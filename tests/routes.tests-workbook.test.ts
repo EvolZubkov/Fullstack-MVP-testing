@@ -411,6 +411,123 @@ describe("POST /:id/workbook/import?dryRun=true — предпросмотр", (
   });
 });
 
+// Критерий приёмки 8.6 PRD-48: у КАЖДОГО листа книги свой счётчик, и предпросмотр
+// показывает, что произойдёт, — не сколько строк лежит в файле.
+describe("POST /:id/workbook/import?dryRun=true — счётчики всех листов", () => {
+  /** Книга со всеми листами: по одному непустому счётчику на каждый. */
+  function fullBook(): Promise<Buffer> {
+    return makeWorkbook({
+      "Настройки": [
+        { "Параметр": "Лимит времени теста", "Значение": "45" },
+        { "Параметр": "Сценарий прохождения", "Значение": "Линейный по темам" },
+      ],
+      "Вопросы": [questionRow],
+      "Шкалы": [scaleRow],
+      "Показатели": [{ "Имя": "passed", "Метка": "Сдал", "Тип": "boolean", "Формула": "score >= 60" }],
+      "Вклады вопросов": [
+        { "Вопрос": "q1", "Шкала": "ee", "Источник": "вариант", "Ключ источника": "1", "Значение": "3" },
+      ],
+      "Оценка": [{ "Вопрос": "q1", "Балл": 2 }],
+      "Структура": [
+        { "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2, "Тег": "" },
+      ],
+      "Квоты": [{ "Раздел": "JavaScript", "Тег": "основы", "Количество": 1, "Режим": "ровно" }],
+      "Обратная связь": [
+        { "Кому": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "Общий отзыв" },
+        { "Кому": "Раздел", "Раздел": "JavaScript", "Формат": "Простой", "Текст": "Отзыв темы" },
+      ],
+      "Рекомендации": [
+        {
+          "Кому": "Тест", "Раздел": "", "Номер уровня": "",
+          "Тип": "Курс", "Заголовок": "Курс", "Ссылка": "https://example.test/c",
+        },
+        {
+          "Кому": "Уровень", "Раздел": "JavaScript", "Номер уровня": 1,
+          "Тип": "Курс", "Заголовок": "Курс уровня", "Ссылка": "https://example.test/l",
+        },
+      ],
+      "Адаптивные уровни": [
+        {
+          "Раздел": "JavaScript", "Номер": 1, "Название": "Базовый", "Сложность от": 0,
+          "Сложность до": 50, "Вопросов": 3, "Тип порога": "Процент", "Порог": 60,
+        },
+      ],
+      "Страницы": [
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1,
+          "Вариант": "info.wide", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+      ],
+      "Поля страниц": [
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1,
+          "Куда": "Содержание", "Ключ": "body", "Значение": "<p>Спасибо</p>",
+        },
+      ],
+      "Оформление": [
+        { "Что": "Шаблон", "Режим": "", "Тема": "", "Ключ": "", "Значение": "corporate" },
+        { "Что": "Тема теста", "Режим": "", "Тема": "", "Ключ": "", "Значение": "Тёмная" },
+        { "Что": "Параметр", "Режим": "", "Тема": "", "Ключ": "showProgressBar", "Значение": "Да" },
+        { "Что": "Отчёт", "Режим": "Стандартный", "Тема": "", "Ключ": "Вид отчёта", "Значение": "report.standard" },
+        { "Что": "Отчёт", "Режим": "Стандартный", "Тема": "", "Ключ": "showScales", "Значение": "Да" },
+      ],
+    });
+  }
+
+  beforeEach(() => {
+    setDesignTemplate();
+    storageMock.getQuestion.mockResolvedValue({
+      id: "q1", type: "multiple", dataJson: { options: ["3", "4", "5"] },
+    });
+  });
+
+  it("каждый лист книги отдаёт свой ненулевой счётчик", async () => {
+    const res = await postWorkbook(await fullBook(), "?dryRun=true");
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.questions.created).toBe(1);
+    expect(res.body.scales.created).toBe(1);
+    expect(res.body.resultVariables.created).toBe(1);
+    expect(res.body.measurements).toMatchObject({ rows: 1, questions: 1 });
+    expect(res.body.scoring.rows).toBe(1);
+    expect(res.body.structure).toMatchObject({ sections: 1, quotas: 1 });
+    expect(res.body.pages.created).toBe(1);
+    // Два параметра листа «Настройки»: лимит времени и сценарий.
+    expect(res.body.settings.params).toBe(2);
+    // Владельцы — тест и раздел; рекомендации — курс теста и материал уровня.
+    expect(res.body.feedback).toMatchObject({ owners: 2, recommendations: 2 });
+    expect(res.body.adaptive).toMatchObject({ topics: 1, levels: 1 });
+    // Оформление: шаблон, палитра и параметр; отчёт: вид и одно поле.
+    expect(res.body.design).toMatchObject({ params: 3, report: 2 });
+  });
+
+  it("предпросмотр не пишет ничего", async () => {
+    await postWorkbook(await fullBook(), "?dryRun=true");
+
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+    expect(storageMock.createQuestion).not.toHaveBeenCalled();
+    expect(storageMock.createContentPage).not.toHaveBeenCalled();
+    expect(storageMock.replaceTestQuestionScoring).not.toHaveBeenCalled();
+    expect(storageMock.upsertQuestionMeasurements).not.toHaveBeenCalled();
+  });
+
+  // Лист, которого в книге нет, ничего не применяет — и счётчик обязан остаться нулём,
+  // иначе предпросмотр обещает автору перенос, которого не будет.
+  it("листа нет — счётчик ноль", async () => {
+    const res = await postWorkbook(
+      await makeWorkbook({ "Вопросы": [questionRow] }),
+      "?dryRun=true",
+    );
+
+    expect(res.body.settings.params).toBe(0);
+    expect(res.body.feedback).toMatchObject({ owners: 0, recommendations: 0 });
+    expect(res.body.adaptive).toMatchObject({ topics: 0, levels: 0 });
+    expect(res.body.design).toMatchObject({ params: 0, report: 0 });
+  });
+});
+
 describe("POST /:id/workbook/import — «Структура» + «Квоты» (FR-16)", () => {
   it("создаёт разделы с порогом и квотами", async () => {
     const buf = await makeWorkbook({

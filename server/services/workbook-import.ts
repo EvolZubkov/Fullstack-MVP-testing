@@ -119,6 +119,7 @@ import {
   type ReportMode,
   type ParsedQuota,
   type SettingsDraft,
+  type FeedbackPayload,
   type ParsedFeedbackSheets,
   type ParsedPage,
   type ParsedAdaptiveSheet,
@@ -139,6 +140,30 @@ export interface WorkbookImportResult {
    * pages of the zones the sheet named and therefore replaced.
    */
   pages: { updated: number; created: number; deleted: number };
+  /**
+   * PRD-48 §4.1: parameters of «Настройки» the import will apply. Counted from the parsed
+   * draft, not from the rows of the sheet: a row the parser refused is reported in `errors`
+   * and changes nothing, and the preview exists to say what WILL happen.
+   */
+  settings: { params: number };
+  /**
+   * PRD-48 FR-12/FR-13: owners («Обратная связь») whose feedback is applied, and the
+   * recommendations («Рекомендации») attached to them. An owner the run did not claim —
+   * a section absent from «Структура» — is an error, so it is counted by neither field.
+   */
+  feedback: { owners: number; recommendations: number };
+  /**
+   * PRD-48 FR-16: adaptive topics and their levels applied from «Адаптивные уровни». Only
+   * topics a section of this run claimed are here, for the same reason as feedback.
+   */
+  adaptive: { topics: number; levels: number };
+  /**
+   * PRD-48 FR-17/FR-18: values of «Оформление» applied. `params` counts the design ones
+   * (template, palette, flat parameters and per-palette overrides), `report` the report
+   * ones (the switch, the chosen view and its fields). A value the receiving manifest does
+   * not declare is dropped with a warning and is not counted.
+   */
+  design: { params: number; report: number };
   errors: string[];
   /**
    * Non-blocking notices: the book imports, but something in it is likely not
@@ -146,6 +171,27 @@ export interface WorkbookImportResult {
    */
   warnings: string[];
   dryRun: boolean;
+}
+
+/**
+ * How many parameters the «Настройки» draft carries — what the preview reports as the
+ * sheet's row count. Every branch of the draft is a group of keys destined for one column
+ * of the test, plus the two scalars that are groups of one.
+ */
+function countSettingsParams(draft: SettingsDraft): number {
+  const groups = [
+    draft.test, draft.router, draft.overall, draft.retake, draft.attemptInterval,
+    draft.plugin, draft.introResults, draft.introReport, draft.introRoot,
+  ];
+  return groups.reduce((n, g) => n + Object.keys(g).length, 0)
+    + (draft.flowMode !== undefined ? 1 : 0)
+    + (draft.folderPath !== undefined ? 1 : 0);
+}
+
+/** Recommendations inside one owner's feedback: courses, materials and events together. */
+function countRecommendations(payload: FeedbackPayload | null | undefined): number {
+  if (!payload) return 0;
+  return (payload.links?.length ?? 0) + (payload.assets?.length ?? 0) + (payload.events?.length ?? 0);
 }
 
 /** Normalize a topic/section name for case/space-insensitive matching. */
@@ -867,6 +913,13 @@ async function applyDesignSheet(
       }
     }
 
+    // The design values that survived the manifest: the template row itself, the palette
+    // row when the template has palettes, and every parameter left after the drop above.
+    result.design.params = 1
+      + (supportsThemes(manifest) && parsed.theme !== undefined ? 1 : 0)
+      + Object.keys(design.params).length
+      + Object.values(design.paramsByTheme).reduce((n, v) => n + Object.keys(v).length, 0);
+
     if (!dryRun) {
       await storage.updateTest(testId, { designSettingsJson: designSettings });
       // Медиатека: сбой индексации не должен стоить автору переноса — как и на маршруте
@@ -890,7 +943,10 @@ async function applyDesignSheet(
   // would take the report away from every test whose author never touched it.
   const merged: Record<string, unknown> = { ...asObject(test?.reportSettingsJson) };
   let touched = parsed.reportEnabled !== undefined;
-  if (parsed.reportEnabled !== undefined) merged.enabled = parsed.reportEnabled;
+  if (parsed.reportEnabled !== undefined) {
+    merged.enabled = parsed.reportEnabled;
+    result.design.report++;
+  }
   for (const mode of Object.keys(parsed.report) as ReportMode[]) {
     const branch = normalizeReportBranch(parsed.report[mode], manifest, mode);
     result.errors.push(...branch.errors.map((e) => `${at}: ${e}`));
@@ -903,6 +959,8 @@ async function applyDesignSheet(
     if (branch.branch) {
       merged[mode] = branch.branch;
       touched = true;
+      result.design.report += (branch.branch.variantKey !== undefined ? 1 : 0)
+        + Object.keys(branch.branch.values).length;
     }
   }
   // Nothing applied — nothing written. A refused branch may not become a rewrite of the
@@ -941,6 +999,10 @@ export async function importWorkbook(
     scoring: { rows: 0 },
     structure: { sections: 0, quotas: 0 },
     pages: { updated: 0, created: 0, deleted: 0 },
+    settings: { params: 0 },
+    feedback: { owners: 0, recommendations: 0 },
+    adaptive: { topics: 0, levels: 0 },
+    design: { params: 0, report: 0 },
     errors: [],
     warnings: [],
     dryRun,
@@ -967,6 +1029,10 @@ export async function importWorkbook(
     // PRD-48 §4.1: «Название из книги в этом случае игнорируется без ошибки» — no error
     // and no warning, so the author who typed the title sees nothing to act upon.
     if (keepTitle) delete settingsDraft.test.title;
+    // Counted HERE and not at the save: later passes borrow the draft as their carrier —
+    // the feedback of the test, the report settings, the unlock rules of «Структура» all
+    // ride in it — and those parameters belong to their own sheets, not to this one.
+    result.settings.params = countSettingsParams(settingsDraft);
   }
 
   // ── «Адаптивные уровни» (PRD-48 FR-16) ──────────────────────────────────────
@@ -1756,7 +1822,30 @@ export async function importWorkbook(
             + "можно применить только вместе с листом «Структура»",
       );
     }
+
+    // Counted after the sections are known, because that is when «applied» becomes
+    // knowable: the test's own feedback always is, a section's only if this run claimed
+    // the section, and a level's only if the level rode into `adaptiveTopics`.
+    result.feedback.owners = (feedback.test !== undefined ? 1 : 0)
+      + [...feedback.byTopic.keys()].filter((key) => usedTopicKeys.has(key)).length;
+    result.feedback.recommendations = countRecommendations(feedback.test ?? undefined);
+    for (const [key, payload] of feedback.byTopic) {
+      if (usedTopicKeys.has(key)) result.feedback.recommendations += countRecommendations(payload);
+    }
+    for (const topic of adaptiveTopics) {
+      for (const level of topic.levels ?? []) {
+        result.feedback.recommendations += level.links?.length ?? 0;
+      }
+    }
   }
+
+  // The levels that will actually be written: `adaptiveTopics` holds one entry per topic a
+  // section of this run claimed AND the sheet gave rows to, which is exactly the payload of
+  // the save below.
+  result.adaptive = {
+    topics: adaptiveTopics.length,
+    levels: adaptiveTopics.reduce((n, t) => n + (t.levels?.length ?? 0), 0),
+  };
 
   // ── Topics named by «Адаптивные уровни» that no section of this run claimed ──
   // Levels belong to a topic but act only for a topic the TEST contains, so a level of a
