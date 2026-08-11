@@ -51,6 +51,9 @@ import {
   PAGE_KIND_CHOICES,
   PAGE_MODE_CHOICES,
   PAGE_TARGET_CHOICES,
+  ADAPTIVE_LEVEL_HEADERS,
+  ADAPTIVE_PASS_TYPE_CHOICES,
+  parseAdaptiveLevelSheet,
   parseBool,
   parseFeedbackSheets,
   parseMeasurementRow,
@@ -158,6 +161,7 @@ const CANONICAL: Record<string, string[]> = {
   "Рекомендации": RECOMMENDATION_HEADERS,
   "Страницы": PAGE_HEADERS,
   "Поля страниц": PAGE_FIELD_HEADERS,
+  "Адаптивные уровни": ADAPTIVE_LEVEL_HEADERS,
   "Оценка": SCORING_OVERRIDE_HEADERS,
   "Шкалы": SCALE_HEADERS,
   "Показатели": RESULT_VAR_HEADERS,
@@ -376,12 +380,42 @@ describe("шаблон книги — валидность примеров", ()
     const owner = (r: Record<string, unknown>) =>
       `${String(r["Кому"] ?? "")}|${String(r["Раздел"] ?? "").trim().toLowerCase()}`;
     const owners = new Set(EXAMPLE_ROWS["Обратная связь"].map(owner));
+    // Владелец-уровень подчинён ДРУГОМУ листу — «Адаптивным уровням», а не «Обратной
+    // связи»: его текст живёт там, поэтому здесь такие строки проверяются отдельно.
+    const plain = EXAMPLE_ROWS["Рекомендации"].filter((r) => r["Кому"] !== "Уровень");
 
     expect(owners.size).toBeGreaterThan(1);
-    expect(EXAMPLE_ROWS["Рекомендации"].filter((r) => !owners.has(owner(r)))).toEqual([]);
+    expect(plain.filter((r) => !owners.has(owner(r)))).toEqual([]);
     // Пример показывает все три вида рекомендаций, иначе о двух из них автор не узнает.
-    expect(new Set(EXAMPLE_ROWS["Рекомендации"].map((r) => r["Тип"])))
-      .toEqual(new Set(RECOMMENDATION_TYPE_CHOICES));
+    expect(new Set(plain.map((r) => r["Тип"]))).toEqual(new Set(RECOMMENDATION_TYPE_CHOICES));
+  });
+
+  // Материал уровня хранится ВНУТРИ уровня, поэтому строка примера, ссылающаяся на
+  // уровень без строки на листе «Адаптивные уровни», дала бы читателю готовую ошибку.
+  it("каждый примерный материал уровня ссылается на уровень из примера «Адаптивных уровней»", () => {
+    const address = (topic: unknown, number: unknown) =>
+      `${String(topic ?? "").trim().toLowerCase()}|${String(number ?? "").trim()}`;
+    const levels = new Set(
+      EXAMPLE_ROWS["Адаптивные уровни"].map((r) => address(r["Раздел"], r["Номер"])),
+    );
+    const levelRows = EXAMPLE_ROWS["Рекомендации"].filter((r) => r["Кому"] === "Уровень");
+
+    expect(levelRows.length).toBeGreaterThan(0);
+    expect(levelRows.filter((r) => !levels.has(address(r["Раздел"], r["Номер уровня"])))).toEqual([]);
+    // Уровню доступен только «Курс»: у его материала есть лишь заголовок и ссылка.
+    expect(new Set(levelRows.map((r) => r["Тип"]))).toEqual(new Set(["Курс"]));
+  });
+
+  // Уровни темы, не входящей в разделы теста, применить некуда — такая строка примера
+  // была бы готовой ошибкой загрузки.
+  it("раздел примерного уровня есть на листе «Структура»", () => {
+    const sections = new Set(
+      EXAMPLE_ROWS["Структура"].map((r) => String(r["Раздел"]).trim().toLowerCase()),
+    );
+    for (const row of EXAMPLE_ROWS["Адаптивные уровни"]) {
+      const name = String(row["Раздел"] ?? "").trim().toLowerCase();
+      expect(sections, `раздела «${row["Раздел"]}» нет на листе «Структура»`).toContain(name);
+    }
   });
 
   // Раздел из примера обязан существовать на листе «Структура»: обратная связь раздела,
@@ -459,6 +493,9 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Поля страниц", "Зона")).toEqual(PAGE_ZONE_CHOICES);
     expect(choicesBehind(wb, "Поля страниц", "Вид")).toEqual(PAGE_KIND_CHOICES);
     expect(choicesBehind(wb, "Поля страниц", "Куда")).toEqual(PAGE_TARGET_CHOICES);
+    // У уровня порог всегда конкретное число, наследовать ему не у кого — поэтому
+    // список короче, чем у «Структуры».
+    expect(choicesBehind(wb, "Адаптивные уровни", "Тип порога")).toEqual(ADAPTIVE_PASS_TYPE_CHOICES);
   });
 
   // Excel не открывает книгу, где подсказка проверки длиннее 255 символов, а текст
@@ -600,6 +637,14 @@ describe("шаблон книги — проверка ввода", () => {
         }],
       );
       expect(parsed.errors, `«Куда» = «${target}»`).toEqual([]);
+    }
+
+    for (const value of choicesBehind(wb, "Адаптивные уровни", "Тип порога")) {
+      const row = {
+        "Раздел": "Право", "Номер": 1, "Название": "Базовый", "Сложность от": 0,
+        "Сложность до": 50, "Вопросов": 1, "Тип порога": value, "Порог": 60,
+      };
+      expect(parseAdaptiveLevelSheet([row]).errors, `«Тип порога» = «${value}»`).toEqual([]);
     }
 
     // «да»/«нет» — то, что пишет экспорт и читает parseBool.
