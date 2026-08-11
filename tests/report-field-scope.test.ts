@@ -67,7 +67,11 @@ describe("поставляемые шаблоны", () => {
       for (const variant of variants) {
         const byKey = new Map((variant.settings ?? []).map((f) => [String(f.key), f]));
         // Что показать в отчёте — содержание: автор ищет это рядом с обратной связью.
-        for (const key of ["scalesChartKind", "radarAxisLimit", "showCompetencyRadar"]) {
+        // `showCompetencyRadar` здесь не проверяется: галочка радара PRD-35 убрана из
+        // интерфейса (`78dcadd8`), и ни один поставляемый манифест её больше не объявляет —
+        // вид диаграммы задаётся выбором `scalesChartKind`. Требовать признак у поля,
+        // которого нет, значит требовать вернуть поле.
+        for (const key of ["scalesChartKind", "radarAxisLimit"]) {
           expect(reportFieldScope(byKey.get(key)), `${key} в ${variant.kind}`).toBe("content");
         }
         // Как он выглядит — оформление.
