@@ -1312,6 +1312,8 @@ export async function importWorkbook(
     const unlockByTopicKey = new Map<string, { mode: string; dependsOn: string[] }>();
     /** Topics whose «failed a level» text has no levels sheet to ride with (warned about). */
     const failureWithoutLevels: string[] = [];
+    /** Topics whose «failed a level» text has no LEVEL ROWS to ride with (warned about). */
+    const failureWithoutRows: string[] = [];
     /** Topic id per section of THIS book — what a dependency name may point at. */
     const sectionTopicIdByKey = new Map<string, string>();
     for (let i = 0; i < structRows.length; i++) {
@@ -1396,12 +1398,22 @@ export async function importWorkbook(
       result.structure.quotas += strata.length;
 
       // PRD-48 FR-16: the topic's levels, with the materials «Рекомендации» attached to each
-      // of them by the SAME address the levels sheet spells. An entry is made for a topic the
-      // book gave levels to, or one whose «Обратная связь при непройденном уровне» is filled
-      // in — those two are the whole of `adaptive_topic_settings`.
+      // of them by the SAME address the levels sheet spells.
+      //
+      // An entry is made ONLY for a topic the book gave LEVEL ROWS to. `adaptiveSettings` is a
+      // wholesale rewrite, so an entry with `levels: []` does not mean «this topic has only a
+      // text», it means «this topic has no levels» — and the topic's ladder is deleted. That
+      // is reachable without a single word in `errors`: the «adaptive section without levels»
+      // gate reads the mode from the payload, so a book with no «Настройки» sheet never turns
+      // it on, and a book whose level rows ALL failed their row checks passes it too.
+      //
+      // `failureFeedback` still carries the parser's three-state marker here — the target is
+      // only consulted on the saving path, by {@link resolveFailureFeedback}.
       const levels = adaptive?.byTopic.get(key) ?? [];
-      if (!adaptive && sec.failureFeedback !== null) failureWithoutLevels.push(sec.topicName);
-      if (adaptive && (levels.length > 0 || sec.failureFeedback !== null)) {
+      if (sec.failureFeedback !== null && levels.length === 0) {
+        (adaptive ? failureWithoutRows : failureWithoutLevels).push(sec.topicName);
+      }
+      if (levels.length > 0) {
         adaptiveTopics.push({
           topicId,
           failureFeedback: sec.failureFeedback,
@@ -1421,6 +1433,15 @@ export async function importWorkbook(
         `Лист «${ADAPTIVE_LEVEL_SHEET_NAME}» отсутствует: «Обратная связь при непройденном `
         + `уровне» разделов ${failureWithoutLevels.map((n) => `"${n}"`).join(", ")} не применена `
         + "— адаптивные настройки такая книга не трогает",
+      );
+    }
+    // The sheet IS there, but not for these topics: their text has no levels payload to ride
+    // in, and writing one would delete the ladder the book never described.
+    if (failureWithoutRows.length > 0) {
+      result.warnings.push(
+        `Лист «${ADAPTIVE_LEVEL_SHEET_NAME}»: у разделов `
+        + `${failureWithoutRows.map((n) => `"${n}"`).join(", ")} нет строк уровней — `
+        + "«Обратная связь при непройденном уровне» не применена: текст хранится вместе с уровнями",
       );
     }
 

@@ -11,6 +11,7 @@ import express from "express";
 import session from "express-session";
 import ExcelJS from "exceljs";
 import { addJsonSheet, workbookToBuffer, readWorkbookFromBuffer, sheetToObjects } from "../server/utils/excel";
+import { ADAPTIVE_LEVEL_HEADERS } from "../server/utils/workbook-adaptive";
 
 vi.hoisted(() => {
   process.env.DATABASE_URL = "postgresql://fake/test";
@@ -2910,6 +2911,43 @@ describe("Адаптивные уровни: выгрузка и загрузк�
       "Лист «Адаптивные уровни»: раздел \"Финансы\" не найден на листе «Структура»",
     ]);
     const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.adaptiveSettings).toBeUndefined();
+  });
+
+  // Самый массовый случай: и шаблон книги, и выгрузка любого НЕадаптивного теста несут этот
+  // лист с одними заголовками. Ни листа «Настройки», ни режима в payload — проверка
+  // «адаптивный раздел без уровней» молчит, и стереть уровни было бы некому помешать.
+  it("лист уровней с одними заголовками уровни темы не стирает", async () => {
+    const wb = new ExcelJS.Workbook();
+    addJsonSheet(wb, "Структура", [
+      {
+        "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 4,
+        "Обратная связь при непройденном уровне": "Текст из книги",
+      },
+    ]);
+    wb.addWorksheet("Адаптивные уровни").columns = ADAPTIVE_LEVEL_HEADERS
+      .map((header) => ({ header, key: header }));
+    const res = await postWorkbook(await workbookToBuffer(wb));
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.sections).toHaveLength(1);
+    expect(payload.adaptiveSettings).toBeUndefined();
+    // Текст без уровней ехать не с чем — молчать об этом нельзя.
+    expect(res.body.warnings.some((w: string) => w.includes("нет строк уровней"))).toBe(true);
+  });
+
+  // Строки были, но все отвалились: тема осталась бы записью с пустым списком уровней, а
+  // это для службы «уровней нет» — лестница темы исчезла бы вслед за опечаткой.
+  it("тема, у которой все строки уровней отвалились ошибкой, уровни не теряет", async () => {
+    const res = await postWorkbook(await levelBook({}, { "Тип порога": "Средний балл" }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0]).toContain("Тип порога");
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.sections).toHaveLength(1);
     expect(payload.adaptiveSettings).toBeUndefined();
   });
 
