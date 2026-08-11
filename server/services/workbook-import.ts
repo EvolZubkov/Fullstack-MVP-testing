@@ -441,11 +441,17 @@ interface PendingAuthorPage {
  * Author pages have no key at all, so the unit of idempotency is the ZONE: a zone the sheet
  * names ends up looking exactly as the sheet says, and a zone the sheet never names is not
  * touched.
+ *
+ * @param bookSections Sections the «Структура» sheet described, empty when the book did not
+ *   rewrite the structure. It decides WHICH sections a topic zone may address: with the sheet
+ *   the book's own list rules (under `dryRun` it is the only list there is), without it the
+ *   target's — exactly the split `POST /content-pages` makes when it validates `topicId`.
  */
 async function applyPageSheets(
   testId: string,
   workbook: ExcelJS.Workbook,
   dryRun: boolean,
+  bookSections: readonly SectionPayload[],
   result: WorkbookImportResult,
 ): Promise<void> {
   const pageSheet = findSheet(workbook, PAGE_SHEET_NAME);
@@ -488,6 +494,16 @@ async function applyPageSheets(
   const topics = await storage.getTopics();
   const topicIdByName = new Map(topics.map((t) => [normalizeName(t.name), t.id]));
 
+  // The name is resolved against the WHOLE topic bank, so it may well land on a topic this
+  // test never uses. Such a page renders nowhere and yet holds the topic for `content-guard`,
+  // so the same rule the page editor enforces applies here: a page's topic must be a section
+  // of THIS test (`POST /content-pages` answers 422).
+  const sectionTopicIds = new Set(
+    bookSections.length > 0
+      ? bookSections.map((s) => s.topicId)
+      : (await storage.getTestSections(testId)).map((s) => s.topicId),
+  );
+
   /** Zone of a page as both sides address it: the position plus the topic (empty for a test zone). */
   const zoneKeyOf = (position: string, topicId: string | null) => `${position}|${topicId ?? ""}`;
 
@@ -511,6 +527,13 @@ async function applyPageSheets(
       topicId = topicIdByName.get(page.topicKey) ?? null;
       if (!topicId) {
         result.errors.push(`${where}: тема "${page.topicName}" не найдена`);
+        continue;
+      }
+      if (!sectionTopicIds.has(topicId)) {
+        result.errors.push(
+          `${where}: тема "${page.topicName}" не входит в разделы теста — страница такой темы `
+          + "нигде не показывается",
+        );
         continue;
       }
     }
@@ -1449,7 +1472,7 @@ export async function importWorkbook(
   // ── Pass 7: «Страницы» + «Поля страниц» (PRD-48 FR-14/FR-15) ──
   // LAST, and only here: the system pages the book expects to find are materialised by the
   // save above, out of the scenario («Настройки») and the topic list («Структура»).
-  await applyPageSheets(testId, workbook, dryRun, result);
+  await applyPageSheets(testId, workbook, dryRun, sections, result);
 
   return result;
 }

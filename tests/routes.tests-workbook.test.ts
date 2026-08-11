@@ -2420,6 +2420,77 @@ describe("POST /:id/workbook/import — «Страницы» и «Поля ст�
     expect(storageMock.deleteContentPage).not.toHaveBeenCalled();
   });
 
+  // Имя темы резолвится по всему банку тем, поэтому книга легко называет тему, которой в
+  // тесте нет: страница такой темы нигде не показывается, но держит тему занятой для
+  // защиты ссылочной целостности. Ровно эту проверку делает и роут создания страницы.
+  describe("тема страницы обязана быть разделом теста", () => {
+    /** Строка зоны темы: авторская страница «До темы <Раздел>». */
+    const topicPageRow = (topicName: string) =>
+      pageRow({
+        "Зона": "До темы", "Раздел": topicName, "Вид": "Авторская", "Номер": 1,
+        "Вариант": "info.wide",
+      });
+
+    beforeEach(() => {
+      // В банке тем две; в тесте участвует только «JavaScript».
+      storageMock.getTopics.mockResolvedValue([
+        dbTopic,
+        { ...dbTopic, id: "t2", name: "Финансы" },
+      ]);
+      storageMock.getContentPages.mockResolvedValue([]);
+    });
+
+    /** Книга со «Структурой»: разделы берутся из книги. */
+    const structure = [{ "Раздел": "JavaScript", "Порядок": 1, "Вопросов в выборке": 2 }];
+
+    it("книга со «Структурой»: чужая тема отвергнута, страница не создана", async () => {
+      const buf = await makeWorkbook({
+        "Структура": structure,
+        "Страницы": [topicPageRow("Финансы")],
+      });
+      const res = await postWorkbook(buf);
+
+      expect(res.status).toBe(200);
+      expect(
+        res.body.errors.some((e: string) => /Финансы/.test(e) && /разделы теста/.test(e)),
+      ).toBe(true);
+      expect(storageMock.createContentPage).not.toHaveBeenCalled();
+    });
+
+    it("книга со «Структурой»: своя тема принята", async () => {
+      const buf = await makeWorkbook({
+        "Структура": structure,
+        "Страницы": [topicPageRow("JavaScript")],
+      });
+      const res = await postWorkbook(buf);
+
+      expect(res.body.errors).toEqual([]);
+      expect(storageMock.createContentPage).toHaveBeenCalledWith(
+        expect.objectContaining({ topicId: "t1", position: "before_topic" }),
+      );
+    });
+
+    it("книга без «Структуры»: чужая тема отвергнута по разделам приёмника", async () => {
+      storageMock.getTestSections.mockResolvedValue([{ id: "s1", testId: "test-1", topicId: "t1" }]);
+      const res = await postWorkbook(await makeWorkbook({ "Страницы": [topicPageRow("Финансы")] }));
+
+      expect(
+        res.body.errors.some((e: string) => /Финансы/.test(e) && /разделы теста/.test(e)),
+      ).toBe(true);
+      expect(storageMock.createContentPage).not.toHaveBeenCalled();
+    });
+
+    it("книга без «Структуры»: тема раздела приёмника принята", async () => {
+      storageMock.getTestSections.mockResolvedValue([{ id: "s1", testId: "test-1", topicId: "t1" }]);
+      const res = await postWorkbook(await makeWorkbook({ "Страницы": [topicPageRow("JavaScript")] }));
+
+      expect(res.body.errors).toEqual([]);
+      expect(storageMock.createContentPage).toHaveBeenCalledWith(
+        expect.objectContaining({ topicId: "t1" }),
+      );
+    });
+  });
+
   it("лист «Поля страниц» без листа «Страницы» — ошибка, а не молчание", async () => {
     const buf = await makeWorkbook({
       "Поля страниц": [fieldRow({ "Значение": "Новый заголовок" })],
