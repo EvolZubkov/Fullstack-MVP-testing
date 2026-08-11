@@ -105,7 +105,12 @@ const CONTENT_TEMPLATES = [
     placeholders: [{ key: "title", type: "text" }, { key: "lead", type: "richText" }],
     settings: [{ key: "buttonLabel", type: "text" }],
   },
-  { key: "info.wide", kind: "info", placeholders: [{ key: "body", type: "richText" }] },
+  {
+    key: "info.wide",
+    kind: "info",
+    placeholders: [{ key: "body", type: "richText" }],
+    settings: [{ key: "nextLabel", type: "text" }],
+  },
 ];
 const authorUser = { id: "user-1", role: "author", status: "active" };
 const dbTopic = { id: "t1", name: "JavaScript", description: null, folderId: null, createdAt: new Date() };
@@ -2411,6 +2416,15 @@ describe("Round-trip: страницы и их поля через роуты", 
       valuesJson: { values: { body: "<p>Спасибо</p>" } }, settingsJson: {},
       autoAdvance: false, autoAdvanceDelayMs: null,
     },
+    // Вторая авторская страница той же зоны: у авторских страниц нет ключа, и различает
+    // их только номер внутри зоны — круг обязан довезти обе, не слив их в одну.
+    {
+      id: "p-info-2", testId: "test-1", topicId: null, position: "after", kind: "info",
+      mode: "template", type: "info", templateKey: "info.wide", sortOrder: 2,
+      valuesJson: { values: { body: "<p>Материалы курса</p>" } },
+      settingsJson: { nextLabel: "Завершить" },
+      autoAdvance: true, autoAdvanceDelayMs: 3000,
+    },
   ];
 
   beforeEach(() => {
@@ -2422,7 +2436,7 @@ describe("Round-trip: страницы и их поля через роуты", 
     storageMock.getContentPages.mockResolvedValue(sourcePages);
   });
 
-  it("книга переносит содержимое стартовой страницы и авторскую страницу в другой тест", async () => {
+  it("книга переносит стартовую страницу и обе авторские в другой тест", async () => {
     const exportRes = await getExport();
     expect(exportRes.status).toBe(200);
 
@@ -2438,19 +2452,31 @@ describe("Round-trip: страницы и их поля через роуты", 
     expect(res.status).toBe(200);
     expect(res.body.errors).toEqual([]);
     expect(res.body.warnings).toEqual([]);
+    expect(res.body.pages).toMatchObject({ updated: 1, created: 2, deleted: 0 });
 
-    const [, patch] = storageMock.updateContentPage.mock.calls[0] as [string, any];
+    // Системная страница: заполненное содержимое и настройка доехали до приёмника.
+    expect(storageMock.updateContentPage).toHaveBeenCalledTimes(1);
+    const [updatedId, patch] = storageMock.updateContentPage.mock.calls[0] as [string, any];
+    expect(updatedId).toBe("p2-start");
     expect(patch.valuesJson.values).toEqual({ title: "Добро пожаловать", lead: "<p>Пара слов</p>" });
     expect(patch.settingsJson).toEqual({ buttonLabel: "Начать" });
-    expect(storageMock.createContentPage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        testId: "test-2",
-        position: "after",
-        kind: "info",
-        templateKey: "info.wide",
-        valuesJson: { values: { body: "<p>Спасибо</p>" }, placeholderStyles: {} },
-      }),
-    );
+
+    // Авторские страницы: обе созданы, каждая со своим содержимым и своим номером в зоне.
+    const created = storageMock.createContentPage.mock.calls.map((c: any[]) => c[0]);
+    expect(created).toHaveLength(2);
+    expect(created.map((p: any) => [p.sortOrder, p.valuesJson.values.body])).toEqual([
+      [1, "<p>Спасибо</p>"],
+      [2, "<p>Материалы курса</p>"],
+    ]);
+    expect(created[1]).toMatchObject({
+      testId: "test-2",
+      position: "after",
+      kind: "info",
+      templateKey: "info.wide",
+      settingsJson: { nextLabel: "Завершить" },
+      autoAdvance: true,
+      autoAdvanceDelayMs: 3000,
+    });
   });
 });
 
