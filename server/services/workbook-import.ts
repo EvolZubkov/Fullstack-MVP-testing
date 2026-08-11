@@ -17,7 +17,8 @@
  *   (PRD-48 FR-14/FR-15);
  * - «Адаптивные уровни» — the levels of the adaptive topics, with their materials taken
  *   off «Рекомендации» (PRD-48 FR-16). They ride into the same save as the sections: the
- *   service takes them only as `adaptiveSettings` of that payload.
+ *   service takes them only as `adaptiveSettings` of that payload;
+ * - «Оформление» — the test's design and the settings of its report (PRD-48 FR-17/FR-18).
  *
  * Everything except the questions is written into the target `testId`.
  *
@@ -27,10 +28,12 @@
  * by `ID`/alias and scale by `key`) and result variables (validate formula), then the
  * per-test scoring overrides (from the «Оценка» sheet, or, when it is absent, derived from
  * the legacy «Балл»/«Цена ответа» columns of the «Вопросы» sheet), then the structure +
- * quotas (FR-16). ONE save applies the settings and the sections together. The content
- * pages come LAST, and only there: the system pages the book expects to find are
- * materialised by that save out of the scenario and the topic list. Writes are skipped
- * under `dryRun`; counts are still computed (FR-13).
+ * quotas (FR-16), then «Оформление» — its report settings join the settings patch, while its
+ * design goes by its OWN write, the one `PUT /api/tests/:id/design` performs. ONE save applies
+ * the settings and the sections together. The content pages come LAST, and only there: the
+ * system pages the book expects to find are materialised by that save out of the scenario and
+ * the topic list, and the design template is by then the one whose manifest types their
+ * fields. Writes are skipped under `dryRun`; counts are still computed (FR-13).
  *
  * Upsert keys (FR-15 idempotency): scale = (test, key); result variable =
  * (test, name); measurements are replaced per question (the sheet is

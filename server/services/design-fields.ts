@@ -47,7 +47,6 @@ export interface DesignParamDef {
   options?: string[];
   /** Human labels of `options`; accepted on input so a hand-filled cell also loads. */
   optionLabels?: Record<string, string>;
-  default?: unknown;
 }
 
 /** Design values as they arrive from the workbook: every value still untyped. */
