@@ -21,8 +21,10 @@
  *
  * Contract of a call:
  * - `errors` — a value that cannot be brought to the type its manifest declares. The offending
- *   KEY is skipped and the rest is applied, the way a bad row on a sheet is dropped while the
- *   sheet is applied;
+ *   KEY is left out of the result and the rest is returned; whether a set with a hole in it is
+ *   then APPLIED is the caller's call, and the two callers answer differently — the report
+ *   branch takes what came, while the design half of the «Оформление» sheet is refused whole,
+ *   because it replaces the receiver's parameters instead of merging into them;
  * - `dropped` — keys the receiving manifest does not declare. Dropped rather than stored,
  *   because the design route answers an undeclared key with a 422 for the WHOLE request; and
  *   named rather than swallowed, because otherwise the author reads «оформление перенесено»

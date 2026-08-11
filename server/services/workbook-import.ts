@@ -816,12 +816,19 @@ async function loadActiveTemplate(id: string): Promise<DesignTemplate | undefine
  * one module that owns them ({@link normalizeDesignParams}), because a second, looser copy
  * would make the workbook a way past the route.
  *
- * Three refusals differ on purpose:
+ * Four refusals differ on purpose:
  *
  * - the TEMPLATE is missing or inactive → the sheet is refused WHOLE, report included.
  *   Half an applied design is worse than none: the test would wear foreign colours over a
  *   foreign layout, and the workbook cannot install a template (they arrive as a ZIP
  *   through the admin registry);
+ * - a design row the sheet could not read, or a value the manifest refused → the DESIGN half
+ *   is refused whole, the report half still applies. `params` replaces the receiver's set
+ *   entirely, so a row missing from it is not a parameter left untransferred but a parameter
+ *   DELETED on the receiver: a book whose parameter rows all carry a typo in «Что» or «Ключ»
+ *   would strip the receiving test of its design while honestly reporting an error on every
+ *   row. The «Страницы» pass states the same rule for a zone — a row that was rejected has
+ *   bought nothing, and it must not have cost anything either;
  * - a key the receiving manifest does not declare → dropped with a WARNING. The route
  *   answers such a key with a 422 for the whole request, so it cannot be stored; and
  *   silence would let the author read «оформление перенесено» with half of it missing;
@@ -900,41 +907,53 @@ async function applyDesignSheet(
       );
     }
 
-    // Shaped exactly as the design route shapes it, versions included: BOTH are stamped
-    // from the receiving template's own row. The book carries neither — a version from the
-    // source stand raises the «Шаблон обновлён» banner here, whose one button drops every
-    // parameter the local manifest no longer declares.
-    const designSettings: Record<string, unknown> = {
-      templateId,
-      templateVersion: template.version,
-      templateApiVersion: template.templateApiVersion,
-      params: design.params,
-    };
-    if (supportsThemes(manifest)) {
-      designSettings.theme = design.theme ?? "auto";
-      if (Object.keys(design.paramsByTheme).length > 0) {
-        designSettings.paramsByTheme = design.paramsByTheme;
+    // The design is applied WHOLE or not at all — see the fourth refusal above. Both halves
+    // of «not whole» count: a row the sheet could not read at all, and a value the manifest
+    // refused (that key is missing from `design.params` just the same). A key the manifest
+    // does not DECLARE is not among them: it is a warning by design, because otherwise no
+    // book could ever travel between two stands whose templates differ.
+    if (design.errors.length > 0 || parsed.designRowsDropped > 0) {
+      result.errors.push(
+        `${at}: параметры оформления не применены целиком — исправьте строки выше и повторите `
+        + "импорт; применить их наполовину значило бы стереть у теста то, чего книга не назвала",
+      );
+    } else {
+      // Shaped exactly as the design route shapes it, versions included: BOTH are stamped
+      // from the receiving template's own row. The book carries neither — a version from the
+      // source stand raises the «Шаблон обновлён» banner here, whose one button drops every
+      // parameter the local manifest no longer declares.
+      const designSettings: Record<string, unknown> = {
+        templateId,
+        templateVersion: template.version,
+        templateApiVersion: template.templateApiVersion,
+        params: design.params,
+      };
+      if (supportsThemes(manifest)) {
+        designSettings.theme = design.theme ?? "auto";
+        if (Object.keys(design.paramsByTheme).length > 0) {
+          designSettings.paramsByTheme = design.paramsByTheme;
+        }
       }
-    }
 
-    // The design values that survived the manifest: the template row itself, the palette
-    // row when the template has palettes, and every parameter left after the drop above.
-    result.design.params = 1
-      + (supportsThemes(manifest) && parsed.theme !== undefined ? 1 : 0)
-      + Object.keys(design.params).length
-      + Object.values(design.paramsByTheme).reduce((n, v) => n + Object.keys(v).length, 0);
+      // The design values that survived the manifest: the template row itself, the palette
+      // row when the template has palettes, and every parameter left after the drop above.
+      result.design.params = 1
+        + (supportsThemes(manifest) && parsed.theme !== undefined ? 1 : 0)
+        + Object.keys(design.params).length
+        + Object.values(design.paramsByTheme).reduce((n, v) => n + Object.keys(v).length, 0);
 
-    if (!dryRun) {
-      await storage.updateTest(testId, { designSettingsJson: designSettings });
-      // Медиатека: сбой индексации не должен стоить автору переноса — как и на маршруте
-      // оформления, недостающая строка индекса чинится пересборкой, потерянная запись нет.
-      try {
-        await syncEntityUsages("test_design", testId, designSettings);
-      } catch (error) {
-        logger.error(
-          `Media usage sync failed for test design ${testId}: ${(error as Error).message}`,
-          "workbook-import",
-        );
+      if (!dryRun) {
+        await storage.updateTest(testId, { designSettingsJson: designSettings });
+        // Медиатека: сбой индексации не должен стоить автору переноса — как и на маршруте
+        // оформления, недостающая строка индекса чинится пересборкой, потерянная запись нет.
+        try {
+          await syncEntityUsages("test_design", testId, designSettings);
+        } catch (error) {
+          logger.error(
+            `Media usage sync failed for test design ${testId}: ${(error as Error).message}`,
+            "workbook-import",
+          );
+        }
       }
     }
   }

@@ -1715,6 +1715,42 @@ describe("POST /:id/workbook/import — «Оформление»", () => {
     expect(patch.designSettingsJson.params).toEqual({ fontFamily: "Roboto" });
   });
 
+  it("книга с непрочитанными строками параметров не стирает оформление приёмника", async () => {
+    // Опечатка в «Что» и пустой «Ключ» — и набор параметров, доехавший до приёмника,
+    // неполон. Записать его значило бы удалить у теста то, чего книга не называла:
+    // отвергнутая строка ничего не покупает и ничего не должна стоить.
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Шаблон", "", "", "", "corporate"),
+        row("Парамерт", "", "", "fontFamily", "Roboto"),
+        row("Параметр", "", "", "", "#ff0000"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.join("\n")).toContain("не применены целиком");
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+    expect(res.body.design.params).toBe(0);
+  });
+
+  it("значение, которое манифест не принимает, тоже отменяет запись оформления", async () => {
+    // Ключ известен, а значения у него не будет — в наборе такая же дыра, как от
+    // непрочитанной строки, и цена у неё та же.
+    const buf = await makeWorkbook({
+      "Оформление": [
+        row("Шаблон", "", "", "", "corporate"),
+        row("Параметр", "", "", "fontFamily", "Comic Sans"),
+        row("Параметр", "", "", "showProgressBar", "Да"),
+      ],
+    });
+
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.join("\n")).toContain("Comic Sans");
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+  });
+
   it("вид отчёта, которого нет в манифесте приёмника, — ошибка строки", async () => {
     // Продукт молча подменил бы вид на умолчательный, и увидеть подмену можно было бы
     // только глазами в готовом PDF. Книга здесь сознательно строже.

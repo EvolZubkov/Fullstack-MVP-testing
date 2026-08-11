@@ -151,6 +151,17 @@ export interface ParsedDesignSheet {
   reportEnabled?: boolean;
   /** Mode branches named by the sheet; an absent branch is not touched by the import. */
   report: Partial<Record<ReportMode, ParsedReportBranch>>;
+  /**
+   * How many rows were dropped by a check while they could have been speaking about the
+   * DESIGN. A row whose «Что» is unreadable counts among them: nothing says which half of the
+   * sheet it belonged to, so it has to be assumed the more dangerous one.
+   *
+   * The import needs the count to tell «the book says the design has no such parameter» from
+   * «the book's parameter was not read»: `params` reaches the receiver as a WHOLE set, so a
+   * row missing from it does not merely fail to transfer its own value — it deletes the
+   * receiver's.
+   */
+  designRowsDropped: number;
   errors: string[];
 }
 
@@ -244,15 +255,18 @@ function isBlankRow(row: Record<string, unknown>): boolean {
 
 /** An empty result — also the shape a sheet of nothing but blank rows yields. */
 function emptySheet(): ParsedDesignSheet {
-  return { params: {}, paramsByTheme: {}, report: {}, errors: [] };
+  return { params: {}, paramsByTheme: {}, report: {}, designRowsDropped: 0, errors: [] };
 }
 
 /**
  * Read the «Оформление» sheet.
  *
- * Rows are independent: a row with an error is dropped and the rest are applied, as on every
+ * Rows are independent: a row with an error is dropped and the rest are read, as on every
  * other sheet of the workbook. A key repeated for the same owner ends up at its LAST row —
- * the sheet is a list of statements and the author reads it top to bottom.
+ * the sheet is a list of statements and the author reads it top to bottom. A dropped row that
+ * could have been a DESIGN statement is also COUNTED ({@link ParsedDesignSheet.designRowsDropped}):
+ * the design half of the sheet reaches the receiver as a whole set, so the caller has to know
+ * that the set it got is not the whole of what the book said.
  *
  * Nothing here is checked against a manifest: see the module note. In particular an unknown
  * report variant is NOT an error at this level — this module cannot know the receiver's
@@ -267,11 +281,16 @@ export function parseDesignSheet(rows: Record<string, unknown>[] = []): ParsedDe
     const fail = (message: string): void => {
       out.errors.push(`${where}: ${message}`);
     };
+    /** A row that was going to say something about the DESIGN and could not be read. */
+    const failDesign = (message: string): void => {
+      out.designRowsDropped++;
+      fail(message);
+    };
 
     const whatRaw = String(row[DS_WHAT] ?? "");
     const what = byLabelOrValue(WHAT_TO, whatRaw) as DesignWhat | undefined;
     if (!what) {
-      fail(`неизвестное «${DS_WHAT}»: "${whatRaw}"; ожидается одно из: ${DESIGN_WHAT_CHOICES.join(", ")}`);
+      failDesign(`неизвестное «${DS_WHAT}»: "${whatRaw}"; ожидается одно из: ${DESIGN_WHAT_CHOICES.join(", ")}`);
       return;
     }
 
@@ -281,7 +300,7 @@ export function parseDesignSheet(rows: Record<string, unknown>[] = []): ParsedDe
     if (what === "template") {
       const templateId = cleanCell(valueRaw);
       if (templateId === "") {
-        fail(`строка «${WHAT_TO.template}» без «${DS_VALUE}»: нечего применять`);
+        failDesign(`строка «${WHAT_TO.template}» без «${DS_VALUE}»: нечего применять`);
         return;
       }
       out.templateId = templateId;
@@ -291,7 +310,7 @@ export function parseDesignSheet(rows: Record<string, unknown>[] = []): ParsedDe
     if (what === "theme") {
       const theme = byLabelOrValue(THEME_TO, valueRaw) as TestTheme | undefined;
       if (!theme) {
-        fail(
+        failDesign(
           `неизвестная «${WHAT_TO.theme}»: "${valueRaw}"; `
           + `ожидается одно из: ${DESIGN_THEME_CHOICES.join(", ")}`,
         );
@@ -303,7 +322,7 @@ export function parseDesignSheet(rows: Record<string, unknown>[] = []): ParsedDe
 
     if (what === "param") {
       if (key === "") {
-        fail(`строка «${WHAT_TO.param}» без «${DS_KEY}»: неизвестно, что настраивается`);
+        failDesign(`строка «${WHAT_TO.param}» без «${DS_KEY}»: неизвестно, что настраивается`);
         return;
       }
       const themeRaw = cleanCell(String(row[DS_THEME] ?? ""));
@@ -316,7 +335,7 @@ export function parseDesignSheet(rows: Record<string, unknown>[] = []): ParsedDe
       // palette the receiving template may well declare.
       const palette = (byLabelOrValue(THEME_TO, themeRaw) as TestTheme | undefined) ?? themeRaw;
       if (palette === "auto") {
-        fail(`«${DS_THEME}»: «${THEME_TO.auto}» — не палитра; переопределять по ней нечего`);
+        failDesign(`«${DS_THEME}»: «${THEME_TO.auto}» — не палитра; переопределять по ней нечего`);
         return;
       }
       (out.paramsByTheme[palette] ??= {})[key] = decodeFieldValue(valueRaw);

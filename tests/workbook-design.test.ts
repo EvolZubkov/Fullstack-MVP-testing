@@ -241,6 +241,29 @@ describe("лист «Оформление»", () => {
     expect(parsed.errors).toHaveLength(2);
   });
 
+  it("отброшенные строки оформления считаются, а строки отчёта — нет", () => {
+    // Набор параметров уходит приёмнику ЦЕЛИКОМ, поэтому импорту нужно отличать
+    // «книга не называла параметра» от «строку не удалось прочитать». Строка с
+    // непонятным «Что» считается тоже: чему она принадлежала, сказать нечем.
+    const parsed = parseDesignSheet([
+      { "Что": "Обложка", "Ключ": "x", "Значение": "1" },
+      { "Что": "Параметр", "Ключ": "", "Значение": "#fff" },
+      { "Что": "Отчёт", "Режим": "Полуадаптивный", "Ключ": "showScales", "Значение": "true" },
+      { "Что": "Отчёт", "Режим": "", "Ключ": "showScales", "Значение": "true" },
+    ]);
+    expect(parsed.errors).toHaveLength(4);
+    expect(parsed.designRowsDropped).toBe(2);
+  });
+
+  it("прочитанный лист не сообщает об отброшенных строках оформления", () => {
+    const parsed = parseDesignSheet([
+      { "Что": "Шаблон", "Значение": "corporate" },
+      { "Что": "Параметр", "Ключ": "fontFamily", "Значение": "Inter" },
+    ]);
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.designRowsDropped).toBe(0);
+  });
+
   it("строка отчёта без режима — ошибка: непонятно, к какой ветви её отнести", () => {
     const parsed = parseDesignSheet([
       { "Что": "Отчёт", "Режим": "", "Ключ": "showScales", "Значение": "true" },
@@ -301,6 +324,12 @@ describe("лист «Оформление»", () => {
 
   it("пустой лист ничего не сообщает: импорту нечего применять", () => {
     const parsed = parseDesignSheet();
-    expect(parsed).toEqual({ params: {}, paramsByTheme: {}, report: {}, errors: [] });
+    expect(parsed).toEqual({
+      params: {},
+      paramsByTheme: {},
+      report: {},
+      designRowsDropped: 0,
+      errors: [],
+    });
   });
 });
