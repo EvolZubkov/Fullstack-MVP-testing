@@ -229,6 +229,9 @@ function readRequiredInt(
  * a hand-written sheet need not number a topic that has one level, and a number taken this way
  * can never collide. A number that IS taken is an error rather than an overwrite: it is half
  * of the level's address, and the losing level would vanish without a word.
+ *
+ * An empty «Название» is NOT an error: it takes the editor's «Уровень N», since the editor
+ * saves a nameless level without a word and the book may not be stricter than it.
  */
 export function parseAdaptiveLevelSheet(
   rows: Record<string, unknown>[] = [],
@@ -263,14 +266,14 @@ export function parseAdaptiveLevelSheet(
       return;
     }
 
-    // A level has NO default name: it is what the learner sees on the transition screen and
-    // what the author recognises the row by, so an empty cell is an error rather than
-    // «Уровень 2» invented here.
-    const levelName = cleanCell(String(row[AL_NAME] ?? ""));
-    if (levelName === "") {
-      errors.push(`${where}: не указано «${AL_NAME}» уровня`);
-      return;
-    }
+    // An empty name takes the editor's own default, «Уровень N» by the book's number — the
+    // very string `makeDefaultLevel` stamps on a level added by hand. The editor never checks
+    // the name, so a level with an empty one saves through it perfectly well; refusing the row
+    // here would make the book STRICTER than the editor (PRD-48 §9) over a value the author
+    // can neither see nor fix — and if it were the topic's only level, the refusal would cost
+    // the WHOLE save: the «adaptive section without levels» gate would then cancel the
+    // settings, the structure, the feedback and the pages along with it.
+    const levelName = cleanCell(String(row[AL_NAME] ?? "")) || `Уровень ${number}`;
 
     const min = readRequiredInt(row, AL_MIN, { min: DIFFICULTY_MIN, max: DIFFICULTY_MAX });
     if (!min.ok) {
