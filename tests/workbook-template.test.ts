@@ -53,6 +53,11 @@ import {
   PAGE_TARGET_CHOICES,
   ADAPTIVE_LEVEL_HEADERS,
   ADAPTIVE_PASS_TYPE_CHOICES,
+  DESIGN_HEADERS,
+  DESIGN_WHAT_CHOICES,
+  DESIGN_MODE_CHOICES,
+  DESIGN_PALETTE_CHOICES,
+  parseDesignSheet,
   parseAdaptiveLevelSheet,
   parseBool,
   parseFeedbackSheets,
@@ -71,6 +76,8 @@ vi.hoisted(() => {
 const { storageMock, testSettingsMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
+    // PRD-48 Э5: оформление пишется своим путём, а не через службу настроек.
+    updateTest: vi.fn(),
     getTopics: vi.fn(),
     createTopic: vi.fn(),
     getQuestion: vi.fn(),
@@ -111,6 +118,22 @@ vi.mock("../server/services/content-page-fields", async (importOriginal) => {
   ) as { contentTemplates?: unknown[] };
   return { ...actual, resolveContentTemplates: vi.fn(async () => manifest.contentTemplates ?? null) };
 });
+/**
+ * Лист «Оформление» типизируется манифестом активного шаблона, который импорт читает
+ * ПРЯМЫМ запросом к таблице шаблонов. Подменяется сам `db`, и строка отдаётся с тем же
+ * НАСТОЯЩИМ манифестом «Стандартного»: только так прогон примерных строк проверяет, что
+ * ключи параметров и вид отчёта в примере существуют, а не согласованы сами с собой.
+ */
+vi.mock("../server/db", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const manifest = JSON.parse(
+    readFileSync(join(process.cwd(), "server/scorm/templates/default/manifest.json"), "utf8"),
+  ) as unknown;
+  const rows = [{ id: "default", isActive: true, version: "1.0.0", templateApiVersion: "1.0", manifest }];
+  const chain: any = { select: () => chain, from: () => chain, where: () => chain, then: (r: any) => r(rows) };
+  return { db: chain };
+});
 vi.mock("../server/services/test-settings", () => ({ testSettingsService: testSettingsMock }));
 vi.mock("../server/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
@@ -136,6 +159,8 @@ beforeEach(() => {
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.getTest.mockResolvedValue({ id: "test-1", status: "draft" });
+  storageMock.updateTest.mockImplementation(async (id: string, patch: any) => ({ id, ...patch }));
+  testSettingsMock.save.mockResolvedValue({ id: "test-1" });
   // Системные страницы создаёт сам тест, поэтому у приёмника примерных строк обязана
   // существовать страница итогов: строка «Итоги» её НАХОДИТ, а не создаёт.
   storageMock.getContentPages.mockResolvedValue([
@@ -162,6 +187,7 @@ const CANONICAL: Record<string, string[]> = {
   "Страницы": PAGE_HEADERS,
   "Поля страниц": PAGE_FIELD_HEADERS,
   "Адаптивные уровни": ADAPTIVE_LEVEL_HEADERS,
+  "Оформление": DESIGN_HEADERS,
   "Оценка": SCORING_OVERRIDE_HEADERS,
   "Шкалы": SCALE_HEADERS,
   "Показатели": RESULT_VAR_HEADERS,
@@ -323,6 +349,33 @@ describe("шаблон книги — валидность примеров", ()
     // Ключ, которого вариант «Стандартного» шаблона не объявляет, применён не был бы —
     // и загрузка сказала бы об этом. Пример не вправе учить такому.
     expect(result.warnings.filter((w) => w.includes("не объявляет полей"))).toEqual([]);
+  });
+
+  // Прогон общей книги доказывает, что примерные строки НЕ ломают импорт; здесь
+  // проверяется, что примерное оформление ещё и ПРИМЕНЯЕТСЯ. Без этого лист с опечаткой
+  // в названии просто не читался бы, и «ошибок нет» ничего бы не значило.
+  it("примерное оформление применяется настоящим импортом", async () => {
+    const wb = new ExcelJS.Workbook();
+    addJsonSheet(wb, "Оформление", EXAMPLE_ROWS["Оформление"]);
+    const loaded = await readWorkbookFromBuffer(await workbookToBuffer(wb));
+
+    const result = await importWorkbook("test-1", loaded, { dryRun: false });
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    const [, patch] = storageMock.updateTest.mock.calls[0] as [string, any];
+    expect(patch.designSettingsJson).toMatchObject({
+      templateId: "default",
+      theme: "dark",
+      params: { fontFamily: "Roboto", showProgressBar: true },
+      paramsByTheme: { light: { primaryColor: "#2f6fed" }, dark: { primaryColor: "#88aaff" } },
+    });
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.test.reportSettingsJson).toMatchObject({
+      enabled: true,
+      standard: { variantKey: "report.standard", values: { scalesChartKind: "rose" } },
+      adaptive: { variantKey: "report.adaptive.standard", values: { scalesChartKind: "none" } },
+    });
   });
 
   // Значение поля хранится НА странице: строка примера с адресом, которого нет на листе
@@ -496,6 +549,11 @@ describe("шаблон книги — проверка ввода", () => {
     // У уровня порог всегда конкретное число, наследовать ему не у кого — поэтому
     // список короче, чем у «Структуры».
     expect(choicesBehind(wb, "Адаптивные уровни", "Тип порога")).toEqual(ADAPTIVE_PASS_TYPE_CHOICES);
+    // Оформление: три закрытые колонки из пяти. «Тема» предлагает только палитры —
+    // «Авто» это выбор ТЕСТА, а не палитра, и переопределять параметр по ней нечего.
+    expect(choicesBehind(wb, "Оформление", "Что")).toEqual(DESIGN_WHAT_CHOICES);
+    expect(choicesBehind(wb, "Оформление", "Режим")).toEqual(DESIGN_MODE_CHOICES);
+    expect(choicesBehind(wb, "Оформление", "Тема")).toEqual(DESIGN_PALETTE_CHOICES);
   });
 
   // Excel не открывает книгу, где подсказка проверки длиннее 255 символов, а текст
@@ -637,6 +695,33 @@ describe("шаблон книги — проверка ввода", () => {
         }],
       );
       expect(parsed.errors, `«Куда» = «${target}»`).toEqual([]);
+    }
+
+    // Оформление: у каждого значения «Что» своя форма строки, поэтому проверяется, что
+    // хоть одна из четырёх форм читается разборщиком без ошибок — какие колонки нужны
+    // каждому виду строки, знает он сам, и повторять это знание здесь значило бы
+    // разойтись с ним. «Режим» и «Тема» проверяются в своей форме строки.
+    for (const what of choicesBehind(wb, "Оформление", "Что")) {
+      const shapes = [
+        { "Что": what, "Режим": "", "Тема": "", "Ключ": "", "Значение": "default" },
+        { "Что": what, "Режим": "", "Тема": "", "Ключ": "", "Значение": "Тёмная" },
+        { "Что": what, "Режим": "", "Тема": "", "Ключ": "primaryColor", "Значение": "#2f6fed" },
+        { "Что": what, "Режим": "Стандартный", "Тема": "", "Ключ": "Вид отчёта", "Значение": "report.standard" },
+      ];
+      const clean = shapes.filter((r) => parseDesignSheet([r]).errors.length === 0);
+      expect(clean.length, `«Что» = «${what}» не читается ни в одной форме строки`).toBeGreaterThan(0);
+    }
+    for (const mode of choicesBehind(wb, "Оформление", "Режим")) {
+      const parsed = parseDesignSheet([
+        { "Что": "Отчёт", "Режим": mode, "Тема": "", "Ключ": "Вид отчёта", "Значение": "report.standard" },
+      ]);
+      expect(parsed.errors, `«Режим» = «${mode}»`).toEqual([]);
+    }
+    for (const palette of choicesBehind(wb, "Оформление", "Тема")) {
+      const parsed = parseDesignSheet([
+        { "Что": "Параметр", "Режим": "", "Тема": palette, "Ключ": "primaryColor", "Значение": "#2f6fed" },
+      ]);
+      expect(parsed.errors, `«Тема» = «${palette}»`).toEqual([]);
     }
 
     for (const value of choicesBehind(wb, "Адаптивные уровни", "Тип порога")) {
