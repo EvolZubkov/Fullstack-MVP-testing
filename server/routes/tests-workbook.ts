@@ -17,7 +17,7 @@ import { addAoaSheet, addJsonSheet, readWorkbookFromBuffer, workbookToBuffer } f
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
-import { workbookUploadSingle } from "../middleware/upload";
+import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
 import { importWorkbook } from "../services/workbook-import";
 import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import {
@@ -88,6 +88,7 @@ router.post(
       res.json(result);
     } catch (error) {
       logger.error("Workbook import error: " + (error as Error).message, "tests-workbook");
+      if (respondWorkbookReadError(res, error)) return;
       res.status(500).json({ error: "Failed to import workbook" });
     }
   },

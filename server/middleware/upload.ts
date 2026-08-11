@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { NextFunction, Request, Response } from "express";
+import { WorkbookReadError } from "../utils/excel";
 
 // Директория для медиа-файлов
 const mediaDir = path.resolve(process.cwd(), "uploads", "media");
@@ -80,6 +81,26 @@ export const mediaUpload = multer({
     cb(ok ? null : (new Error("Unsupported media type") as any), ok);
   },
 });
+
+/**
+ * Answer a failed workbook read as a CLIENT error, carrying the reason code.
+ *
+ * A file the author picked is their input, not a server fault: every route that
+ * reads an uploaded book used to let the failure fall into its generic `500`,
+ * which told the author nothing and looked like an outage. Lives next to
+ * {@link workbookUploadSingle} because both translate an upload-level problem
+ * into the answer the client can act on.
+ *
+ * @param res Response to write to.
+ * @param error The caught error, of any kind.
+ * @returns true when the error WAS a read failure and the response is sent, so
+ *   the caller can return; false to fall through to its own handling.
+ */
+export function respondWorkbookReadError(res: Response, error: unknown): boolean {
+  if (!(error instanceof WorkbookReadError)) return false;
+  res.status(400).json({ error: "Failed to read file", code: error.reason });
+  return true;
+}
 
 /**
  * Проверка на base64 в mediaUrl (запрещено)

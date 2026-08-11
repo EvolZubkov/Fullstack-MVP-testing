@@ -235,6 +235,19 @@ describe("POST /api/workbook/import-new", () => {
       .attach("file", buf, "wb.xlsx");
     expect(res.status).toBe(400);
   });
+
+  it("нечитаемый файл → 400 с кодом причины, а не 500", async () => {
+    const notAZip = Buffer.from("Ключ строки;Тема\nq1;JS\n", "utf8");
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Сертификация")
+      .attach("file", notAZip, "wb.xlsx");
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("not_a_zip");
+    // Ничего не создано: файл не прочитан, значит и оболочки теста быть не должно.
+    expect(testSettingsMock.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/workbook/template", () => {

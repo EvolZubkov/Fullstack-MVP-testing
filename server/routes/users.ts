@@ -3,6 +3,7 @@ import { logger, audit } from "../logger";
 import { appBaseUrl } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
+import { respondWorkbookReadError } from "../middleware/upload";
 import { getEffectiveRoles, isSuperadmin } from "../services/access";
 import { validateRoleChange, isStoredRole, type StoredRole } from "@shared/access";
 import { sendInviteEmail } from "../email";
@@ -509,6 +510,7 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
     res.json(preview);
   } catch (error) {
     logger.error("Bulk preview error: " + (error as Error).message);
+    if (respondWorkbookReadError(res, error)) return;
     res.status(500).json({ error: "Failed to parse file" });
   }
 });

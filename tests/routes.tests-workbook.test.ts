@@ -210,6 +210,14 @@ describe("POST /:id/workbook/import — основной поток", () => {
 });
 
 describe("POST /:id/workbook/import — ошибки и валидация", () => {
+  it("нечитаемый файл → 400 с кодом причины, а не 500", async () => {
+    const notAZip = Buffer.from("email;name\na@b.c;A\n", "utf8");
+    const res = await postWorkbook(notAZip);
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("not_a_zip");
+  });
+
   it("неизвестная шкала в «Вкладах вопросов» → ошибка строки", async () => {
     const buf = await makeWorkbook({
       "Вклады вопросов": [{ "Вопрос": "q-x", "Шкала": "missing", "Источник": "вопрос", "Значение": "1" }],

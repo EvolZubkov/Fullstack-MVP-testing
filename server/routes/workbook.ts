@@ -34,11 +34,10 @@ import {
   readWorkbookFromBuffer,
   sheetToObjects,
   workbookToBuffer,
-  WorkbookReadError,
 } from "../utils/excel";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
-import { workbookUploadSingle } from "../middleware/upload";
+import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
 import { importWorkbook } from "../services/workbook-import";
 import { testSettingsService } from "../services/test-settings";
 // The role-sheet names and the template itself live in one module, so /inspect
@@ -123,11 +122,11 @@ router.post(
       });
     } catch (error) {
       logger.error("Workbook inspect error: " + (error as Error).message, "workbook");
-      // `code` separates "this is not an .xlsx at all" from "it is a package we
-      // could not parse": the advice to the author differs (pick another file vs
-      // re-save the book), and the reader is the only place that knows which.
-      const code = error instanceof WorkbookReadError ? error.reason : undefined;
-      res.status(400).json({ error: "Failed to read file", ...(code ? { code } : {}) });
+      // The reason code separates "this is not an .xlsx at all" from "it is a
+      // package we could not parse": the advice to the author differs (pick
+      // another file vs re-save the book).
+      if (respondWorkbookReadError(res, error)) return;
+      res.status(400).json({ error: "Failed to read file" });
     }
   },
 );
@@ -180,6 +179,7 @@ router.post(
       res.status(201).json({ ...result, test: { id: test.id, title: test.title } });
     } catch (error) {
       logger.error("Workbook import-new error: " + (error as Error).message, "workbook");
+      if (respondWorkbookReadError(res, error)) return;
       res.status(500).json({ error: "Failed to import workbook into a new test" });
     }
   },
