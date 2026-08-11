@@ -93,8 +93,24 @@ const MEDIA_TYPES = new Set(["image", "asset", "file", "downloadLink"]);
 /** Fields of the media envelope that are carried over; anything else is not stored. */
 const MEDIA_FIELDS = ["url", "name", "mime", "size", "mediaId", "label"] as const;
 
-/** Types whose empty value is a MEANINGFUL empty string rather than «nothing was set». */
-const EMPTY_MEANS_VALUE = new Set(["text", "url", "color"]);
+/**
+ * Types whose empty value is a MEANINGFUL empty string rather than «nothing was set».
+ *
+ * Which types those are is a property of the EDITOR that owns the field, not of the type name,
+ * so the two passes get two lists. Absence and `""` are genuinely different states here:
+ * absence means «the template's own value applies», and the reader has to give back exactly
+ * what the author left behind.
+ *
+ * A DESIGN parameter is released by `clearParam`, which REMOVES the key (the «Вернуть из
+ * шаблона» button of a colour, the template switch, «Сбросить всё»), and the only controls of
+ * the design section that can be left holding an empty string are the `text` and `url` inputs:
+ * a `select` always carries one of its options, a colour is a picker, media is dropped whole.
+ * The REPORT card has no such button — everything it does not render as a switch, a select or
+ * a spinner is a plain text input — so a colour wiped there IS an empty string the author
+ * typed, and the round trip has to bring it back.
+ */
+const EMPTY_IS_VALUE_PARAM = new Set(["text", "url"]);
+const EMPTY_IS_VALUE_REPORT = new Set(["text", "url", "color"]);
 
 const TRUE_WORDS = new Set(["true", "да", "1", "yes"]);
 const FALSE_WORDS = new Set(["false", "нет", "0", "no"]);
@@ -244,17 +260,16 @@ function coerceValue(def: DesignParamDef, raw: unknown): { value: unknown } | { 
  * @param source Incoming values.
  * @param defs Declarations by key.
  * @param where Prefix of an error message, naming the owner of the values.
- * @param keepEmpty Whether an empty value is stored as an empty string. False for design
- *   params, where the ABSENCE of a key means «the template's own value applies» — exactly
- *   what the editor stores when the author clears an override, so storing `""` there would
- *   pin a blank colour instead of releasing it.
+ * @param emptyIsValue Types whose empty cell is stored as an empty string; for every other
+ *   type an empty cell means «nothing was set» and the key is left out, which is what the
+ *   editor of that type leaves behind. See {@link EMPTY_IS_VALUE_PARAM}.
  * @param out Collected result.
  */
 function applyValues(
   source: Record<string, unknown>,
   defs: Map<string, DesignParamDef>,
   where: string,
-  keepEmpty: boolean,
+  emptyIsValue: ReadonlySet<string>,
   out: { values: Record<string, unknown>; dropped: string[]; errors: string[] },
 ): void {
   for (const [key, raw] of Object.entries(source)) {
@@ -264,7 +279,7 @@ function applyValues(
       continue;
     }
     if (isEmpty(raw)) {
-      if (keepEmpty && EMPTY_MEANS_VALUE.has(String(def.type))) out.values[key] = "";
+      if (emptyIsValue.has(String(def.type))) out.values[key] = "";
       continue;
     }
     const result = coerceValue(def, raw);
@@ -294,7 +309,7 @@ export function normalizeDesignParams(input: DesignInput, manifest: unknown): No
   const out: NormalizedDesign = { params: {}, paramsByTheme: {}, dropped: [], errors: [] };
   const flat = { values: out.params, dropped: out.dropped, errors: out.errors };
 
-  applyValues(record(input.params), defs, "Оформление", false, flat);
+  applyValues(record(input.params), defs, "Оформление", EMPTY_IS_VALUE_PARAM, flat);
 
   const themed = supportsThemes(manifest);
   const themeIds = new Set<string>(declaredThemes(manifest).map((t) => t.id));
@@ -341,7 +356,7 @@ export function normalizeDesignParams(input: DesignInput, manifest: unknown): No
       colourOnly[key] = raw;
     }
     const bucket: Record<string, unknown> = {};
-    applyValues(colourOnly, defs, `Оформление, палитра «${themeId}»`, false, {
+    applyValues(colourOnly, defs, `Оформление, палитра «${themeId}»`, EMPTY_IS_VALUE_PARAM, {
       values: bucket,
       dropped: out.dropped,
       errors: out.errors,
@@ -395,7 +410,7 @@ export function normalizeReportBranch(
 
   const defs = byKey(Array.isArray(variant?.settings) ? (variant?.settings as DesignParamDef[]) : []);
   const values: Record<string, unknown> = {};
-  applyValues(record(input.values), defs, `Отчёт («${modeLabel}»)`, true, {
+  applyValues(record(input.values), defs, `Отчёт («${modeLabel}»)`, EMPTY_IS_VALUE_REPORT, {
     values,
     dropped: out.dropped,
     errors: out.errors,

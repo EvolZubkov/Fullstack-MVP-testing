@@ -149,9 +149,22 @@ describe("нормализация оформления по манифесту"
     expect(out.params).toEqual({ primaryColor: "#00ff00" });
   });
 
-  it("пустое значение не пишется: отсутствие параметра и есть «берётся из шаблона»", () => {
-    const out = normalizeDesignParams({ params: { primaryColor: "", caption: "  " } }, MANIFEST);
+  it("пустой цвет не пишется: отсутствие параметра и есть «берётся из шаблона»", () => {
+    // Цвет отпускается кнопкой «Вернуть из шаблона», а она УДАЛЯЕТ ключ; то же у select
+    // и медиа. Пустая ячейка таких типов — не значение.
+    const out = normalizeDesignParams(
+      { params: { primaryColor: "", fontFamily: "  ", logoUrl: "" } },
+      MANIFEST,
+    );
     expect(out.params).toEqual({});
+    expect(out.errors).toEqual([]);
+  });
+
+  it("пустой текст параметра сохраняется: именно его кладёт редактор стёртым полем", () => {
+    // У `text`/`url` кнопки сброса нет — автор стирает поле, и в модель уходит пустая
+    // строка. Отбросив её, круг «выгрузка → загрузка» вернул бы умолчание манифеста.
+    const out = normalizeDesignParams({ params: { caption: "" } }, MANIFEST);
+    expect(out.params).toEqual({ caption: "" });
     expect(out.errors).toEqual([]);
   });
 

@@ -207,6 +207,17 @@ describe("лист «Оформление»", () => {
     expect(cell(rows, "Отчёт", "note", { mode: "Стандартный" })).toBeUndefined();
   });
 
+  it("пустая строка — не то же, что отсутствие: она доезжает своей строкой", () => {
+    // Стёртое текстовое поле хранится пустой строкой, и круг обязан вернуть её, а не
+    // умолчание манифеста. Типизацию делает импорт: лист манифеста не знает.
+    const rows = serializeDesignRows({ templateId: "default", params: { caption: "" } }, null);
+    expect(cell(rows, "Параметр", "caption")).toBe("");
+
+    const parsed = parseDesignSheet(rows);
+    expect(parsed.params).toEqual({ caption: "" });
+    expect(parsed.errors).toEqual([]);
+  });
+
   it("неизвестные «Что» и «Режим» — ошибки своих строк, остальные строки применяются", () => {
     const parsed = parseDesignSheet([
       { "Что": "Обложка", "Ключ": "x", "Значение": "1" },
