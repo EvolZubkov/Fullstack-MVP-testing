@@ -10,9 +10,9 @@ import { registryMediaResolver } from "./builders/media-resolver";
 import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import { readVendorDsCss, readPackageFontFiles, assemblePackageStyles } from "./builders/ds-styles";
-import { resolveReportBake, reportKindForMode } from "@shared/report/report-variants";
+import { resolveReportBake, reportKindForMode, type ReportLabelLayers } from "@shared/report/report-variants";
 import { isReportEnabled } from "@shared/schema";
-import type { ReportSettings } from "@shared/schema";
+import type { ReportSettings, DesignSettings } from "@shared/schema";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -163,6 +163,15 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // не объявлен, деградация та же, что у прочих системных экранов: макет из
   // вложенного `default` — иначе тест на стороннем шаблоне остался бы без отчёта.
   const reportKind = reportKindForMode(data.test.mode);
+  // PRD-49: слои надписей — общая формулировка теста (`design_settings_json.labels`) и
+  // СВОЙ слой отчёта (`report_settings_json.labels`). Оба лежат на тесте целиком, а не
+  // по ветке режима, поэтому читаются один раз и идут в ОБА вызова `resolveReportBake`
+  // ниже (активный шаблон и деградация на «Стандартный») — та же карта, что и без учёта
+  // выбора варианта: слова принадлежат тесту, а не тому, чей макет их печатает.
+  const reportLabelLayers: ReportLabelLayers = {
+    values: (data.test.designSettingsJson as DesignSettings | null)?.labels ?? null,
+    overrides: (data.test.reportSettingsJson as ReportSettings | null)?.labels ?? null,
+  };
   let reportBake = resolveReportBake(
     readTemplateManifest(templateDir),
     reportKind,
@@ -173,6 +182,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     // Резолвятся здесь, а не в рантайме: только сборщик знает, из какого каталога
     // приехал вариант.
     `${PACKAGE_TEMPLATE_DIR}/`,
+    reportLabelLayers,
   );
   if (!reportBake.variantKey) {
     // Активный шаблон вида не объявил. Макет приходит из вложенного «Стандартного» по
@@ -185,6 +195,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
       reportKind,
       null,
       `${PACKAGE_DEFAULT_TEMPLATE_DIR}/`,
+      reportLabelLayers,
     );
     reportBake = { ...fromDefault, variantKey: null, layoutKey: reportKind };
   }

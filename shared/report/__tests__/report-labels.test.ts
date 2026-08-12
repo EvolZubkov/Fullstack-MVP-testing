@@ -77,8 +77,9 @@ function renderReport(layers?: ReportLabelLayers): string {
 describe("отчёт печатает надписи блоков (PRD-49)", () => {
   it("берёт формулировки из словаря, а не из макета", () => {
     const html = renderReport();
-    // Ключи `results.*` — те же, что на экране итогов, поэтому и умолчания те же.
-    expect(html).toContain("По темам");
+    // У ключа тем манифест объявил СВОЁ умолчание отчёта: документ сохраняет прежние слова,
+    // хотя экран итогов после PRD-49 говорит короче («По темам»).
+    expect(html).toContain("Результаты по темам");
     // …а у групп рекомендаций манифест объявил СВОИ умолчания отчёта (`defaults.report`).
     expect(html).toContain("Рекомендации по курсам");
     expect(html).toContain("Рекомендуемые мероприятия");
@@ -122,7 +123,7 @@ describe("отчёт печатает надписи блоков (PRD-49)", () 
 
   it("выключенная в отчёте надпись уносит заголовок, но не сам раздел", () => {
     const html = renderReport({ overrides: { "results.topics": { on: false } } });
-    expect(html).not.toContain("По темам");
+    expect(html).not.toContain("Результаты по темам");
     // Карточки тем на месте — гасится подпись, а не содержимое (спека, решение 4).
     expect(html).toContain("Технологии");
   });
@@ -147,6 +148,6 @@ describe("отчёт печатает надписи блоков (PRD-49)", () 
     const html = compileTemplate(REPORT)(ctx).replace(/\s+/g, " ");
     expect(html).toContain("Технологии");
     expect(html).toContain("Основы сетей");
-    expect(html).not.toContain("По темам");
+    expect(html).not.toContain("Результаты по темам");
   });
 });

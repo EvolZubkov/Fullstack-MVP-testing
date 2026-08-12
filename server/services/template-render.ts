@@ -24,13 +24,14 @@ import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/
 import { resolveThemeParams } from "@shared/template/theme-params";
 import { supportsThemes } from "@shared/template/themes";
 import type { StoredDesignSettings } from "@shared/template/theme-params";
-import type { LabelDeclaration } from "@shared/template/labels";
+import { resolveLabels, type LabelDeclaration, type LabelValues, type ResolvedLabels } from "@shared/template/labels";
 import type { TemplateBlockOrder, ResultsBlockKey } from "@shared/template/results-order";
 import type { AttemptResult } from "@shared/schema";
 import {
   resolveReportVariant,
   resolveReportValues,
   type ReportKind,
+  type ReportLabelLayers,
 } from "@shared/report/report-variants";
 import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
 
@@ -488,6 +489,14 @@ export function readResultsRenderPayload(
  *   `GET /api/templates/:id/assets/*` serves (PRD-27 FR-05). It follows the LAYOUT, so
  *   on a fallback it is `default`, not the active template. Omitted (dev/tests) leaves
  *   template-relative paths unresolved rather than pointing them at the wrong template.
+ * @param labelLayers PRD-49: the test's label wording — the shared layer
+ *   (`design_settings_json.labels`) and the report's own override layer
+ *   (`report_settings_json.labels`). Resolved against THIS directory's manifest, the
+ *   same way {@link module:shared/report/report-variants resolveReportBake} resolves it
+ *   for the SCORM package — a second resolution rule here would let the web host and
+ *   the package disagree on the very same test. Omitted/absent labels on either layer
+ *   leave the template default (or the template's own hard-coded string, for a
+ *   template that declares no `labels[]` at all).
  * @returns Payload, or `null` when this directory offers no such variant.
  */
 export function readReportRenderPayload(
@@ -497,6 +506,7 @@ export function readReportRenderPayload(
   design?: DesignSettingsInput | null,
   paramsDir?: string,
   assetTemplateId?: string,
+  labelLayers?: ReportLabelLayers | null,
 ): {
   layout: string;
   css: string;
@@ -506,6 +516,7 @@ export function readReportRenderPayload(
   cssVars?: Record<string, string>;
   themeCss?: string;
   design?: Record<string, string>;
+  labels?: ResolvedLabels;
 } | null {
   try {
     const raw = readFileSafe(path.join(dir, "manifest.json"));
@@ -528,6 +539,20 @@ export function readReportRenderPayload(
     // ответ с результатом попытки не тащил сотни килобайт base64.
     const imageKeys = reportImageKeys(variant);
     const values = resolveReportValues(variant, authored?.values ?? null);
+    // PRD-49: те же слои, тем же путём, что и в сборщике SCORM-пакета — умолчание
+    // манифеста (с умолчанием ИМЕННО экрана `report`), поверх него общая формулировка
+    // теста, поверх неё слой отчёта. Ключа нет вовсе у шаблона без `labels[]`.
+    const labelDeclarations = Array.isArray((manifest as { labels?: unknown } | null)?.labels)
+      ? ((manifest as { labels?: unknown }).labels as LabelDeclaration[])
+      : [];
+    const labels = labelDeclarations.length
+      ? resolveLabels({
+          declarations: labelDeclarations,
+          values: (labelLayers?.values ?? {}) as LabelValues,
+          overrides: (labelLayers?.overrides ?? {}) as LabelValues,
+          screen: "report",
+        })
+      : {};
     return {
       layout,
       css,
@@ -539,6 +564,7 @@ export function readReportRenderPayload(
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
       ...(themeCss ? { themeCss } : {}),
       ...(logoUrl ? { design: { logoUrl } } : {}),
+      ...(Object.keys(labels).length ? { labels } : {}),
     };
   } catch {
     return null;

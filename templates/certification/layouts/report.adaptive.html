@@ -15,9 +15,12 @@
     <div class="tb-report__title tb-report__title--solid" data-path="course.title"></div>
   </section>
 
+  <!-- ЗАГОЛОВКИ РАЗДЕЛОВ приходят словарём надписей (PRD-49) — те же ключи, что у обычного
+       отчёта и у экрана итогов: формулировка принадлежит тесту, а не режиму выдачи. Пустая
+       надпись означает «не печатать»: раздел остаётся, заголовка у него нет. -->
   {{#if report.hasTopics}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Результаты по темам</div>
+    {{#if labels.results.topics}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.topics }}</div>{{/if}}
     <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
       {{#each result.topicResults}}
       <div class="tb-report__topic tb-report__topic--level {{ achievedClass }}">
@@ -41,7 +44,7 @@
 
   {{#if result.indicators}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Ваш результат</div>
+    {{#if labels.results.indicators}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.indicators }}</div>{{/if}}
     <div class="tb-report__scales">
       <div class="tb-report__scale-list">
         {{#each result.indicators}}
@@ -61,7 +64,7 @@
 
   {{#if result.scales}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">По шкалам</div>
+    {{#if labels.results.scales}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.scales }}</div>{{/if}}
     <!-- Колонки «диаграмма слева, список справа» включает МОДИФИКАТОР, и ставится он по
          тому же признаку, каким гейтится сама фигура. Без него единственный ребёнок —
          список толкований — занимал колонку под диаграмму, 240 px из 545 доступных, и
@@ -128,7 +131,7 @@
   {{/if}}
   {{#if result.recommendations.hasAny}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Рекомендации</div>
+    {{#if labels.results.recommendations}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.recommendations }}</div>{{/if}}
     <!-- Текст рекомендации печатается РАЗМЕТКОЙ: автор выбирает формат («Обычный»,
          «Форматированный», «HTML») в редакторе обратной связи, и его выбор доезжает сюда
          полем `textsHtml`. Обычный текст ядро экранирует само, а переводы строк отдаёт

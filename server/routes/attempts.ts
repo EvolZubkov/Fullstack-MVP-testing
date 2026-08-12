@@ -30,7 +30,7 @@ import {
   completeMeasuresSource,
   readResultsDeclarations,
 } from "../services/template-render";
-import { reportKindForMode } from "@shared/report/report-variants";
+import { reportKindForMode, type ReportLabelLayers } from "@shared/report/report-variants";
 import {
   buildReportInput,
   buildAdaptiveReportInput,
@@ -1731,6 +1731,15 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         (deliveredTest?.reportSettingsJson as ReportSettings | null)?.[
           resultJson.mode === "adaptive" ? "adaptive" : "standard"
         ] ?? null;
+      // PRD-49: словарь надписей документа. Общий слой — ЖИВЫЕ `design_settings_json` теста
+      // (та же ветка, что несёт брендинг чуть выше), а не снапшот: слова экрана итогов и
+      // отчёта берутся из одного места, а `deliveredTest` фиксирует только выбор ВАРИАНТА и
+      // его поля (FR-24). Слой отчёта — общая настройка теста вне ветки режима, поэтому
+      // читается с того же `deliveredTest`, откуда пришёл `authoredReport`.
+      const reportLabelLayers: ReportLabelLayers = {
+        values: (test?.designSettingsJson as DesignSettings | null)?.labels ?? null,
+        overrides: (deliveredTest?.reportSettingsJson as ReportSettings | null)?.labels ?? null,
+      };
       reportRender = readReportRenderPayload(
         activeDir,
         reportKind,
@@ -1738,6 +1747,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         test?.designSettingsJson as any,
         activeDir,
         templateId,
+        reportLabelLayers,
       );
       if (!reportRender) {
         const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
@@ -1752,6 +1762,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             test?.designSettingsJson as any,
             activeDir,
             "default",
+            reportLabelLayers,
           );
         }
       }
