@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { buildResultContext, type ResultInput } from "../result-context";
+import {
+  buildResultContext,
+  buildAdaptiveResultContext,
+  buildSectionResultContext,
+  type ResultInput,
+  type AdaptiveResultInput,
+} from "../result-context";
 import { LEVEL_SCHEMES } from "../level-ramp";
 
 const INPUT: ResultInput = {
@@ -158,5 +164,92 @@ describe("buildResultContext — sub-blocks (PRD-49)", () => {
     // shown exactly as it always was — the sub-block list must say the same.
     const ctx = buildResultContext({ ...INPUT, possiblePoints: 0 }, "Тест", { labels: LABELS });
     expect(ctx.result.blocks?.map((b) => b.key)).toEqual(["summary"]);
+  });
+});
+
+const ADAPTIVE_INPUT: AdaptiveResultInput = {
+  passed: false,
+  topicResults: [
+    { topicName: "Тема", achievedLevelIndex: 1, achievedLevelName: "Средний" },
+  ],
+};
+
+describe("buildAdaptiveResultContext — sub-blocks (PRD-49)", () => {
+  it("carries the resolved labels as a nested tree, same as the standard screen", () => {
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_INPUT, "Тест", { labels: LABELS });
+    expect((ctx.labels as Record<string, Record<string, string>>).results.heading).toBe("Ваш результат");
+  });
+
+  it("keeps the context untouched when the caller passes no labels", () => {
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_INPUT, "Тест");
+    expect("labels" in ctx).toBe(false);
+  });
+
+  it("lists the visible sub-blocks in the template's declared composition — no summary", () => {
+    // The manifest declares `resultsBlockOrder["results.adaptive"] = ["topics", "scales",
+    // "indicators"]` (no `summary`): the adaptive screen has never carried a score summary.
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_INPUT, "Тест", {
+      labels: LABELS,
+      measures: MEASURES,
+      templateBlockOrder: ["topics", "scales", "indicators"],
+    });
+    expect(ctx.result.blocks?.map((b) => b.key)).toEqual(["topics", "scales", "indicators"]);
+  });
+
+  it("cannot print a summary sub-block even when the author's saved order asks for one", () => {
+    // A test that switched templates keeps whatever `blockOrder` it saved elsewhere; the
+    // adaptive screen must still refuse a block it has no data and no layout slot for.
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_INPUT, "Тест", {
+      labels: LABELS,
+      measures: MEASURES,
+      templateBlockOrder: ["topics", "scales", "indicators"],
+      blockOrder: ["summary", "topics", "scales", "indicators"],
+    });
+    expect(ctx.result.blocks?.some((b) => b.key === "summary")).toBe(false);
+    expect(ctx.result.blocks?.map((b) => b.key)).toEqual(["topics", "scales", "indicators"]);
+  });
+
+  it("still refuses the summary block when the caller falls back to the shipped order", () => {
+    // No `templateBlockOrder` at all (a host not yet wired to the manifest) falls back to
+    // DEFAULT_BLOCK_ORDER, which DOES list `summary` — but `hasSummary` is fixed to `false`
+    // for every adaptive context, so the block is filtered out regardless of the order.
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_INPUT, "Тест", { labels: LABELS });
+    expect(ctx.result.blocks?.some((b) => b.key === "summary")).toBe(false);
+  });
+
+  it("flags the visible sub-blocks with the names their layout gates on", () => {
+    const ctx = buildAdaptiveResultContext(ADAPTIVE_INPUT, "Тест", {
+      labels: LABELS,
+      measures: MEASURES,
+      templateBlockOrder: ["topics", "scales", "indicators"],
+    });
+    expect(ctx.result.blocks).toEqual([
+      { key: "topics", heading: "По темам", isTopics: true },
+      { key: "scales", heading: "По шкалам", isScales: true },
+      { key: "indicators", heading: "По показателям", isIndicators: true },
+    ]);
+  });
+});
+
+describe("buildSectionResultContext — labels (PRD-49)", () => {
+  const SECTION_INPUT = { topicName: "Раздел", correct: 3, total: 5, percent: 60, passed: true };
+
+  it("carries the resolved labels as a nested tree", () => {
+    const ctx = buildSectionResultContext(SECTION_INPUT, {
+      labels: { "section.eyebrow": "Итоги раздела", "facts.correct": "верно" },
+    });
+    expect((ctx.labels as Record<string, Record<string, string>>).section.eyebrow).toBe("Итоги раздела");
+    expect((ctx.labels as Record<string, Record<string, string>>).facts.correct).toBe("верно");
+  });
+
+  it("carries no `result.blocks` — the section-results screen has no sub-blocks", () => {
+    const ctx = buildSectionResultContext(SECTION_INPUT, { labels: { "section.eyebrow": "Итоги раздела" } });
+    expect("result" in ctx).toBe(false);
+    expect((ctx as Record<string, unknown>).blocks).toBeUndefined();
+  });
+
+  it("keeps the context untouched when the caller passes no labels", () => {
+    const ctx = buildSectionResultContext(SECTION_INPUT);
+    expect("labels" in ctx).toBe(false);
   });
 });

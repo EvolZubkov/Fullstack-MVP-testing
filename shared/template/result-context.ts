@@ -639,6 +639,70 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
   return view;
 }
 
+/** PRD-49 input {@link attachBlocksAndLabels} takes from either results builder's `opts`. */
+interface BlockLabelOptions {
+  labels?: Record<string, string>;
+  blockOrder?: ResultsBlockKey[];
+  templateBlockOrder?: readonly ResultsBlockKey[];
+}
+
+/**
+ * PRD-49. Attach the umbrella's ordered, labelled sub-blocks (`result.blocks`) and resolve
+ * the labels tree — ONE rule for BOTH the standard and the adaptive results screen.
+ *
+ * A second copy of «which sub-blocks are visible, and in what order» is exactly the drift
+ * PRD-49 exists to prevent. Scales/indicators/topics are read off the SAME fields the two
+ * layouts already gate their own rendering on (`{{#if result.scales}}` /
+ * `{{#if result.indicators}}` / `{{#if result.topicResults}}` in `results.html` and
+ * `results.adaptive.html`), so this function cannot disagree with what the screen actually
+ * prints — it is reading the layout's own gate, not recomputing a second one.
+ *
+ * The score summary is the one exception: the adaptive screen has none, so its visibility
+ * cannot be read off any `result` field (nothing there means «no summary block exists»,
+ * same as «summary is hidden»). The caller states the fact directly via `hasSummary` — the
+ * standard builder passes `!result.hideScoreSummary` (the flag the screen's own ring/strip
+ * reads), the adaptive builder always passes `false`.
+ *
+ * Even with `hasSummary: true` by mistake, a `summary` sub-block could still only appear if
+ * `summary` were present in the resolved order — and for the adaptive screen it never is:
+ * `templateBlockOrder` there leaves it out, so `resolveBlockOrder` drops it from the merged
+ * order however the author's saved `blockOrder` asks for it (`results-order.ts`'s own
+ * mechanism, not a second check here). `hasSummary` is still explicit rather than derived,
+ * so a reader of either call site sees the answer without following the order resolution.
+ *
+ * Mutates `result.blocks` in place, matching every other Core-prepared field this builder
+ * sets, and returns the labels TREE for the caller's `{ ..., labels }` spread — `undefined`
+ * when the caller passed no `labels` at all, so a host not yet taught PRD-49 gets a
+ * byte-identical context (no `labels` key at all, not an empty one).
+ */
+function attachBlocksAndLabels(
+  result: CtxResult,
+  opts: BlockLabelOptions,
+  hasSummary: boolean,
+): Record<string, unknown> | undefined {
+  // `topics` has no `auto/show/hide` setting of its own — it is visible exactly when there
+  // is a topic card to show, which is what both layouts gated on before this PRD.
+  const visible: Record<ResultsBlockKey, boolean> = {
+    summary: hasSummary,
+    scales: !!result.scales?.length,
+    indicators: !!result.indicators?.length,
+    topics: !!result.topicResults?.length,
+  };
+  const labels = opts.labels ?? {};
+  const order = resolveBlockOrder(opts.blockOrder, opts.templateBlockOrder ?? DEFAULT_BLOCK_ORDER);
+  // Named `subBlocks` and not `blocks`: in the standard builder's scope `blocks` already
+  // holds the PRD-29 show/hide answers of the measurement blocks, a different thing entirely.
+  const subBlocks = order
+    .filter((key) => visible[key])
+    .map((key) => ({
+      key,
+      heading: labels[`results.${key}`] ?? "",
+      [BLOCK_FLAG[key]]: true,
+    })) as CtxResultBlock[];
+  if (subBlocks.length) result.blocks = subBlocks;
+  return opts.labels ? labelsTree(labels) : undefined;
+}
+
 /**
  * Build the STANDARD results context. `result.*` carries both raw numbers and
  * Core-prepared presentational fields (the layout/DSL computes no logic). The
@@ -792,31 +856,12 @@ export function buildResultContext(
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
-  // PRD-49. The umbrella's sub-blocks: same visibility rules as before, only gathered into
-  // one ordered array. `summary` reads the INVERTED flag the screen itself reads, so the
-  // list says «visible» exactly where the summary prints — including a control test, which
-  // never reaches the toggle and has always shown it. `topics` has no `auto/show/hide`
-  // setting of its own — it is visible exactly when there is a topic card to show, which is
-  // what the layout gated on before.
-  const visible: Record<ResultsBlockKey, boolean> = {
-    summary: !result.hideScoreSummary,
-    scales: !!result.scales?.length,
-    indicators: !!result.indicators?.length,
-    topics: !!result.topicResults?.length,
-  };
-  const labels = opts.labels ?? {};
-  const order = resolveBlockOrder(opts.blockOrder, opts.templateBlockOrder ?? DEFAULT_BLOCK_ORDER);
-  // Named `subBlocks` and not `blocks`: `blocks` in this scope already holds the PRD-29
-  // show/hide answers of the measurement blocks, a different thing entirely.
-  const subBlocks = order
-    .filter((key) => visible[key])
-    .map((key) => ({
-      key,
-      heading: labels[`results.${key}`] ?? "",
-      [BLOCK_FLAG[key]]: true,
-    })) as CtxResultBlock[];
-  if (subBlocks.length) result.blocks = subBlocks;
-  return { course: { title }, result, ...(opts.labels ? { labels: labelsTree(labels) } : {}) };
+  // PRD-49. The umbrella's sub-blocks + resolved labels, via the ONE rule shared with the
+  // adaptive builder (see `attachBlocksAndLabels`). `summary` reads the INVERTED flag the
+  // screen itself reads, so the list says «visible» exactly where the summary prints —
+  // including a control test, which never reaches the toggle and has always shown it.
+  const labelsTreeOut = attachBlocksAndLabels(result, opts, !result.hideScoreSummary);
+  return { course: { title }, result, ...(labelsTreeOut ? { labels: labelsTreeOut } : {}) };
 }
 
 /** Normalized input for the staged section-results screen (PRD-19 FR-05a). */
@@ -840,6 +885,20 @@ export interface SectionResultInput {
   sectionsTotal?: number;
 }
 
+/** PRD-49: optional resolved labels for the section-results screen. */
+export interface SectionResultContextOptions {
+  /**
+   * Resolved labels of THIS screen (`section.eyebrow`, `facts.*`), same flat map the
+   * results builders take. Absent = no `labels` key on the returned context — a caller
+   * not yet taught PRD-49 gets a byte-identical result.
+   *
+   * The section-results screen has no sub-blocks of its own (it is one fixed card, not
+   * an umbrella with children), so this builder attaches ONLY the labels tree — there is
+   * no `attachBlocksAndLabels` call here, and none is needed.
+   */
+  labels?: Record<string, string>;
+}
+
 /**
  * Build the COMPUTED section-results context (`{ course, sectionResult }`, PRD-19
  * FR-05a). Reuses the same ring geometry as the test results screen; the verdict
@@ -847,9 +906,14 @@ export interface SectionResultInput {
  * shows the score without a pass/fail label. Pure — both hosts call it on their
  * own normalized section result so the numbers/markup cannot drift.
  */
-export function buildSectionResultContext(input: SectionResultInput): {
+export function buildSectionResultContext(
+  input: SectionResultInput,
+  opts: SectionResultContextOptions = {},
+): {
   course: CtxCourse;
   sectionResult: CtxSectionResult;
+  /** PRD-49: resolved interface labels as a nested tree (`labels.section.eyebrow`). */
+  labels?: Record<string, unknown>;
 } {
   const percent = Math.round(input.percent || 0);
   const hasVerdict = input.passed === true || input.passed === false;
@@ -873,6 +937,7 @@ export function buildSectionResultContext(input: SectionResultInput): {
   return {
     course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
     sectionResult,
+    ...(opts.labels ? { labels: labelsTree(opts.labels) } : {}),
   };
 }
 
@@ -1005,6 +1070,22 @@ export interface AdaptiveResultContextOptions {
   measures?: MeasuresInput;
   /** Вводный блок этой выдачи — тот же, что у стандартного экрана (см. там же). */
   intro?: { text?: string | null; format?: RichTextFormat | null } | null;
+  /**
+   * PRD-49: resolved labels of THIS screen, same flat map the standard builder takes
+   * ({@link ResultContextOptions.labels}). Absent = no `labels` key on the returned
+   * context, so a caller not yet taught PRD-49 gets a byte-identical result.
+   */
+  labels?: Record<string, string>;
+  /** PRD-49: the author's order of the sub-blocks; absent = the template's order. */
+  blockOrder?: ResultsBlockKey[];
+  /**
+   * PRD-49: what THIS screen of THIS template prints, and in what order
+   * ({@link ResultContextOptions.templateBlockOrder}). The adaptive results screen has
+   * never carried a score summary, so its declared list has no `summary` key — and that
+   * is what keeps the sub-block list from ever growing one, whatever the author's saved
+   * `blockOrder` asks for (see `attachBlocksAndLabels`).
+   */
+  templateBlockOrder?: readonly ResultsBlockKey[];
 }
 
 /**
@@ -1140,5 +1221,9 @@ export function buildAdaptiveResultContext(
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
-  return { course: { title }, result };
+  // PRD-49. Same rule as the standard screen (see `attachBlocksAndLabels`), with
+  // `hasSummary: false` fixed — this screen has never carried a score summary, so no
+  // caller-supplied order can ever bring one back onto it.
+  const labelsTreeOut = attachBlocksAndLabels(result, opts, false);
+  return { course: { title }, result, ...(labelsTreeOut ? { labels: labelsTreeOut } : {}) };
 }
