@@ -81,29 +81,9 @@
   </section>
   {{/if}}
 
-  <!-- ПОКАЗАТЕЛЬ — СВОЯ карточка, а не строка внутри общей. Раскладка режет документ
-       между блоками верхнего уровня, и одна карточка на все показатели становилась
-       «переростком» в полтора листа: её приходилось резать растром, а хвост в полторы
-       сотни пикселей открывал почти пустую страницу. Отдельными карточками они ложатся
-       плотно. Заголовок несёт первая — иначе он остался бы карточкой из одной строки. -->
-  {{#each result.indicators}}
-  <section class="tb-report__card">
-    {{#if @first}}<div class="tb-report__title tb-report__title--tight">Ваш результат</div>{{/if}}
-    <div class="tb-report__scales">
-      <div class="tb-report__scale-list">
-        <div class="tb-report__scale">
-          <div class="tb-report__scale-name">{{name}}</div>
-          <div class="tb-report__scale-meta">
-            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
-            {{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}
-          </div>
-          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
-        </div>
-      </div>
-    </div>
-  </section>
-  {{/each}}
-
+  <!-- ШКАЛЫ идут ПЕРЕД показателями — тот же порядок, что на экране итогов: шкала —
+       измерение, показатель — вывод из измерений, и вывод читается после того, из чего
+       он сделан. -->
   {{#if result.scales}}
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--tight">По шкалам</div>
@@ -176,6 +156,30 @@
     </div>
   </section>
   {{/if}}
+
+  <!-- ПОКАЗАТЕЛЬ — СВОЯ карточка, а не строка внутри общей. Раскладка режет документ
+       между блоками верхнего уровня, и одна карточка на все показатели становилась
+       «переростком» в полтора листа: её приходилось резать растром, а хвост в полторы
+       сотни пикселей открывал почти пустую страницу. Отдельными карточками они ложатся
+       плотно. Заголовок несёт первая — иначе он остался бы карточкой из одной строки. -->
+  {{#each result.indicators}}
+  <section class="tb-report__card">
+    {{#if @first}}<div class="tb-report__title tb-report__title--tight">Ваш результат</div>{{/if}}
+    <div class="tb-report__scales">
+      <div class="tb-report__scale-list">
+        <div class="tb-report__scale">
+          <div class="tb-report__scale-name">{{name}}</div>
+          <div class="tb-report__scale-meta">
+            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+            {{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}
+          </div>
+          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
+        </div>
+      </div>
+    </div>
+  </section>
+  {{/each}}
+
   {{#if result.recommendations.hasAny}}
   <section class="tb-report__card">
     <div class="tb-report__title tb-report__title--tight">Рекомендации</div>

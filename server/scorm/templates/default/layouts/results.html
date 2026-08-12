@@ -40,33 +40,12 @@
       </div>
       {{/unless}}
 
-      {{#if result.indicators}}
-      {{#unless result.hideScoreSummary}}<hr class="ou-separator ou-separator--horizontal">{{/unless}}
-      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
-      <div class="tb-measures">
-        {{#each result.indicators}}
-        <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
-          <div class="ou-formsection__intro">
-            <h4 class="ou-formsection__title">{{name}}</h4>
-          </div>
-          <div class="ou-formsection__body">
-            {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
-            {{#if levelLabel}}
-            <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
-              <div class="ou-banner__body">
-                <div class="ou-banner__title">{{levelLabel}}</div>
-                {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
-              </div>
-            </div>
-            {{/if}}
-          </div>
-        </div>
-        {{/each}}
-      </div>
-      {{/if}}
-
+      <!-- ШКАЛЫ идут ПЕРЕД показателями: шкала — измерение, показатель — вывод из
+           измерений, и вывод читается после того, из чего он сделан. Разделитель ставит
+           только НЕ первый блок, поэтому гейт «нет сводки баллов» переехал сюда вместе с
+           порядком. -->
       {{#if result.scales}}
-      <hr class="ou-separator ou-separator--horizontal">
+      {{#unless result.hideScoreSummary}}<hr class="ou-separator ou-separator--horizontal">{{/unless}}
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
       <div class="{{result.scalesBlockClass}}">
         {{#if result.scalesChart}}
@@ -152,6 +131,35 @@
         </div>
         {{/each}}
         </div>
+      </div>
+      {{/if}}
+
+      {{#if result.indicators}}
+      <!-- Разделитель у показателей зависит от того, что стоит выше: после блока шкал он
+           нужен всегда, а без шкал показатели становятся первым блоком и разделяют их с
+           тем же гейтом, что был у шкал. -->
+      {{#if result.scales}}<hr class="ou-separator ou-separator--horizontal">{{/if}}
+      {{#unless result.scales}}{{#unless result.hideScoreSummary}}<hr class="ou-separator ou-separator--horizontal">{{/unless}}{{/unless}}
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
+      <div class="tb-measures">
+        {{#each result.indicators}}
+        <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
+          <div class="ou-formsection__intro">
+            <h4 class="ou-formsection__title">{{name}}</h4>
+          </div>
+          <div class="ou-formsection__body">
+            {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
+            {{#if levelLabel}}
+            <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">{{levelLabel}}</div>
+                {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
+              </div>
+            </div>
+            {{/if}}
+          </div>
+        </div>
+        {{/each}}
       </div>
       {{/if}}
 

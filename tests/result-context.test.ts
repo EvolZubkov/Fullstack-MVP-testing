@@ -328,11 +328,12 @@ describe("adaptive results + measures → render real results.adaptive.html (e2e
     expect(root.textContent).toContain("Высокий");
   });
 
-  it("уровни тем остаются на месте и выше измерений", () => {
+  it("уровни тем остаются на месте и выше измерений, шкалы идут перед показателями", () => {
     const text = root.textContent ?? "";
     expect(text.indexOf("Результаты по темам")).toBeGreaterThan(-1);
-    expect(text.indexOf("Результаты по темам")).toBeLessThan(text.indexOf("Ваш результат"));
-    expect(text.indexOf("Ваш результат")).toBeLessThan(text.indexOf("По шкалам"));
+    expect(text.indexOf("Результаты по темам")).toBeLessThan(text.indexOf("По шкалам"));
+    // Шкала — измерение, показатель — вывод из измерений: сначала то, из чего сделан вывод.
+    expect(text.indexOf("По шкалам")).toBeLessThan(text.indexOf("Ваш результат"));
   });
 
   it("шкала рисуется линейкой с зонами, как на обычном экране", () => {

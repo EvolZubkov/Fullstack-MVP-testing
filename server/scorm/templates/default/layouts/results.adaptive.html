@@ -46,28 +46,8 @@
       </div>
       {{/if}}
 
-      {{#if result.indicators}}
-      <hr class="ou-separator ou-separator--horizontal">
-      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
-      <div class="tb-measures">
-        {{#each result.indicators}}
-        <div class="ou-formsection tb-measure">
-          <div class="ou-formsection__intro">
-            <h4 class="ou-formsection__title">{{name}}</h4>
-          </div>
-          <div class="ou-formsection__body">
-            <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
-              <div class="ou-banner__body">
-                <div class="ou-banner__title">{{levelLabel}}</div>
-                {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
-              </div>
-            </div>
-          </div>
-        </div>
-        {{/each}}
-      </div>
-      {{/if}}
-
+      <!-- ШКАЛЫ идут ПЕРЕД показателями — тот же порядок, что на обычном экране итогов:
+           шкала — измерение, показатель — вывод из измерений. -->
       {{#if result.scales}}
       <hr class="ou-separator ou-separator--horizontal">
       <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
@@ -137,6 +117,28 @@
         </div>
         {{/each}}
         </div>
+      </div>
+      {{/if}}
+
+      {{#if result.indicators}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
+      <div class="tb-measures">
+        {{#each result.indicators}}
+        <div class="ou-formsection tb-measure">
+          <div class="ou-formsection__intro">
+            <h4 class="ou-formsection__title">{{name}}</h4>
+          </div>
+          <div class="ou-formsection__body">
+            <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">{{levelLabel}}</div>
+                {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
+              </div>
+            </div>
+          </div>
+        </div>
+        {{/each}}
       </div>
       {{/if}}
 
