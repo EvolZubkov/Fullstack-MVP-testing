@@ -51,6 +51,18 @@ export interface DeliverAssignmentLinkOptions {
 export interface DeliverAssignmentLinkResult {
   /** `true` when a token was minted and the letter carries a magic link; `false` when withheld. */
   issued: boolean;
+  /**
+   * The freshly minted link, present only when `issued` is true. Returned so a
+   * bulk run can offer the operator a one-time export (PRD-28 раздел 7) — the
+   * raw token is never stored, so this is the only moment it exists.
+   *
+   * It is handed to the CALLER and to nobody else: the raw token must never
+   * reach the log, so the log lines below deliberately name the user and the
+   * test but not the link.
+   */
+  magicLink?: string;
+  /** Whether the notification letter was actually accepted by the transport. */
+  delivered: boolean;
 }
 
 /**
@@ -65,6 +77,11 @@ export interface DeliverAssignmentLinkResult {
  * never thrown. Callers only need to resolve the recipient and their e-mail
  * beforehand (decrypt errors are handled by the caller, since the desired
  * response — 400, skip, silent return — differs by call site).
+ *
+ * The result reports what happened per recipient: whether a link was issued,
+ * the link itself (see {@link DeliverAssignmentLinkResult.magicLink}) and
+ * whether the transport accepted the letter, so a bulk run can tally failures
+ * and offer the operator a one-time export of the links it just minted.
  */
 export async function deliverAssignmentLink(
   opts: DeliverAssignmentLinkOptions,
@@ -79,7 +96,7 @@ export async function deliverAssignmentLink(
       `Assignment link withheld (privileged account) for user ${user.id}, test "${testTitle}"`,
       "assignments",
     );
-    await sendAssignmentEmail({
+    const delivered = await sendAssignmentEmail({
       to: email,
       userName: user.name || undefined,
       testTitle,
@@ -87,7 +104,7 @@ export async function deliverAssignmentLink(
       dueDate,
     });
     logger.info(`Assignment email sent to ${email} for test "${testTitle}"`, "assignments");
-    return { issued: false };
+    return { issued: false, delivered };
   }
 
   if (revokeExisting) {
@@ -110,7 +127,7 @@ export async function deliverAssignmentLink(
     "assignments",
   );
 
-  await sendAssignmentEmail({
+  const delivered = await sendAssignmentEmail({
     to: email,
     userName: user.name || undefined,
     testTitle,
@@ -120,5 +137,5 @@ export async function deliverAssignmentLink(
   });
   logger.info(`Assignment email sent to ${email} for test "${testTitle}"`, "assignments");
 
-  return { issued: true };
+  return { issued: true, magicLink, delivered };
 }
