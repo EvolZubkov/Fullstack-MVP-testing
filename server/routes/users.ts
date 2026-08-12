@@ -304,6 +304,12 @@ router.post("/:id/invite", requirePermission("users.manage"), async (req, res) =
       return res.status(404).json({ error: "User not found" });
     }
 
+    // PRD-28: the invitation letter carries a password-setup link, and an external
+    // participant must never get one — their only way in is the assignment link.
+    if (user.isExternal) {
+      return res.status(400).json({ error: "An external participant cannot be invited to set a password" });
+    }
+
     if (user.status !== "pending") {
       return res.status(400).json({
         error: "Only a pending account can be invited",
