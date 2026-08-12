@@ -136,6 +136,9 @@ function main() {
       process.exitCode = 1;
       continue;
     }
+    // Timestamp of the previous build, if any: the only reliable proof that this
+    // run actually replaced the file (see the check after Chrome exits).
+    const mtimeBefore = existsSync(doc.out) ? statSync(doc.out).mtimeMs : 0;
     const html = renderHtml(readFileSync(doc.src, "utf8"), doc.title, path.dirname(doc.src));
     const tmpHtml = doc.out.replace(/\.pdf$/, ".tmp.html");
     writeFileSync(tmpHtml, html, "utf8");
@@ -163,6 +166,19 @@ function main() {
     }
     if (res.status !== 0 || !existsSync(doc.out)) {
       console.error("Не удалось собрать PDF:", doc.out, res.error || "exit " + res.status);
+      process.exitCode = 1;
+      continue;
+    }
+    // Chrome exits 0 even when `--print-to-pdf` cannot write the target (the file
+    // is open in a PDF viewer, read-only, on a full disk). Existence alone then
+    // "passes" on the PREVIOUS build's file and the run reports OK for a document
+    // that was never rebuilt — the exact failure that shipped a stale guide. A
+    // newer mtime is what actually proves the write happened.
+    if (statSync(doc.out).mtimeMs <= mtimeBefore) {
+      console.error(
+        "PDF не перезаписан (файл занят другой программой, только для чтения или диск полон):",
+        doc.out,
+      );
       process.exitCode = 1;
       continue;
     }
