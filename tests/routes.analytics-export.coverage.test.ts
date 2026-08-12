@@ -29,6 +29,11 @@ const { storageMock } = vi.hoisted(() => ({
     getGroups: vi.fn(), getGroupUsers: vi.fn(),
     getScormPackages: vi.fn(), getAllScormAttempts: vi.fn(),
     getScormAnswersByAttempt: vi.fn(),
+    // PRD-5/PRD-2: the export now names the test's scales and indicators, so it reads
+    // the measurement rows too. Empty by default — these fixtures are control tests.
+    getScales: vi.fn().mockResolvedValue([]),
+    getResultVariables: vi.fn().mockResolvedValue([]),
+    getQuestionMeasurements: vi.fn().mockResolvedValue([]),
     // Object-level scope sources (non-admin readableTestScope path).
     getTestIdsByOwner: vi.fn(), getUserTestGrants: vi.fn(),
     getTestGrantForUser: vi.fn(), isTestAssignedToUser: vi.fn(),
@@ -156,6 +161,11 @@ beforeEach(() => {
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.getTopicCourses.mockResolvedValue([]);
   storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
+  // PRD-5/PRD-2 measurement sources — re-armed here because `resetAllMocks` above
+  // drops the implementations declared at hoist time.
+  storageMock.getScales.mockResolvedValue([]);
+  storageMock.getResultVariables.mockResolvedValue([]);
+  storageMock.getQuestionMeasurements.mockResolvedValue([]);
   app = makeApp();
 });
 

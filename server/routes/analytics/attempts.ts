@@ -11,6 +11,33 @@ import { computeAttemptResult, type AttemptResultBase } from "../../services/res
 import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
 import { isSingleIndexChoice, distributesBudget } from "@shared/questions/question-type";
 import { stripMarkdown } from "@shared/text";
+import {
+  buildIndicatorViews,
+  declaresPassThreshold,
+  gradingOf,
+  loadMeasureCatalogue,
+  type MeasureCatalogue,
+} from "./helpers";
+import { isMeasurementOnly } from "@shared/questions/question-type";
+
+/**
+ * The measurements of ONE run, as they were STORED at finish.
+ *
+ * Read off the attempt rather than recomputed: analytics answers «what did this
+ * person get», and a recompute answers «what would they get from today's config» —
+ * two different questions, and only the first one is a registration of the run. An
+ * attempt finished before the test had scales simply carries nothing.
+ */
+function storedMeasures(result: unknown): {
+  scaleValues?: Record<string, unknown>;
+  indicatorValues?: Record<string, unknown>;
+} {
+  const r = (result ?? {}) as { scaleResults?: Record<string, unknown>; resultVariables?: Record<string, unknown> };
+  return {
+    ...(r.scaleResults ? { scaleValues: r.scaleResults } : {}),
+    ...(r.resultVariables ? { indicatorValues: r.resultVariables } : {}),
+  };
+}
 
 const router = Router();
 
@@ -40,6 +67,11 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
     const snapshots = await storage.getSnapshotsForTest(testId);
     const versionBySnapshot = new Map(snapshots.map(s => [s.id, s.version]));
 
+    // PRD-5/PRD-2: what this test MEASURES, so the attempts table can carry a column
+    // per scale/indicator instead of registering a questionnaire run as «0.0 % / Сдан».
+    const measures: MeasureCatalogue = await loadMeasureCatalogue(testId);
+    const thresholdDeclared = declaresPassThreshold(test);
+
     const attemptsList = testAttempts.map(attempt => {
       const result = attempt.resultJson as any;
       const duration = attempt.startedAt && attempt.finishedAt
@@ -65,7 +97,14 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
         earnedPoints: result?.totalEarnedPoints || 0,
         possiblePoints: result?.totalPossiblePoints || 0,
         passed: result?.overallPassed || false,
+        // PRD-29 §6.7 reaches the AUTHOR too: without these two the table printed a
+        // green «Сдан» over «0.0 %» for every questionnaire run — the default 70%
+        // threshold every test is born with, applied to a run that grades nothing.
+        // `passed` itself is left as stored so no existing reader loses its field.
+        ...gradingOf(result, thresholdDeclared),
         completed: result !== null,
+        // What the run actually measured (absent for a control test).
+        ...storedMeasures(result),
         achievedLevels,
         // PRD-15 T-20: which published edition this attempt was taken on.
         snapshotVersion: attempt.snapshotId ? versionBySnapshot.get(attempt.snapshotId) ?? null : null,
@@ -92,6 +131,10 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
       testId: test.id,
       testTitle: test.title,
       testMode: test.mode,
+      // Whether the TEST declares an overall threshold at all — the half of the
+      // PRD-29 §6.7 rule that belongs to the test rather than to a single run.
+      hasPassThreshold: thresholdDeclared,
+      measures,
       currentVersion: snapshots[0]?.version ?? null,
       versions,
       attempts: attemptsList,
@@ -163,6 +206,12 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
     // CURRENT config (like the points recompute above); may drift if the test changed
     // after the attempt — persisting-at-attempt-time would be a separate follow-up.
     const scoringConfig = await loadScoringConfig(test.id, storage);
+    // PRD-5/PRD-2 vocabulary + the PRD-29 §6.7 inputs, exactly as in the list route.
+    const measures = await loadMeasureCatalogue(test.id);
+    const thresholdDeclared = declaresPassThreshold(test);
+    // The indicator ROWS themselves (not just their names): resolving what a value
+    // MEANS needs each variable's interpretation config, which the catalogue drops.
+    const rvRows = await storage.getResultVariables(test.id);
 
     const detailedAnswers: any[] = [];
     // Raw (runtime-encoded) answers + question types, for the scale engine.
@@ -251,6 +300,11 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
         correctAnswerRaw: correctJson,
         isCorrect,
         ratio,
+        // PRD-26 FR-08 / PRD-44 FR-09: never checked, earns no points. The window
+        // reads this to drop the tick and the points from the row — «0/1 ✗» is not a
+        // low score on such a question, it is a verdict it cannot carry. Resolved
+        // here and not in the client: the rule belongs to the question model.
+        measurementOnly: isMeasurementOnly(question),
         earnedPoints: ratio * effective.points,
         possiblePoints: effective.points,
         difficulty: scoring.difficultyOf(question) || 50,
@@ -261,22 +315,40 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       });
     }
 
-    // PRD-5/PRD-2: attempt-level scale results (raw/percent/level) and result
-    // variables (показатели), computed from the raw answers + the test config.
-    const gradedBase: AttemptResultBase = {
-      percent: result?.overallPercent || 0,
-      topicResults: (result?.topicResults || []).map((tr: any) => ({
-        topicId: tr.topicId,
-        percent: tr.percent || 0,
-        passed: tr.passed ?? null,
-        earnedPoints: tr.earnedPoints || 0,
-        topicName: tr.topicName,
-        code: tr.code ?? null,
-      })),
-    };
-    const graded = scoringConfig.scales.length || scoringConfig.resultVariables.length
-      ? computeAttemptResult(scoringConfig, rawAnswers, questionTypes, gradedBase)
-      : { scaleResults: {}, resultVariables: {}, status: {} };
+    // PRD-5/PRD-2: the attempt's scale results (raw/percent/level) and result
+    // variables (показатели).
+    //
+    // STORED FIRST. The run recorded them at finish, and that record — not a replay —
+    // is what the author is asking to see: recomputing answers «what would this person
+    // get from today's configuration», which silently rewrites history whenever a scale,
+    // a measurement row or a formula changed after the attempt. The recompute stays as
+    // the FALLBACK for attempts finished before the values were persisted (they carry
+    // none), so no run loses its profile.
+    const stored = storedMeasures(result);
+    const measuresRecomputable = scoringConfig.scales.length || scoringConfig.resultVariables.length;
+    let graded: { scaleResults: Record<string, unknown>; resultVariables: Record<string, unknown> };
+
+    if (stored.scaleValues || stored.indicatorValues) {
+      graded = {
+        scaleResults: (stored.scaleValues ?? {}) as Record<string, unknown>,
+        resultVariables: (stored.indicatorValues ?? {}) as Record<string, unknown>,
+      };
+    } else if (measuresRecomputable) {
+      const gradedBase: AttemptResultBase = {
+        percent: result?.overallPercent || 0,
+        topicResults: (result?.topicResults || []).map((tr: any) => ({
+          topicId: tr.topicId,
+          percent: tr.percent || 0,
+          passed: tr.passed ?? null,
+          earnedPoints: tr.earnedPoints || 0,
+          topicName: tr.topicName,
+          code: tr.code ?? null,
+        })),
+      };
+      graded = computeAttemptResult(scoringConfig, rawAnswers, questionTypes, gradedBase);
+    } else {
+      graded = { scaleResults: {}, resultVariables: {} };
+    }
 
     let trajectory: any[] | undefined;
     let achievedLevels: any[] | undefined;
@@ -334,10 +406,24 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       earnedPoints: result?.totalEarnedPoints || 0,
       possiblePoints: result?.totalPossiblePoints || 0,
       passed: result?.overallPassed || false,
+      // PRD-29 §6.7 — see the list route above. Without them the detail window
+      // headlined a green «Пройден» over «0/0 баллов» for a questionnaire.
+      hasPassThreshold: thresholdDeclared,
+      ...gradingOf(result, thresholdDeclared),
       answers: detailedAnswers,
       topicResults: result?.topicResults || [],
+      // How much of what was DELIVERED the learner actually answered. The answered
+      // count alone cannot tell a full run from an abandoned one, and a measurement
+      // run has no percent to say it instead.
+      questionCount: uniqueQuestionIds.length,
+      answeredCount: detailedAnswers.length,
+      // What to CALL the scales/indicators below — their stored keys are DSL
+      // identifiers, not headings.
+      measures,
       scaleResults: graded.scaleResults,
       resultVariables: graded.resultVariables,
+      // The indicators, resolved: value + what the author says it MEANS.
+      indicatorViews: buildIndicatorViews(rvRows, graded.resultVariables),
       trajectory,
       achievedLevels,
     });
