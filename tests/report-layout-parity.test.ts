@@ -17,7 +17,11 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { renderScreenInto } from "../shared/template/render-screen";
-import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
+import {
+  buildReportContext as buildReportContextRaw,
+  buildAdaptiveReportContext as buildAdaptiveReportContextRaw,
+  type ReportContextOptions,
+} from "../shared/report/report-context";
 import { LEVEL_SCHEMES } from "../shared/template/level-ramp";
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
@@ -36,6 +40,28 @@ const REPORT_LAYOUTS: Array<[string, string, string]> = [
     fs.readFileSync(path.join(CERT_DIR, "layouts", "report.adaptive.html"), "utf8"),
   ],
 ];
+
+/**
+ * PRD-49: заголовки разделов документа макет печатает ИЗ СЛОВАРЯ надписей, разрешённого
+ * для экрана `report` (`resolveReportBake`), а не из вёрстки. Эталон переноса от этого не
+ * двигается: словарь несёт ровно те строки, которые макет печатал жёстко, — предметом
+ * проверки здесь остаются состав, порядок и гейты, а не то, откуда пришло слово.
+ */
+const LABELS = {
+  "results.topics": "Результаты по темам",
+  "results.scales": "По шкалам",
+  "results.indicators": "Ваш результат",
+  "results.recommendations": "Рекомендации",
+  "recommendations.courses": "Рекомендации по курсам",
+  "recommendations.events": "Рекомендуемые мероприятия",
+};
+
+/** Контекст отчёта, как его собирает хост, научённый надписям. */
+const buildReportContext = (input: ReportInput, opts: ReportContextOptions = {}) =>
+  buildReportContextRaw(input, { labels: LABELS, ...opts });
+
+const buildAdaptiveReportContext = (input: AdaptiveReportInput, opts: ReportContextOptions = {}) =>
+  buildAdaptiveReportContextRaw(input, { labels: LABELS, ...opts });
 
 /** Видимый текст со схлопнутыми пробелами. */
 function visibleText(source: HTMLElement): string {

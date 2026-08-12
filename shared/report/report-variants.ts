@@ -18,6 +18,12 @@
 
 import { validateVariantFields, isSettingType, SETTING_TYPES } from "../template/field-types";
 import { legacyChartKind, type ChartKindSettings } from "../template/scales-chart";
+import {
+  resolveLabels,
+  type LabelDeclaration,
+  type LabelValues,
+  type ResolvedLabels,
+} from "../template/labels";
 import { reportImageKeys, resolveReportImageValues } from "./report-assets";
 
 /** Виды отчёта. Обычный режим и адаптивный — разные виды (D-5). */
@@ -160,6 +166,30 @@ function applyLegacyChartKind(
   return carried ? { ...values, scalesChartKind: carried } : values;
 }
 
+/**
+ * PRD-49 §4.2. Значения надписей, которые ложатся поверх умолчаний манифеста при сборке
+ * отчёта: общая формулировка теста и СВОЙ слой отчёта.
+ *
+ * Два слоя, а не один словарь: автор правит формулировку ОДИН раз на все экраны итогов, а
+ * отчёт вправе сказать иначе (спека, решение 2). Разделить их может только источник —
+ * разные поля теста, — поэтому они и приезжают сюда порознь.
+ */
+export interface ReportLabelLayers {
+  /** `tests.design_settings_json.labels` — общая формулировка всех экранов итогов. */
+  values?: LabelValues | null;
+  /** `tests.report_settings_json.labels` — переопределения отчёта. Пусто = как на экране. */
+  overrides?: LabelValues | null;
+}
+
+/**
+ * Объявления надписей манифеста (`labels[]`). Пусто у шаблона, который их не объявил, —
+ * его макеты печатают свои жёсткие строки (спека §9), и пустой список это и означает.
+ */
+function labelDeclarations(manifest: unknown): LabelDeclaration[] {
+  const list = (manifest as { labels?: unknown } | null)?.labels;
+  return Array.isArray(list) ? (list as LabelDeclaration[]) : [];
+}
+
 /** Что нужно знать хосту, чтобы собрать отчёт выбранным вариантом (FR-22). */
 export interface ReportBake {
   /** Выбранный вариант; `null` — шаблон видов не объявил, идёт деградация (FR-10/FR-15). */
@@ -188,6 +218,19 @@ export interface ReportBake {
   styleFile: string | null;
   /** Значения `settings[]`, уже слитые с умолчаниями манифеста. */
   values: Record<string, unknown>;
+  /**
+   * PRD-49: УЖЕ РАЗРЕШЁННЫЕ надписи экрана `report` — плоская карта «ключ → текст», где
+   * пустая строка означает «не печатать».
+   *
+   * Разрешаются здесь по той же причине, по какой здесь разрешается выбор варианта: только
+   * эта сторона видит и манифест шаблона, и настройки теста. В LMS манифеста нет вовсе, и
+   * второго источника умолчаний у рантайма быть не может (спека §8), а веб-хост обязан
+   * прийти к тому же ответу — иначе документ разошёлся бы с самим собой на двух хостах.
+   *
+   * ОТСУТСТВУЕТ у шаблона, который надписей не объявил: макет тогда не получает `labels`
+   * вовсе и печатает свои жёсткие строки, как до этого PRD.
+   */
+  labels?: ResolvedLabels;
 }
 
 /**
@@ -202,23 +245,43 @@ export interface ReportBake {
  * @param assetBase Где у ЭТОГО хоста лежат файлы шаблона, со слешем на конце
  *   (`template/` в пакете, `/api/templates/<id>/assets/` на вебе). Пути картинок из
  *   манифеста разрешаются против неё (FR-05); пустая база оставляет их как есть.
+ * @param labelLayers PRD-49: значения надписей теста — общие и переопределения отчёта.
+ *   Отсутствуют = только умолчания манифеста (с учётом `defaults.report`), то есть вид
+ *   документа до того, как автор что-либо переформулировал.
  */
 export function resolveReportBake(
   manifest: unknown,
   kind: ReportKind,
   branch?: { variantKey?: string | null; values?: Record<string, unknown> | null } | null,
   assetBase = "",
+  labelLayers?: ReportLabelLayers | null,
 ): ReportBake {
   const variant = resolveReportVariant(manifest, kind, branch?.variantKey);
   const layoutFile = typeof variant?.layoutFile === "string" ? variant.layoutFile : "";
   const imageKeys = reportImageKeys(variant);
   const values = resolveReportValues(variant, branch?.values ?? null);
+  // PRD-49. Слои идут ТЕМ ЖЕ путём, что выбор варианта: умолчание шаблона (со своим
+  // умолчанием экрана `report`), поверх него общая формулировка теста, поверх неё — слой
+  // отчёта. Считает их ОДНА функция на весь продукт (`shared/template/labels`): второй
+  // реализации разрешения быть не должно, иначе документ и экран разойдутся в словах.
+  const declarations = labelDeclarations(manifest);
+  const labels = declarations.length
+    ? resolveLabels({
+        declarations,
+        values: labelLayers?.values ?? {},
+        overrides: labelLayers?.overrides ?? {},
+        screen: "report",
+      })
+    : {};
   return {
     variantKey: variant?.key ?? null,
     imageKeys,
     layoutKey: layoutFile || kind,
     styleFile: typeof variant?.styleFile === "string" && variant.styleFile ? variant.styleFile : null,
     values: assetBase ? resolveReportImageValues(values, imageKeys, assetBase) : values,
+    // Ключа нет вовсе у шаблона без объявлений: пустая карта в контексте — это уже
+    // «надписи есть, но все пустые», а это другое утверждение.
+    ...(Object.keys(labels).length ? { labels } : {}),
   };
 }
 
