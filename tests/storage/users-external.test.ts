@@ -76,13 +76,12 @@ async function rawRow(id: string) {
 
 describe("UsersRepository — external participant (PRD-28)", () => {
   it("createUser persists the external flag with no password at all", async () => {
-    const insert: InsertUser = {
+    const created = await storage.createUser({
       email: `ext-${randomUUID()}@example.org`,
       passwordHash: null,
       isExternal: true,
       name: "Внешний участник",
-    };
-    const created = await storage.createUser(insert);
+    } satisfies InsertUser);
 
     expect(created.isExternal).toBe(true);
     expect(created.passwordHash).toBeNull();
@@ -94,11 +93,10 @@ describe("UsersRepository — external participant (PRD-28)", () => {
   });
 
   it("createUser defaults the flag to false for a regular account", async () => {
-    const insert: InsertUser = {
+    const created = await storage.createUser({
       email: `staff-${randomUUID()}@example.org`,
       passwordHash: "Secret!2026",
-    };
-    const created = await storage.createUser(insert);
+    } satisfies InsertUser);
 
     expect(created.isExternal).toBe(false);
     expect((await rawRow(created.id)).isExternal).toBe(false);
