@@ -194,6 +194,11 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
       value: scaleResults[s.key]?.raw ?? null,
       visibility: s.learnerVisibility,
       interpretation: parseScaleInterpretation(s.configJson),
+      // PRD-49 §6: per-slot toggles saved by the scale editor. `!== false` is load-bearing —
+      // an absent key means "show" (legacy scales carry no key at all), so any other reading
+      // would silently hide the name/level slot of every scale saved before this PRD.
+      showName: (s.configJson as Record<string, unknown>)?.showName !== false,
+      showLevel: (s.configJson as Record<string, unknown>)?.showLevel !== false,
     }));
 
   const indicators: MeasureInput[] = source.variables
@@ -205,6 +210,9 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
       value: variableValues[v.name] as number | string | boolean | null,
       visibility: v.learnerVisibility,
       interpretation: parseIndicatorInterpretation(v.configJson),
+      // PRD-49 §6: same toggle pair, saved by the result-variable editor.
+      showName: (v.configJson as Record<string, unknown>)?.showName !== false,
+      showLevel: (v.configJson as Record<string, unknown>)?.showLevel !== false,
     }));
 
   return {

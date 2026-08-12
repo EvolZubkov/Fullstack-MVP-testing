@@ -331,6 +331,11 @@ function buildResultsMeasures(scaleComputation, varComputation) {
 
   var scales = measuresBySortOrder(rawScales).map(function (s) {
     var computed = scaleValues[s.key];
+    // PRD-49 §6: per-slot toggles read the same way the web host reads them
+    // (`result-context.buildMeasuresInput`) — `!== false` because an absent key means
+    // "show", so a scale baked before this PRD (no `configJson` on the row at all) keeps
+    // printing both slots.
+    var scaleConfig = s.configJson || {};
     return {
       key: s.key,
       name: s.label || s.key,
@@ -339,17 +344,23 @@ function buildResultsMeasures(scaleComputation, varComputation) {
       // The BAKED scale carries its interpretation flat (domainMin/domainMax/valence/
       // bands) and the shared parser reads exactly those keys, so the package ends up
       // with the identical interpretation object the web host parses from config_json.
-      interpretation: TB.parseScaleInterpretation(s)
+      interpretation: TB.parseScaleInterpretation(s),
+      showName: scaleConfig.showName !== false,
+      showLevel: scaleConfig.showLevel !== false
     };
   });
 
   var indicators = measuresBySortOrder(rawVars).map(function (v) {
+    // PRD-49 §6: same toggle pair, baked raw onto the result-variable row's `configJson`.
+    var varConfig = v.configJson || {};
     return {
       key: v.name,
       name: v.label || v.name,
       value: varValues[v.name],
       visibility: v.learnerVisibility || 'hidden',
-      interpretation: TB.parseIndicatorInterpretation(v.configJson)
+      interpretation: TB.parseIndicatorInterpretation(v.configJson),
+      showName: varConfig.showName !== false,
+      showLevel: varConfig.showLevel !== false
     };
   });
 

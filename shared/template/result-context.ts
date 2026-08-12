@@ -184,6 +184,16 @@ export interface MeasureInput {
   value: number | string | boolean | null | undefined;
   visibility: LearnerVisibility;
   interpretation: ScaleInterpretation | IndicatorInterpretation;
+  /**
+   * PRD-49 §6. Show the card's name / level slots — read by the host from
+   * `config_json.showName` / `config_json.showLevel` of the scale or result-variable row.
+   * Absent = show, so a measure whose row carries neither key (every measure saved before
+   * this PRD) keeps its card exactly as it was. Spread straight through to
+   * {@link module:shared/template/measure-view.MeasureViewInput} by {@link buildMeasureView}
+   * callers below — this is the ONE place both hosts read the toggle from.
+   */
+  showName?: boolean;
+  showLevel?: boolean;
 }
 
 /** PRD-29 measurement input: the visible measures plus the design-param choices. */
