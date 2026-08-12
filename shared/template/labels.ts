@@ -55,21 +55,33 @@ function applyLayer(value: LabelValue | undefined, fallback: string): string | n
   return text ? text : fallback;
 }
 
+/** Named-parameter input for {@link resolveLabels} — `values` and `overrides` share a
+ * type and sit next to each other conceptually, so a positional signature would let a
+ * transposed call slip past the compiler unnoticed. */
+export interface ResolveLabelsInput {
+  declarations: readonly LabelDeclaration[];
+  /** What the test stores for every screen. */
+  values: LabelValues;
+  /** The rendering screen's own layer; absent for a screen that has none. */
+  overrides?: LabelValues;
+  screen: LabelScreen;
+}
+
 /**
  * Effective label texts for one screen: template default, the test's shared values on top,
  * then the CALLER's own override layer on top of those. `overrides` belongs to whichever
  * screen is being rendered, not to any particular screen by name — the resolver has no
  * opinion on who gets to override. Today only the report screen fills this layer
- * (`report_settings_json.labels`); every other caller passes `{}` and gets the shared
- * wording. Keys the template does not declare are dropped — the test may have been moved
- * to another template.
+ * (`report_settings_json.labels`); every other caller simply omits `overrides` and gets the
+ * shared wording. Keys the template does not declare are dropped — the test may have been
+ * moved to another template.
  */
-export function resolveLabels(
-  declarations: readonly LabelDeclaration[],
-  values: LabelValues,
-  overrides: LabelValues,
-  screen: LabelScreen,
-): ResolvedLabels {
+export function resolveLabels({
+  declarations,
+  values,
+  overrides = {},
+  screen,
+}: ResolveLabelsInput): ResolvedLabels {
   const out: ResolvedLabels = {};
   for (const decl of declarations) {
     const fallback = pick(decl, screen);
@@ -84,6 +96,13 @@ export function resolveLabels(
  * Turns the flat map into the nested object the DSL addresses: `resolvePath` splits a
  * template path on dots, so `labels["results.scales"]` would never be reachable from
  * `{{ labels.results.scales }}`.
+ *
+ * Invariant: keys must not be mutual prefixes (e.g. `"results"` and `"results.heading"`
+ * together). A prefix key would need to hold both a string leaf and a nested object at the
+ * same path, and whichever is written second silently overwrites the first — a real label
+ * would vanish from the tree with no error. The manifest never declares such a pair today,
+ * but this function is generic, so the collision is rejected explicitly instead of trusting
+ * every future caller to avoid it.
  */
 export function labelsTree(labels: ResolvedLabels): Record<string, unknown> {
   const root: Record<string, unknown> = {};
@@ -92,10 +111,20 @@ export function labelsTree(labels: ResolvedLabels): Record<string, unknown> {
     let node = root;
     for (let i = 0; i < parts.length - 1; i += 1) {
       const part = parts[i];
-      if (typeof node[part] !== "object" || node[part] === null) node[part] = {};
+      const existing = node[part];
+      if (typeof existing === "string") {
+        throw new Error(
+          `labelsTree: key "${parts.slice(0, i + 1).join(".")}" collides with key "${key}" — keys must not be mutual prefixes`,
+        );
+      }
+      if (typeof existing !== "object" || existing === null) node[part] = {};
       node = node[part] as Record<string, unknown>;
     }
-    node[parts[parts.length - 1]] = text;
+    const leaf = parts[parts.length - 1];
+    if (typeof node[leaf] === "object" && node[leaf] !== null) {
+      throw new Error(`labelsTree: key "${key}" collides with a longer key under the same prefix — keys must not be mutual prefixes`);
+    }
+    node[leaf] = text;
   }
   return root;
 }
