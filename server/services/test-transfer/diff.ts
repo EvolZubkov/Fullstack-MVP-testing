@@ -55,7 +55,10 @@ export type EntityKind =
   | "measurement"
   | "resultVariable"
   | "contentPage"
-  | "questionScoring";
+  | "questionScoring"
+  | "adaptiveSetting"
+  | "adaptiveLevel"
+  | "adaptiveLevelLink";
 
 /** One row's fate, as the plan screen shows it. */
 export interface TransferOperation {
@@ -94,12 +97,16 @@ export interface TargetSnapshot {
   test: { id: string } | null;
   sections: Array<{ id: string; topicId: string }>;
   /** The package's topics as they exist here, each with its FULL question pool. */
-  topics: Array<{ id: string; name: string; questions: Array<{ id: string; text: string }> }>;
-  scales: Array<{ id: string; key: string; title?: string | null }>;
+  topics: Array<{ id: string; name: string; questions: Array<{ id: string; prompt: string }> }>;
+  scales: Array<{ id: string; key: string; label: string }>;
   measurements: Array<{ id: string; questionId: string; scaleId: string }>;
   resultVariables: Array<{ id: string; name: string }>;
-  contentPages: Array<{ id: string; kind: string; title?: string | null }>;
+  contentPages: Array<{ id: string; kind: string }>;
   questionScoring: Array<{ id: string; questionId: string }>;
+  /** Adaptive configuration here, matched by identifier alone — it has no author handle. */
+  adaptiveSettings: Array<{ id: string }>;
+  adaptiveLevels: Array<{ id: string }>;
+  adaptiveLevelLinks: Array<{ id: string }>;
   /** Questions here that already carry answers: deleting one throws away history. */
   questionsUsedInAttempts: Set<string>;
   /** Topic names the importer already owns — `(owner_id, name_normalized)` is unique. */
@@ -120,9 +127,9 @@ export const TEST_FIELDS_BY_PART: Partial<Record<PartName, string[]>> = {
   results: ["introJson", "designSettingsJson", "reportSettingsJson"],
 };
 
-/** First non-empty line of a question, for the plan screen. */
-function questionTitle(text: unknown): string {
-  const plain = String(text ?? "")
+/** The beginning of a question's prompt, for the plan screen. */
+function questionTitle(prompt: unknown): string {
+  const plain = String(prompt ?? "")
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -198,6 +205,24 @@ function pageHandle(
   return sameKind.length === 1 ? (row) => row.kind === kind : null;
 }
 
+/** Rows matched by identifier alone and never deleted; `label` names the column to show. */
+function upsertById(
+  entity: EntityKind,
+  sources: unknown[],
+  targets: Array<{ id: string }>,
+  label: string,
+): TransferOperation[] {
+  return reconcile({
+    entity,
+    sources: sources as Array<Record<string, unknown>>,
+    targets,
+    sourceId: (row) => String(row.id),
+    title: (row) => String(row[label] ?? ""),
+    handle: () => null,
+    deletes: false,
+  });
+}
+
 /** Rows of the test's own composition: sections, topics and questions. */
 function diffStructure(
   pkg: TestTransferPackage,
@@ -231,7 +256,7 @@ function diffStructure(
           entity: "question",
           id: here ? newId() : question.id,
           sourceId: question.id,
-          title: questionTitle((question as unknown as { text?: unknown }).text),
+          title: questionTitle((question as unknown as { prompt?: unknown }).prompt),
         });
       }
       continue;
@@ -244,15 +269,29 @@ function diffStructure(
         sources: questions,
         targets: here.questions,
         sourceId: (q) => (q as unknown as { id: string }).id,
-        title: (q) => questionTitle((q as unknown as { text?: unknown }).text),
+        title: (q) => questionTitle((q as unknown as { prompt?: unknown }).prompt),
         // Never by text: see the module note on `content_hash`.
         handle: () => null,
         deletes: policy === "replace",
-        deleteTitle: (q) => questionTitle(q.text),
+        deleteTitle: (q) => questionTitle(q.prompt),
         usedInAttempts: (q) => target.questionsUsedInAttempts.has(q.id),
       }),
     );
   }
+
+  // Adaptive configuration travels with the structure and is never removed: it belongs to
+  // the test rather than to the content the topic policy governs, so no policy can erase it.
+  // It has no author handle either — a level is addressed by identifier and nothing else.
+  ops.push(
+    ...upsertById("adaptiveSetting", content.adaptiveSettings ?? [], target.adaptiveSettings, "topicId"),
+    ...upsertById("adaptiveLevel", content.adaptiveLevels ?? [], target.adaptiveLevels, "title"),
+    ...upsertById(
+      "adaptiveLevelLink",
+      Object.values(content.adaptiveLevelLinksByLevel ?? {}).flat(),
+      target.adaptiveLevelLinks,
+      "levelId",
+    ),
+  );
 
   // The test's own composition converges on the package: a section the package does not carry
   // describes a block the source test no longer has. It is a deletion, so it is shown.
@@ -316,9 +355,9 @@ export function diffTransfer(
         // The key is what a result-variable formula names a scale by, so it survives the move
         // and is the handle a hand-built test can still be matched on.
         handle: (s) => (row) => row.key === s.key,
-        title: (s) => String((s as unknown as { title?: string }).title ?? s.key),
+        title: (s) => String((s as unknown as { label?: string }).label ?? s.key),
         deletes: replace,
-        deleteTitle: (s) => String(s.title ?? s.key),
+        deleteTitle: (s) => s.label || s.key,
       }),
       ...reconcile({
         entity: "measurement",
@@ -367,7 +406,7 @@ export function diffTransfer(
         targets: target.contentPages,
         sourceId: (p) => p.id,
         handle: (p) => pageHandle(target.contentPages, p.kind),
-        title: (p) => String((p as unknown as { title?: string }).title ?? p.kind),
+        title: (p) => p.kind,
         // Results and appearance NEVER delete (PRD-48 §3): the pages are system ones and
         // always present, so replacing a value IS the upsert.
         deletes: false,

@@ -31,17 +31,17 @@ function sourcePackage(): TestTransferPackage {
     sections: [{ id: "sec-a", testId: "src-test", topicId: "topic-a" }],
     questionsByTopic: {
       "topic-a": [
-        { id: "q-1", topicId: "topic-a", text: "Первый вопрос" },
-        { id: "q-2", topicId: "topic-a", text: "Второй вопрос" },
+        { id: "q-1", topicId: "topic-a", prompt: "Первый вопрос" },
+        { id: "q-2", topicId: "topic-a", prompt: "Второй вопрос" },
       ],
     },
     scales: [
-      { id: "sc-vdo", testId: "src-test", key: "vdo", title: "Вдохновляющий" },
-      { id: "sc-emp", testId: "src-test", key: "emp", title: "Эмпатичный" },
+      { id: "sc-vdo", testId: "src-test", key: "vdo", label: "Вдохновляющий" },
+      { id: "sc-emp", testId: "src-test", key: "emp", label: "Эмпатичный" },
     ],
     measurements: [{ id: "m-1", testId: "src-test", questionId: "q-1", scaleId: "sc-vdo", value: 1 }],
     resultVariables: [{ id: "rv-1", testId: "src-test", name: "lead_style", formula: "1" }],
-    contentPages: [{ id: "page-res", testId: "src-test", kind: "results", title: "Итоги" }],
+    contentPages: [{ id: "page-res", testId: "src-test", kind: "results" }],
     questionScoring: [{ id: "qs-1", testId: "src-test", questionId: "q-1", points: 2 }],
     topicCoursesByTopic: {},
     topicEventsByTopic: {},
@@ -89,18 +89,18 @@ function populatedTarget(): TargetSnapshot {
         id: "topic-a",
         name: "Лидерство",
         questions: [
-          { id: "q-1", text: "Первый вопрос (старая редакция)" },
-          { id: "q-9", text: "Лишний вопрос темы" },
+          { id: "q-1", prompt: "Первый вопрос (старая редакция)" },
+          { id: "q-9", prompt: "Лишний вопрос темы" },
         ],
       },
     ],
     scales: [
-      { id: "tgt-vdo", key: "vdo", title: "Вдохновляющий" },
-      { id: "tgt-old", key: "old", title: "Отменённая шкала" },
+      { id: "tgt-vdo", key: "vdo", label: "Вдохновляющий" },
+      { id: "tgt-old", key: "old", label: "Отменённая шкала" },
     ],
     measurements: [{ id: "m-1", questionId: "q-1", scaleId: "tgt-vdo" }],
     resultVariables: [{ id: "rv-1", name: "lead_style" }],
-    contentPages: [{ id: "tgt-page", kind: "results", title: "Итоги" }],
+    contentPages: [{ id: "tgt-page", kind: "results" }],
     questionScoring: [{ id: "qs-1", questionId: "q-1" }],
     questionsUsedInAttempts: new Set(["q-9"]),
     takenTopicNames: ["Лидерство"],
@@ -276,6 +276,36 @@ describe("diffTransfer: topic policies", () => {
   });
 });
 
+describe("diffTransfer: an adaptive test", () => {
+  it("carries the adaptive configuration and never deletes any of it", () => {
+    const pkg = sourcePackage();
+    const content = pkg.content as unknown as Record<string, unknown>;
+    content.adaptiveSettings = [{ id: "as-1", testId: "src-test", topicId: "topic-a" }];
+    content.adaptiveLevels = [{ id: "lv-1", testId: "src-test", title: "Базовый" }];
+    content.adaptiveLevelLinksByLevel = { "lv-1": [{ id: "ln-1", levelId: "lv-1" }] };
+
+    const target = populatedTarget();
+    target.adaptiveSettings = [{ id: "as-1" }];
+    target.adaptiveLevels = [];
+    target.adaptiveLevelLinks = [{ id: "ln-old" }];
+
+    const ops = diffTransfer(pkg, target, options({ topics: { "topic-a": "replace" } }));
+
+    expect(of(ops, "adaptiveSetting")).toEqual([
+      { kind: "update", entity: "adaptiveSetting", id: "as-1", sourceId: "as-1", title: "topic-a" },
+    ]);
+    expect(of(ops, "adaptiveLevel")).toEqual([
+      { kind: "create", entity: "adaptiveLevel", id: "lv-1", sourceId: "lv-1", title: "Базовый" },
+    ]);
+    expect(of(ops, "adaptiveLevelLink")).toEqual([
+      { kind: "create", entity: "adaptiveLevelLink", id: "ln-1", sourceId: "ln-1", title: "lv-1" },
+    ]);
+    // Even under the harshest topic policy the adaptive rows are never removed: they are
+    // configuration of the test, not content the author chose to replace.
+    expect(ops.filter((op) => op.entity.startsWith("adaptive") && op.kind === "delete")).toEqual([]);
+  });
+});
+
 describe("diffTransfer: the test row, which three parts write into", () => {
   it("withholds the columns of a part the author declined", () => {
     const ops = diffTransfer(
@@ -309,8 +339,8 @@ describe("diffTransfer: the parts declared safe", () => {
   it("never deletes for results and appearance", () => {
     const target = populatedTarget();
     target.contentPages = [
-      { id: "tgt-page", kind: "results", title: "Итоги" },
-      { id: "tgt-extra", kind: "content", title: "Авторская страница" },
+      { id: "tgt-page", kind: "results" },
+      { id: "tgt-extra", kind: "info" },
     ];
 
     const ops = diffTransfer(sourcePackage(), target, options());
@@ -323,7 +353,7 @@ describe("diffTransfer: the parts declared safe", () => {
       entity: "contentPage",
       id: "tgt-page",
       sourceId: "page-res",
-      title: "Итоги",
+      title: "results",
     });
   });
 });
