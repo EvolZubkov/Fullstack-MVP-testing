@@ -7,7 +7,10 @@
  * plaintext email is decrypted only on read. Password hashing goes through the
  * `server/utils/crypto` seam (`hashPassword`/`verifyPassword`), keeping this
  * repository crypto-agnostic. `validatePassword` performs a dummy verification
- * on the not-found path to equalize response timing (anti-enumeration); reset
+ * on every path that has no password to check — the address is unknown, the
+ * account is an external participant (PRD-28), or the row simply carries no hash
+ * — so response timing does not tell those apart from a wrong password
+ * (anti-enumeration); reset
  * tokens store only a hash and are consumed by marking `usedAt`, never deleted,
  * so `getRecentTokensCount` can rate-limit requests. Exposed to the rest of the
  * app through the `IStorage` facade, never imported directly by routes.
@@ -80,10 +83,13 @@ export class UsersRepository {
   async validatePassword(email: string, password: string): Promise<User | null> {
     const user = await this.getUserByEmail(email);
     // No password to check: not found, an external participant (PRD-28) or a legacy
-    // row without a hash. All three take the same dummy verification as the
-    // not-found path so response time does not tell them apart. The flag is checked
-    // on its own, not merely the missing hash: an external account that somehow got
-    // a password set (e.g. through `updateUserPassword`) must stay locked out.
+    // row without a hash. The three branches are not byte-identical in work done
+    // (the not-found one never reaches `decryptEmail`), but they all pay the same
+    // scrypt-profile dummy verification, whose cost dominates that difference — so
+    // the answer time carries no usable signal about which branch was taken. The
+    // flag is checked on its own, not merely the missing hash: an external account
+    // that somehow got a password set (e.g. through `updateUserPassword`) must stay
+    // locked out.
     if (!user || user.isExternal || !user.passwordHash) {
       await dummyVerifyPassword(password);
       return null;
