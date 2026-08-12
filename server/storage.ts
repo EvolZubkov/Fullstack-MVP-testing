@@ -26,6 +26,8 @@ import { MediaRepository, type MediaUsageRef } from "./storage/media-repository"
 import {
   TestTransferRepository,
   type ImportWriteResult,
+  type TransferWriteBatch,
+  type TransferWriteCounts,
 } from "./storage/test-transfer-repository";
 // Type-only: `test-snapshot` imports this module at runtime, so a value import here
 // would close the cycle.
@@ -372,6 +374,8 @@ export interface IStorage {
   // Перенос теста между инсталляциями (.tbtest): запись уже перенумерованного графа
   // одной транзакцией. Идентификаторы приходят готовыми — см. services/test-transfer/plan.
   writeImportedTest(content: TestSnapshotContent): Promise<ImportWriteResult>;
+  applyTransferBatch(batch: TransferWriteBatch): Promise<TransferWriteCounts>;
+  getAnsweredQuestionIds(testId: string): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1256,6 +1260,14 @@ export class DatabaseStorage implements IStorage {
 
   writeImportedTest(content: TestSnapshotContent): Promise<ImportWriteResult> {
     return this.transferRepo.writeImportedTest(content);
+  }
+
+  applyTransferBatch(batch: TransferWriteBatch): Promise<TransferWriteCounts> {
+    return this.transferRepo.applyTransferBatch(batch);
+  }
+
+  getAnsweredQuestionIds(testId: string): Promise<string[]> {
+    return this.attemptsRepo.getAnsweredQuestionIds(testId);
   }
 }
 

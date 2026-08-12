@@ -28,7 +28,8 @@ import { extensionForMime } from "../media/media-mime";
 import { collectSourceIds, planImport, UnsupportedPackageError } from "./plan";
 import { buildIdMap } from "./identity";
 import { readTransferPackage, InvalidPackageError } from "./inspect";
-import { type TransferMediaEntry } from "./package";
+import { type TestTransferPackage, type TransferMediaEntry } from "./package";
+import type JSZip from "jszip";
 import type { ImportWriteResult } from "../../storage/test-transfer-repository";
 
 export { UnsupportedPackageError, InvalidPackageError };
@@ -114,6 +115,37 @@ export const registryMediaRegistrar: MediaRegistrar = async (entry, bytes, owner
   }
 };
 
+/**
+ * Registers every file of the package here and answers with the address map.
+ *
+ * Shared by both import paths — the whole copy and the selective apply — because a file is
+ * registered the same way whichever of them runs; two passes would drift into two libraries.
+ */
+export async function registerPackageMedia(
+  zip: JSZip,
+  pkg: TestTransferPackage,
+  ownerId: string,
+  registerMedia: MediaRegistrar,
+): Promise<{ mediaAddressMap: Map<string, string>; mediaReused: number; mediaCreated: number }> {
+  const mediaAddressMap = new Map<string, string>();
+  let mediaReused = 0;
+  let mediaCreated = 0;
+
+  for (const entry of pkg.media ?? []) {
+    const file = zip.file(entry.path);
+    if (!file) {
+      throw new InvalidPackageError(`В пакете нет файла ${entry.path}, указанного в манифесте`);
+    }
+    const bytes = await file.async("nodebuffer");
+    const { address, reused } = await registerMedia(entry, bytes, ownerId);
+    mediaAddressMap.set(entry.address, address);
+    if (reused) mediaReused++;
+    else mediaCreated++;
+  }
+
+  return { mediaAddressMap, mediaReused, mediaCreated };
+}
+
 /** Imports a package into this installation as a new test. */
 export async function importTestPackage(
   archive: Buffer,
@@ -128,21 +160,12 @@ export async function importTestPackage(
   const { zip, pkg } = await readTransferPackage(archive);
 
   // Pass 1 — media. The address map must be complete before renumbering runs.
-  const mediaAddressMap = new Map<string, string>();
-  let mediaReused = 0;
-  let mediaCreated = 0;
-
-  for (const entry of pkg.media ?? []) {
-    const file = zip.file(entry.path);
-    if (!file) {
-      throw new InvalidPackageError(`В пакете нет файла ${entry.path}, указанного в манифесте`);
-    }
-    const bytes = await file.async("nodebuffer");
-    const { address, reused } = await registerMedia(entry, bytes, opts.ownerId);
-    mediaAddressMap.set(entry.address, address);
-    if (reused) mediaReused++;
-    else mediaCreated++;
-  }
+  const { mediaAddressMap, mediaReused, mediaCreated } = await registerPackageMedia(
+    zip,
+    pkg,
+    opts.ownerId,
+    registerMedia,
+  );
 
   // Pass 2 — renumbering. With `takenIds` only collisions move (preserve); without it
   // every identifier does (copy).

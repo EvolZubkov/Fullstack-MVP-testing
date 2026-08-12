@@ -41,6 +41,47 @@ export interface ImportWriteResult {
   counts: Record<string, number>;
 }
 
+/**
+ * The rows of a selective import, already decided and already renumbered.
+ *
+ * Keyed by the entity names of `services/test-transfer/diff`, because that is what decided
+ * them: this module executes a plan, it does not form one.
+ */
+export interface TransferWriteBatch {
+  creates: Record<string, Array<Record<string, unknown>>>;
+  updates: Record<string, Array<Record<string, unknown>>>;
+  deletes: Record<string, string[]>;
+}
+
+/** How many rows of each entity were created, updated and removed. */
+export interface TransferWriteCounts {
+  created: Record<string, number>;
+  updated: Record<string, number>;
+  deleted: Record<string, number>;
+}
+
+/**
+ * Entity name -> table, and with it the ORDER of the write.
+ *
+ * Parents first, children after: a question needs its topic, a measurement needs its scale.
+ * Deletions run the same list backwards, so a child never outlives the row it points at —
+ * the cascades in the schema then take care of the rest.
+ */
+const TABLES = [
+  ["topic", topics],
+  ["test", tests],
+  ["question", questions],
+  ["section", testSections],
+  ["scale", scales],
+  ["measurement", questionMeasurements],
+  ["resultVariable", resultVariables],
+  ["contentPage", contentPages],
+  ["questionScoring", testQuestionScoring],
+  ["adaptiveSetting", adaptiveTopicSettings],
+  ["adaptiveLevel", adaptiveLevels],
+  ["adaptiveLevelLink", adaptiveLevelLinks],
+] as const;
+
 /** The database owns these; a carried-over value would be a lie about this installation. */
 const STRIPPED = ["createdAt", "updatedAt"] as const;
 
@@ -140,6 +181,44 @@ export class TestTransferRepository {
         },
       };
     });
+  }
+
+  /**
+   * Executes a decided plan in ONE transaction.
+   *
+   * Rows go in whole, exactly as `writeImportedTest` does and for the same reason: a writer
+   * that spells out its columns loses the one nobody remembered. Deletions run FIRST — they
+   * free unique keys the incoming rows may need, and the cascades of the schema carry away
+   * what hung on the deleted row.
+   */
+  async applyTransferBatch(batch: TransferWriteBatch): Promise<TransferWriteCounts> {
+    const counts: TransferWriteCounts = { created: {}, updated: {}, deleted: {} };
+
+    await db.transaction(async (tx) => {
+      for (const [entity, table] of [...TABLES].reverse()) {
+        const ids = batch.deletes[entity] ?? [];
+        if (!ids.length) continue;
+        for (const id of ids) await tx.delete(table).where(eq(table.id, id));
+        counts.deleted[entity] = ids.length;
+      }
+
+      for (const [entity, table] of TABLES) {
+        const created = batch.creates[entity] ?? [];
+        if (created.length) {
+          await tx.insert(table).values(created.map(insertable) as never);
+          counts.created[entity] = created.length;
+        }
+
+        const updated = batch.updates[entity] ?? [];
+        for (const row of updated) {
+          const { id, ...rest } = insertable(row);
+          await tx.update(table).set(rest as never).where(eq(table.id, String(id)));
+        }
+        if (updated.length) counts.updated[entity] = updated.length;
+      }
+    });
+
+    return counts;
   }
 }
 
