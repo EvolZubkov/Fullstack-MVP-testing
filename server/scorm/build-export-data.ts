@@ -95,15 +95,28 @@ export async function buildScormExportData(
 
   // PRD-49 §8. There is no manifest inside an LMS, so the package carries the ALREADY
   // RESOLVED wording — the template default with the test's own words on top — exactly
-  // as it carries the resolved report variant. The runtime unfolds nothing: it hands
-  // this flat «key → text» map to the shared builder, and the builder alone turns it
-  // into the `labels.*` tree, so there is only ever ONE place that shapes it.
+  // as it carries the resolved report variant. The runtime unfolds nothing: it picks its
+  // screen's flat «key → text» map and hands it to the shared builder, which alone turns
+  // it into the `labels.*` tree, so there is only ever ONE place that shapes it.
+  //
+  // Resolved PER SCREEN, because `defaults.<экран>` is part of the declaration: a template
+  // that words the adaptive results screen differently would otherwise get the standard
+  // screen's wording in the package while the web host — which resolves per screen —
+  // printed its own. That is precisely the host drift §2.5 forbids, so the answer is baked
+  // for every screen that renders labels rather than reduced to one map. The report layer
+  // is not here: it carries its own overrides and is resolved by the report builder.
   const declarations = readResultsDeclarations(templateDir);
   const design = (rawDesignSettings ?? null) as DesignSettings | null;
-  const labels = resolveScreenLabels(declarations.labels, design, "results");
-  // …the ORDER, on the other hand, cannot be reduced to one screen: the shipped manifest
-  // gives the adaptive results screen its own composition (topics first, no score
-  // summary). It is resolved per screen HERE, again because the manifest does not travel.
+  const labels = declarations.labels.length
+    ? {
+        results: resolveScreenLabels(declarations.labels, design, "results"),
+        "results.adaptive": resolveScreenLabels(declarations.labels, design, "results.adaptive"),
+        "section-results": resolveScreenLabels(declarations.labels, design, "section-results"),
+      }
+    : null;
+  // The ORDER is resolved per screen for the same reason, and for one more: the shipped
+  // manifest gives the adaptive results screen its own composition (topics first, no score
+  // summary). Итоги раздела подблоков не имеют — списка у них и нет.
   const screenBlockOrder = declarations.blockOrder
     ? {
         results: templateBlockOrder(declarations.blockOrder, "results"),
@@ -116,7 +129,7 @@ export async function buildScormExportData(
   // give such a test headings on the web and none in the package — the very drift PRD-49
   // §2.5 forbids. Every key is still absent for a template that declares nothing.
   const prd49 = {
-    ...(Object.keys(labels).length ? { labels } : {}),
+    ...(labels ? { labels } : {}),
     ...(design?.resultsBlockOrder ? { resultsBlockOrder: design.resultsBlockOrder } : {}),
     // Absent for a template that declares no order at all: the runtime then falls back
     // to the shipped list inside the shared builder, which is what it did before.

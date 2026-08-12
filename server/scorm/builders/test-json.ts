@@ -51,14 +51,23 @@ interface DesignSettingsExport {
    */
   report?: ReportBake;
   /**
-   * PRD-49 §8: the ALREADY RESOLVED interface labels of the results screen — a flat
-   * «key → text» map, where an empty string means «do not print this label». Resolved by
-   * the assembler (`build-export-data`), because the manifest that declares the defaults
-   * does not travel into an LMS; the runtime hands the map to the shared builder as it
-   * is, and the builder alone turns it into the `labels.*` tree. Absent for a template
-   * that declares no labels — its layouts print their own strings, as before this PRD.
+   * PRD-49 §8: the ALREADY RESOLVED interface labels, BY SCREEN — `{ results: {…},
+   * "results.adaptive": {…}, "section-results": {…} }`, each a flat «key → text» map
+   * where an empty string means «do not print this label».
+   *
+   * Resolved by the assembler (`build-export-data`) because the manifest that declares
+   * the defaults does not travel into an LMS — and resolved per SCREEN because those
+   * defaults are per screen (`defaults.<screen>`): one map for all three would print the
+   * results screen's wording on the adaptive screen while the web host printed the
+   * screen's own, which is the host drift this PRD exists to remove. The runtime picks
+   * its screen's map and hands it over unchanged; the shared builder alone turns it into
+   * the `labels.*` tree.
+   *
+   * Absent for a template that declares no labels — its layouts print their own strings,
+   * as before this PRD. Packages baked before the split carry a FLAT map here instead;
+   * the runtime tells the two shapes apart (`vrScreenLabels`, viewResults.js).
    */
-  labels?: Record<string, string>;
+  labels?: Record<string, Record<string, string>>;
   /** PRD-49: the author's order of the results sub-blocks (`design_settings_json`). */
   resultsBlockOrder?: string[];
   /**
@@ -207,6 +216,10 @@ export function buildTestJson(data: ExportData): string {
       : {}),
     showDifficultyLevel: data.test.showDifficultyLevel ?? true,
     overallPassRule: overallPassRule,
+    // «Тест пройден, если»: HOW the overall rule and the topic gates combine into the
+    // verdict. Baked so the package decides exactly like the web host; a package built
+    // before this shipped carries none and the shared engine then keeps the old rule.
+    passDecisionPolicy: data.test.passDecisionPolicy ?? null,
     webhookUrl: data.test.webhookUrl,
     testFeedback: data.test.feedback || null,
     // PRD-29 §7.1: the test's OWN feedback block (`tests.feedback_json`) is one of the

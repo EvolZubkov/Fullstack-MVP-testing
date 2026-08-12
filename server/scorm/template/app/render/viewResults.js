@@ -132,6 +132,40 @@ function vrReportEnabled() {
 }
 
 /**
+ * Карта надписей ОДНОГО экрана из того, что несёт пакет.
+ *
+ * Форм две, и различать их приходится по значениям, а не по версии пакета:
+ *
+ * - по экранам — `{ "results": { … }, "results.adaptive": { … } }`, значения ОБЪЕКТЫ;
+ *   так печёт сборка сегодня, потому что умолчание объявляется по экранам
+ *   (`defaults.<экран>`) и разрешать его надо для каждого экрана отдельно;
+ * - плоская — `{ "results.scales": "По шкалам" }`, значения СТРОКИ; так печатали первые
+ *   пакеты PRD-49, и они продолжают ходить в LMS. Для них одна карта отвечает за все
+ *   экраны — ровно то, чем она и была на момент сборки.
+ *
+ * Признак — тип ПЕРВОГО собственного значения: у плоской карты это строка, у карты по
+ * экранам — объект. Сверять по имени ключа было бы хуже: ключ `results.adaptive` законен
+ * в обеих формах (в плоской он был бы надписью, в карте по экранам — экраном).
+ *
+ * @param {object|null} labels `designSettings.labels` как есть.
+ * @param {string} screen Экран (`results` / `results.adaptive` / `section-results`).
+ * @returns {object|null} Плоская карта «ключ → текст» этого экрана.
+ */
+function vrScreenLabels(labels, screen) {
+  if (!labels || typeof labels !== 'object') return null;
+  for (var key in labels) {
+    if (!Object.prototype.hasOwnProperty.call(labels, key)) continue;
+    var value = labels[key];
+    // Старая плоская форма: карта одна на все экраны, отдаём её как есть.
+    if (typeof value === 'string') return labels;
+    // Новая форма: у экрана либо есть своя карта, либо этот экран надписей не печатает.
+    var own = labels[screen];
+    return (own && typeof own === 'object') ? own : null;
+  }
+  return null;
+}
+
+/**
  * PRD-49: надписи блоков итогов и порядок подблоков — как их несёт пакет.
  *
  * Приезжают УЖЕ РАЗРЕШЁННЫМИ (`build-export-data`): манифеста с умолчаниями в LMS нет, и
@@ -143,13 +177,14 @@ function vrReportEnabled() {
  * Пакет, собранный до этого PRD (или на шаблоне без раздела `labels`), не несёт ни одного
  * из трёх полей — и опции остаются пустыми, то есть экран собирается ровно как прежде.
  *
- * @param {string} screen Экран, чей список подблоков нужен (`results`).
+ * @param {string} screen Экран, чьи надписи и список подблоков нужны.
  * @returns {object} Опции для `TBTemplate.buildResultContext`.
  */
 function vrLabelOptions(screen) {
   var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || {};
   var opts = {};
-  if (ds.labels) opts.labels = ds.labels;
+  var labels = vrScreenLabels(ds.labels, screen);
+  if (labels) opts.labels = labels;
   if (ds.resultsBlockOrder) opts.blockOrder = ds.resultsBlockOrder;
   if (ds.templateBlockOrder && ds.templateBlockOrder[screen]) {
     opts.templateBlockOrder = ds.templateBlockOrder[screen];

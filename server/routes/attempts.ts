@@ -35,6 +35,7 @@ import {
   buildReportInput,
   buildAdaptiveReportInput,
   buildMeasuresInput,
+  resolveScreenLabels,
   type MeasuresSource,
 } from "../services/result-context";
 import type { MeasuresInput } from "@shared/template/result-context";
@@ -1352,6 +1353,17 @@ router.post("/attempts/:attemptId/section-result", requirePermission("attempts.t
     // resolves its verdict identically (resolveTopicRule -> overall).
     const agg = aggregateStandardResult({ sections: [aggSection], overallPassRule: test.overallPassRuleJson });
     const tr = agg.topicResults[0];
+    // PRD-49: надписи ЭТОГО экрана (`section.eyebrow`, `facts.*`). Разрешает СЕРВЕР — тем
+    // же адаптером и против того же манифеста, что и надписи экрана итогов, — а браузер
+    // отдаёт готовую плоскую карту ядру: дерево строит только оно. Настройки берутся из
+    // ВЫДАННОЙ версии теста (`src`), на которой попытка и идёт. Пустая карта (шаблон
+    // надписей не объявлял) в ответ не кладётся: экран тогда печатает свои строки, как до
+    // этого PRD.
+    const design = (test.designSettingsJson as DesignSettings | null) ?? null;
+    const declarations = readResultsDeclarations(
+      await resolveTemplateDir(design?.templateId, { activeOnly: true }),
+    );
+    const labels = resolveScreenLabels(declarations.labels, design, "section-results");
     res.json({
       topicId: tr.topicId,
       topicName: tr.topicName,
@@ -1361,6 +1373,7 @@ router.post("/attempts/:attemptId/section-result", requirePermission("attempts.t
       passed: tr.passed,
       earnedPoints: tr.earnedPoints,
       possiblePoints: tr.possiblePoints,
+      ...(Object.keys(labels).length ? { labels } : {}),
     });
   } catch (error) {
     logger.error("Section result error: " + (error as Error).message);

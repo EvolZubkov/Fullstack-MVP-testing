@@ -609,7 +609,23 @@ export default function TakeTestPage() {
   // PRD-19 D5: the computed section-results screen payload (null = not shown). Built
   // from the server /section-result grade (parity with SCORM computeSectionResult).
   const [sectionResultView, setSectionResultView] = useState<
-    { topicId: string; topicName: string; correct: number; total: number; percent: number; passed: boolean | null; isLast: boolean } | null
+    {
+      topicId: string;
+      topicName: string;
+      correct: number;
+      total: number;
+      percent: number;
+      passed: boolean | null;
+      isLast: boolean;
+      /**
+       * PRD-49: разрешённые надписи ЭТОГО экрана — плоская карта «ключ → текст»,
+       * которую посчитал сервер (`POST /attempts/:id/section-result`) против манифеста
+       * шаблона и настроек ВЫДАННОЙ версии теста. Браузер её не трогает: дерево
+       * `labels.section.*` строит ядро внутри `buildSectionResultContext`. Отсутствует у
+       * шаблона, надписей не объявившего, — экран печатает свои строки, как раньше.
+       */
+      labels?: Record<string, string>;
+    } | null
   >(null);
 
   // Standard mode state
@@ -1972,6 +1988,8 @@ export default function TakeTestPage() {
             percent: d.percent,
             passed: d.passed,
             isLast,
+            // PRD-49: надписи экрана приезжают разрешёнными вместе с оценкой раздела.
+            ...(d.labels ? { labels: d.labels as Record<string, string> } : {}),
           });
           // Freeze the outcome so the router hub card reflects it (parity with SCORM).
           setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed: d.passed } }));
@@ -3021,7 +3039,12 @@ export default function TakeTestPage() {
       sectionIndex: srPos || undefined,
       sectionsTotal: orderedTopics.length,
       continueLabel: sectionResultView.isLast ? "Завершить тест" : "Продолжить",
-    });
+    },
+    // PRD-49: разрешённая карта надписей уходит в ЯДРО как есть — оно и раскладывает её
+    // в дерево `labels.section.*` / `labels.facts.*`, которое печатает макет. Ключа нет
+    // (шаблон надписей не объявлял) — построитель не отдаёт и `labels`, и контекст
+    // остаётся ровно тем, чем был до этого PRD.
+    sectionResultView.labels ? { labels: sectionResultView.labels } : {});
     const srIsLast = sectionResultView.isLast;
     return (
       <div className="tbh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
@@ -3044,6 +3067,9 @@ export default function TakeTestPage() {
             course: built.course,
             design: sectionResultsTpl.design,
             sectionResult: built.sectionResult,
+            // PRD-49: дерево надписей, которое построило ядро (есть только когда шаблон
+            // их объявил). Макет адресует его как `labels.section.eyebrow`.
+            ...(built.labels ? { labels: built.labels } : {}),
           }}
           onAction={(action) => {
             if (action === "section-continue") continueAfterSection(srTopic, srIsLast);

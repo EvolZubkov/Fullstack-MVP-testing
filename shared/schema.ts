@@ -426,6 +426,13 @@ export const reportSettingsSchema = z.object({
    * существующего теста.
    */
   enabled: z.boolean().optional(),
+  /**
+   * PRD-49: переопределения надписей ИМЕННО для отчёта. Слой лежит вне ветвей режима по
+   * той же причине, что и `enabled`: формулировка принадлежит документу, а не способу
+   * его выдачи. Отсутствие ключа = документ говорит теми же словами, что экран итогов.
+   * Форма та же, что у `design_settings_json.labels` (см. `shared/template/labels`).
+   */
+  labels: z.record(z.string(), z.object({ on: z.boolean().optional(), text: z.string().optional() })).optional(),
   standard: reportModeSettingsSchema.nullish(),
   adaptive: reportModeSettingsSchema.nullish(),
 });
