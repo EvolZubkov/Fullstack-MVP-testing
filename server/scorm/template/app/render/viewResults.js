@@ -331,11 +331,6 @@ function buildResultsMeasures(scaleComputation, varComputation) {
 
   var scales = measuresBySortOrder(rawScales).map(function (s) {
     var computed = scaleValues[s.key];
-    // PRD-49 §6: per-slot toggles read the same way the web host reads them
-    // (`result-context.buildMeasuresInput`) — `!== false` because an absent key means
-    // "show", so a scale baked before this PRD (no `configJson` on the row at all) keeps
-    // printing both slots.
-    var scaleConfig = s.configJson || {};
     return {
       key: s.key,
       name: s.label || s.key,
@@ -345,8 +340,13 @@ function buildResultsMeasures(scaleComputation, varComputation) {
       // bands) and the shared parser reads exactly those keys, so the package ends up
       // with the identical interpretation object the web host parses from config_json.
       interpretation: TB.parseScaleInterpretation(s),
-      showName: scaleConfig.showName !== false,
-      showLevel: scaleConfig.showLevel !== false
+      // PRD-49 §6: per-slot toggles. Baked as RESOLVED booleans straight onto the scale
+      // row (`test-json.ts`), not as a nested `config_json` — the package never carries
+      // the author's raw config for a scale, only the parsed interpretation and this
+      // answer. `!== false` because an absent key means "show", so a scale baked before
+      // this field existed keeps printing both slots.
+      showName: s.showName !== false,
+      showLevel: s.showLevel !== false
     };
   });
 

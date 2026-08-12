@@ -628,6 +628,13 @@ export function buildTestJson(data: ExportData): string {
         learnerVisibility: s.learnerVisibility,
         scormTarget: s.scormTarget,
         sortOrder: s.sortOrder,
+        // PRD-49 §6: the card's name/level slot toggles, RESOLVED to a plain boolean here
+        // (not the raw `config_json`) — the runtime only ever needs the answer, and the
+        // author's config object is not something the package is meant to leak. `!== false`
+        // because an absent key means "show"; every scale baked before this PRD carries
+        // neither key and keeps both slots.
+        showName: (s.configJson as Record<string, unknown>).showName !== false,
+        showLevel: (s.configJson as Record<string, unknown>).showLevel !== false,
       };
     });
 
