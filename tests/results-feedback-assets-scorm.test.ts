@@ -119,10 +119,21 @@ function makeRuntime(sections: unknown[], testFeedbackJson?: unknown, overallPas
   return { rt, app };
 }
 
-/** Links rendered in the «Материалы» group of the recommendations block. */
+/**
+ * Links rendered in the «Материалы» group of the recommendations block.
+ *
+ * PRD-49 moved the group eyebrows into the context (`labels.recommendations.*`), and the
+ * SCORM host does not pass the labels yet, so the eyebrow is empty in this runtime's
+ * output. The group is therefore taken by its FIXED place in the block — attachments are
+ * printed last, after texts, courses and events — and the eyebrow is still honoured once
+ * the host fills it, so this helper needs no second edit when the wiring lands.
+ */
 function materials(app: HTMLElement): Array<{ title: string; href: string }> {
-  return Array.from(app.querySelectorAll(".tb-recs-group"))
-    .filter((g) => (g.querySelector(".tb-eyebrow")?.textContent ?? "").trim() === "Материалы")
+  const groups = Array.from(app.querySelectorAll(".tb-recs-group"));
+  const eyebrow = (g: Element) => (g.querySelector(".tb-eyebrow")?.textContent ?? "").trim();
+  const labelled = groups.filter((g) => eyebrow(g) === "Материалы");
+  const target = labelled.length ? labelled : groups.slice(-1).filter((g) => eyebrow(g) === "");
+  return target
     .flatMap((g) => Array.from(g.querySelectorAll("a.tb-rec")))
     .map((a) => ({ title: a.textContent?.trim() ?? "", href: a.getAttribute("href") ?? "" }));
 }

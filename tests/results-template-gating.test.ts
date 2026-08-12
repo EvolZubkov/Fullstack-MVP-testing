@@ -57,10 +57,28 @@ function render(layout: string, context: unknown): HTMLElement {
 const actions = (root: HTMLElement) =>
   Array.from(root.querySelectorAll("[data-action]")).map((b) => b.getAttribute("data-action"));
 
+/**
+ * PRD-49: the standard results screen walks `result.blocks` and takes every heading and
+ * row label from `labels` — both are Core-prepared, so a hand-built context must carry
+ * them exactly as `buildResultContext` would. The certification layout still prints its
+ * own strings and simply ignores the two keys, which is what keeps this fixture shared.
+ */
+const labels = {
+  results: { heading: "Ваш результат", topics: "Результаты по темам", recommendations: "Рекомендации" },
+  facts: { questions: "вопросов", correct: "верно", points: "баллов" },
+  topic: { correct: "Правильно", points: "Баллов" },
+  recommendations: { courses: "Пройти обучение", events: "Мероприятия", assets: "Материалы" },
+};
+
 // Minimal web-shaped context (the shape buildResultContext produces — no SCORM extras).
 const webResult = {
   course: { title: "Тест" },
+  labels,
   result: {
+    blocks: [
+      { key: "summary", heading: "Общий балл", isSummary: true },
+      { key: "topics", heading: "Результаты по темам", isTopics: true },
+    ],
     passed: true,
     passClass: "is-pass",
     statusLabel: "Пройден",
@@ -91,6 +109,7 @@ describe("results.html — superset gating", () => {
   it("SCORM context: points row + threshold + recommendations + back action", () => {
     const scorm = {
       course: { title: "Тест" },
+      labels,
       result: {
         ...webResult.result,
         topicResults: [
@@ -129,6 +148,7 @@ describe("results.html — superset gating", () => {
     it(`${templateId}: тема без оцениваемых вопросов не печатает «Правильно»`, () => {
       const root = render(layout, {
         course: { title: "Тест" },
+        labels,
         result: {
           ...webResult.result,
           topicResults: [
@@ -157,6 +177,7 @@ describe("results.html — текст обратной связи только �
   const TEXT = "Повторите тему «Сети».";
   const contextWithBoth = {
     course: { title: "Тест" },
+    labels,
     result: {
       ...webResult.result,
       topicResults: [
@@ -217,12 +238,15 @@ describe("results.html — пустая плашка не рисуется", () 
   it("шкала без сработавшего интервала не оставляет плашку уровня", () => {
     const root = render(resultsLayout, {
       course: { title: "Опросник" },
+      labels,
       result: {
         passed: false,
         passClass: "",
         statusLabel: "",
         hideScoreSummary: true,
         topicResults: [],
+        // Only the scales sub-block is visible: no summary (hidden), no topics, no indicators.
+        blocks: [{ key: "scales", heading: "По шкалам", isScales: true }],
         scales: [
           { name: "Без интервалов", levelLabel: "", toneClass: "", renderKind: "band_ruler" },
           { name: "С уровнем", levelLabel: "Высокий", toneClass: "ou-tag--error", renderKind: "band_ruler" },
@@ -435,6 +459,10 @@ describe("results.adaptive.html — консолидированный блок 
  * шаблонах: сторонние шаблоны гасят заголовок тем же `{{#if result.topicResults}}`.
  */
 describe("results.html — блок «Результаты по темам» молчит, когда темам нечего сказать", () => {
+  // PRD-49: the builder resolves the heading from the FLAT label values a host passes in
+  // (`labels['results.topics']`), so the assertion below reads the same wording the
+  // certification layout still prints from its own markup.
+  const labelValues = { "results.topics": "Результаты по темам" };
   const measurementRun = {
     passed: false,
     percent: 0,
@@ -458,7 +486,7 @@ describe("results.html — блок «Результаты по темам» м�
 
   for (const [templateId, layout] of standardLayouts) {
     it(`${templateId}: измерительная тема не оставляет ни заголовка, ни карточки`, () => {
-      const root = render(layout, buildResultContext(measurementRun, "Опросник", { withTopicPoints: true }));
+      const root = render(layout, buildResultContext(measurementRun, "Опросник", { withTopicPoints: true, labels: labelValues }));
       expect(root.querySelector(".tb-topics-grid")).toBeNull();
       expect(root.querySelector(".tb-topic-card")).toBeNull();
       expect(root.textContent).not.toContain("Результаты по темам");
@@ -471,7 +499,7 @@ describe("results.html — блок «Результаты по темам» м�
           { ...measurementRun.topicResults[0], correct: 3, total: 4, percent: 75, earnedPoints: 3, possiblePoints: 4 },
         ],
       };
-      const root = render(layout, buildResultContext(graded, "Тест", { withTopicPoints: true }));
+      const root = render(layout, buildResultContext(graded, "Тест", { withTopicPoints: true, labels: labelValues }));
       expect(root.querySelector(".tb-topic-card")).not.toBeNull();
       expect(root.textContent).toContain("Результаты по темам");
     });
@@ -485,7 +513,7 @@ describe("results.html — блок «Результаты по темам» м�
           { ...measurementRun.topicResults[0], recommendedCourses: [{ title: "Курс A", url: "https://e/a" }] },
         ],
       };
-      const root = render(layout, buildResultContext(withCourses, "Опросник", { withTopicPoints: true }));
+      const root = render(layout, buildResultContext(withCourses, "Опросник", { withTopicPoints: true, labels: labelValues }));
       const card = root.querySelector(".tb-topic-card") as HTMLElement;
       expect(card).not.toBeNull();
       expect(card.querySelector(".tb-topic-card__bar")).toBeNull();

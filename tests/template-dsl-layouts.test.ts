@@ -21,6 +21,13 @@ const LAYOUTS_DIR = path.join(process.cwd(), "server", "scorm", "templates", "de
 const ctx = {
   course: { title: "Демо-тест", description: "Описание", questionCount: 10, passPercent: 70 },
   state: { questionCounterLabel: "Вопрос 1 из 10" },
+  // PRD-49: the results screen walks the sub-blocks the Core resolved, and its headings
+  // come from `labels` — the layout carries neither list nor wording of its own.
+  labels: {
+    results: { heading: "Ваш результат", topics: "Результаты по темам", recommendations: "Рекомендации" },
+    facts: { questions: "вопросов", correct: "верно", points: "баллов" },
+    topic: { correct: "Правильно", points: "Баллов" },
+  },
   result: {
     passed: false,
     ringDashoffset: 120,
@@ -30,6 +37,10 @@ const ctx = {
     totalQuestions: 10,
     correct: 6,
     earnedPoints: 6,
+    blocks: [
+      { key: "summary", heading: "Общий балл", isSummary: true },
+      { key: "topics", heading: "Результаты по темам", isTopics: true },
+    ],
     topicResults: [
       { topicName: "Тема A", passClass: "is-pass", statusLabel: "Пройдено", percent: 80, correct: 4, total: 5 },
       { topicName: "Тема B", passClass: "is-fail", statusLabel: "Не пройдено", percent: 40, correct: 2, total: 5 },
@@ -61,7 +72,7 @@ describe("DSL renders real default-template layouts", () => {
     // {{#each result.topicResults}} iterated with item-scoped fields
     expect(out).toContain("Тема A");
     expect(out).toContain("Тема B");
-    expect(out).toContain("Результаты по темам"); // {{#if result.topicResults}}
+    expect(out).toContain("Результаты по темам"); // {{#if isTopics}} + heading from the context
 
     // {{ percent }} inside an inline width style resolves per each-item
     expect(out).toContain("width: 80%");
