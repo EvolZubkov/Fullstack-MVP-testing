@@ -697,6 +697,95 @@ describe("<TakeTestPage /> flexible flow", () => {
   });
 });
 
+describe("<TakeTestPage /> flexible flow when the обзор is not shown", () => {
+  // PRD-19 FR-16: in flexible mode the last question's primary button is «Далее»
+  // (finishing belongs to the обзор), but the обзор gate hides that screen when it
+  // has nothing to offer. The click must still END the test — the SCORM runtime
+  // does exactly that (contentFlow.advancePageSequence → submit), and a host that
+  // only saves progress leaves the learner stuck on the last question.
+  const walkTwoStep = async () => {
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await screen.findByTestId("question-screen");
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Далее"));
+    await waitFor(() =>
+      expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
+    );
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Далее"));
+  };
+
+  it("finishes from the last question when answers cannot be changed (nothing to act on)", async () => {
+    await renderToStart({
+      startAttempt: jsonRes(
+        standardAttempt({
+          allowReturnToUnanswered: true,
+          allowAnswerChange: false,
+          answerCommitScope: "test",
+        }),
+      ),
+    });
+    await walkTwoStep();
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
+  });
+
+  it("finishes from the last question when the author suppressed the обзор (skipReviewWhenComplete)", async () => {
+    await renderToStart({
+      startAttempt: jsonRes(
+        standardAttempt({
+          allowReturnToUnanswered: true,
+          allowAnswerChange: true,
+          skipReviewWhenComplete: true,
+          answerCommitScope: "test",
+        }),
+      ),
+    });
+    await walkTwoStep();
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
+  });
+
+  it("finishes from the LAST section of a sectional flexible test", async () => {
+    await renderToStart({
+      startAttempt: jsonRes(
+        standardAttempt({
+          allowReturnToUnanswered: true,
+          allowAnswerChange: false,
+          answerCommitScope: "section",
+          showSectionResults: true,
+          variantJson: {
+            sections: [
+              { topicName: "Тема A", topicId: "topic-a", timeLimitMinutes: null, questionIds: ["q1"] },
+              { topicName: "Тема B", topicId: "topic-b", timeLimitMinutes: null, questionIds: ["q2"] },
+            ],
+          },
+          questions: [q("q1", "Вопрос 1", "topic-a", "Тема A"), q("q2", "Вопрос 2", "topic-b", "Тема B")],
+        }),
+      ),
+      sectionResult: jsonRes({ topicName: "Тема A", correct: 1, total: 1, percent: 100, passed: true }),
+    });
+    fireEvent.click(screen.getByTestId("ts-start-test"));
+    await screen.findByTestId("question-screen");
+
+    // Section A: commit → its results screen → continue into section B.
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Далее"));
+    fireEvent.click(await screen.findByTestId("ts-section-continue"));
+    await waitFor(() =>
+      expect(screen.getByTestId("qs-counter").textContent).toContain("Вопрос 2 из 2"),
+    );
+
+    // Section B is the last one: no section-results screen of its own (FR-05a), so
+    // «Далее» has to end the test instead of standing still.
+    fireEvent.click(screen.getByTestId("qs-answer-0"));
+    fireEvent.click(await screen.findByText("Отправить ответ"));
+    fireEvent.click(await screen.findByText("Далее"));
+    await waitFor(() => expect(navigateSpy).toHaveBeenCalledWith("/learner/result/attempt-1"));
+  });
+});
+
 describe("<TakeTestPage /> strict flow without quick advance (PRD-43)", () => {
   it("two-step footer with NO Назад/Пропустить: «Отправить ответ» then «Далее»", async () => {
     await renderToStart({

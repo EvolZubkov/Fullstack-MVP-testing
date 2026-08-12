@@ -225,6 +225,15 @@ function pickGradedAnswers(
   return out;
 }
 
+/**
+ * Answer + status maps to grade an attempt from, when the caller cannot rely on
+ * component state — it submits from inside the very handler that updated them.
+ */
+interface GradedSnapshot {
+  answers: Record<string, any>;
+  status: Record<string, "unanswered" | "answered" | "skipped">;
+}
+
 /** Escape text for safe injection into a template slot. */
 function escSlot(s: unknown): string {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -1917,10 +1926,23 @@ export default function TakeTestPage() {
     if (nextIdx !== null) {
       setCurrentIndex(nextIdx);
       saveProgress(nextAnswers, nextIdx, nextStatus);
-    } else {
-      // Strict end (no обзор): submit is triggered by the «Завершить тест» button.
-      saveProgress(nextAnswers, currentIndex, nextStatus);
+      return;
     }
+    // No further question AND no обзор staged above — the run is over, so finishing
+    // it is what «Далее» has to do. In flexible mode the primary button is ALWAYS
+    // «Далее» (FR-16 hands завершение to the обзор), so when the обзор gate hides
+    // that screen — everything answered plus either «правка запрещена» or авторское
+    // `skipReviewWhenComplete` — this is the only remaining terminal: without it the
+    // learner sits on the last question clicking a button that does nothing.
+    // Parity: the SCORM runtime ends the same sequence with submit(true)
+    // (contentFlow.advancePageSequence).
+    //
+    // The fresh maps are passed EXPLICITLY: this runs synchronously inside the same
+    // handler that just called setQuestionStatus, so the state in scope still lacks
+    // the last question's 'answered' — and in flexible mode pickGradedAnswers drops
+    // everything not marked 'answered', which would silently zero that answer.
+    saveProgress(nextAnswers, currentIndex, nextStatus);
+    void handleSubmit({ answers: nextAnswers, status: nextStatus });
   };
 
   /**
@@ -1998,11 +2020,21 @@ export default function TakeTestPage() {
     saveProgress(answers, nextIdx, questionStatus);
   };
 
-  const handleSubmit = async () => {
+  /**
+   * Finish the attempt (after the «После теста» zone, when the author placed one).
+   *
+   * `fresh` overrides the answer/status maps for callers that submit from INSIDE the
+   * handler that just updated them — React state is still the pre-update value there,
+   * and in flexible mode a status that has not caught up drops the answer from
+   * grading (see {@link pickGradedAnswers}). Omitted = use the component state, which
+   * is correct for every caller that runs from a later render (обзор, hub, кнопка).
+   */
+  const handleSubmit = async (fresh?: GradedSnapshot) => {
     if (!attempt) return;
 
+    const submitAnswers = fresh?.answers ?? answers;
     const unansweredQuestions = flatQuestions.filter(
-      (fq) => answers[fq.question.id] === undefined || answers[fq.question.id] === null
+      (fq) => submitAnswers[fq.question.id] === undefined || submitAnswers[fq.question.id] === null
     );
 
     // PRD-19 (Block B): strict-linear tests (allowReturnToUnanswered=false) still
@@ -2032,11 +2064,11 @@ export default function TakeTestPage() {
       }
     }
 
-    await submitAttempt();
+    await submitAttempt(fresh);
   };
 
-  /** Sends the attempt and moves to the results page. */
-  const submitAttempt = async () => {
+  /** Sends the attempt and moves to the results page. `fresh` — see {@link handleSubmit}. */
+  const submitAttempt = async (fresh?: GradedSnapshot) => {
     if (!attempt) return;
     setIsSubmitting(true);
     try {
@@ -2044,7 +2076,13 @@ export default function TakeTestPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
+        body: JSON.stringify({
+          answers: pickGradedAnswers(
+            fresh?.answers ?? answers,
+            fresh?.status ?? questionStatus,
+            navSettings.allowReturnToUnanswered,
+          ),
+        }),
       });
 
       if (res.status === 404) { setAttemptGone(true); return; }
