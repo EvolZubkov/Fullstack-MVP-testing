@@ -1,0 +1,64 @@
+/**
+ * @module features/content-protection/content-impact-dialog.css
+ *
+ * Token-only styles for the dependent-tests list in the content-impact dialog
+ * (PRD-15 T-12). No DS list component covers this composition; everything uses
+ * --ou-* tokens so it follows light/dark and density automatically.
+ */
+
+.cp-dep-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-3);
+}
+
+.cp-dep {
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  background: var(--ou-bg-muted);
+}
+
+.cp-dep__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  flex-wrap: wrap;
+}
+
+.cp-dep__title {
+  font: var(--ou-text-body-m);
+  font-weight: 600;
+  color: var(--ou-fg-default);
+}
+
+.cp-dep__owner {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  margin-left: auto;
+}
+
+.cp-dep__reasons {
+  margin: var(--ou-space-2) 0 0;
+  padding-left: var(--ou-space-5);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+}
+
+.cp-foot {
+  display: inline-flex;
+  gap: var(--ou-space-3);
+  margin-left: auto;
+}
+
+.cp-foot--between {
+  margin-left: 0;
+  width: 100%;
+  justify-content: space-between;
+}

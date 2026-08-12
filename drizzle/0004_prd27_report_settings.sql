@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "report_settings_json" jsonb;

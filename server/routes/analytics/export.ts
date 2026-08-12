@@ -1,9 +1,18 @@
 import { Router, Request, Response } from "express";
-import * as XLSX from "xlsx";
+import { logger } from "../../logger";
+import ExcelJS from "exceljs";
+import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
+// Analytics reports are read by people, not re-imported: the question text goes in
+// without its markdown markers. The question-bank export is the opposite case and
+// keeps the stored text verbatim, so an export/import round trip cannot lose markup.
+import { stripMarkdown } from "@shared/text";
+import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import {
+  analyticsScope,
   formatQuestionType,
   formatAllOptions,
   formatCorrectAnswerText,
@@ -13,7 +22,7 @@ import {
 const router = Router();
 
 // GET /api/analytics/tests/:testId/export/excel - Экспорт теста в Excel
-router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, res: Response) => {
+router.get("/tests/:testId/export/excel", requirePermission("analytics.export"), requireTestScope("analytics", "testId"), async (req: Request, res: Response) => {
   try {
     const testId = req.params.testId;
     const test = await storage.getTest(testId);
@@ -59,6 +68,9 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
 
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
+
+    // PRD-15 block D (FR-32): recompute with the test-effective price/config.
+    const scoring = await loadTestScoringContext(testId, storage);
 
     // ЛИСТ 1: Сводка
     const summaryData: any[][] = [
@@ -165,7 +177,8 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
         const question = questionMap.get(qId);
         if (!question) continue;
 
-        const isCorrect = checkAnswer(question, userAnswer) === 1;
+        const effective = scoring.resolve(question);
+        const isCorrect = checkAnswer(question, userAnswer, effective.scoring) === 1;
         const dataJson = question.dataJson as any;
         const correctJson = question.correctJson as any;
 
@@ -185,15 +198,15 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
           attempt.id,
           username,
           startDateStr,
-          question.prompt,
+          stripMarkdown(question.prompt),
           topicMap.get(question.topicId) || "Unknown",
           formatQuestionType(question.type),
-          question.difficulty || 50,
+          scoring.difficultyOf(question) || 50,
           formatAllOptions(question.type, dataJson),
           formatCorrectAnswerText(question.type, dataJson, correctJson),
           formatUserAnswerText(question.type, dataJson, userAnswer),
           isCorrect ? "Верно" : "Неверно",
-          isCorrect ? (question.points || 1) : 0,
+          isCorrect ? effective.points : 0,
         ];
 
         if (test.mode === "adaptive") {
@@ -215,7 +228,7 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
 
         const stats = questionStatsMap.get(qId) || { total: 0, correct: 0 };
         stats.total++;
-        if (checkAnswer(question, answer) === 1) {
+        if (checkAnswer(question, answer, scoring.resolve(question).scoring) === 1) {
           stats.correct++;
         }
         questionStatsMap.set(qId, stats);
@@ -234,10 +247,10 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
       const correctJson = question.correctJson as any;
 
       questionStatsData.push([
-        question.prompt,
+        stripMarkdown(question.prompt),
         topicMap.get(question.topicId) || "Unknown",
         formatQuestionType(question.type),
-        question.difficulty || 50,
+        scoring.difficultyOf(question) || 50,
         formatAllOptions(question.type, dataJson),
         formatCorrectAnswerText(question.type, dataJson, correctJson),
         stats.total,
@@ -255,34 +268,13 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
     questionStatsData.unshift(header!);
 
     // Создаём Excel
-    const workbook = XLSX.utils.book_new();
+    const workbook = new ExcelJS.Workbook();
+    addAoaSheet(workbook, "Сводка", summaryData);
+    addAoaSheet(workbook, "Попытки", attemptsData, [36, 20, 18, 18, 12, 12, 10, 12, 12, 40]);
+    addAoaSheet(workbook, "Ответы", answersData, [36, 15, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8, 15]);
+    addAoaSheet(workbook, "Статистика вопросов", questionStatsData, [50, 20, 15, 10, 50, 30, 12, 12, 12]);
 
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, "Сводка");
-
-    const attemptsSheet = XLSX.utils.aoa_to_sheet(attemptsData);
-    attemptsSheet["!cols"] = [
-      { wch: 36 }, { wch: 20 }, { wch: 18 }, { wch: 18 },
-      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 40 },
-    ];
-    XLSX.utils.book_append_sheet(workbook, attemptsSheet, "Попытки");
-
-    const answersSheet = XLSX.utils.aoa_to_sheet(answersData);
-    answersSheet["!cols"] = [
-      { wch: 36 }, { wch: 15 }, { wch: 18 }, { wch: 50 }, { wch: 20 },
-      { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 30 }, { wch: 30 },
-      { wch: 10 }, { wch: 8 }, { wch: 15 },
-    ];
-    XLSX.utils.book_append_sheet(workbook, answersSheet, "Ответы");
-
-    const questionStatsSheet = XLSX.utils.aoa_to_sheet(questionStatsData);
-    questionStatsSheet["!cols"] = [
-      { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 50 },
-      { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    ];
-    XLSX.utils.book_append_sheet(workbook, questionStatsSheet, "Статистика вопросов");
-
-    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const buffer = await workbookToBuffer(workbook);
 
     const filename = `analytics_${test.title.replace(/[^a-zA-Zа-яА-Я0-9]/g, "_")}_${new Date().toISOString().split("T")[0]}.xlsx`;
 
@@ -291,18 +283,26 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
     res.send(buffer);
 
   } catch (error) {
-    console.error("Excel export error:", error);
+    logger.error("Excel export error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to export Excel" });
   }
 });
 
 // GET /api/export/filters - Данные для фильтров экспорта
-router.get("/export/filters", requireAuthor, async (_req: Request, res: Response) => {
+router.get("/export/filters", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
-    const tests = await storage.getTests();
-    const allAttempts = await storage.getAllAttempts();
-    const allScormAttempts = await storage.getAllScormAttempts();
-    const scormPackages = await storage.getScormPackages();
+    // PRD-15 FR-08 (audit F-5): the filter dictionary only exposes readable tests
+    // and the attempts/packages belonging to them.
+    const scope = await analyticsScope(req);
+    const tests = (await storage.getTests()).filter((t) => scope.has(t.id));
+    const allAttempts = (await storage.getAllAttempts()).filter((a) => scope.has(a.testId));
+    const scormPackages = (await storage.getScormPackages()).filter((p) =>
+      scope.has(p.testId ?? null),
+    );
+    const scopedPackageIds = new Set(scormPackages.map((p) => p.id));
+    const allScormAttempts = (await storage.getAllScormAttempts()).filter((a) =>
+      scopedPackageIds.has(a.packageId),
+    );
 
     const webTestIds = new Set(allAttempts.filter(a => a.finishedAt).map(a => a.testId));
     const lmsTestIds = new Set<string>();
@@ -385,13 +385,13 @@ router.get("/export/filters", requireAuthor, async (_req: Request, res: Response
       scormPackages: scormOptions,
     });
   } catch (error) {
-    console.error("Export filters error:", error);
+    logger.error("Export filters error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch export filters" });
   }
 });
 
 // POST /api/export/excel - Экспорт отчёта в Excel
-router.post("/export/excel", requireAuthor, async (req: Request, res: Response) => {
+router.post("/export/excel", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
     const config = req.body as any;
 
@@ -410,8 +410,13 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
       return res.status(400).json({ error: "testIds is required" });
     }
 
+    // PRD-15 FR-08 (audit F-5): export only the tests within the actor's scope.
+    const scope = await analyticsScope(req);
     const tests = await storage.getTests();
-    const selectedTests = tests.filter(t => testIds.includes(t.id));
+    const selectedTests = tests.filter(t => testIds.includes(t.id) && scope.has(t.id));
+    if (selectedTests.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const testTitleMap = new Map(selectedTests.map(t => [t.id, t.title]));
     const testModeMap = new Map(selectedTests.map(t => [t.id, t.mode || "standard"]));
 
@@ -420,8 +425,9 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
 
     const allAttempts = await storage.getAllAttempts();
 
-    // Filter attempts
-    let attempts = allAttempts.filter(a => testIds.includes(a.testId));
+    // Filter attempts (selectedTests is already scope-filtered, FR-08).
+    const selectedTestIds = new Set(selectedTests.map((t) => t.id));
+    let attempts = allAttempts.filter(a => selectedTestIds.has(a.testId));
 
     // Filter by groups
     let effectiveUserIds = [...userIds];
@@ -524,7 +530,14 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
-    const wb = XLSX.utils.book_new();
+    // PRD-15 block D (FR-32): the effective price/config/difficulty of the same
+    // question differ between tests — one resolution context per selected test.
+    const scoringByTest = new Map<string, TestScoringContext>();
+    for (const t of selectedTests) {
+      scoringByTest.set(t.id, await loadTestScoringContext(t.id, storage));
+    }
+
+    const wb = new ExcelJS.Workbook();
 
     // Sheet: Summary
     if (includeSheets.summary) {
@@ -547,7 +560,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         rows.push([t.title, ta.length, `${avg.toFixed(1)}%`, ta.length ? `${(passed / ta.length * 100).toFixed(1)}%` : "0%"]);
       }
 
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Сводка");
+      addAoaSheet(wb, "Сводка", rows);
     }
 
     // Sheet: Attempts
@@ -577,9 +590,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 36 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Попытки");
+      addAoaSheet(wb, "Попытки", rows, [24, 36, 18, 18, 18, 12, 12, 10, 12, 10]);
     }
 
     // Sheet: Answers
@@ -593,12 +604,14 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         const answers = (attempt.answersJson || {}) as Record<string, unknown>;
         const username = userMap.get(attempt.userId) || "Unknown";
         const startStr = attempt.startedAt ? new Date(attempt.startedAt).toLocaleString("ru-RU") : "";
+        const scoring = scoringByTest.get(attempt.testId);
 
         for (const [qId, userAnswer] of Object.entries(answers)) {
           const q = questionMap.get(qId);
           if (!q) continue;
 
-          const isCorrect = checkAnswer(q, userAnswer) === 1;
+          const effective = scoring?.resolve(q);
+          const isCorrect = checkAnswer(q, userAnswer, effective?.scoring) === 1;
           const dataJson = q.dataJson as any;
           const correctJson = q.correctJson as any;
 
@@ -607,22 +620,22 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
             attempt.id,
             username,
             startStr,
-            q.prompt,
+            stripMarkdown(q.prompt),
             topicMap.get(q.topicId) || "Unknown",
             formatQuestionType(q.type),
-            q.difficulty || 50,
+            (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
             formatAllOptions(q.type, dataJson),
             formatCorrectAnswerText(q.type, dataJson, correctJson),
             formatUserAnswerText(q.type, dataJson, userAnswer),
             isCorrect ? "Верно" : "Неверно",
-            isCorrect ? (q.points || 1) : 0,
+            // T-40: points come from the effective chain; the `?? 1` is the
+            // system default for the defensive case of a missing scoring context.
+            isCorrect ? (effective?.points ?? 1) : 0,
           ]);
         }
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 36 }, { wch: 15 }, { wch: 18 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 30 }, { wch: 30 }, { wch: 10 }, { wch: 8 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Ответы");
+      addAoaSheet(wb, "Ответы", rows, [24, 36, 15, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8]);
     }
 
     // Sheet: Question stats
@@ -631,6 +644,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
 
       for (const attempt of completed) {
         const answers = (attempt.answersJson || {}) as Record<string, unknown>;
+        const scoring = scoringByTest.get(attempt.testId);
         for (const [qId, ans] of Object.entries(answers)) {
           const q = questionMap.get(qId);
           if (!q) continue;
@@ -638,7 +652,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
           const key = `${attempt.testId}:${qId}`;
           const s = stat.get(key) || { total: 0, correct: 0, testId: attempt.testId };
           s.total++;
-          if (checkAnswer(q, ans) === 1) s.correct++;
+          if (checkAnswer(q, ans, scoring?.resolve(q).scoring) === 1) s.correct++;
           stat.set(key, s);
         }
       }
@@ -648,25 +662,95 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         const qId = key.split(":")[1];
         const q = questionMap.get(qId);
         if (!q) continue;
+        const scoring = scoringByTest.get(s.testId);
 
         rows.push([
           testTitleMap.get(s.testId) || s.testId,
-          q.prompt,
+          stripMarkdown(q.prompt),
           topicMap.get(q.topicId) || "Unknown",
           formatQuestionType(q.type),
-          q.difficulty || 50,
+          (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
           s.total,
           s.correct,
           s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Статистика вопросов");
+      addAoaSheet(wb, "Статистика вопросов", rows, [24, 50, 20, 15, 10, 10, 12, 12]);
     }
 
-    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    // Sheet: Level stats — кто какой уровень достиг
+    if (includeSheets.levelStats) {
+      const rows: any[][] = [["Пользователь", "Email", "Тест", "Тема", "Достигнутый уровень", "Дата"]];
+
+      for (const attempt of completed) {
+        const result = attempt.resultJson as any;
+        if (result?.mode !== "adaptive") continue;
+
+        const userName = userMap.get(attempt.userId) || attempt.userId;
+        const testTitle = testTitleMap.get(attempt.testId) || attempt.testId;
+        const date = attempt.finishedAt
+          ? new Date(attempt.finishedAt).toLocaleDateString("ru-RU")
+          : "—";
+
+        for (const tr of result?.topicResults || []) {
+          rows.push([
+            userName,
+            "—",
+            testTitle,
+            tr.topicName || "—",
+            tr.achievedLevelName || "Не достигнут",
+            date,
+          ]);
+        }
+      }
+
+      if (rows.length > 1) {
+        addAoaSheet(wb, "Статистика уровней", rows, [25, 30, 30, 25, 20, 15]);
+      }
+    }
+
+    // Sheet: Recommendations (web — и адаптивные и стандартные)
+    if (includeSheets.recommendations) {
+      const userCourses = new Map<string, Set<string>>();
+
+      for (const attempt of completed) {
+        const result = attempt.resultJson as any;
+        const userName = userMap.get(attempt.userId) || attempt.userId;
+
+        if (result?.mode === "adaptive") {
+          // Адаптивный — берём recommendedLinks из topicResults
+          for (const tr of result?.topicResults || []) {
+            for (const link of tr.recommendedLinks || []) {
+              if (!userCourses.has(userName)) userCourses.set(userName, new Set());
+              userCourses.get(userName)!.add(link.title);
+            }
+          }
+        } else {
+          // Стандартный — берём recommendedCourses из проваленных тем
+          for (const tr of result?.topicResults || []) {
+            if (tr.passed === false) {
+              for (const course of tr.recommendedCourses || []) {
+                if (!userCourses.has(userName)) userCourses.set(userName, new Set());
+                userCourses.get(userName)!.add(course.title);
+              }
+            }
+          }
+        }
+      }
+
+      if (userCourses.size > 0) {
+        const rows: any[][] = [["Пользователь", "Рекомендуемый курс"]];
+        for (const [userName, courses] of userCourses.entries()) {
+          for (const course of courses) {
+            rows.push([userName, course]);
+          }
+        }
+        addAoaSheet(wb, "Рекомендации", rows, [30, 50]);
+      }
+    }
+
+    const buffer = await workbookToBuffer(wb);
 
     const filename = `report_${new Date().toISOString().split("T")[0]}.xlsx`;
     const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -676,13 +760,13 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
     res.send(buffer);
 
   } catch (e) {
-    console.error("POST /api/export/excel error:", e);
+    logger.error("POST /api/export/excel error: " + (e as Error).message);
     res.status(500).json({ error: "Failed to export Excel" });
   }
 });
 
 // POST /api/export/excel-lms - Экспорт LMS данных в Excel
-router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Response) => {
+router.post("/export/excel-lms", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
     const config = req.body as any;
 
@@ -699,8 +783,15 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
       return res.status(400).json({ error: "testIds is required" });
     }
 
+    // PRD-15 FR-08 (audit F-5): export only the tests within the actor's scope.
+    const scope = await analyticsScope(req);
+    const scopedTestIds = testIds.filter((id) => scope.has(id));
+    if (scopedTestIds.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const tests = await storage.getTests();
-    const selectedTests = tests.filter(t => testIds.includes(t.id));
+    const selectedTests = tests.filter(t => scopedTestIds.includes(t.id));
     const testTitleMap = new Map(selectedTests.map(t => [t.id, t.title]));
 
     const topics = await storage.getTopics();
@@ -709,7 +800,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
     const packages = await storage.getScormPackages();
     const packageMap = new Map(packages.map(p => [p.id, p]));
 
-    const relevantPackages = packages.filter(p => p.testId && testIds.includes(p.testId));
+    const relevantPackages = packages.filter(p => p.testId && scopedTestIds.includes(p.testId));
     const relevantPackageIds = new Set(relevantPackages.map(p => p.id));
 
     const allAttempts = await storage.getAllScormAttempts();
@@ -784,7 +875,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
 
     // Sheet: Summary
     if (includeSheets.summary) {
@@ -812,7 +903,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         ]);
       }
 
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Сводка");
+      addAoaSheet(wb, "Сводка", rows);
     }
 
     // Sheet: Attempts
@@ -846,12 +937,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [
-        { wch: 24 }, { wch: 36 }, { wch: 20 }, { wch: 25 }, { wch: 25 }, { wch: 20 },
-        { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }
-      ];
-      XLSX.utils.book_append_sheet(wb, sh, "Попытки");
+      addAoaSheet(wb, "Попытки", rows, [24, 36, 20, 25, 25, 20, 18, 18, 12, 12, 10, 12, 10]);
     }
 
     // Sheet: Answers
@@ -878,7 +964,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
             attempt.lmsUserName || "—",
             attempt.lmsUserEmail || "—",
             startStr,
-            ans.questionPrompt || q?.prompt || "—",
+            stripMarkdown(ans.questionPrompt || q?.prompt || "—"),
             ans.topicName || topicMap.get(ans.topicId || "") || "—",
             formatQuestionType(ans.questionType || q?.type || "unknown"),
             ans.difficulty || q?.difficulty || 50,
@@ -892,14 +978,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         }
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [
-        { wch: 24 }, { wch: 36 }, { wch: 25 }, { wch: 25 }, { wch: 18 },
-        { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 },
-        { wch: 50 }, { wch: 30 }, { wch: 30 },
-        { wch: 10 }, { wch: 8 }, { wch: 15 },
-      ];
-      XLSX.utils.book_append_sheet(wb, sh, "Ответы");
+      addAoaSheet(wb, "Ответы", rows, [24, 36, 25, 25, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8, 15]);
     }
 
     // Sheet: Question stats
@@ -916,7 +995,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
           const testId = pkg.testId || "";
           const key = `${testId}:${ans.questionId}`;
           const s = stat.get(key) || {
-            prompt: ans.questionPrompt || q?.prompt || "—",
+            prompt: stripMarkdown(ans.questionPrompt || q?.prompt || "—"),
             testId,
             total: 0,
             correct: 0,
@@ -944,53 +1023,38 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Статистика вопросов");
+      addAoaSheet(wb, "Статистика вопросов", rows, [24, 50, 20, 15, 10, 10, 12, 12]);
     }
 
-    // Sheet: Level stats (adaptive)
+    // Sheet: Level stats — кто какой уровень достиг (LMS)
     if (includeSheets.levelStats) {
-      const levelStat = new Map<string, { testTitle: string; topicName: string; levelName: string; total: number; correct: number }>();
+      const rows: any[][] = [["Пользователь", "Email", "Тест", "Тема", "Достигнутый уровень", "Дата"]];
 
       for (const attempt of completed) {
         const pkg = packageMap.get(attempt.packageId);
-        if (!pkg || pkg.testMode !== "adaptive") continue;
+        if (pkg?.testMode !== "adaptive") continue;
 
-        const answers = attemptAnswers.get(attempt.id) || [];
-        for (const ans of answers) {
-          if (!ans.levelName) continue;
+        const achievedLevels = attempt.achievedLevelsJson as any[] | null;
+        if (!achievedLevels || achievedLevels.length === 0) continue;
 
-          const key = `${pkg.testId}:${ans.topicId}:${ans.levelIndex}`;
-          const s = levelStat.get(key) || {
-            testTitle: pkg.testTitle,
-            topicName: ans.topicName || "—",
-            levelName: ans.levelName,
-            total: 0,
-            correct: 0,
-          };
-          s.total++;
-          if (ans.isCorrect) s.correct++;
-          levelStat.set(key, s);
+        const date = attempt.finishedAt
+          ? new Date(attempt.finishedAt).toLocaleDateString("ru-RU")
+          : "—";
+
+        for (const level of achievedLevels) {
+          rows.push([
+            attempt.lmsUserName || attempt.lmsUserId || "—",
+            attempt.lmsUserEmail || "—",
+            pkg?.testTitle || "—",
+            level.topicName || "—",
+            level.levelName || "Не достигнут",
+            date,
+          ]);
         }
       }
 
-      if (levelStat.size > 0) {
-        const rows: any[][] = [["Тест", "Тема", "Уровень", "Всего ответов", "Правильных", "% правильных"]];
-        for (const [_, s] of levelStat.entries()) {
-          rows.push([
-            s.testTitle,
-            s.topicName,
-            s.levelName,
-            s.total,
-            s.correct,
-            s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",
-          ]);
-        }
-
-        const sh = XLSX.utils.aoa_to_sheet(rows);
-        sh["!cols"] = [{ wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
-        XLSX.utils.book_append_sheet(wb, sh, "Статистика уровней");
+      if (rows.length > 1) {
+        addAoaSheet(wb, "Статистика уровней", rows, [25, 30, 30, 25, 20, 15]);
       }
     }
 
@@ -1029,13 +1093,11 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
       }
 
       if (rows.length > 1) {
-        const sh = XLSX.utils.aoa_to_sheet(rows);
-        sh["!cols"] = [{ wch: 25 }, { wch: 50 }];
-        XLSX.utils.book_append_sheet(wb, sh, "Рекомендации");
+        addAoaSheet(wb, "Рекомендации", rows, [25, 50]);
       }
     }
 
-    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const buffer = await workbookToBuffer(wb);
 
     const filename = `report_lms_${new Date().toISOString().split("T")[0]}.xlsx`;
     const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -1045,7 +1107,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
     res.send(buffer);
 
   } catch (e) {
-    console.error("POST /api/export/excel-lms error:", e);
+    logger.error("POST /api/export/excel-lms error: " + (e as Error).message);
     res.status(500).json({ error: "Failed to export LMS Excel" });
   }
 });

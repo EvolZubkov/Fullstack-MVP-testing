@@ -1,0 +1,58 @@
+/*
+ * Learner template-host chrome (PRD-12). Plain-CSS classes replacing the raw
+ * Tailwind utilities on the framework wrappers / footers / nav buttons of the
+ * learner screens (take-test.tsx, result.tsx, template-question-screen.tsx).
+ * These are host-framework chrome around the shared template render, not DS
+ * components — semantic composable classes (tbh-*), DS tokens where applicable.
+ * Part of the Tailwind-removal track (stage 5).
+ */
+
+/* Scene root: the learner screen is exactly the window (spec «Стандартный» §3.3 —
+   pinned header/footer, the template's `.tb-scene__body` is the only scrolling
+   area). A `min-height` here would let a long question grow the PAGE instead: the
+   header (question map, progress) and the footer scroll away, and the runtime fit
+   (`fitQuestionScene`) — which shrinks the option font only when `.tb-scene__body`
+   overflows — never sees an overflow, so the options stay at the maximum size.
+   `dvh` after `vh` so mobile browsers measure the visible viewport. */
+.tbh-screen { height: 100vh; height: 100dvh; overflow: hidden; }
+/* Same scene, but INSIDE the app shell (the result page keeps the learner navbar):
+   it fills what the shell left over, not the whole window — `100dvh` here adds up to
+   the navbar and pushes the scene's footer past the bottom edge, while a `min-height`
+   leaves a dead band under a short scene. It STRETCHES instead of resolving a
+   percentage: the shell's `<main>` (LearnerLayout: `<Box as="main" grow>` inside a
+   column Stack of `min-height: 100vh`) has no definite height of its own, so `height:
+   100%` in here would collapse to the content. The `:has()` rule below turns that
+   main into a column flex container for these screens only — the list/history pages
+   keep the plain block flow they lay out in. */
+main:has(> .tbh-inset-screen) { display: flex; flex-direction: column; min-height: 0; }
+/* The shell's column is `min-height: 100dvh` — it GROWS with its content, so a scene
+   taller than the window stretches `main`, the scene stretches with it, and the PAGE
+   scrolls: the scene's pinned footer leaves the screen. Bound the column to the
+   viewport for the screens that host an inset scene; the list and history pages keep
+   the growing flow they lay out in. */
+.ou-stack--minh-screen:has(.tbh-inset-screen) { height: 100dvh; }
+.tbh-inset-screen { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.tbh-col { display: flex; flex-direction: column; }
+.tbh-noselect { user-select: none; }
+/* `min-height: 0` lets the template host shrink below its content, which is what
+   leaves the host-rendered footer its row inside the window — a flex item at the
+   default `min-height: auto` never goes below its content and pushes the footer
+   past the bottom edge, where the scene root clips it. */
+.tbh-fill { flex: 1 1 0%; width: 100%; min-height: 0; }
+.tbh-wfull { width: 100%; }
+
+/* NB: neither the question screen nor the results screen has a footer class here any
+   more. Their nav rows are part of the TEMPLATE's scene (`.tb-scene__foot`, built from
+   `state.nav` / `result.nav` + `result.showBack`) on both hosts — chrome rendered next
+   to the shadow root is a second footer on the screen and gets neither the scene
+   surface nor the DS palette, which is what made the adaptive footer a light band with
+   a colourless primary button. */
+
+/* Blocked-screen footer: single centered action. */
+.tbh-center-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 40px;
+}
+

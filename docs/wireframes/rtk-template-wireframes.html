@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTK-шаблон · wireframes экранов</title>
+<!--
+  ЭСКИЗ-ПРЕДЛОЖЕНИЕ (draft). Wireframes ученических экранов RTK-шаблона в реальных
+  пропорциях 16:9. Светлая тема, акцент #E33A00. Не продакшн-разметка; до
+  утверждённых DS-wireframes. Открывать в браузере как обычный файл.
+-->
+<style>
+  :root{
+    --bg:#EDEBE8; --panel:#FBFAF8; --ink:#211C17; --ink-2:#6E655C; --ink-3:#948A7F;
+    --line:#E1D9CF; --accent:#E33A00;
+    --mono:"Cascadia Code","SF Mono",ui-monospace,Consolas,monospace;
+    --sans:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#15120F; --panel:#1E1915; --ink:#F0EAE3; --ink-2:#AEA396; --ink-3:#7E7468; --line:#332B23; --accent:#FF5A2B}
+  }
+
+  /* fixed RTK LIGHT palette for the screen artboards (brand of the template) */
+  .board{
+    --bg:#ECECEE; --card:#FFFFFF; --sink:#1B1B1F; --smut:#6B7078; --sline:#E4E3E6;
+    --acc:#E33A00; --acc2:#4472C4; --good:#2F912F; --goodbg:#EAF4EA; --bad:#D0021B;
+    --lock:#8A8A90; --track:#E3E3E6;
+  }
+
+  *{box-sizing:border-box} body{margin:0}
+  .page{background:var(--bg); color:var(--ink); font-family:var(--sans); line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:clamp(20px,5vw,56px) clamp(14px,4vw,36px)}
+  .wrap{max-width:940px; margin:0 auto}
+
+  .mast{border-bottom:2px solid var(--ink); padding-bottom:20px; margin-bottom:12px}
+  .kicker{font-family:var(--mono); font-size:12px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--accent); font-weight:600; margin:0 0 12px; display:flex; align-items:center; gap:10px}
+  .kicker::before{content:""; width:24px; height:2px; background:var(--accent); display:inline-block}
+  h1{font-size:clamp(26px,4.4vw,40px); line-height:1.06; letter-spacing:-.02em; font-weight:800; margin:0 0 12px}
+  .lede{font-size:16px; color:var(--ink-2); max-width:64ch; margin:0}
+
+  .screen{margin-top:38px}
+  .screen__lbl{display:flex; align-items:baseline; gap:12px; margin-bottom:12px; flex-wrap:wrap}
+  .screen__name{font-size:17px; font-weight:750; letter-spacing:-.01em}
+  .screen__kind{font-family:var(--mono); font-size:12px; color:var(--accent); font-weight:600}
+  .screen__note{font-size:13px; color:var(--ink-3); margin:10px 2px 0}
+
+  /* 16:9 artboard, scales its content via container units */
+  .board{aspect-ratio:16/9; width:100%; container-type:size; background:var(--bg);
+    border:1px solid var(--line); border-radius:12px; overflow:hidden; position:relative;
+    box-shadow:0 2px 10px rgba(60,40,20,.10); font-family:var(--sans); color:var(--sink)}
+  .pad{position:absolute; inset:0; padding:6cqh 5.5cqw; display:flex; flex-direction:column}
+
+  .brand{font-weight:800; color:var(--acc); font-size:3.6cqh; letter-spacing:.02em}
+  .eyebrow{font-weight:700; font-size:2.15cqh; letter-spacing:.16em; text-transform:uppercase; color:var(--acc)}
+  .h1{font-size:6.6cqh; line-height:1.04; font-weight:800; letter-spacing:-.01em; margin:0}
+  .h2{font-size:5cqh; line-height:1.08; font-weight:800; margin:0}
+  .desc{font-size:2.7cqh; line-height:1.42; color:var(--smut); margin:0}
+  .btn{display:inline-block; background:var(--acc); color:#fff; font-size:2.7cqh; font-weight:650;
+    border:none; border-radius:1.5cqh; padding:1.9cqh 4.2cqw; letter-spacing:.01em; cursor:default}
+  .btn--ghost{background:transparent; color:var(--sink); border:1.5px solid var(--sline)}
+  .chip{display:inline-flex; align-items:center; gap:1cqw; font-size:2.15cqh; background:var(--card);
+    border:1px solid var(--sline); border-radius:5cqh; padding:1cqh 2.4cqw; color:var(--sink)}
+  .row{display:flex; align-items:center} .between{justify-content:space-between}
+  .imgph{background:repeating-linear-gradient(45deg,#EEE 0 10px,#E6E6E9 10px 20px);
+    border:1px solid var(--sline); border-radius:2cqh; display:grid; place-items:center;
+    color:#A8A8AE; font-size:2.2cqh; font-family:var(--mono)}
+
+  /* TITLE / COVER */
+  .cover-grid{flex:1; display:grid; grid-template-columns:1.05fr .95fr; gap:5cqw; align-items:center; margin-top:2cqh}
+  .cover-col{display:flex; flex-direction:column; gap:2.8cqh; align-items:flex-start}
+  .cover-title{font-size:8cqh; line-height:1.02}
+  .cover-img{align-self:stretch; min-height:74cqh}
+
+  /* ROUTER */
+  .rt-head{display:flex; align-items:flex-end; justify-content:space-between; margin-top:1cqh}
+  .rt-prog{font-size:2.3cqh; color:var(--smut)}
+  .rt-prog b{color:var(--acc)}
+  .rgrid{flex:1; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:1fr 1fr; gap:2.4cqh 2cqw; margin:3cqh 0 2.4cqh}
+  .rcard{background:var(--card); border:1px solid var(--sline); border-radius:1.8cqh; padding:2.4cqh 2.2cqw;
+    display:flex; flex-direction:column; justify-content:space-between; gap:1.4cqh}
+  .rcard.locked{opacity:.55}
+  .rcard.done{border-color:var(--good)}
+  .rname{font-size:2.5cqh; font-weight:700; line-height:1.15}
+  .rstat{font-size:1.95cqh; font-weight:650; display:inline-flex; align-items:center; gap:1cqw}
+  .s-done{color:var(--good)} .s-open{color:var(--acc)} .s-lock{color:var(--lock)}
+  .rscore{font-size:1.95cqh; color:var(--smut)}
+
+  /* QUESTION */
+  .qbar{display:flex; align-items:center; justify-content:space-between; background:var(--card);
+    border-bottom:1px solid var(--sline); margin:-6cqh -5.5cqw 0; padding:2.4cqh 5.5cqw}
+  .qbar .l{display:flex; align-items:center; gap:2.4cqw}
+  .qsec{font-size:2.2cqh; font-weight:700}
+  .qcount{font-size:2cqh; color:var(--smut)}
+  .qtimer{font-family:var(--mono); font-size:2.4cqh; font-weight:700; background:var(--bg);
+    border:1px solid var(--sline); border-radius:1cqh; padding:.8cqh 2cqw}
+  .qprompt{font-size:3.3cqh; line-height:1.3; font-weight:650; margin:4cqh 0 3cqh}
+  .qopts{display:flex; flex-direction:column; gap:1.6cqh; flex:1}
+  .opt{display:flex; align-items:center; gap:2.4cqw; background:var(--card); border:1px solid var(--sline);
+    border-radius:1.5cqh; padding:1.9cqh 2.6cqw; font-size:2.5cqh}
+  .opt .dot{flex:0 0 auto; width:2.8cqh; height:2.8cqh; border-radius:50%; border:2px solid var(--sline)}
+  .opt.sel{border-color:var(--acc); box-shadow:inset 0 0 0 1px var(--acc)}
+  .opt.sel .dot{border-color:var(--acc); background:var(--acc); box-shadow:inset 0 0 0 .7cqh #fff}
+  .qfoot{display:flex; align-items:center; justify-content:space-between; margin-top:2.6cqh}
+  .pills{display:flex; gap:.8cqw; flex-wrap:wrap}
+  .pill2{width:3.8cqh; height:3.8cqh; border-radius:50%; border:1.5px solid var(--sline); background:var(--card);
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:1.85cqh; font-weight:650; color:var(--smut)}
+  .pill2.ok{background:var(--acc); border-color:var(--acc); color:#fff}
+  .pill2.cur{border-color:var(--acc); border-width:2.5px; color:var(--acc); font-weight:800}
+
+  /* SECTION RESULT */
+  .center{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2.6cqh; text-align:center}
+  .ring{width:26cqh; aspect-ratio:1; border-radius:50%; display:grid; place-items:center; position:relative;
+    background:conic-gradient(var(--acc) 0 83%, var(--track) 83% 100%)}
+  .ring::before{content:""; position:absolute; inset:15%; background:var(--bg); border-radius:50%}
+  .ring .v{position:relative; font-size:6.4cqh; font-weight:800}
+  .ring .v small{font-size:2.6cqh; font-weight:600; color:var(--smut)}
+  .metrics{display:flex; gap:2cqw}
+  .badge{font-size:2.5cqh; font-weight:700; border-radius:5cqh; padding:1.1cqh 3cqw; display:inline-flex; align-items:center; gap:1.2cqw}
+  .badge.pass{background:var(--goodbg); color:var(--good); border:1px solid var(--good)}
+
+  /* RESULTS */
+  .res-badge{align-self:center; margin:1cqh 0 2.4cqh}
+  .brk{background:var(--card); border:1px solid var(--sline); border-radius:1.8cqh; overflow:hidden; margin-bottom:2.4cqh}
+  .brow{display:flex; align-items:center; justify-content:space-between; padding:1.55cqh 3cqw; border-bottom:1px solid var(--sline); font-size:2.3cqh}
+  .brow:last-child{border-bottom:none}
+  .brow .nm{font-weight:600}
+  .brow .rt{display:flex; align-items:center; gap:2.4cqw}
+  .dotok{color:var(--good); font-weight:700; font-size:2.1cqh}
+  .pct{font-family:var(--mono); font-weight:700; min-width:8cqw; text-align:right}
+
+  /* BLOCKED */
+  .lockc{width:16cqh; aspect-ratio:1; border-radius:50%; background:var(--bg); border:2px solid var(--lock);
+    display:grid; place-items:center; color:var(--lock)}
+  .lockc svg{width:7.5cqh; height:7.5cqh}
+  .datechip{font-family:var(--mono); font-size:2.6cqh; font-weight:700; background:var(--card);
+    border:1px solid var(--sline); border-radius:1.4cqh; padding:1.3cqh 3cqw; color:var(--sink)}
+
+  /* INFO trio */
+  .trio{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:12px}
+  @media (max-width:720px){.trio{grid-template-columns:1fr}}
+  .trio .board{box-shadow:0 1px 6px rgba(60,40,20,.09)}
+  .tcap{font-family:var(--mono); font-size:11.5px; color:var(--ink-3); text-align:center; margin:8px 0 0}
+  .navrow{display:flex; justify-content:flex-end; gap:2cqw; margin-top:auto}
+  .metaline{display:flex; gap:2cqw; margin-top:2cqh}
+  .txtlines{display:flex; flex-direction:column; gap:1.4cqh}
+  .txtln{height:2.4cqh; background:var(--sline); border-radius:1cqh}
+  .txtln.s{width:70%}
+
+  /* WELCOME / CONSENT */
+  .consent{display:inline-flex; align-items:center; gap:2cqw; background:var(--card); border:1px solid var(--sline);
+    border-radius:1.4cqh; padding:1.5cqh 3cqw; font-size:2.3cqh}
+  .cbx{flex:0 0 auto; width:2.8cqh; height:2.8cqh; border-radius:.7cqh; border:2px solid var(--acc); background:var(--acc);
+    color:#fff; display:grid; place-items:center; font-size:2cqh; font-weight:800}
+  /* INSTRUCTION two-column */
+  .instr-grid{flex:1; display:grid; grid-template-columns:1.15fr .85fr; gap:4.5cqw; margin:2cqh 0; align-items:center}
+  .steps{display:flex; flex-direction:column; gap:2.4cqh}
+  .step{display:flex; gap:2.2cqw; align-items:flex-start; font-size:2.4cqh; line-height:1.3}
+  .step .num{flex:0 0 auto; width:4.4cqh; height:4.4cqh; border-radius:50%; background:var(--acc); color:#fff;
+    font-weight:700; display:grid; place-items:center; font-size:2.2cqh}
+  .instr-img{align-self:stretch; min-height:52cqh}
+  /* MULTIPLE choice checkbox */
+  .box2{flex:0 0 auto; width:2.8cqh; height:2.8cqh; border-radius:.7cqh; border:2px solid var(--sline);
+    display:grid; place-items:center; color:#fff; font-size:1.9cqh; font-weight:800}
+  .opt.sel .box2{border-color:var(--acc); background:var(--acc)}
+  /* FEEDBACK banner + answered states */
+  .opt.correct{border-color:var(--good); background:var(--goodbg)}
+  .opt.wrong{border-color:var(--bad); background:#FBEAE8}
+  .fb{margin:2cqh -5.5cqw -6cqh; padding:2.8cqh 5.5cqw; display:flex; align-items:center; gap:3cqw; border-top:2px solid}
+  .fb.no{background:#FBEAE8; border-color:var(--bad)} .fb.ok{background:var(--goodbg); border-color:var(--good)}
+  .fb .ic{flex:0 0 auto; width:6.5cqh; height:6.5cqh; border-radius:50%; display:grid; place-items:center;
+    font-size:3.4cqh; font-weight:800; color:#fff}
+  .fb.no .ic{background:var(--bad)} .fb.ok .ic{background:var(--good)}
+  .fb .txt{flex:1}
+  .fb .vt{font-weight:800; font-size:2.8cqh} .fb.no .vt{color:var(--bad)} .fb.ok .vt{color:var(--good)}
+  .fb .ex{font-size:2.15cqh; color:var(--smut); margin-top:.5cqh}
+
+  /* ROUTER stat strip */
+  .rt-stats{display:flex; gap:1.6cqw; flex-wrap:wrap; margin-top:1.6cqh}
+  .statchip{font-size:2cqh; background:var(--card); border:1px solid var(--sline); border-radius:5cqh; padding:.9cqh 2.2cqw; color:var(--sink)}
+  .statchip b{color:var(--acc)}
+  /* FAIL result */
+  .ring.fail{background:conic-gradient(var(--bad) 0 55%, var(--track) 55% 100%)}
+  .badge.fail{background:#FBEAE8; color:var(--bad); border:1px solid var(--bad)}
+  /* ANSWER states ladder */
+  .opt.hover{border-color:var(--acc); background:#fff; box-shadow:0 .4cqh 1.4cqh rgba(227,58,0,.16)}
+  .opt.done{border-color:var(--sline); background:var(--bg); color:var(--smut)}
+  .opt.disabled{opacity:.45}
+  .sttag{margin-left:auto; font-family:var(--mono); font-size:1.8cqh; color:var(--smut)}
+  /* TEXT-ENTRY field */
+  .entry{flex:1; background:var(--card); border:1.5px solid var(--sline); border-radius:1.4cqh; padding:2.4cqh 2.6cqw;
+    font-size:2.5cqh; color:var(--smut); display:flex; align-items:flex-start; min-height:12cqh}
+  .entry .cursor{display:inline-block; width:0; height:3cqh; border-left:2px solid var(--acc); margin-left:.4cqw}
+
+  /* QUESTION nav (prev / skip / to-review) + skipped pill */
+  .qfoot2{display:flex; flex-direction:column; gap:2cqh; margin-top:2.4cqh}
+  .qnav{display:flex; align-items:center; gap:2cqw}
+  .qnav .btn{font-size:2.4cqh; padding:1.5cqh 3.2cqw}
+  .rvlink{font-size:2.3cqh; color:var(--acc); font-weight:600}
+  .spacer{flex:1}
+  .pill2.skip{border-color:var(--acc); border-style:dashed; color:var(--acc); background:var(--card)}
+  /* REVIEW page */
+  .rv-stats{display:flex; gap:2.5cqw; margin:2cqh 0 1.6cqh; font-size:2.2cqh; color:var(--smut)}
+  .rv-stats b{color:var(--sink)}
+  .rv-list{display:flex; flex-direction:column; gap:1.2cqh; flex:1; min-height:0}
+  .rv-row{display:flex; align-items:center; gap:2cqw; background:var(--card); border:1px solid var(--sline);
+    border-left:3px solid var(--acc); border-radius:1.2cqh; padding:1.4cqh 2.6cqw; font-size:2.25cqh}
+  .rv-row .num{font-family:var(--mono); font-weight:700; color:var(--acc); flex:0 0 auto}
+  .rv-row .pr{flex:1; color:var(--sink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .rv-row .go{font-size:2cqh; color:var(--acc); font-weight:600}
+  .rv-hint{font-size:2.05cqh; color:var(--smut); margin:1.4cqh 0}
+
+  /* PLACEHOLDER slots (template) vs injected content */
+  .ph{color:var(--smut); border-bottom:1.6px dashed var(--sline); padding-bottom:.2cqh}
+  .slot{border:1.5px dashed var(--sline); border-radius:1cqh; background:rgba(120,110,100,.05);
+    color:var(--smut); display:flex; align-items:center; gap:1.4cqw; padding:1.6cqh 2.2cqw; font-size:2.4cqh}
+  .slot.big{font-size:3.4cqh; font-weight:700; padding:2.2cqh 2.4cqw}
+  .slot .lbl{flex:1}
+  .tag{font-family:var(--mono); font-size:1.7cqh; padding:.3cqh 1.4cqw; border-radius:.7cqh; border:1px solid; white-space:nowrap; font-weight:600}
+  .tag.d{color:#6C4AA6; border-color:#B49BDD; background:#F1EBF8}
+  .tag.p{color:#E33A00; border-color:#E33A00; background:#FCEBE4}
+  .tag.c{color:#2C5590; border-color:#6E9BD8; background:#E8F0FB}
+  /* variable-length list slot (one richText placeholder) */
+  .listslot{border:1.5px dashed var(--sline); border-radius:1.2cqh; padding:2cqh 2.4cqw;
+    display:flex; flex-direction:column; gap:1.6cqh; background:rgba(120,110,100,.04)}
+  .listslot__hd{display:flex; align-items:center; justify-content:space-between; gap:1.4cqw;
+    font-size:2cqh; color:var(--smut); font-weight:600}
+  /* placeholder legend (page scope) */
+  .phkey{display:flex; gap:12px 22px; flex-wrap:wrap; margin:18px 0 2px; font-size:13px; color:var(--ink-2); align-items:center}
+  .phkey span{display:inline-flex; align-items:center; gap:7px}
+  .phkey .tag{font-size:11px; padding:1px 7px}
+  .phbox{display:inline-block; width:26px; height:13px; border:1.6px dashed #C7BBAC; border-radius:3px}
+
+  .foot{margin-top:44px; padding-top:18px; border-top:1px solid var(--line); font-size:12.5px;
+    color:var(--ink-3); font-family:var(--mono); display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="page"><div class="wrap">
+
+  <header class="mast">
+    <p class="kicker">Wireframes экранов · RTK-шаблон · черновик</p>
+    <h1>Экраны в реальных пропорциях 16:9</h1>
+    <p class="lede">Эскизы ключевых экранов ученического потока в фирменном стиле Ростелекома (светлая тема, акцент <b style="color:var(--accent)">#E33A00</b>). Содержание — представительное. Каждый экран масштабируется контейнерными единицами, как реальный плеер. Ниже — весь поток: обложка, приветствие/согласие, инструкция, меню-роутер, введение раздела, вопрос (одиночный и множественный) с навигацией «назад/пропустить», обратная связь верно/неверно, обзор раздела (возврат к пропущенным), итог блока, финал, блокировка + три инфо-раскладки.</p>
+  </header>
+
+  <div class="phkey">
+    <span><i class="phbox"></i> плейсхолдер / слот шаблона</span>
+    <span><span class="tag d">данные</span> из теста: вопросы, названия, счётчики</span>
+    <span><span class="tag p">параметр</span> оформление: логотип, цвета, шрифт</span>
+    <span><span class="tag c">контент</span> автор заполняет: изображения, тексты</span>
+  </div>
+
+  <!-- TITLE / COVER -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Титульный экран (обложка)</span><span class="screen__kind">start.rtk · T1 · титульный слайд оригинала</span></div>
+    <div class="board">
+      <div class="pad">
+        <div class="cover-grid">
+          <div class="cover-col">
+            <div class="slot"><span class="lbl">Логотип</span><span class="tag p">параметр</span></div>
+            <div class="slot"><span class="lbl">Надпись сверху</span><span class="tag d">данные</span></div>
+            <div class="slot big"><span class="lbl">Название теста</span><span class="tag d">course.title</span></div>
+            <div class="slot"><span class="lbl">Описание теста</span><span class="tag d">course.description</span></div>
+            <button class="btn">Начать</button>
+          </div>
+          <div class="imgph cover-img">Изображение старта &middot; контент</div>
+        </div>
+      </div>
+    </div>
+    <p class="screen__note">Обложка. <b>Плейсхолдеры:</b> название/описание/надпись — из данных теста (<code>course.*</code>), логотип — параметр оформления, изображение — контент автора. Фиксирована только структура и действие «Начать» (подпись — <code>state.startLabel</code>).</p>
+  </div>
+
+  <!-- WELCOME / CONSENT -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Приветствие и согласие</span><span class="screen__kind">info · стартовая последовательность (slide2–4)</span></div>
+    <div class="board"><div class="pad">
+      <div class="center">
+        <span class="eyebrow">Перед началом</span>
+        <div class="slot big"><span class="lbl">Заголовок страницы</span><span class="tag c">контент</span></div>
+        <div class="slot" style="max-width:64cqw"><span class="lbl">Текст страницы</span><span class="tag c">контент</span></div>
+        <div class="consent"><span class="cbx">&#10003;</span> <span class="ph">Текст согласия</span></div>
+        <button class="btn">Продолжить</button>
+      </div>
+    </div></div>
+    <p class="screen__note">Информационная страница (обвязка): приветствие + чек-бокс согласия, как в оригинале (slide2–4). Плейсхолдеры «Заголовок»/«Текст»; галочка согласия — обязательный шаг перед стартом.</p>
+  </div>
+
+  <!-- INSTRUCTION -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Инструкция «Как пройти тестирование»</span><span class="screen__kind">info.article (двухколоночная) · slide5</span></div>
+    <div class="board"><div class="pad">
+      <span class="eyebrow">Инструкция</span>
+      <div class="slot big" style="margin-top:1.2cqh"><span class="lbl">Заголовок страницы</span><span class="tag c">контент</span></div>
+      <div class="instr-grid">
+        <div class="listslot">
+          <div class="listslot__hd"><span>Список пунктов · нумерованный</span><span class="tag c">контент · richText</span></div>
+          <div class="steps">
+            <div class="step"><span class="num">1</span><span class="ph" style="flex:1">Пункт списка</span></div>
+            <div class="step"><span class="num">2</span><span class="ph" style="flex:1">Пункт списка</span></div>
+            <div class="step"><span class="num">&#8230;</span><span class="ph" style="flex:1">количество задаёт автор</span></div>
+          </div>
+        </div>
+        <div class="imgph instr-img">Изображение &middot; контент</div>
+      </div>
+      <div class="navrow"><button class="btn">Начать</button></div>
+    </div></div>
+    <p class="screen__note">Двухколоночная раскладка обвязки (L3 оригинала). <b>Список пунктов — ОДИН плейсхолдер <code>richText</code></b> с <code>allowedBlocks: ["numberedList","bulletedList"]</code>: автор добавляет во вкладке «Структура» произвольное число пунктов, шаблон стилизует маркеры <code>&lt;ol&gt;/&lt;li&gt;</code> (кружки с номером). Количество недетерминировано — задаётся контентом, не фиксированными полями. Это <b>контент страницы</b> (не параметр оформления).</p>
+  </div>
+
+  <!-- ROUTER -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Меню разделов (роутер)</span><span class="screen__kind">router.rtk · T2</span></div>
+    <div class="board">
+      <div class="pad">
+        <div class="rt-head">
+          <div><span class="eyebrow">Аттестация</span><h2 class="h2" style="margin-top:1cqh">Выберите раздел</h2></div>
+          <div class="rt-prog">Пройдено N из M</div>
+        </div>
+        <div class="rt-stats">
+          <span class="statchip">Сдать до ДД.ММ.ГГГГ</span>
+          <span class="statchip">Затрачено Ч:ММ:СС</span>
+          <span class="statchip">Осталось разделов N</span>
+        </div>
+        <div class="rgrid">
+          <div class="rcard done"><div class="rname ph">Название раздела</div><div class="row between"><span class="rstat s-done">&#9679; Пройдено</span><span class="rscore ph">NN%</span></div></div>
+          <div class="rcard done"><div class="rname ph">Название раздела</div><div class="row between"><span class="rstat s-done">&#9679; Пройдено</span><span class="rscore ph">NN%</span></div></div>
+          <div class="rcard"><div class="rname ph">Название раздела</div><div class="rstat s-open">&#9656; Доступно</div></div>
+          <div class="rcard"><div class="rname ph">Название раздела</div><div class="rstat s-open">&#9656; Доступно</div></div>
+          <div class="rcard locked"><div class="rname ph">Название раздела</div><div class="rstat s-lock">Заблокировано</div></div>
+          <div class="rcard locked"><div class="rname ph">Название раздела</div><div class="rstat s-lock">Заблокировано</div></div>
+        </div>
+        <div class="row between">
+          <span class="chip">Осталось N разделов</span>
+          <button class="btn btn--ghost">Смотреть итоги</button>
+        </div>
+      </div>
+    </div>
+    <p class="screen__note">Карточки блоков и статус (пройдено/доступно/заблокировано) — из данных теста; заголовок меню — плейсхолдер; «Смотреть итоги» разблокируется, когда сданы все разделы.</p>
+  </div>
+
+  <!-- SECTION INTRO -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Введение раздела</span><span class="screen__kind">intro.rtk (section-intro) · перед вопросами блока</span></div>
+    <div class="board"><div class="pad">
+      <div class="center">
+        <span class="eyebrow">Раздел N из M</span>
+        <div class="slot big"><span class="lbl">Название раздела</span><span class="tag d">sectionIntro.topicName</span></div>
+        <div class="slot" style="max-width:62cqw"><span class="lbl">Описание раздела</span><span class="tag d">данные</span></div>
+        <div class="metrics">
+          <span class="chip ph">N вопросов</span>
+          <span class="chip ph">N минут</span>
+          <span class="chip ph">порог NN%</span>
+        </div>
+        <p class="desc" style="color:var(--acc); font-weight:650; max-width:62cqw"><b>Важно:</b> после «Начать раздел» пойдёт таймер — приостановить нельзя.</p>
+        <button class="btn">Начать раздел</button>
+      </div>
+    </div></div>
+    <p class="screen__note">Системный экран «Введение раздела» (<code>sectionIntro.*</code>): «Раздел N из M», название темы, описание, счётчик вопросов/время/порог, «Начать раздел». Показывается перед вопросами блока в режимах по темам.</p>
+  </div>
+
+  <!-- QUESTION -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Экран вопроса (одиночный выбор)</span><span class="screen__kind">question.rtk · T3 · тип single</span></div>
+    <div class="board">
+      <div class="pad">
+        <div class="qbar">
+          <div class="l"><span class="brand ph" style="font-size:2.8cqh">Логотип</span><span class="qsec ph">Название раздела</span></div>
+          <div class="l"><span class="qcount ph">Вопрос N из M</span><span class="qtimer">M:SS</span></div>
+        </div>
+        <div class="slot big" style="margin:4cqh 0 3cqh"><span class="lbl">Текст вопроса</span><span class="tag d">слот · question-text</span></div>
+        <div class="qopts">
+          <div class="opt"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span><span class="tag d">слот · question-interaction</span></div>
+          <div class="opt sel"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа (выбран)</span></div>
+          <div class="opt"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span></div>
+          <div class="opt"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span></div>
+        </div>
+        <div class="qfoot2">
+          <div class="pills"><span class="pill2 ok">1</span><span class="pill2 ok">2</span><span class="pill2 skip">3</span><span class="pill2 ok">4</span><span class="pill2 cur">5</span><span class="pill2">6</span><span class="pill2">7</span><span class="pill2">8</span><span class="pill2">9</span><span class="pill2">10</span><span class="pill2">11</span><span class="pill2">12</span></div>
+          <div class="qnav">
+            <button class="btn btn--ghost">&#8592; Назад</button>
+            <span class="rvlink">К обзору</span>
+            <span class="spacer"></span>
+            <button class="btn btn--ghost">Пропустить</button>
+            <button class="btn">Ответить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="screen__note">Формулировка, варианты, медиа и обратная связь — слоты ядра; раздел/счётчик/таймер — из данных; логотип — параметр. <b>Навигация (PRD-19):</b> «Назад» / «Пропустить» / «К обзору» + «Ответить». Пилюли <b>нумерованные</b> (<code>state.questionsProgress.states[]</code>): отвеченный — залит, текущий — обведён, <b>пропущенный — пунктирный</b> (№3); все кликабельны (<code>data-action="goto:index"</code>, frontier-правило).</p>
+  </div>
+
+  <!-- QUESTION: MULTIPLE -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Вопрос: множественный выбор</span><span class="screen__kind">question.rtk · тип multiple</span></div>
+    <div class="board"><div class="pad">
+      <div class="qbar">
+        <div class="l"><span class="brand ph" style="font-size:2.8cqh">Логотип</span><span class="qsec ph">Название раздела</span></div>
+        <div class="l"><span class="qcount ph">Вопрос N из M</span><span class="qtimer">M:SS</span></div>
+      </div>
+      <div class="slot big" style="margin:4cqh 0 3cqh"><span class="lbl">Текст вопроса · «выберите все»</span><span class="tag d">слот · question-text</span></div>
+      <div class="qopts">
+        <div class="opt sel"><span class="box2">&#10003;</span><span class="ph" style="flex:1">Вариант ответа (выбран)</span><span class="tag d">слот · question-interaction</span></div>
+        <div class="opt"><span class="box2"></span><span class="ph" style="flex:1">Вариант ответа</span></div>
+        <div class="opt sel"><span class="box2">&#10003;</span><span class="ph" style="flex:1">Вариант ответа (выбран)</span></div>
+        <div class="opt sel"><span class="box2">&#10003;</span><span class="ph" style="flex:1">Вариант ответа (выбран)</span></div>
+      </div>
+      <div class="qfoot">
+        <div class="pills"><span class="pill2 ok">1</span><span class="pill2 ok">2</span><span class="pill2 ok">3</span><span class="pill2 ok">4</span><span class="pill2 cur">5</span><span class="pill2">6</span><span class="pill2">7</span><span class="pill2">8</span><span class="pill2">9</span><span class="pill2">10</span></div>
+        <button class="btn">Ответить</button>
+      </div>
+    </div></div>
+    <p class="screen__note">Тот же лайаут вопроса, тип <b>multiple</b>: чекбоксы вместо радио + подсказка «выберите все». Интерактив наполняет ядро по типу вопроса — отдельный шаблон не нужен.</p>
+  </div>
+
+  <!-- QUESTION: TEXT ENTRY -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Вопрос: свободный ввод</span><span class="screen__kind">оригинал: text-entry (не оцениваемый захват)</span></div>
+    <div class="board"><div class="pad">
+      <div class="qbar">
+        <div class="l"><span class="brand ph" style="font-size:2.8cqh">Логотип</span><span class="qsec ph">Название раздела</span></div>
+        <div class="l"><span class="qcount ph">Вопрос N из M</span><span class="qtimer">M:SS</span></div>
+      </div>
+      <div class="slot big" style="margin:4cqh 0 3cqh"><span class="lbl">Текст вопроса</span><span class="tag d">слот · question-text</span></div>
+      <div class="qopts"><div class="entry">Поле свободного ввода<span class="cursor"></span></div></div>
+      <div class="qfoot">
+        <div class="pills"><span class="pill2 ok">6</span><span class="pill2 ok">7</span><span class="pill2 cur">8</span><span class="pill2">9</span><span class="pill2">10</span></div>
+        <button class="btn">Ответить</button>
+      </div>
+    </div></div>
+    <p class="screen__note"><b>Осторожно:</b> в оригинале RTK 18 полей свободного ввода — это <b>не оцениваемый захват</b> (текст пишется в переменную и сдаётся в LMS, но не проверяется, на балл/сдачу не влияет). Штатного типа «открытый ответ» в сервисе нет: такие поля либо не переносятся (без влияния на результат), либо требуют отдельной фичи «open-response capture». Показано для полноты.</p>
+  </div>
+
+  <!-- FEEDBACK -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Обратная связь: неверно</span><span class="screen__kind">слот question-feedback · слой correct/incorrect</span></div>
+    <div class="board"><div class="pad">
+      <div class="qbar">
+        <div class="l"><span class="brand ph" style="font-size:2.8cqh">Логотип</span><span class="qsec ph">Название раздела</span></div>
+        <div class="l"><span class="qcount ph">Вопрос N из M</span><span class="qtimer">M:SS</span></div>
+      </div>
+      <div class="slot big" style="margin:4cqh 0 3cqh"><span class="lbl">Текст вопроса</span><span class="tag d">слот · question-text</span></div>
+      <div class="qopts">
+        <div class="opt wrong"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа (выбран, неверный)</span></div>
+        <div class="opt correct"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа (правильный)</span></div>
+        <div class="opt"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span></div>
+        <div class="opt"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span></div>
+      </div>
+      <div class="fb no">
+        <div class="ic">&#10007;</div>
+        <div class="txt"><div class="vt">Неверно</div><div class="ex ph">Пояснение к ответу</div></div>
+        <button class="btn">Далее</button>
+      </div>
+    </div></div>
+    <p class="screen__note">Слой обратной связи (в оригинале — <code>sldLayer</code> correct/incorrect на каждом вопросе). Заполняет слот <code>question-feedback</code>: выбранный неверный вариант красный, правильный зелёный, баннер с вердиктом и пояснением. Верный ответ — зеркальный зелёный баннер «Верно».</p>
+  </div>
+
+  <!-- ANSWER STATES -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Состояния варианта ответа</span><span class="screen__kind">Normal · Hover · Selected · Done · Disabled</span></div>
+    <div class="board"><div class="pad">
+      <span class="eyebrow">Состояния строки-варианта</span>
+      <div class="qopts" style="flex:1; justify-content:center">
+        <div class="opt"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span><span class="sttag">обычное</span></div>
+        <div class="opt hover"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span><span class="sttag">наведение</span></div>
+        <div class="opt sel"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span><span class="sttag">выбрано</span></div>
+        <div class="opt done"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span><span class="sttag">отвечено</span></div>
+        <div class="opt disabled"><span class="dot"></span><span class="ph" style="flex:1">Вариант ответа</span><span class="sttag">заблокировано</span></div>
+      </div>
+    </div></div>
+    <p class="screen__note">Полный набор состояний строки-варианта (в оригинале RTK после ответа строки блокируются без показа верно/неверно). В шаблоне состояния задаются CSS; correct/incorrect выводятся через слот <code>question-feedback</code> (экран «Обратная связь»).</p>
+  </div>
+
+  <!-- REVIEW -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Обзор раздела</span><span class="screen__kind">review.rtk · T5 · пропуск / возврат к неотвеченным</span></div>
+    <div class="board"><div class="pad">
+      <span class="eyebrow">Раздел «Название» · обзор</span>
+      <div class="h2" style="margin-top:1cqh; font-size:4.4cqh">Проверьте ответы перед завершением</div>
+      <div class="pills" style="margin-top:2cqh">
+        <span class="pill2 ok">1</span><span class="pill2 ok">2</span><span class="pill2 skip">3</span><span class="pill2 ok">4</span><span class="pill2 ok">5</span><span class="pill2 ok">6</span><span class="pill2 skip">7</span><span class="pill2 ok">8</span><span class="pill2 ok">9</span><span class="pill2 ok">10</span><span class="pill2 skip">11</span><span class="pill2 ok">12</span>
+      </div>
+      <div class="rv-stats"><span>Отвечено <b>N</b></span><span>Пропущено <b>N</b></span><span>Всего <b>N</b></span></div>
+      <div class="rv-list">
+        <div class="rv-row"><span class="num">№</span><span class="pr ph">Текст пропущенного вопроса</span><span class="go">Перейти &#8594;</span></div>
+        <div class="rv-row"><span class="num">№</span><span class="pr ph">Текст пропущенного вопроса</span><span class="go">Перейти &#8594;</span></div>
+        <div class="rv-row"><span class="num">№</span><span class="pr ph">Текст пропущенного вопроса</span><span class="go">Перейти &#8594;</span></div>
+      </div>
+      <div class="rv-hint">Можно вернуться к любому вопросу или завершить раздел — пропущенные засчитаются как неотвеченные.</div>
+      <div class="qnav">
+        <button class="btn btn--ghost">&#8592; Назад к вопросам</button>
+        <span class="spacer"></span>
+        <button class="btn">Завершить раздел</button>
+      </div>
+    </div></div>
+    <p class="screen__note">Экран «Обзор» (<code>review.*</code>): карта-пилюли всех вопросов (отвечен / <b>пропущен</b> — пунктир / текущий), кликабельны для перехода; счётчики <code>answeredCount/unansweredCount/total</code>; явный <b>список пропущенных</b> (<code>review.unanswered[]</code>) с «Перейти»; подсказка (<code>review.hint</code>) и «Завершить раздел» (<code>review.finishLabel</code>). Настройки теста: «разрешить возврат к неотвеченным», «разрешить менять ответ» (PRD-19).</p>
+  </div>
+
+  <!-- SECTION RESULT -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Итог раздела</span><span class="screen__kind">section-results.rtk · T4</span></div>
+    <div class="board">
+      <div class="pad">
+        <div class="center">
+          <span class="eyebrow">Раздел завершён</span>
+          <div class="ring"><span class="v">NN<small>%</small></span></div>
+          <div class="slot big"><span class="lbl">Название раздела</span><span class="tag d">sectionResult.topicName</span></div>
+          <div class="metrics">
+            <span class="chip ph">N из M верно</span>
+            <span class="chip ph">порог NN%</span>
+          </div>
+          <span class="badge pass">&#10003; Раздел пройден</span>
+          <button class="btn">Продолжить</button>
+        </div>
+      </div>
+    </div>
+    <p class="screen__note">Кольцо и метрики — вычисленные <code>sectionResult.*</code> (рендерер <code>core.ringChart</code> + <code>core.badge</code>). Порог считается по сумме баллов (per-question цена).</p>
+  </div>
+
+  <!-- SECTION RESULT: FAIL -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Итог раздела: не пройден</span><span class="screen__kind">section-results.rtk · ветка Failure</span></div>
+    <div class="board"><div class="pad">
+      <div class="center">
+        <span class="eyebrow">Раздел завершён</span>
+        <div class="ring fail"><span class="v">NN<small>%</small></span></div>
+        <div class="slot big"><span class="lbl">Название раздела</span><span class="tag d">sectionResult.topicName</span></div>
+        <div class="metrics"><span class="chip ph">N из M верно</span><span class="chip ph">порог NN%</span></div>
+        <span class="badge fail">&#10007; Раздел не пройден</span>
+        <button class="btn">Продолжить</button>
+      </div>
+    </div></div>
+    <p class="screen__note">Негативная ветка того же шаблона итога (в оригинале — слой Failure). Кольцо красное, бейдж «не пройден». Один шаблон <code>section-results</code> покрывает обе ветки через <code>passClass</code>/<code>statusLabel</code> — здесь и в финале.</p>
+  </div>
+
+  <!-- TRANSITION -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Переход «Вы завершили раздел»</span><span class="screen__kind">transition · мостик блок → меню (slide10)</span></div>
+    <div class="board"><div class="pad">
+      <span class="eyebrow">Вы завершили раздел</span>
+      <div class="cover-grid" style="margin-top:2cqh">
+        <div class="cover-col">
+          <div class="slot big"><span class="lbl">Название раздела</span><span class="tag d">данные</span></div>
+          <div class="metrics"><span class="chip ph">NN% · статус</span><span class="chip ph">затрачено Ч:ММ</span></div>
+          <p class="desc ph">Текст перехода</p>
+          <button class="btn">В меню</button>
+        </div>
+        <div class="imgph cover-img">Изображение &middot; контент</div>
+      </div>
+    </div></div>
+    <p class="screen__note">Лёгкий межэкранный мостик блок→меню (в оригинале slide10, слои passed/failed/timeout, пишет Blocks_Done/Date_Unblock). В сервисе роль перехода закрывает возврат в роутер после итога раздела; отдельный экран — опционален.</p>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Итоги аттестации (пройти все)</span><span class="screen__kind">results.rtk · T4</span></div>
+    <div class="board">
+      <div class="pad">
+        <div class="row between"><span class="eyebrow">Итоги аттестации</span><span class="qcount ph">N из M разделов сдано</span></div>
+        <span class="badge pass res-badge" style="font-size:3cqh; padding:1.4cqh 4cqw">&#10003; Аттестация пройдена</span>
+        <div class="brk">
+          <div class="brow"><span class="nm ph">Название раздела</span><span class="rt"><span class="dotok">&#9679; сдан</span><span class="pct ph">NN%</span></span></div>
+          <div class="brow"><span class="nm ph">Название раздела</span><span class="rt"><span class="dotok">&#9679; сдан</span><span class="pct ph">NN%</span></span></div>
+          <div class="brow"><span class="nm ph">Название раздела</span><span class="rt"><span class="dotok">&#9679; сдан</span><span class="pct ph">NN%</span></span></div>
+          <div class="brow"><span class="nm ph">Название раздела</span><span class="rt"><span class="dotok">&#9679; сдан</span><span class="pct ph">NN%</span></span></div>
+          <div class="brow"><span class="nm ph">Название раздела</span><span class="rt"><span class="dotok">&#9679; сдан</span><span class="pct ph">NN%</span></span></div>
+          <div class="brow"><span class="nm ph">Название раздела</span><span class="rt"><span class="dotok">&#9679; сдан</span><span class="pct ph">NN%</span></span></div>
+        </div>
+        <div class="row" style="gap:2cqw; justify-content:flex-end"><button class="btn btn--ghost">Скачать отчёт</button><button class="btn">Завершить</button></div>
+      </div>
+    </div>
+    <p class="screen__note">Разбивка по разделам — <code>result.topicResults[]</code> (в оригинале RTK её не было — здесь улучшение); статус «пройдена» — must-pass-all.</p>
+  </div>
+
+  <!-- BLOCKED -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Блокировка (кулдаун)</span><span class="screen__kind">blocked.rtk · T5</span></div>
+    <div class="board">
+      <div class="pad">
+        <div class="center">
+          <div class="lockc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+          <div class="h2">Повторная попытка недоступна</div>
+          <p class="desc ph" style="max-width:60cqw">Текст причины и периода ожидания</p>
+          <div class="metaline" style="justify-content:center">
+            <span class="datechip">Доступно с ДД.ММ.ГГГГ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="screen__note">Дата и причина — <code>retake.availableDateHuman</code> / <code>retake.reason</code> (гейт PRD-6). На старте то же состояние встраивается в стартовый экран (без отдельной страницы).</p>
+  </div>
+
+  <!-- INFO TRIO -->
+  <div class="screen">
+    <div class="screen__lbl"><span class="screen__name">Информационная обвязка</span><span class="screen__kind">info.media · info.panel · info.article</span></div>
+    <div class="trio">
+      <div>
+        <div class="board"><div class="pad" style="padding:3cqh 3.5cqw">
+          <div class="imgph" style="flex:1; min-height:0">Изображение &middot; контент</div>
+          <div class="navrow"><button class="btn btn--ghost" style="font-size:2.4cqh; padding:1.4cqh 3cqw">Назад</button><button class="btn" style="font-size:2.4cqh; padding:1.4cqh 3cqw">Далее</button></div>
+        </div></div>
+        <p class="tcap">И1 · Full-media (готовый PNG)</p>
+      </div>
+      <div>
+        <div class="board"><div class="pad" style="padding:4cqh 4cqw">
+          <div class="h2 ph" style="font-size:4cqh">Заголовок</div>
+          <div class="imgph" style="flex:1; margin:2.4cqh 0; min-height:0">Изображение &middot; контент</div>
+          <div class="metaline"><span class="chip ph">N вопросов</span><span class="chip ph">N минут</span><button class="btn" style="margin-left:auto; font-size:2.3cqh; padding:1.3cqh 3cqw">Далее</button></div>
+        </div></div>
+        <p class="tcap">И2 · Панель + показатели</p>
+      </div>
+      <div>
+        <div class="board"><div class="pad" style="padding:4cqh 4cqw">
+          <div class="h2 ph" style="font-size:3.8cqh">Заголовок</div>
+          <div class="row" style="gap:3cqw; flex:1; margin-top:2.4cqh; align-items:flex-start">
+            <div class="txtlines" style="flex:1">
+              <div class="txtln"></div><div class="txtln"></div><div class="txtln s"></div><div class="txtln"></div><div class="txtln s"></div>
+            </div>
+            <div class="imgph" style="flex:0 0 40%; align-self:stretch">Изображение &middot; контент</div>
+          </div>
+          <div class="navrow"><button class="btn" style="font-size:2.3cqh; padding:1.3cqh 3cqw">Далее</button></div>
+        </div></div>
+        <p class="tcap">И3 · Текст + графика</p>
+      </div>
+    </div>
+    <p class="screen__note">Обвязка: И1 — плейсхолдер «Полноэкранное изображение» (67% инф-слайдов RTK — готовые PNG); И2/И3 — заголовок + панель/текст + изображение.</p>
+  </div>
+
+  <div class="foot">
+    <span>RTK-шаблон · wireframes · светлая тема · #E33A00</span>
+    <span>эскиз-предложение · до утверждённых DS-wireframes</span>
+  </div>
+
+</div></div>
+</body>
+</html>

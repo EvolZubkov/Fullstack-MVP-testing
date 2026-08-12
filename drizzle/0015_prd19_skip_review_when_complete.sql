@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "skip_review_when_complete" boolean DEFAULT false NOT NULL;

@@ -1,3 +1,22 @@
+import type { Request } from "express";
+import { readableTestScope } from "../../services/test-access";
+
+/**
+ * PRD-15 FR-08 (audit F-5): cross-test analytics aggregates and exports are
+ * limited to the tests the actor may read (ownership, grants, admin). Wraps
+ * {@link readableTestScope} into a predicate; `has(null)` is true only for
+ * administrators, so LMS attempts of deleted tests stay admin-visible only.
+ */
+export async function analyticsScope(
+  req: Request,
+): Promise<{ all: boolean; has: (testId: string | null | undefined) => boolean }> {
+  const scope = await readableTestScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+  return {
+    all: scope.all,
+    has: (testId) => scope.all || (!!testId && scope.ids.has(testId)),
+  };
+}
+
 /**
  * Форматирует тип вопроса для отображения
  */
@@ -7,6 +26,8 @@ export function formatQuestionType(type: string): string {
     multiple: "Несколько ответов",
     matching: "Сопоставление",
     ranking: "Ранжирование",
+    scale: "Шкала",
+    allocation: "Распределение баллов",
   };
   return types[type] || type;
 }
@@ -20,6 +41,8 @@ export function formatAllOptions(type: string, dataJson: any): string {
   switch (type) {
     case "single":
     case "multiple":
+    // Шкала хранит градации в том же списке options (PRD-26).
+    case "scale":
       if (dataJson.options && Array.isArray(dataJson.options)) {
         return dataJson.options.map((opt: string, i: number) => `${i + 1}) ${opt}`).join("\n");
       }
@@ -48,6 +71,8 @@ export function formatCorrectAnswerText(type: string, dataJson: any, correctJson
 
   switch (type) {
     case "single":
+    // У измерительной шкалы correctIndex отсутствует — вернётся пустая строка.
+    case "scale":
       if (correctJson.correctIndex !== undefined && dataJson?.options) {
         const idx = correctJson.correctIndex;
         return `${idx + 1}) ${dataJson.options[idx] || "?"}`;
@@ -86,6 +111,7 @@ export function formatUserAnswerText(type: string, dataJson: any, userAnswer: un
 
   switch (type) {
     case "single":
+    case "scale":
       if (typeof userAnswer === "number" && dataJson?.options) {
         return `${userAnswer + 1}) ${dataJson.options[userAnswer] || "?"}`;
       }
@@ -95,6 +121,16 @@ export function formatUserAnswerText(type: string, dataJson: any, userAnswer: un
         if (userAnswer.length === 0) return "(ничего не выбрано)";
         return userAnswer
           .map((idx: number) => `${idx + 1}) ${dataJson.options[idx] || "?"}`)
+          .join(", ");
+      }
+      break;
+    // PRD-44: распределение показывается ПОЛНОСТЬЮ, вместе с нулями — ноль здесь
+    // содержателен, он отличает «рассмотрел и не дал веса» от «не дошёл».
+    case "allocation":
+      if (typeof userAnswer === "object" && dataJson?.options) {
+        const assigned = userAnswer as Record<string, number>;
+        return (dataJson.options as string[])
+          .map((label, i) => `${label}: ${Number(assigned[String(i)] ?? 0)}`)
           .join(", ");
       }
       break;

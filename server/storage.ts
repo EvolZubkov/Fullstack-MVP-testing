@@ -1,31 +1,68 @@
-import { randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
-import { eq, inArray, and, sql, desc } from "drizzle-orm";
-import { db } from "./db";
-import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
-import {
-  users, topics, topicCourses, questions, tests, testSections, attempts, folders,
-  adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
-  groups, userGroups, testAssignments, passwordResetTokens,
-  type User, type InsertUser,
-  type Folder, type InsertFolder,
-  type Topic, type InsertTopic,
-  type TopicCourse, type InsertTopicCourse,
-  type Question, type InsertQuestion,
-  type Test, type InsertTest,
-  type TestSection, type InsertTestSection,
-  type Attempt, type InsertAttempt,
-  type AdaptiveTopicSettings, type InsertAdaptiveTopicSettings,
-  type AdaptiveLevel, type InsertAdaptiveLevel,
-  type AdaptiveLevelLink, type InsertAdaptiveLevelLink,
-  type ScormPackage, type InsertScormPackage,
-  type ScormAttempt, type InsertScormAttempt,
-  type ScormAnswer, type InsertScormAnswer,
-  type Group, type InsertGroup,
-  type UserGroup, type InsertUserGroup,
-  type TestAssignment, type InsertTestAssignment,
-  type PasswordResetToken, type InsertPasswordResetToken,
+/**
+ * @module server/storage
+ * @description Data access layer for the whole application. Exposes the
+ * `IStorage` contract (the authoritative surface of all persistence operations)
+ * and its `DatabaseStorage` implementation. `DatabaseStorage` is a thin
+ * delegating facade: every method forwards to a per-domain repository under
+ * `server/storage/*` that owns the Drizzle ORM + PostgreSQL queries for its
+ * aggregate (transactions, whitelisting, cascades and the crypto seam all live
+ * in the repositories). This file holds no query logic of its own — it exists so
+ * routes depend only on `IStorage`, never on the concrete repositories.
+ */
+import { UsersRepository } from "./storage/users-repository";
+import { GroupsRepository } from "./storage/groups-repository";
+import { AccessRepository } from "./storage/access-repository";
+import { TopicsRepository, type TopicDeletionResult, type TopicsBulkDeletionResult } from "./storage/topics-repository";
+import { QuestionsRepository } from "./storage/questions-repository";
+import { ScormRepository } from "./storage/scorm-repository";
+import { AdaptiveRepository } from "./storage/adaptive-repository";
+import { AttemptsRepository } from "./storage/attempts-repository";
+import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
+import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
+import { ContentPagesRepository, type ContentPageBinding } from "./storage/content-pages-repository";
+import { AssignmentsRepository } from "./storage/assignments-repository";
+import { FoldersRepository } from "./storage/folders-repository";
+import { MediaRepository, type MediaUsageRef } from "./storage/media-repository";
+
+export type { TestUsageRef };
+export type { MediaUsageRef };
+export type { TopicDeletionResult, TopicsBulkDeletionResult };
+// Type-only imports: the facade names these in `IStorage` and its delegating
+// method signatures. Table objects and query helpers live in the repositories.
+import type {
+  User, InsertUser,
+  Folder, InsertFolder,
+  TestFolder, InsertTestFolder,
+  Topic, InsertTopic,
+  TopicCourse,
+  TopicEvent,
+  Question, InsertQuestion,
+  Test, InsertTest,
+  TestSection,
+  Attempt, InsertAttempt,
+  AdaptiveTopicSettings, InsertAdaptiveTopicSettings,
+  AdaptiveLevel, InsertAdaptiveLevel,
+  AdaptiveLevelLink, InsertAdaptiveLevelLink,
+  ScormPackage, InsertScormPackage,
+  ScormAttempt, InsertScormAttempt,
+  ScormAnswer, InsertScormAnswer,
+  Group, InsertGroup,
+  UserGroup,
+  TestAccessGrant, InsertTestAccessGrant,
+  TestSnapshot,
+  TopicAccessGrant,
+  TestAssignment, InsertTestAssignment,
+  PasswordResetToken,
+  AssignmentAccessToken,
+  ContentPage, InsertContentPage,
+  ResultVariable, InsertResultVariable,
+  Scale, InsertScale,
+  QuestionMeasurement, InsertQuestionMeasurement,
+  TestQuestionScoring, InsertTestQuestionScoring,
+  MediaAsset, InsertMediaAsset, MediaUsage, MediaEntityType,
 } from "@shared/schema";
+import type { StoredRole } from "@shared/access";
+import { type ValidationResult, type ValueType } from "@shared/formula";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -53,50 +90,164 @@ export interface IStorage {
   removeUserFromGroup(userId: string, groupId: string): Promise<boolean>;
   setUserGroups(userId: string, groupIds: string[]): Promise<void>;
 
+  // User Roles (PRD-13 RBAC)
+  getUserRoles(userId: string): Promise<StoredRole[]>;
+  setUserRoles(userId: string, roles: StoredRole[], grantedBy?: string | null): Promise<void>;
+  addUserRole(userId: string, role: StoredRole, grantedBy?: string | null): Promise<void>;
+  removeUserRole(userId: string, role: StoredRole): Promise<void>;
+
+  // Test access grants + owner (PRD-13 RBAC)
+  setTestOwner(testId: string, ownerId: string | null): Promise<void>;
+  getTestIdsByOwner(ownerId: string): Promise<string[]>;
+  getTestAccessGrants(testId: string): Promise<TestAccessGrant[]>;
+  getUserTestGrants(userId: string): Promise<TestAccessGrant[]>;
+  getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined>;
+  upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant>;
+  removeTestAccessGrant(testId: string, userId: string): Promise<boolean>;
+
+  // "Where used" lookups (PRD-15 FR-03): tests depending on shared content.
+  getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]>;
+  getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]>;
+
+  // Publication snapshots (PRD-15 block B, FR-10/FR-17).
+  createTestSnapshot(snapshot: {
+    testId: string;
+    version: number;
+    contentJson: unknown;
+    publishedBy: string | null;
+  }): Promise<TestSnapshot>;
+  getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined>;
+  getSnapshot(id: string): Promise<TestSnapshot | undefined>;
+  getSnapshotsForTest(testId: string): Promise<TestSnapshot[]>;
+  /** Every snapshot in the database, for the media re-sync (Медиатека). */
+  getAllSnapshots(): Promise<TestSnapshot[]>;
+  deleteSnapshotsForTest(testId: string): Promise<void>;
+  /** Distinct snapshot ids still referenced by any attempt of the test (FR-17). */
+  getReferencedSnapshotIds(testId: string): Promise<string[]>;
+  deleteSnapshotById(id: string): Promise<void>;
+
   // Test Assignments
+  getAssignment(id: string): Promise<TestAssignment | undefined>;
   getTestAssignments(testId: string): Promise<TestAssignment[]>;
   getUserAssignments(userId: string): Promise<TestAssignment[]>;
+  isTestAssignedToUser(testId: string, userId: string): Promise<boolean>;
   getGroupAssignments(groupId: string): Promise<TestAssignment[]>;
+  /** PRD-25 FR-11: every assignment, for the home-page counters. */
+  getAllAssignments(): Promise<TestAssignment[]>;
   createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment>;
   deleteTestAssignment(id: string): Promise<boolean>;
   getAssignedTestsForUser(userId: string): Promise<Test[]>;
+  /** PRD-31 §5.3: assignment a new attempt belongs to; null = implicit legacy bucket. */
+  getCurrentAssignmentId(userId: string, testId: string): Promise<string | null>;
 
   // Password Reset Tokens
-  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string): Promise<PasswordResetToken>;
+  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken>;
   getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined>;
   markTokenAsUsed(id: string): Promise<void>;
   getRecentTokensCount(userId: string, hours: number): Promise<number>;
+
+  // Assignment Access Tokens (magic links)
+  createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken>;
+  getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined>;
+  getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]>;
+  revokeAssignmentAccessToken(id: string): Promise<void>;
+  revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void>;
+  revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void>;
 
   getFolders(): Promise<Folder[]>;
   getFolder(id: string): Promise<Folder | undefined>;
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
-  deleteFolder(id: string): Promise<boolean>;
+  /**
+   * Deletes a content folder after relocating its topics and nested folders
+   * to the given destination (`moveTo`, default `null` = root) — the
+   * "Move contents" variant of the folder-delete dialog (s-folder-delete).
+   * Folders carry no permissions, so no content-guard is needed.
+   */
+  deleteFolder(id: string, moveTo?: string | null): Promise<boolean>;
+  /** IDs of the folder and all its descendants (including itself), BFS traversal. */
+  getFolderSubtreeIds(id: string): Promise<string[]>;
+  /** Deletes folder rows by id (the caller decides the fate of their contents). */
+  deleteFoldersBulk(ids: string[]): Promise<number>;
+
+  getTestFolders(): Promise<TestFolder[]>;
+  createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
+  updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined>;
+  /**
+   * Deletes a folder after relocating all its tests and nested folders to the
+   * given destination (`moveTo`, default `null` = root). This is the
+   * "Folder only" variant from the prd7-tests-list.html wireframe
+   * (s-folder-delete-a).
+   */
+  deleteTestFolder(id: string, moveTo?: string | null): Promise<boolean>;
+  /**
+   * Deletes a folder together with every test inside it (including transitively
+   * through nested folders) and the nested folders themselves. Used for the
+   * "Folder and all tests" variant (s-folder-delete-b), which requires typing
+   * the exact name to confirm at the route-handler level.
+   */
+  deleteTestFolderCascade(id: string): Promise<boolean>;
+  moveTestToFolder(testId: string, folderId: string | null): Promise<boolean>;
 
   getTopics(): Promise<Topic[]>;
   getTopic(id: string): Promise<Topic | undefined>;
   createTopic(topic: InsertTopic): Promise<Topic>;
   updateTopic(id: string, topic: Partial<InsertTopic>): Promise<Topic | undefined>;
-  deleteTopic(id: string): Promise<boolean>;
-  deleteTopicsBulk(ids: string[]): Promise<number>;
+  renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
+  deleteTopic(id: string): Promise<TopicDeletionResult>;
+  deleteTopicsBulk(ids: string[]): Promise<TopicsBulkDeletionResult>;
+  /** Bulk-moves topics into a folder (or to root when `null`). Organizational. */
+  moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
 
+  // PRD-15 block C: topic ownership + access grants (grantees are users, TD-01).
+  setTopicOwner(topicId: string, ownerId: string | null): Promise<void>;
+  setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void>;
+  getTopicIdsByOwner(ownerId: string): Promise<string[]>;
+  getSharedTopicIds(): Promise<string[]>;
+  getTopicGrants(topicId: string): Promise<TopicAccessGrant[]>;
+  getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]>;
+  getTopicGrantForGrantee(topicId: string, granteeId: string): Promise<TopicAccessGrant | undefined>;
+  upsertTopicGrant(grant: {
+    topicId: string;
+    granteeId: string;
+    accessLevel: "use" | "manage";
+    grantedBy: string | null;
+  }): Promise<TopicAccessGrant>;
+  setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void>;
+  removeTopicGrant(id: string): Promise<void>;
+  /** Duplicate a topic and its questions; the copy is owned by `createdBy`. */
+  duplicateTopicWithQuestions(id: string, createdBy?: string): Promise<{ topic: Topic; questions: Question[] } | undefined>;
+
+  // TD-02 r.3: recommended courses/events are derived from topics.feedback_json
+  // (write paths removed). Only the read accessors remain, kept for delivery.
   getTopicCourses(topicId: string): Promise<TopicCourse[]>;
-  createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse>;
-  deleteTopicCourse(id: string): Promise<boolean>;
+  getTopicEvents(topicId: string): Promise<TopicEvent[]>;
 
   getQuestions(): Promise<Question[]>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
+  getTestSectionsByTopic(topicId: string): Promise<TestSection[]>;
+  getMeasurementsForQuestions(questionIds: string[]): Promise<Array<{ testId: string; questionId: string }>>;
+  getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>>;
+  getContentHashesByTopic(topicId: string): Promise<Set<string>>;
+  /** Question type + answer key of the given topics — input of `isMeasurementOnly`. */
+  getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>>;
   getQuestion(id: string): Promise<Question | undefined>;
   getQuestionsByIds(ids: string[]): Promise<Question[]>;
   createQuestion(question: InsertQuestion): Promise<Question>;
   updateQuestion(id: string, question: Partial<InsertQuestion>): Promise<Question | undefined>;
   deleteQuestion(id: string): Promise<boolean>;
   deleteQuestionsBulk(ids: string[]): Promise<number>;
+  /** Duplicate a single question within its topic (prompt gets a « (копия)» suffix). */
+  duplicateQuestion(id: string): Promise<Question | undefined>;
 
   getTests(): Promise<Test[]>;
   getTest(id: string): Promise<Test | undefined>;
-  createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test>;
-  updateTest(id: string, test: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined>;
+  getMigrationHealth(): Promise<{ legacyStartPageCount: number }>;
+  updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined>;
+  /** Updates only the status field without bumping the version counter (PRD-7 §9). */
+  patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined>;
   deleteTest(id: string): Promise<boolean>;
   getTestSections(testId: string): Promise<TestSection[]>;
 
@@ -106,6 +257,11 @@ export interface IStorage {
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
   deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void>;
+  /**
+   * PRD-15 FR-14: annul (delete) in-progress attempts of a test; returns the count.
+   * `userId` narrows it to one learner (the start route drops its own abandoned run).
+   */
+  annulInProgressAttempts(testId: string, userId?: string): Promise<number>;
   getAllAttempts(): Promise<Attempt[]>;
 
   // Adaptive testing
@@ -142,915 +298,949 @@ export interface IStorage {
   
   createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer>;
   getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]>;
+
+  // Content Pages (PRD-1)
+  /** PRD-22: variant bindings of many tests in ONE query (tests-list audit). */
+  getContentPageBindings(testIds: string[]): Promise<ContentPageBinding[]>;
+  getContentPages(testId: string): Promise<ContentPage[]>;
+  /** Every content page across every test — the media re-sync's full-table read. */
+  getAllContentPages(): Promise<ContentPage[]>;
+  getContentPage(id: string): Promise<ContentPage | undefined>;
+  createContentPage(page: InsertContentPage): Promise<ContentPage>;
+  updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined>;
+  deleteContentPage(id: string): Promise<boolean>;
+  reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void>;
+
+  // PRD-2: user-defined result variables (result indicators).
+  getResultVariables(testId: string): Promise<ResultVariable[]>;
+  createResultVariable(rv: InsertResultVariable): Promise<ResultVariable>;
+  updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined>;
+  deleteResultVariable(id: string): Promise<boolean>;
+  reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void>;
+  validateResultVariableFormula(
+    testId: string,
+    formula: string,
+    type: ValueType,
+    opts?: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] },
+  ): Promise<ValidationResult>;
+  // PRD-5: scales and per-question measurements.
+  getScales(testId: string): Promise<Scale[]>;
+  createScale(scale: InsertScale): Promise<Scale>;
+  updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined>;
+  deleteScale(id: string): Promise<boolean>;
+  reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void>;
+  getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]>;
+  getQuestionMeasurementsByQuestion(testId: string, questionId: string): Promise<QuestionMeasurement[]>;
+  upsertQuestionMeasurements(
+    testId: string,
+    questionId: string,
+    rows: InsertQuestionMeasurement[],
+  ): Promise<QuestionMeasurement[]>;
+  // PRD-15 block D: per-(test, question) scoring overrides (FR-30).
+  getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]>;
+  upsertTestQuestionScoring(
+    testId: string,
+    questionId: string,
+    values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
+  ): Promise<TestQuestionScoring>;
+  deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean>;
+  replaceTestQuestionScoring(
+    testId: string,
+    rows: Omit<InsertTestQuestionScoring, "testId">[],
+  ): Promise<TestQuestionScoring[]>;
+
+  // Media library: asset registry (media_assets) and reverse usage index (media_usages).
+  createMediaAsset(asset: Omit<InsertMediaAsset, "id">): Promise<MediaAsset>;
+  getMediaAsset(id: string): Promise<MediaAsset | undefined>;
+  getMediaAssetByStorageKey(storageKey: string): Promise<MediaAsset | undefined>;
+  findMediaAssetByOwnerChecksum(ownerId: string | null, checksum: string): Promise<MediaAsset | undefined>;
+  countMediaAssetsByChecksum(checksum: string): Promise<number>;
+  listMediaAssetsByOwner(ownerId: string): Promise<MediaAsset[]>;
+  deleteMediaAsset(id: string): Promise<boolean>;
+  replaceMediaUsages(entityType: MediaEntityType, entityId: string, refs: MediaUsageRef[]): Promise<void>;
+  getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]>;
+  listOrphanMediaAssets(): Promise<MediaAsset[]>;
+  deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void>;
 }
+
 export class DatabaseStorage implements IStorage {
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
-    }
-    return undefined;
+  // Domain repositories behind the facade. The split is incremental: methods of
+  // an extracted domain delegate here, the rest remain inline until migrated.
+  private readonly usersRepo = new UsersRepository();
+  private readonly groupsRepo = new GroupsRepository();
+  private readonly accessRepo = new AccessRepository();
+  private readonly topicsRepo = new TopicsRepository();
+  private readonly questionsRepo = new QuestionsRepository();
+  private readonly scormRepo = new ScormRepository();
+  private readonly adaptiveRepo = new AdaptiveRepository();
+  private readonly attemptsRepo = new AttemptsRepository();
+  private readonly scalesVariablesRepo = new ScalesVariablesRepository();
+  private readonly testsRepo = new TestsRepository();
+  private readonly contentPagesRepo = new ContentPagesRepository();
+  private readonly assignmentsRepo = new AssignmentsRepository();
+  private readonly foldersRepo = new FoldersRepository();
+  private readonly mediaRepo = new MediaRepository();
+
+  // ============================================
+  // Users (delegated to UsersRepository)
+  // ============================================
+
+  getUser(id: string): Promise<User | undefined> {
+    return this.usersRepo.getUser(id);
   }
 
-  async getUserByEmail(email: string): Promise<User | undefined> {
-    const emailHashValue = hashEmail(email);
-    const [user] = await db.select().from(users).where(eq(users.emailHash, emailHashValue));
-    if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
-    }
-    return undefined;
+  getUserByEmail(email: string): Promise<User | undefined> {
+    return this.usersRepo.getUserByEmail(email);
   }
 
-  async createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
-    const id = randomUUID();
-    const hashedPassword = await bcrypt.hash(insertUser.passwordHash, 10);
-    const emailEncrypted = await encryptEmail(insertUser.email);
-    const emailHashValue = hashEmail(insertUser.email);
-
-    const [user] = await db.insert(users).values({
-      id,
-      email: emailEncrypted,
-      emailHash: emailHashValue,
-      passwordHash: hashedPassword,
-      name: insertUser.name || null,
-      role: insertUser.role || "learner",
-      status: insertUser.status || "pending",
-      mustChangePassword: insertUser.mustChangePassword ?? true,
-      gdprConsent: false,
-      createdAt: new Date(),
-      createdBy: insertUser.createdBy || null,
-    }).returning();
-
-    return { ...user, email: await decryptEmail(user.email) };
+  createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
+    return this.usersRepo.createUser(insertUser);
   }
 
-  async validatePassword(email: string, password: string): Promise<User | null> {
-    const user = await this.getUserByEmail(email);
-    if (!user) return null;
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    return valid ? user : null;
+  validatePassword(email: string, password: string): Promise<User | null> {
+    return this.usersRepo.validatePassword(email, password);
   }
 
-  async updateUserLastLogin(id: string): Promise<void> {
-    await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, id));
+  updateUserLastLogin(id: string): Promise<void> {
+    return this.usersRepo.updateUserLastLogin(id);
   }
 
-  async getUsers(): Promise<User[]> {
-    const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
-    return Promise.all(allUsers.map(async user => ({ ...user, email: await decryptEmail(user.email) })));
+  getUsers(): Promise<User[]> {
+    return this.usersRepo.getUsers();
   }
 
-  async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
-    const updateData: any = { ...data };
-    if (data.email) {
-      updateData.email = await encryptEmail(data.email);
-      updateData.emailHash = hashEmail(data.email);
-    }
-
-    const [updated] = await db.update(users)
-      .set(updateData)
-      .where(eq(users.id, id))
-      .returning();
-
-    if (updated) {
-      return { ...updated, email: await decryptEmail(updated.email) };
-    }
-    return undefined;
+  updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
+    return this.usersRepo.updateUser(id, data);
   }
 
-  async updateUserPassword(id: string, newPasswordHash: string): Promise<void> {
-    const hashed = await bcrypt.hash(newPasswordHash, 10);
-    await db.update(users).set({ 
-      passwordHash: hashed,
-      mustChangePassword: false,
-    }).where(eq(users.id, id));
+  updateUserPassword(id: string, newPasswordHash: string): Promise<void> {
+    return this.usersRepo.updateUserPassword(id, newPasswordHash);
   }
 
-  async deactivateUser(id: string): Promise<User | undefined> {
-    const [updated] = await db.update(users)
-      .set({ status: "inactive" })
-      .where(eq(users.id, id))
-      .returning();
-    return updated || undefined;
+  deactivateUser(id: string): Promise<User | undefined> {
+    return this.usersRepo.deactivateUser(id);
   }
 
-  async activateUser(id: string): Promise<User | undefined> {
-    const [updated] = await db.update(users)
-      .set({ status: "active" })
-      .where(eq(users.id, id))
-      .returning();
-    return updated || undefined;
+  activateUser(id: string): Promise<User | undefined> {
+    return this.usersRepo.activateUser(id);
   }
 
   // ============================================
-  // Groups
+  // Groups + membership (delegated to GroupsRepository)
   // ============================================
 
-  async getGroups(): Promise<Group[]> {
-    return db.select().from(groups).orderBy(desc(groups.createdAt));
+  getGroups(): Promise<Group[]> {
+    return this.groupsRepo.getGroups();
   }
 
-  async getGroup(id: string): Promise<Group | undefined> {
-    const [group] = await db.select().from(groups).where(eq(groups.id, id));
-    return group || undefined;
+  getGroup(id: string): Promise<Group | undefined> {
+    return this.groupsRepo.getGroup(id);
   }
 
-  async createGroup(group: InsertGroup & { createdBy?: string }): Promise<Group> {
-    const id = randomUUID();
-    const [created] = await db.insert(groups).values({
-      id,
-      name: group.name,
-      description: group.description || null,
-      createdAt: new Date(),
-      createdBy: group.createdBy || null,
-    }).returning();
-    return created;
+  createGroup(group: InsertGroup & { createdBy?: string }): Promise<Group> {
+    return this.groupsRepo.createGroup(group);
   }
 
-  async updateGroup(id: string, data: Partial<Group>): Promise<Group | undefined> {
-    const [updated] = await db.update(groups).set(data).where(eq(groups.id, id)).returning();
-    return updated || undefined;
+  updateGroup(id: string, data: Partial<Group>): Promise<Group | undefined> {
+    return this.groupsRepo.updateGroup(id, data);
   }
 
-  async deleteGroup(id: string): Promise<boolean> {
-    // Сначала удаляем связи с пользователями
-    await db.delete(userGroups).where(eq(userGroups.groupId, id));
-    // Затем удаляем саму группу
-    const result = await db.delete(groups).where(eq(groups.id, id));
-    return (result.rowCount ?? 0) > 0;
+  deleteGroup(id: string): Promise<boolean> {
+    return this.groupsRepo.deleteGroup(id);
   }
 
-  // ============================================
-  // User-Group relations
-  // ============================================
-
-  async getUserGroups(userId: string): Promise<Group[]> {
-    const result = await db
-      .select({ group: groups })
-      .from(userGroups)
-      .innerJoin(groups, eq(userGroups.groupId, groups.id))
-      .where(eq(userGroups.userId, userId));
-    return result.map(r => r.group);
+  getUserGroups(userId: string): Promise<Group[]> {
+    return this.groupsRepo.getUserGroups(userId);
   }
 
-  async getGroupUsers(groupId: string): Promise<User[]> {
-    const result = await db
-      .select({ user: users })
-      .from(userGroups)
-      .innerJoin(users, eq(userGroups.userId, users.id))
-      .where(eq(userGroups.groupId, groupId));
-    return Promise.all(result.map(async r => ({ ...r.user, email: await decryptEmail(r.user.email) })));
+  getGroupUsers(groupId: string): Promise<User[]> {
+    return this.groupsRepo.getGroupUsers(groupId);
   }
 
-  async addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
-    const id = randomUUID();
-    const [created] = await db.insert(userGroups).values({
-      id,
-      userId,
-      groupId,
-      addedAt: new Date(),
-    }).returning();
-    return created;
+  addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
+    return this.groupsRepo.addUserToGroup(userId, groupId);
   }
 
-  async removeUserFromGroup(userId: string, groupId: string): Promise<boolean> {
-    const result = await db.delete(userGroups)
-      .where(and(eq(userGroups.userId, userId), eq(userGroups.groupId, groupId)));
-    return (result.rowCount ?? 0) > 0;
+  removeUserFromGroup(userId: string, groupId: string): Promise<boolean> {
+    return this.groupsRepo.removeUserFromGroup(userId, groupId);
   }
 
-  async setUserGroups(userId: string, groupIds: string[]): Promise<void> {
-    // Удаляем все текущие связи
-    await db.delete(userGroups).where(eq(userGroups.userId, userId));
-    
-    // Добавляем новые
-    if (groupIds.length > 0) {
-      const values = groupIds.map(groupId => ({
-        id: randomUUID(),
-        userId,
-        groupId,
-        addedAt: new Date(),
-      }));
-      await db.insert(userGroups).values(values);
-    }
+  setUserGroups(userId: string, groupIds: string[]): Promise<void> {
+    return this.groupsRepo.setUserGroups(userId, groupIds);
   }
 
   // ============================================
-  // Test Assignments
+  // Access: roles + test/topic ownership & grants (delegated to AccessRepository)
   // ============================================
 
-  async getTestAssignments(testId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.testId, testId));
+  getUserRoles(userId: string): Promise<StoredRole[]> {
+    return this.accessRepo.getUserRoles(userId);
   }
 
-  async getUserAssignments(userId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.userId, userId));
+  setUserRoles(userId: string, roles: StoredRole[], grantedBy: string | null = null): Promise<void> {
+    return this.accessRepo.setUserRoles(userId, roles, grantedBy);
   }
 
-  async getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.groupId, groupId));
+  addUserRole(userId: string, role: StoredRole, grantedBy: string | null = null): Promise<void> {
+    return this.accessRepo.addUserRole(userId, role, grantedBy);
   }
 
-  async createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
-    const id = randomUUID();
-    const [created] = await db.insert(testAssignments).values({
-      id,
-      testId: assignment.testId,
-      userId: assignment.userId || null,
-      groupId: assignment.groupId || null,
-      dueDate: assignment.dueDate || null,
-      assignedAt: new Date(),
-      assignedBy: assignment.assignedBy,
-    }).returning();
-    return created;
+  removeUserRole(userId: string, role: StoredRole): Promise<void> {
+    return this.accessRepo.removeUserRole(userId, role);
   }
 
-  async deleteTestAssignment(id: string): Promise<boolean> {
-    const result = await db.delete(testAssignments).where(eq(testAssignments.id, id));
-    return (result.rowCount ?? 0) > 0;
+  setTestOwner(testId: string, ownerId: string | null): Promise<void> {
+    return this.accessRepo.setTestOwner(testId, ownerId);
   }
 
-  async getAssignedTestsForUser(userId: string): Promise<Test[]> {
-    // Получаем группы пользователя
-    const userGroupsList = await this.getUserGroups(userId);
-    const groupIds = userGroupsList.map(g => g.id);
-
-    // Получаем назначения напрямую пользователю
-    const directAssignments = await db
-      .select({ testId: testAssignments.testId })
-      .from(testAssignments)
-      .where(eq(testAssignments.userId, userId));
-
-    // Получаем назначения через группы
-    let groupAssignments: { testId: string }[] = [];
-    if (groupIds.length > 0) {
-      groupAssignments = await db
-        .select({ testId: testAssignments.testId })
-        .from(testAssignments)
-        .where(inArray(testAssignments.groupId, groupIds));
-    }
-
-    // Собираем уникальные testId
-    const testIds = [...new Set([
-      ...directAssignments.map(a => a.testId),
-      ...groupAssignments.map(a => a.testId),
-    ])];
-
-    if (testIds.length === 0) {
-      return [];
-    }
-
-    // Получаем тесты
-    return db.select().from(tests).where(inArray(tests.id, testIds));
+  getTestIdsByOwner(ownerId: string): Promise<string[]> {
+    return this.accessRepo.getTestIdsByOwner(ownerId);
   }
 
   // ============================================
-  // Password Reset Tokens
+  // Test usage refs + snapshots (delegated to TestsRepository)
   // ============================================
 
-  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string): Promise<PasswordResetToken> {
-    const id = randomUUID();
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 минут
-    const [token] = await db.insert(passwordResetTokens).values({
-      id,
-      userId,
-      tokenHash,
-      expiresAt,
-      requestIp,
-      createdAt: new Date(),
-    }).returning();
-    return token;
+  getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]> {
+    return this.testsRepo.getTestsUsingTopic(topicId);
   }
 
-  async getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined> {
-    const [token] = await db.select().from(passwordResetTokens)
-      .where(eq(passwordResetTokens.tokenHash, tokenHash));
-    return token || undefined;
+  getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]> {
+    return this.testsRepo.getTestsUsingQuestion(questionId);
   }
 
-  async markTokenAsUsed(id: string): Promise<void> {
-    await db.update(passwordResetTokens)
-      .set({ usedAt: new Date() })
-      .where(eq(passwordResetTokens.id, id));
+  createTestSnapshot(snapshot: {
+    testId: string;
+    version: number;
+    contentJson: unknown;
+    publishedBy: string | null;
+  }): Promise<TestSnapshot> {
+    return this.testsRepo.createTestSnapshot(snapshot);
   }
 
-  async getRecentTokensCount(userId: string, hours: number): Promise<number> {
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-    const result = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(passwordResetTokens)
-      .where(and(
-        eq(passwordResetTokens.userId, userId),
-        sql`${passwordResetTokens.createdAt} > ${since}`
-      ));
-    return Number(result[0]?.count || 0);
+  getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined> {
+    return this.testsRepo.getLatestSnapshot(testId);
   }
 
-  async getFolders(): Promise<Folder[]> {
-    return db.select().from(folders);
+  getSnapshot(id: string): Promise<TestSnapshot | undefined> {
+    return this.testsRepo.getSnapshot(id);
   }
 
-  async getFolder(id: string): Promise<Folder | undefined> {
-    const [folder] = await db.select().from(folders).where(eq(folders.id, id));
-    return folder || undefined;
+  getSnapshotsForTest(testId: string): Promise<TestSnapshot[]> {
+    return this.testsRepo.getSnapshotsForTest(testId);
   }
 
-  async createFolder(folder: InsertFolder): Promise<Folder> {
-    const id = randomUUID();
-    const [newFolder] = await db.insert(folders).values({
-      id,
-      name: folder.name,
-      parentId: folder.parentId || null,
-    }).returning();
-    return newFolder;
+  getAllSnapshots(): Promise<TestSnapshot[]> {
+    return this.testsRepo.getAllSnapshots();
   }
 
-  async updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined> {
-    const [updated] = await db.update(folders).set(updates).where(eq(folders.id, id)).returning();
-    return updated || undefined;
+  deleteSnapshotsForTest(testId: string): Promise<void> {
+    return this.testsRepo.deleteSnapshotsForTest(testId);
   }
 
-  async deleteFolder(id: string): Promise<boolean> {
-    // When deleting a folder, move all its topics to root (folderId = null)
-    await db.update(topics).set({ folderId: null }).where(eq(topics.folderId, id));
-    // Move child folders to root (parentId = null)
-    await db.update(folders).set({ parentId: null }).where(eq(folders.parentId, id));
-    const result = await db.delete(folders).where(eq(folders.id, id)).returning();
-    return result.length > 0;
+  getReferencedSnapshotIds(testId: string): Promise<string[]> {
+    return this.testsRepo.getReferencedSnapshotIds(testId);
   }
 
-  async getTopics(): Promise<Topic[]> {
-    return db.select().from(topics);
+  deleteSnapshotById(id: string): Promise<void> {
+    return this.testsRepo.deleteSnapshotById(id);
   }
 
-  async getTopic(id: string): Promise<Topic | undefined> {
-    const [topic] = await db.select().from(topics).where(eq(topics.id, id));
-    return topic || undefined;
+  getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
+    return this.accessRepo.getTestAccessGrants(testId);
   }
 
-  async createTopic(topic: InsertTopic): Promise<Topic> {
-    const id = randomUUID();
-    const [newTopic] = await db.insert(topics).values({
-      id,
-      name: topic.name,
-      description: topic.description || null,
-      feedback: topic.feedback || null,
-      folderId: topic.folderId || null,
-    }).returning();
-    return newTopic;
+  getUserTestGrants(userId: string): Promise<TestAccessGrant[]> {
+    return this.accessRepo.getUserTestGrants(userId);
   }
 
-  async updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
-    const [updated] = await db.update(topics).set(updates).where(eq(topics.id, id)).returning();
-    return updated || undefined;
+  getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
+    return this.accessRepo.getTestGrantForUser(testId, userId);
   }
 
-  async deleteTopic(id: string): Promise<boolean> {
-    // Cascade delete: first delete questions and courses for this topic
-    await db.delete(questions).where(eq(questions.topicId, id));
-    await db.delete(topicCourses).where(eq(topicCourses.topicId, id));
-    const result = await db.delete(topics).where(eq(topics.id, id)).returning();
-    return result.length > 0;
+  upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant> {
+    return this.accessRepo.upsertTestAccessGrant(grant);
   }
 
-  async deleteTopicsBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    // Cascade delete: first delete questions and courses for these topics
-    await db.delete(questions).where(inArray(questions.topicId, ids));
-    await db.delete(topicCourses).where(inArray(topicCourses.topicId, ids));
-    const result = await db.delete(topics).where(inArray(topics.id, ids)).returning();
-    return result.length;
-  }
-
-  async getTopicCourses(topicId: string): Promise<TopicCourse[]> {
-    return db.select().from(topicCourses).where(eq(topicCourses.topicId, topicId));
-  }
-
-  async createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse> {
-    const id = randomUUID();
-    const [newCourse] = await db.insert(topicCourses).values({ id, ...course }).returning();
-    return newCourse;
-  }
-
-  async deleteTopicCourse(id: string): Promise<boolean> {
-    const result = await db.delete(topicCourses).where(eq(topicCourses.id, id)).returning();
-    return result.length > 0;
-  }
-
-  async getQuestions(): Promise<Question[]> {
-    return db.select().from(questions);
-  }
-
-  async getQuestionsByTopic(topicId: string): Promise<Question[]> {
-    return db.select().from(questions).where(eq(questions.topicId, topicId));
-  }
-
-  async getQuestion(id: string): Promise<Question | undefined> {
-    const [question] = await db.select().from(questions).where(eq(questions.id, id));
-    return question || undefined;
-  }
-
-  async getQuestionsByIds(ids: string[]): Promise<Question[]> {
-    if (ids.length === 0) return [];
-    return db.select().from(questions).where(inArray(questions.id, ids));
-  }
-
-  async createQuestion(question: InsertQuestion): Promise<Question> {
-    const id = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id,
-      topicId: question.topicId,
-      type: question.type,
-      prompt: question.prompt,
-      dataJson: question.dataJson,
-      correctJson: question.correctJson,
-      points: question.points ?? 1,
-      difficulty: question.difficulty ?? 50,
-      mediaUrl: question.mediaUrl || null,
-      mediaType: question.mediaType || null,
-      shuffleAnswers: question.shuffleAnswers ?? true,
-      feedback: question.feedback || null,
-      feedbackMode: question.feedbackMode || "general",
-      feedbackCorrect: question.feedbackCorrect || null,
-      feedbackIncorrect: question.feedbackIncorrect || null,
-    }).returning();
-    return newQuestion;
-  }
-
-  async duplicateQuestion(id: string): Promise<Question | undefined> {
-    const original = await this.getQuestion(id);
-    if (!original) return undefined;
-
-    const newId = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id: newId,
-      topicId: original.topicId,
-      type: original.type,
-      prompt: original.prompt + " (копия)",
-      dataJson: original.dataJson,
-      correctJson: original.correctJson,
-      points: original.points,
-      difficulty: original.difficulty,
-      feedback: original.feedback,
-      feedbackMode: original.feedbackMode,
-      feedbackCorrect: original.feedbackCorrect,
-      feedbackIncorrect: original.feedbackIncorrect,
-      mediaUrl: original.mediaUrl,
-      mediaType: original.mediaType,
-      shuffleAnswers: original.shuffleAnswers,
-    }).returning();
-    return newQuestion;
-  }
-
-  async duplicateTopicWithQuestions(id: string): Promise<{ topic: Topic; questions: Question[] } | undefined> {
-    const originalTopic = await this.getTopic(id);
-    if (!originalTopic) return undefined;
-
-    const newTopicId = randomUUID();
-    const [newTopic] = await db.insert(topics).values({
-      id: newTopicId,
-      name: originalTopic.name + " (копия)",
-      description: originalTopic.description,
-      feedback: originalTopic.feedback,
-    }).returning();
-
-    const originalCourses = await this.getTopicCourses(id);
-    for (const course of originalCourses) {
-      await db.insert(topicCourses).values({
-        id: randomUUID(),
-        topicId: newTopicId,
-        title: course.title,
-        url: course.url,
-      });
-    }
-
-    const originalQuestions = await this.getQuestionsByTopic(id);
-    const newQuestions: Question[] = [];
-
-    for (const q of originalQuestions) {
-      const [newQ] = await db.insert(questions).values({
-        id: randomUUID(),
-        topicId: newTopicId,
-        type: q.type,
-        prompt: q.prompt,
-        dataJson: q.dataJson,
-        correctJson: q.correctJson,
-        points: q.points,
-        difficulty: q.difficulty,
-        mediaUrl: q.mediaUrl,
-        mediaType: q.mediaType,
-        shuffleAnswers: q.shuffleAnswers,
-        feedback: q.feedback,
-        feedbackMode: q.feedbackMode,
-        feedbackCorrect: q.feedbackCorrect,
-        feedbackIncorrect: q.feedbackIncorrect,
-      }).returning();
-      newQuestions.push(newQ);
-    }
-
-    return { topic: newTopic, questions: newQuestions };
-  }
-
-  async getTopicByName(name: string): Promise<Topic | undefined> {
-    const [topic] = await db.select().from(topics).where(eq(topics.name, name));
-    return topic || undefined;
-  }
-
-  async updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
-    const [updated] = await db.update(questions).set(updates).where(eq(questions.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async deleteQuestion(id: string): Promise<boolean> {
-    const result = await db.delete(questions).where(eq(questions.id, id)).returning();
-    return result.length > 0;
-  }
-
-  async deleteQuestionsBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    const result = await db.delete(questions).where(inArray(questions.id, ids)).returning();
-    return result.length;
-  }
-
-  async getTests(): Promise<Test[]> {
-    return db.select().from(tests);
-  }
-
-  async getTest(id: string): Promise<Test | undefined> {
-    const [test] = await db.select().from(tests).where(eq(tests.id, id));
-    return test || undefined;
-  }
-
-  async createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test> {
-    const id = randomUUID();
-    const [newTest] = await db.insert(tests).values({
-      id,
-      title: test.title,
-      description: test.description || null,
-      overallPassRuleJson: test.overallPassRuleJson,
-      webhookUrl: test.webhookUrl || null,
-      published: test.published || false,
-      showCorrectAnswers: test.showCorrectAnswers || false,
-      timeLimitMinutes: test.timeLimitMinutes || null,
-      maxAttempts: test.maxAttempts || null,
-      startPageContent: test.startPageContent || null,
-      feedback: test.feedback || null,
-      mode: test.mode || "standard",
-      showDifficultyLevel: test.showDifficultyLevel ?? true,
-    }).returning();
-
-    for (const section of sections) {
-      const sectionId = randomUUID();
-      await db.insert(testSections).values({
-        id: sectionId,
-        testId: id,
-        topicId: section.topicId,
-        drawCount: section.drawCount,
-        topicPassRuleJson: section.topicPassRuleJson || null,
-      });
-    }
-
-    return newTest;
-  }
-  async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
-    // Increment version when test is updated
-    const [updated] = await db.update(tests)
-      .set({ ...updates, version: sql`${tests.version} + 1` })
-      .where(eq(tests.id, id))
-      .returning();
-    if (!updated) return undefined;
-
-    if (sections) {
-      await db.delete(testSections).where(eq(testSections.testId, id));
-      for (const section of sections) {
-        const sectionId = randomUUID();
-        await db.insert(testSections).values({
-          id: sectionId,
-          testId: id,
-          topicId: section.topicId,
-          drawCount: section.drawCount,
-          topicPassRuleJson: section.topicPassRuleJson || null,
-        });
-      }
-    }
-
-    return updated;
-  }
-
-  async deleteTest(id: string): Promise<boolean> {
-    await db.delete(testSections).where(eq(testSections.testId, id));
-    const result = await db.delete(tests).where(eq(tests.id, id)).returning();
-    return result.length > 0;
-  }
-
-  async getTestSections(testId: string): Promise<TestSection[]> {
-    return db.select().from(testSections).where(eq(testSections.testId, testId));
-  }
-
-  async createAttempt(attempt: InsertAttempt): Promise<Attempt> {
-    const id = randomUUID();
-    const [newAttempt] = await db.insert(attempts).values({
-      id,
-      userId: attempt.userId,
-      testId: attempt.testId,
-      testVersion: attempt.testVersion || 1,
-      variantJson: attempt.variantJson,
-      answersJson: attempt.answersJson || null,
-      resultJson: attempt.resultJson || null,
-      startedAt: new Date(attempt.startedAt),
-      finishedAt: attempt.finishedAt ? new Date(attempt.finishedAt) : null,
-    }).returning();
-    return newAttempt;
-  }
-
-  async getAttempt(id: string): Promise<Attempt | undefined> {
-    const [attempt] = await db.select().from(attempts).where(eq(attempts.id, id));
-    return attempt || undefined;
-  }
-
-  async updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
-    const [updated] = await db.update(attempts).set(updates).where(eq(attempts.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async getAttemptsByUser(userId: string): Promise<Attempt[]> {
-    return db.select().from(attempts).where(eq(attempts.userId, userId));
-  }
-
-  async getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]> {
-    return db.select().from(attempts).where(
-      and(eq(attempts.userId, userId), eq(attempts.testId, testId))
-    );
-  }
-
-  async deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void> {
-    await db.delete(attempts).where(
-      and(eq(attempts.userId, userId), eq(attempts.testId, testId))
-    );
-  }
-
-  async getAllAttempts(): Promise<Attempt[]> {
-    return db.select().from(attempts);
-  }
-
-  // === Adaptive Testing Methods ===
-
-  async getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined> {
-    const [settings] = await db.select().from(adaptiveTopicSettings)
-      .where(and(eq(adaptiveTopicSettings.testId, testId), eq(adaptiveTopicSettings.topicId, topicId)));
-    return settings || undefined;
-  }
-
-  async getAdaptiveTopicSettingsByTest(testId: string): Promise<AdaptiveTopicSettings[]> {
-    return db.select().from(adaptiveTopicSettings).where(eq(adaptiveTopicSettings.testId, testId));
-  }
-
-  async createAdaptiveTopicSettings(settings: InsertAdaptiveTopicSettings): Promise<AdaptiveTopicSettings> {
-    const id = randomUUID();
-    const [newSettings] = await db.insert(adaptiveTopicSettings).values({ id, ...settings }).returning();
-    return newSettings;
-  }
-
-  async updateAdaptiveTopicSettings(id: string, settings: Partial<InsertAdaptiveTopicSettings>): Promise<AdaptiveTopicSettings | undefined> {
-    const [updated] = await db.update(adaptiveTopicSettings).set(settings).where(eq(adaptiveTopicSettings.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async deleteAdaptiveTopicSettingsByTest(testId: string): Promise<void> {
-    await db.delete(adaptiveTopicSettings).where(eq(adaptiveTopicSettings.testId, testId));
-  }
-
-  async getAdaptiveLevels(testId: string, topicId: string): Promise<AdaptiveLevel[]> {
-    return db.select().from(adaptiveLevels)
-      .where(and(eq(adaptiveLevels.testId, testId), eq(adaptiveLevels.topicId, topicId)))
-      .orderBy(adaptiveLevels.levelIndex);
-  }
-
-  async getAdaptiveLevelsByTest(testId: string): Promise<AdaptiveLevel[]> {
-    return db.select().from(adaptiveLevels)
-      .where(eq(adaptiveLevels.testId, testId))
-      .orderBy(adaptiveLevels.levelIndex);
-  }
-
-  async createAdaptiveLevel(level: InsertAdaptiveLevel): Promise<AdaptiveLevel> {
-    const id = randomUUID();
-    const [newLevel] = await db.insert(adaptiveLevels).values({ id, ...level }).returning();
-    return newLevel;
-  }
-
-  async updateAdaptiveLevel(id: string, level: Partial<InsertAdaptiveLevel>): Promise<AdaptiveLevel | undefined> {
-    const [updated] = await db.update(adaptiveLevels).set(level).where(eq(adaptiveLevels.id, id)).returning();
-    return updated || undefined;
-  }
-
-  async deleteAdaptiveLevelsByTest(testId: string): Promise<void> {
-    // First delete all links for levels of this test
-    const levels = await this.getAdaptiveLevelsByTest(testId);
-    for (const level of levels) {
-      await this.deleteAdaptiveLevelLinksByLevel(level.id);
-    }
-    await db.delete(adaptiveLevels).where(eq(adaptiveLevels.testId, testId));
-  }
-
-  async getAdaptiveLevelLinks(levelId: string): Promise<AdaptiveLevelLink[]> {
-    return db.select().from(adaptiveLevelLinks).where(eq(adaptiveLevelLinks.levelId, levelId));
-  }
-
-  async createAdaptiveLevelLink(link: InsertAdaptiveLevelLink): Promise<AdaptiveLevelLink> {
-    const id = randomUUID();
-    const [newLink] = await db.insert(adaptiveLevelLinks).values({ id, ...link }).returning();
-    return newLink;
-  }
-
-  async deleteAdaptiveLevelLinksByLevel(levelId: string): Promise<void> {
-    await db.delete(adaptiveLevelLinks).where(eq(adaptiveLevelLinks.levelId, levelId));
-  }
-
-  async deleteAdaptiveLevelLinksByTest(testId: string): Promise<void> {
-    const levels = await this.getAdaptiveLevelsByTest(testId);
-    for (const level of levels) {
-      await this.deleteAdaptiveLevelLinksByLevel(level.id);
-    }
-  }
-
-  async createScormPackage(pkg: InsertScormPackage & { id: string }): Promise<ScormPackage> {
-    const [created] = await db.insert(scormPackages).values(pkg).returning();
-    return created;
-  }
-
-  async getScormPackage(id: string): Promise<ScormPackage | undefined> {
-    const [pkg] = await db.select().from(scormPackages).where(eq(scormPackages.id, id));
-    return pkg || undefined;
-  }
-
-  async getScormPackagesByTest(testId: string): Promise<ScormPackage[]> {
-    return db.select().from(scormPackages).where(eq(scormPackages.testId, testId));
-  }
-
-  async getScormPackages(): Promise<ScormPackage[]> {
-    return db.select().from(scormPackages);
-  }
-
-  async updateScormPackage(id: string, data: Partial<ScormPackage>): Promise<ScormPackage | undefined> {
-    const [updated] = await db.update(scormPackages)
-      .set(data)
-      .where(eq(scormPackages.id, id))
-      .returning();
-    return updated || undefined;
+  removeTestAccessGrant(testId: string, userId: string): Promise<boolean> {
+    return this.accessRepo.removeTestAccessGrant(testId, userId);
   }
 
   // ============================================
-  // SCORM Attempts
+  // Test Assignments (delegated to AssignmentsRepository)
   // ============================================
 
-  async createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt> {
-    const [created] = await db.insert(scormAttempts).values(attempt).returning();
-    return created;
+  getAssignment(id: string): Promise<TestAssignment | undefined> {
+    return this.assignmentsRepo.getAssignment(id);
   }
 
-  async getScormAttempt(id: string): Promise<ScormAttempt | undefined> {
-    const [attempt] = await db.select().from(scormAttempts).where(eq(scormAttempts.id, id));
-    return attempt || undefined;
+  getTestAssignments(testId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getTestAssignments(testId);
   }
 
-  async getScormAttemptBySession(
-    packageId: string, 
-    sessionId: string, 
-    attemptNumber?: number
+  getUserAssignments(userId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getUserAssignments(userId);
+  }
+
+  getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getGroupAssignments(groupId);
+  }
+
+  getAllAssignments(): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getAllAssignments();
+  }
+
+  isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
+    return this.assignmentsRepo.isTestAssignedToUser(testId, userId);
+  }
+
+  createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
+    return this.assignmentsRepo.createTestAssignment(assignment);
+  }
+
+  deleteTestAssignment(id: string): Promise<boolean> {
+    return this.assignmentsRepo.deleteTestAssignment(id);
+  }
+
+  getAssignedTestsForUser(userId: string): Promise<Test[]> {
+    return this.assignmentsRepo.getAssignedTestsForUser(userId);
+  }
+
+  getCurrentAssignmentId(userId: string, testId: string): Promise<string | null> {
+    return this.assignmentsRepo.getCurrentAssignmentId(userId, testId);
+  }
+
+  // ============================================
+  // Password Reset Tokens (delegated to UsersRepository)
+  // ============================================
+
+  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
+    return this.usersRepo.createPasswordResetToken(userId, tokenHash, requestIp, ttlMs);
+  }
+
+  getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    return this.usersRepo.getPasswordResetToken(tokenHash);
+  }
+
+  markTokenAsUsed(id: string): Promise<void> {
+    return this.usersRepo.markTokenAsUsed(id);
+  }
+
+  getRecentTokensCount(userId: string, hours: number): Promise<number> {
+    return this.usersRepo.getRecentTokensCount(userId, hours);
+  }
+
+  // ── Assignment Access Tokens (magic links) (delegated to AssignmentsRepository) ─
+
+  createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
+    return this.assignmentsRepo.createAssignmentAccessToken(data);
+  }
+
+  getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined> {
+    return this.assignmentsRepo.getAssignmentAccessToken(tokenHash);
+  }
+
+  getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]> {
+    return this.assignmentsRepo.getAssignmentAccessTokensByAssignment(assignmentId);
+  }
+
+  revokeAssignmentAccessToken(id: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessToken(id);
+  }
+
+  revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessTokensByAssignment(assignmentId);
+  }
+
+  revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
+  }
+
+  // ============================================
+  // Folders: content + test trees (delegated to FoldersRepository)
+  // ============================================
+
+  getFolders(): Promise<Folder[]> {
+    return this.foldersRepo.getFolders();
+  }
+
+  getFolder(id: string): Promise<Folder | undefined> {
+    return this.foldersRepo.getFolder(id);
+  }
+
+  createFolder(folder: InsertFolder): Promise<Folder> {
+    return this.foldersRepo.createFolder(folder);
+  }
+
+  updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined> {
+    return this.foldersRepo.updateFolder(id, updates);
+  }
+
+  deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    return this.foldersRepo.deleteFolder(id, moveTo);
+  }
+
+  getFolderSubtreeIds(id: string): Promise<string[]> {
+    return this.foldersRepo.getFolderSubtreeIds(id);
+  }
+
+  deleteFoldersBulk(ids: string[]): Promise<number> {
+    return this.foldersRepo.deleteFoldersBulk(ids);
+  }
+
+  getTestFolders(): Promise<TestFolder[]> {
+    return this.foldersRepo.getTestFolders();
+  }
+
+  createTestFolder(folder: InsertTestFolder): Promise<TestFolder> {
+    return this.foldersRepo.createTestFolder(folder);
+  }
+
+  updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined> {
+    return this.foldersRepo.updateTestFolder(id, updates);
+  }
+
+  deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    return this.foldersRepo.deleteTestFolder(id, moveTo);
+  }
+
+  deleteTestFolderCascade(id: string): Promise<boolean> {
+    return this.foldersRepo.deleteTestFolderCascade(id);
+  }
+
+  moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
+    return this.foldersRepo.moveTestToFolder(testId, folderId);
+  }
+
+  // ============================================
+  // Topics (delegated to TopicsRepository)
+  // ============================================
+
+  getTopics(): Promise<Topic[]> {
+    return this.topicsRepo.getTopics();
+  }
+
+  getTopic(id: string): Promise<Topic | undefined> {
+    return this.topicsRepo.getTopic(id);
+  }
+
+  createTopic(topic: InsertTopic): Promise<Topic> {
+    return this.topicsRepo.createTopic(topic);
+  }
+
+  updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
+    return this.topicsRepo.updateTopic(id, updates);
+  }
+
+  renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void> {
+    return this.topicsRepo.renameTopicInFormulas(topicId, oldName, newName);
+  }
+
+  // ─── Topic ownership and access grants (delegated to AccessRepository) ─────
+
+  setTopicOwner(topicId: string, ownerId: string | null): Promise<void> {
+    return this.accessRepo.setTopicOwner(topicId, ownerId);
+  }
+
+  setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void> {
+    return this.accessRepo.setTopicVisibility(topicId, visibility);
+  }
+
+  getTopicIdsByOwner(ownerId: string): Promise<string[]> {
+    return this.accessRepo.getTopicIdsByOwner(ownerId);
+  }
+
+  getSharedTopicIds(): Promise<string[]> {
+    return this.accessRepo.getSharedTopicIds();
+  }
+
+  getTopicGrants(topicId: string): Promise<TopicAccessGrant[]> {
+    return this.accessRepo.getTopicGrants(topicId);
+  }
+
+  getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]> {
+    return this.accessRepo.getActiveTopicGrantsForGrantees(userId);
+  }
+
+  getTopicGrantForGrantee(topicId: string, granteeId: string): Promise<TopicAccessGrant | undefined> {
+    return this.accessRepo.getTopicGrantForGrantee(topicId, granteeId);
+  }
+
+  upsertTopicGrant(grant: {
+    topicId: string;
+    granteeId: string;
+    accessLevel: "use" | "manage";
+    grantedBy: string | null;
+  }): Promise<TopicAccessGrant> {
+    return this.accessRepo.upsertTopicGrant(grant);
+  }
+
+  setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void> {
+    return this.accessRepo.setTopicGrantState(id, state);
+  }
+
+  removeTopicGrant(id: string): Promise<void> {
+    return this.accessRepo.removeTopicGrant(id);
+  }
+
+  deleteTopic(id: string): Promise<TopicDeletionResult> {
+    return this.topicsRepo.deleteTopic(id);
+  }
+
+  deleteTopicsBulk(ids: string[]): Promise<TopicsBulkDeletionResult> {
+    return this.topicsRepo.deleteTopicsBulk(ids);
+  }
+
+  moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number> {
+    return this.topicsRepo.moveTopicsToFolder(ids, folderId);
+  }
+
+  getTopicCourses(topicId: string): Promise<TopicCourse[]> {
+    return this.topicsRepo.getTopicCourses(topicId);
+  }
+
+  getTopicEvents(topicId: string): Promise<TopicEvent[]> {
+    return this.topicsRepo.getTopicEvents(topicId);
+  }
+
+  // ============================================
+  // Questions (delegated to QuestionsRepository)
+  // ============================================
+
+  getQuestions(): Promise<Question[]> {
+    return this.questionsRepo.getQuestions();
+  }
+
+  getQuestionsByTopic(topicId: string): Promise<Question[]> {
+    return this.questionsRepo.getQuestionsByTopic(topicId);
+  }
+
+  getContentHashesByTopic(topicId: string): Promise<Set<string>> {
+    return this.questionsRepo.getContentHashesByTopic(topicId);
+  }
+
+  getGradingTraitsByTopics(
+    topicIds: string[],
+  ): Promise<Array<{ topicId: string; type: string; correctJson: unknown }>> {
+    return this.questionsRepo.getGradingTraitsByTopics(topicIds);
+  }
+
+  getQuestion(id: string): Promise<Question | undefined> {
+    return this.questionsRepo.getQuestion(id);
+  }
+
+  getQuestionsByIds(ids: string[]): Promise<Question[]> {
+    return this.questionsRepo.getQuestionsByIds(ids);
+  }
+
+  createQuestion(question: InsertQuestion): Promise<Question> {
+    return this.questionsRepo.createQuestion(question);
+  }
+
+  duplicateQuestion(id: string): Promise<Question | undefined> {
+    return this.questionsRepo.duplicateQuestion(id);
+  }
+
+  duplicateTopicWithQuestions(
+    id: string,
+    createdBy?: string,
+  ): Promise<{ topic: Topic; questions: Question[] } | undefined> {
+    return this.topicsRepo.duplicateTopicWithQuestions(id, createdBy);
+  }
+
+  updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
+    return this.questionsRepo.updateQuestion(id, updates);
+  }
+
+  deleteQuestion(id: string): Promise<boolean> {
+    return this.questionsRepo.deleteQuestion(id);
+  }
+
+  deleteQuestionsBulk(ids: string[]): Promise<number> {
+    return this.questionsRepo.deleteQuestionsBulk(ids);
+  }
+
+  // ============================================
+  // Tests (delegated to TestsRepository)
+  // ============================================
+
+  getTests(): Promise<Test[]> {
+    return this.testsRepo.getTests();
+  }
+
+  getTest(id: string): Promise<Test | undefined> {
+    return this.testsRepo.getTest(id);
+  }
+
+  getMigrationHealth(): Promise<{ legacyStartPageCount: number }> {
+    return this.testsRepo.getMigrationHealth();
+  }
+
+  updateTest(id: string, updates: Partial<InsertTest>): Promise<Test | undefined> {
+    return this.testsRepo.updateTest(id, updates);
+  }
+
+  patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined> {
+    return this.testsRepo.patchTestStatus(id, status);
+  }
+
+  deleteTest(id: string): Promise<boolean> {
+    return this.testsRepo.deleteTest(id);
+  }
+
+  getTestSections(testId: string): Promise<TestSection[]> {
+    return this.testsRepo.getTestSections(testId);
+  }
+
+  getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
+    return this.testsRepo.getTestSectionsByTopic(topicId);
+  }
+
+  getMeasurementsForQuestions(
+    questionIds: string[],
+  ): Promise<Array<{ testId: string; questionId: string }>> {
+    return this.scalesVariablesRepo.getMeasurementsForQuestions(questionIds);
+  }
+
+  getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>> {
+    return this.testsRepo.getTopicPageRefs(topicId);
+  }
+
+  // ============================================
+  // Attempts (delegated to AttemptsRepository)
+  // ============================================
+
+  createAttempt(attempt: InsertAttempt): Promise<Attempt> {
+    return this.attemptsRepo.createAttempt(attempt);
+  }
+
+  getAttempt(id: string): Promise<Attempt | undefined> {
+    return this.attemptsRepo.getAttempt(id);
+  }
+
+  updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
+    return this.attemptsRepo.updateAttempt(id, updates);
+  }
+
+  getAttemptsByUser(userId: string): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByUser(userId);
+  }
+
+  getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByUserAndTest(userId, testId);
+  }
+
+  deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void> {
+    return this.attemptsRepo.deleteAttemptsByUserAndTest(userId, testId);
+  }
+
+  annulInProgressAttempts(testId: string, userId?: string): Promise<number> {
+    return this.attemptsRepo.annulInProgressAttempts(testId, userId);
+  }
+
+  getAllAttempts(): Promise<Attempt[]> {
+    return this.attemptsRepo.getAllAttempts();
+  }
+
+  // ============================================
+  // Adaptive delivery (delegated to AdaptiveRepository)
+  // ============================================
+
+  getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined> {
+    return this.adaptiveRepo.getAdaptiveTopicSettings(testId, topicId);
+  }
+
+  getAdaptiveTopicSettingsByTest(testId: string): Promise<AdaptiveTopicSettings[]> {
+    return this.adaptiveRepo.getAdaptiveTopicSettingsByTest(testId);
+  }
+
+  createAdaptiveTopicSettings(settings: InsertAdaptiveTopicSettings): Promise<AdaptiveTopicSettings> {
+    return this.adaptiveRepo.createAdaptiveTopicSettings(settings);
+  }
+
+  updateAdaptiveTopicSettings(id: string, settings: Partial<InsertAdaptiveTopicSettings>): Promise<AdaptiveTopicSettings | undefined> {
+    return this.adaptiveRepo.updateAdaptiveTopicSettings(id, settings);
+  }
+
+  deleteAdaptiveTopicSettingsByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveTopicSettingsByTest(testId);
+  }
+
+  getAdaptiveLevels(testId: string, topicId: string): Promise<AdaptiveLevel[]> {
+    return this.adaptiveRepo.getAdaptiveLevels(testId, topicId);
+  }
+
+  getAdaptiveLevelsByTest(testId: string): Promise<AdaptiveLevel[]> {
+    return this.adaptiveRepo.getAdaptiveLevelsByTest(testId);
+  }
+
+  createAdaptiveLevel(level: InsertAdaptiveLevel): Promise<AdaptiveLevel> {
+    return this.adaptiveRepo.createAdaptiveLevel(level);
+  }
+
+  updateAdaptiveLevel(id: string, level: Partial<InsertAdaptiveLevel>): Promise<AdaptiveLevel | undefined> {
+    return this.adaptiveRepo.updateAdaptiveLevel(id, level);
+  }
+
+  deleteAdaptiveLevelsByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelsByTest(testId);
+  }
+
+  getAdaptiveLevelLinks(levelId: string): Promise<AdaptiveLevelLink[]> {
+    return this.adaptiveRepo.getAdaptiveLevelLinks(levelId);
+  }
+
+  createAdaptiveLevelLink(link: InsertAdaptiveLevelLink): Promise<AdaptiveLevelLink> {
+    return this.adaptiveRepo.createAdaptiveLevelLink(link);
+  }
+
+  deleteAdaptiveLevelLinksByLevel(levelId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelLinksByLevel(levelId);
+  }
+
+  deleteAdaptiveLevelLinksByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelLinksByTest(testId);
+  }
+
+  // ============================================
+  // SCORM telemetry (delegated to ScormRepository)
+  // ============================================
+
+  createScormPackage(pkg: InsertScormPackage & { id: string }): Promise<ScormPackage> {
+    return this.scormRepo.createScormPackage(pkg);
+  }
+
+  getScormPackage(id: string): Promise<ScormPackage | undefined> {
+    return this.scormRepo.getScormPackage(id);
+  }
+
+  getScormPackagesByTest(testId: string): Promise<ScormPackage[]> {
+    return this.scormRepo.getScormPackagesByTest(testId);
+  }
+
+  getScormPackages(): Promise<ScormPackage[]> {
+    return this.scormRepo.getScormPackages();
+  }
+
+  updateScormPackage(id: string, data: Partial<ScormPackage>): Promise<ScormPackage | undefined> {
+    return this.scormRepo.updateScormPackage(id, data);
+  }
+
+  createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt> {
+    return this.scormRepo.createScormAttempt(attempt);
+  }
+
+  getScormAttempt(id: string): Promise<ScormAttempt | undefined> {
+    return this.scormRepo.getScormAttempt(id);
+  }
+
+  getScormAttemptBySession(
+    packageId: string,
+    sessionId: string,
+    attemptNumber?: number,
   ): Promise<ScormAttempt | undefined> {
-    if (attemptNumber !== undefined) {
-      // Ищем конкретную попытку по номеру
-      const [attempt] = await db.select().from(scormAttempts)
-        .where(and(
-          eq(scormAttempts.packageId, packageId),
-          eq(scormAttempts.sessionId, sessionId),
-          eq(scormAttempts.attemptNumber, attemptNumber)
-        ));
-      return attempt || undefined;
-    }
-    
-    // Если attemptNumber не указан - вернуть последнюю попытку
-    const [attempt] = await db.select().from(scormAttempts)
-      .where(and(
-        eq(scormAttempts.packageId, packageId),
-        eq(scormAttempts.sessionId, sessionId)
-      ))
-      .orderBy(desc(scormAttempts.attemptNumber));
-    return attempt || undefined;
+    return this.scormRepo.getScormAttemptBySession(packageId, sessionId, attemptNumber);
   }
 
-  async getNextAttemptNumber(packageId: string, sessionId: string): Promise<number> {
-    const [result] = await db
-      .select({ maxNum: sql<number>`COALESCE(MAX(${scormAttempts.attemptNumber}), 0)` })
-      .from(scormAttempts)
-      .where(and(
-        eq(scormAttempts.packageId, packageId),
-        eq(scormAttempts.sessionId, sessionId)
-      ));
-    return (result?.maxNum || 0) + 1;
+  getNextAttemptNumber(packageId: string, sessionId: string): Promise<number> {
+    return this.scormRepo.getNextAttemptNumber(packageId, sessionId);
   }
 
-  async getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]> {
-    return db.select().from(scormAttempts).where(eq(scormAttempts.packageId, packageId));
+  getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]> {
+    return this.scormRepo.getScormAttemptsByPackage(packageId);
   }
 
-  async updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {
-    const [updated] = await db.update(scormAttempts)
-      .set(data)
-      .where(eq(scormAttempts.id, id))
-      .returning();
-    return updated || undefined;
+  updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {
+    return this.scormRepo.updateScormAttempt(id, data);
   }
 
-  async getAllScormAttempts(): Promise<ScormAttempt[]> {
-    return db.select().from(scormAttempts);
+  getAllScormAttempts(): Promise<ScormAttempt[]> {
+    return this.scormRepo.getAllScormAttempts();
+  }
+
+  createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer> {
+    return this.scormRepo.createScormAnswer(answer);
+  }
+
+  getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
+    return this.scormRepo.getScormAnswersByAttempt(attemptId);
   }
 
   // ============================================
-  // SCORM Answers
+  // Content Pages (PRD-1) (delegated to ContentPagesRepository)
   // ============================================
 
-  async createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer> {
-    const [created] = await db.insert(scormAnswers).values(answer).returning();
-    return created;
+  getContentPageBindings(testIds: string[]): Promise<ContentPageBinding[]> {
+    return this.contentPagesRepo.getContentPageBindings(testIds);
   }
 
-  async getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
-    return db.select().from(scormAnswers).where(eq(scormAnswers.attemptId, attemptId));
+  getContentPages(testId: string): Promise<ContentPage[]> {
+    return this.contentPagesRepo.getContentPages(testId);
+  }
+
+  getAllContentPages(): Promise<ContentPage[]> {
+    return this.contentPagesRepo.getAllContentPages();
+  }
+
+  getContentPage(id: string): Promise<ContentPage | undefined> {
+    return this.contentPagesRepo.getContentPage(id);
+  }
+
+  createContentPage(page: InsertContentPage): Promise<ContentPage> {
+    return this.contentPagesRepo.createContentPage(page);
+  }
+
+  updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined> {
+    return this.contentPagesRepo.updateContentPage(id, updates);
+  }
+
+  deleteContentPage(id: string): Promise<boolean> {
+    return this.contentPagesRepo.deleteContentPage(id);
+  }
+
+  reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.contentPagesRepo.reorderContentPages(updates);
+  }
+
+  // ============================================
+  // Scales / result variables / scoring (delegated to ScalesVariablesRepository)
+  // ============================================
+
+  getResultVariables(testId: string): Promise<ResultVariable[]> {
+    return this.scalesVariablesRepo.getResultVariables(testId);
+  }
+
+  createResultVariable(rv: InsertResultVariable): Promise<ResultVariable> {
+    return this.scalesVariablesRepo.createResultVariable(rv);
+  }
+
+  updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined> {
+    return this.scalesVariablesRepo.updateResultVariable(id, updates);
+  }
+
+  deleteResultVariable(id: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteResultVariable(id);
+  }
+
+  reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.scalesVariablesRepo.reorderResultVariables(updates);
+  }
+
+  validateResultVariableFormula(
+    testId: string,
+    formula: string,
+    type: ValueType,
+    opts: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] } = {},
+  ): Promise<ValidationResult> {
+    return this.scalesVariablesRepo.validateResultVariableFormula(testId, formula, type, opts);
+  }
+
+  getScales(testId: string): Promise<Scale[]> {
+    return this.scalesVariablesRepo.getScales(testId);
+  }
+
+  createScale(scale: InsertScale): Promise<Scale> {
+    return this.scalesVariablesRepo.createScale(scale);
+  }
+
+  updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined> {
+    return this.scalesVariablesRepo.updateScale(id, updates);
+  }
+
+  deleteScale(id: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteScale(id);
+  }
+
+  reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.scalesVariablesRepo.reorderScales(updates);
+  }
+
+  getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]> {
+    return this.scalesVariablesRepo.getQuestionMeasurements(testId);
+  }
+
+  getQuestionMeasurementsByQuestion(testId: string, questionId: string): Promise<QuestionMeasurement[]> {
+    return this.scalesVariablesRepo.getQuestionMeasurementsByQuestion(testId, questionId);
+  }
+
+  upsertQuestionMeasurements(
+    testId: string,
+    questionId: string,
+    rows: InsertQuestionMeasurement[],
+  ): Promise<QuestionMeasurement[]> {
+    return this.scalesVariablesRepo.upsertQuestionMeasurements(testId, questionId, rows);
+  }
+
+  getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]> {
+    return this.scalesVariablesRepo.getTestQuestionScoring(testId);
+  }
+
+  upsertTestQuestionScoring(
+    testId: string,
+    questionId: string,
+    values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
+  ): Promise<TestQuestionScoring> {
+    return this.scalesVariablesRepo.upsertTestQuestionScoring(testId, questionId, values);
+  }
+
+  deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteTestQuestionScoring(testId, questionId);
+  }
+
+  replaceTestQuestionScoring(
+    testId: string,
+    rows: Omit<InsertTestQuestionScoring, "testId">[],
+  ): Promise<TestQuestionScoring[]> {
+    return this.scalesVariablesRepo.replaceTestQuestionScoring(testId, rows);
+  }
+
+  // ============================================
+  // Media library (delegated to MediaRepository)
+  // ============================================
+
+  createMediaAsset(asset: Omit<InsertMediaAsset, "id">): Promise<MediaAsset> {
+    return this.mediaRepo.createAsset(asset);
+  }
+
+  getMediaAsset(id: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.getAsset(id);
+  }
+
+  getMediaAssetByStorageKey(storageKey: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.getAssetByStorageKey(storageKey);
+  }
+
+  findMediaAssetByOwnerChecksum(ownerId: string | null, checksum: string): Promise<MediaAsset | undefined> {
+    return this.mediaRepo.findAssetByOwnerChecksum(ownerId, checksum);
+  }
+
+  countMediaAssetsByChecksum(checksum: string): Promise<number> {
+    return this.mediaRepo.countAssetsByChecksum(checksum);
+  }
+
+  listMediaAssetsByOwner(ownerId: string): Promise<MediaAsset[]> {
+    return this.mediaRepo.listAssetsByOwner(ownerId);
+  }
+
+  deleteMediaAsset(id: string): Promise<boolean> {
+    return this.mediaRepo.deleteAsset(id);
+  }
+
+  replaceMediaUsages(entityType: MediaEntityType, entityId: string, refs: MediaUsageRef[]): Promise<void> {
+    return this.mediaRepo.replaceUsages(entityType, entityId, refs);
+  }
+
+  getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]> {
+    return this.mediaRepo.getUsagesByAsset(assetId);
+  }
+
+  listOrphanMediaAssets(): Promise<MediaAsset[]> {
+    return this.mediaRepo.listOrphanAssets();
+  }
+
+  deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void> {
+    return this.mediaRepo.deleteUsagesExcept(entityType, keepIds);
   }
 }
 
 export const storage = new DatabaseStorage();
-
-export async function seedDatabase() {
-  const existingUsers = await db.select().from(users);
-  if (existingUsers.length > 0) return;
-
-  const adminPassword = await bcrypt.hash("admin123", 10);
-  const learnerPassword = await bcrypt.hash("learner123", 10);
-
-  const adminId = randomUUID();
-  const learnerId = randomUUID();
-
-  await db.insert(users).values([
-    { 
-      id: adminId, 
-      email: "admin@test.com", 
-      passwordHash: adminPassword, 
-      name: "Администратор",
-      role: "author",
-      status: "active",
-      mustChangePassword: false,
-      gdprConsent: true,
-      gdprConsentAt: new Date(),
-      createdAt: new Date(),
-    },
-    { 
-      id: learnerId, 
-      email: "learner@test.com", 
-      passwordHash: learnerPassword, 
-      name: "Тестовый ученик",
-      role: "learner",
-      status: "active",
-      mustChangePassword: false,
-      gdprConsent: true,
-      gdprConsentAt: new Date(),
-      createdAt: new Date(),
-    },
-  ]);
-
-  const iptvTopicId = randomUUID();
-  const wifiTopicId = randomUUID();
-
-  await db.insert(topics).values([
-    { id: iptvTopicId, name: "IPTV", description: "Internet Protocol Television fundamentals and configuration" },
-    { id: wifiTopicId, name: "WiFi", description: "Wireless networking standards and troubleshooting" },
-  ]);
-
-  await db.insert(topicCourses).values([
-    { id: randomUUID(), topicId: iptvTopicId, title: "IPTV Fundamentals Course", url: "https://example.com/iptv-course" },
-    { id: randomUUID(), topicId: wifiTopicId, title: "WiFi Troubleshooting Guide", url: "https://example.com/wifi-course" },
-  ]);
-
-  const iptvQuestions = [
-    { topicId: iptvTopicId, type: "single" as const, prompt: "What does IPTV stand for?", dataJson: { options: ["Internet Protocol Television", "Internal Protocol TV", "Integrated Platform TV", "Internet Provider Television"] }, correctJson: { correctIndex: 0 }, points: 1 },
-    { topicId: iptvTopicId, type: "single" as const, prompt: "Which protocol is commonly used for IPTV streaming?", dataJson: { options: ["HTTP", "RTSP", "FTP", "SMTP"] }, correctJson: { correctIndex: 1 }, points: 1 },
-    { topicId: iptvTopicId, type: "multiple" as const, prompt: "Select all valid IPTV delivery methods:", dataJson: { options: ["Unicast", "Multicast", "Broadcast", "Anycast"] }, correctJson: { correctIndices: [0, 1] }, points: 2 },
-    { topicId: iptvTopicId, type: "matching" as const, prompt: "Match the IPTV term with its definition:", dataJson: { left: ["STB", "EPG", "VOD"], right: ["Set-Top Box", "Electronic Program Guide", "Video on Demand"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] }, points: 3 },
-    { topicId: iptvTopicId, type: "ranking" as const, prompt: "Rank these IPTV setup steps in correct order:", dataJson: { items: ["Connect STB to network", "Configure network settings", "Authenticate with provider", "Start watching channels"] }, correctJson: { correctOrder: [0, 1, 2, 3] }, points: 2 },
-    { topicId: iptvTopicId, type: "single" as const, prompt: "What is the typical bandwidth required for HD IPTV?", dataJson: { options: ["1 Mbps", "5 Mbps", "8-10 Mbps", "50 Mbps"] }, correctJson: { correctIndex: 2 }, points: 1 },
-  ];
-
-  const wifiQuestions = [
-    { topicId: wifiTopicId, type: "single" as const, prompt: "What does WiFi stand for?", dataJson: { options: ["Wireless Fidelity", "Wired Fiber", "Wireless Fiber", "Wide Fidelity"] }, correctJson: { correctIndex: 0 }, points: 1 },
-    { topicId: wifiTopicId, type: "single" as const, prompt: "Which frequency band provides faster speeds but shorter range?", dataJson: { options: ["2.4 GHz", "5 GHz", "900 MHz", "60 GHz"] }, correctJson: { correctIndex: 1 }, points: 1 },
-    { topicId: wifiTopicId, type: "multiple" as const, prompt: "Select all valid WiFi security protocols:", dataJson: { options: ["WPA2", "WPA3", "WEP", "HTTP"] }, correctJson: { correctIndices: [0, 1, 2] }, points: 2 },
-    { topicId: wifiTopicId, type: "matching" as const, prompt: "Match the WiFi standard with its maximum theoretical speed:", dataJson: { left: ["802.11n", "802.11ac", "802.11ax"], right: ["600 Mbps", "6.9 Gbps", "9.6 Gbps"] }, correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }, { left: 2, right: 2 }] }, points: 3 },
-    { topicId: wifiTopicId, type: "ranking" as const, prompt: "Rank WiFi security protocols from least to most secure:", dataJson: { items: ["WEP", "WPA", "WPA2", "WPA3"] }, correctJson: { correctOrder: [0, 1, 2, 3] }, points: 2 },
-    { topicId: wifiTopicId, type: "single" as const, prompt: "What is the main advantage of mesh WiFi systems?", dataJson: { options: ["Lower cost", "Better coverage", "Higher speeds", "Less power consumption"] }, correctJson: { correctIndex: 1 }, points: 1 },
-  ];
-
-  for (const q of [...iptvQuestions, ...wifiQuestions]) {
-    await db.insert(questions).values({ id: randomUUID(), ...q });
-  }
-}

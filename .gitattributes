@@ -1,0 +1,10 @@
+* text=auto
+# Versioned migrations must stay LF on every platform: the file is shipped into
+# the Linux image and applied verbatim; a Windows CRLF checkout would change the
+# bytes drizzle reads (and the baseline hash).
+drizzle/** text eol=lf
+*.sh text eol=lf
+*.env text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf

@@ -1,0 +1,2623 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Tests List</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <style>
+    .page-title { font: var(--ou-text-heading-s); font-weight: 700; }
+
+    .toolbar {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-2) var(--ou-space-6); border-bottom: var(--wf-border-w) solid var(--ou-border-default); flex-shrink: 0;
+    }
+    .search-input-wrap {
+      position: relative; flex: 1; max-width: var(--wf-size-340);
+    }
+    .search-input-wrap input { height: var(--wf-size-34); padding-left: var(--ou-space-7); width: 100%; }
+    .search-icon {
+      position: absolute; left: var(--wf-space-9); top: 50%; transform: translateY(-50%);
+      width: var(--wf-space-14); height: var(--wf-space-14); color: var(--ou-fg-muted); pointer-events: none;
+    }
+    .toolbar-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-default); flex-shrink: 0; }
+
+    /* ── Tree ────────────────────────────────────────────────────── */
+    .tree-area { flex: 1; overflow-y: auto; }
+
+    /* Column header — 8 columns: Name | Status | Mode | Flow | Topics | Questions | Assignments | Actions */
+    .tree-header {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-110) var(--wf-size-150);
+      padding: var(--wf-space-7) 0; border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+      font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      position: sticky; top: 0; background: var(--ou-bg-elevated); z-index: 1;
+    }
+    .tree-header > div:first-child { padding-left: var(--ou-space-6); }
+
+    /* Root row — same grid as data rows so last column aligns with actions */
+    .tree-root {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-110) var(--wf-size-150);
+      align-items: center;
+      padding: 0; border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+      background: var(--ou-bg-elevated); user-select: none;
+    }
+    .tree-root-label {
+      grid-column: 1 / -1;
+      display: flex; align-items: center; gap: 0;
+      padding: var(--wf-space-7) 0 var(--wf-space-7) var(--ou-space-6);
+      font: var(--ou-text-body-s); font-weight: 700; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+
+    /* Folder row */
+    .tree-folder {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-110) var(--wf-size-150);
+      align-items: center;
+      padding: 0; border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+      cursor: pointer; user-select: none;
+    }
+    .tree-folder:hover { background: var(--ou-bg-hover); }
+    .tree-folder-name {
+      display: flex; align-items: center; gap: 0;
+      padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-6); font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default);
+    }
+    .chevron {
+      width: var(--ou-space-5); height: var(--ou-space-5); display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0; color: var(--ou-fg-muted); transition: transform .15s;
+    }
+    .chevron.open { transform: rotate(90deg); }
+    .folder-icon { flex-shrink: 0; color: var(--ou-warning-on-soft); margin-right: var(--wf-space-6); }
+    .folder-count { font: var(--ou-text-caption); font-weight: 400; color: var(--ou-fg-muted); margin-left: var(--wf-space-6); }
+    .tree-folder-actions {
+      display: flex; align-items: center; gap: var(--ou-space-1);
+      justify-content: flex-end; padding-right: var(--ou-space-2);
+      opacity: 0;
+    }
+    .tree-folder:hover .tree-folder-actions { opacity: 1; }
+
+    /* Test row */
+    .tree-test {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-110) var(--wf-size-150);
+      align-items: center;
+      padding: 0; border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+      cursor: pointer;
+    }
+    .tree-test:hover { background: var(--ou-accent-soft); }
+    .tree-test.selected { background: var(--ou-accent-soft); }
+    .tree-test-name {
+      display: flex; align-items: flex-start; gap: 0;
+      padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-6);
+    }
+    /* Indent: folder children get extra padding */
+    .tree-test.indent-1 .tree-test-name { padding-left: var(--wf-size-43); }
+    /* The indent guide line */
+    .indent-line {
+      display: inline-block; width: var(--ou-space-3); flex-shrink: 0;
+      border-left: var(--wf-border-w) solid var(--ou-border-soft); margin-left: var(--ou-space-1);
+      align-self: stretch; margin-right: var(--wf-space-6); position: relative;
+    }
+    .indent-line::before {
+      content: ''; position: absolute;
+      top: 50%; left: 0; width: var(--ou-space-2); height: var(--wf-border-w);
+      background: var(--ou-border-soft);
+    }
+    .test-info { flex: 1; min-width: 0; }
+    .test-name { font: var(--ou-text-body-s); font-weight: 500; }
+    .test-sub { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half); }
+    .tree-test-actions {
+      display: flex; align-items: center; gap: var(--wf-space-1q);
+      justify-content: flex-end; padding-right: var(--ou-space-2);
+      opacity: 0;
+    }
+    .tree-test:hover .tree-test-actions,
+    .tree-test.selected .tree-test-actions { opacity: 1; }
+
+    /* Action buttons */
+    .action-btn {
+      width: var(--wf-size-28); height: var(--wf-size-28); border-radius: var(--ou-radius-xs);
+      border: var(--wf-border-w) solid transparent; background: transparent;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0;
+    }
+    .action-btn:hover { background: var(--ou-bg-hover); border-color: var(--ou-border-default); color: var(--ou-fg-default); }
+    .action-btn.danger:hover { color: var(--ou-error-default); border-color: var(--ou-error-default); background: var(--ou-error-soft); }
+
+    /* Dropdown */
+    .dropdown-menu {
+      position: absolute; right: 0; top: 100%;
+      background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-m);
+      z-index: 20; min-width: var(--wf-size-210); padding: var(--ou-space-1) 0;
+    }
+    .dropdown-item {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--wf-space-14); font: var(--ou-text-body-s); cursor: pointer; color: var(--ou-fg-default);
+    }
+    .dropdown-item:hover { background: var(--ou-bg-hover); }
+    .dropdown-item.danger { color: var(--ou-error-default); }
+    .dropdown-item.danger:hover { background: var(--ou-error-soft); }
+    .dropdown-sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-1) 0; }
+    .more-btn-wrap { position: relative; }
+
+    /* ── Search results ──────────────────────────────────────────── */
+    .search-banner {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-6); background: var(--ou-info-soft); border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+      font: var(--ou-text-body-s); color: var(--ou-info-default); flex-shrink: 0;
+    }
+    .search-clear {
+      font: var(--ou-text-body-s); color: var(--ou-accent-default);
+      background: none; border: none; cursor: pointer; padding: 0 var(--ou-space-1); font-family: inherit; white-space: nowrap; flex-shrink: 0;
+      text-decoration: underline;
+    }
+    /* Breadcrumb path shown in search results */
+    .tree-test-path {
+      font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half);
+      display: flex; align-items: center; gap: var(--ou-space-1);
+    }
+    .path-sep { color: var(--ou-border-soft); }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty-tree {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: var(--wf-size-60) var(--ou-space-6); text-align: center;
+    }
+    .empty-icon {
+      width: var(--ou-space-9); height: var(--ou-space-9); border-radius: var(--ou-radius-s);
+      border: var(--wf-border-w) solid var(--ou-border-soft); background: var(--ou-bg-hover);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--ou-fg-muted); margin-bottom: var(--wf-space-14);
+    }
+
+    /* ── Skeleton ────────────────────────────────────────────────── */
+    .skel {
+      border-radius: var(--ou-radius-xs); background: var(--ou-bg-hover);
+      animation: shimmer 1.4s ease-in-out infinite;
+    }
+    @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+    .tree-num { font: var(--ou-text-body-s); }
+
+    /* Center columns 2-7 in all data rows and header */
+    .tree-header > :nth-child(2),
+    .tree-header > :nth-child(3),
+    .tree-header > :nth-child(4),
+    .tree-header > :nth-child(5),
+    .tree-header > :nth-child(6),
+    .tree-header > :nth-child(7) { text-align: center; }
+    .tree-test > :nth-child(2),
+    .tree-test > :nth-child(3),
+    .tree-test > :nth-child(4),
+    .tree-test > :nth-child(5),
+    .tree-test > :nth-child(6),
+    .tree-test > :nth-child(7),
+    .tree-folder > :nth-child(2),
+    .tree-folder > :nth-child(3),
+    .tree-folder > :nth-child(4),
+    .tree-folder > :nth-child(5),
+    .tree-folder > :nth-child(6),
+    .tree-folder > :nth-child(7) {
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── Preview panel ───────────────────────────────────────────── */
+    .content-split {
+      display: flex; flex: 1; overflow: hidden;
+    }
+    .tree-section {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+    }
+    .preview-panel {
+      width: var(--wf-size-300); flex-shrink: 0;
+      border-left: var(--wf-border-w) solid var(--ou-border-default);
+      display: flex; flex-direction: column;
+      overflow-y: auto; background: var(--ou-bg-elevated);
+    }
+    .preview-header {
+      padding: var(--wf-space-14) var(--ou-space-4) var(--wf-space-10);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+      flex-shrink: 0;
+    }
+    .preview-name {
+      font: var(--ou-text-body-s); font-weight: 600; line-height: 1.4;
+      margin-bottom: var(--ou-space-2);
+    }
+    .preview-badges { display: flex; flex-wrap: wrap; gap: var(--wf-space-tiny); }
+    .preview-body { padding: var(--wf-space-14) var(--ou-space-4); display: flex; flex-direction: column; gap: var(--wf-size-18); }
+    .preview-section-title {
+      font: var(--ou-text-caption); font-weight: 700; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .06em;
+      margin-bottom: var(--ou-space-2);
+    }
+    .preview-topic-row {
+      display: flex; align-items: baseline; gap: var(--wf-space-6);
+      font: var(--ou-text-body-s); padding: var(--wf-space-1q) 0;
+    }
+    .preview-topic-name {
+      flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .preview-topic-dots {
+      flex: none; color: var(--ou-border-soft);
+      overflow: hidden; white-space: nowrap; font: var(--ou-text-caption);
+    }
+    .preview-topic-count { flex-shrink: 0; font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap; }
+    .preview-topic-total {
+      font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-6);
+      padding-top: var(--wf-space-6); border-top: var(--wf-border-w) solid var(--ou-border-default);
+    }
+    .preview-kv-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font: var(--ou-text-body-s); padding: var(--wf-space-1q) 0;
+    }
+    .preview-kv-key { color: var(--ou-fg-muted); }
+    .preview-kv-val { font-weight: 500; text-align: right; }
+    .preview-empty {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: var(--ou-space-7) var(--ou-space-4); text-align: center;
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted); gap: var(--ou-space-2);
+    }
+    /* Toggle button — icon only, sits at the RIGHT end of tree-root row */
+    .preview-toggle-btn {
+      width: var(--wf-size-22); height: var(--wf-size-22); padding: 0; flex-shrink: 0;
+      border-radius: var(--ou-radius-xs); border: var(--wf-border-w) solid transparent;
+      background: transparent; cursor: pointer; color: var(--ou-fg-muted);
+      display: inline-flex; align-items: center; justify-content: center;
+      position: relative;
+      justify-self: end;
+      margin-right: var(--wf-space-11);
+    }
+    .preview-toggle-btn.active { color: var(--ou-accent-default); border-color: var(--ou-accent-container-hover); background: var(--ou-accent-soft); }
+    .preview-toggle-btn:hover:not(.active) { background: var(--ou-bg-hover); color: var(--ou-fg-default); border-color: var(--ou-border-default); }
+    /* Tooltip reuses action-btn pattern */
+    .preview-toggle-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + var(--wf-space-6)); bottom: auto; right: 0; left: auto; transform: none;
+      background: var(--ou-neutral-900); color: var(--ou-neutral-0);
+      font: var(--ou-text-caption); white-space: nowrap; padding: var(--wf-space-1q) var(--wf-space-7);
+      border-radius: var(--ou-space-1); pointer-events: none; z-index: 30;
+    }
+    .preview-toggle-btn[data-tooltip]:hover::before {
+      content: ''; position: absolute; top: calc(100% + var(--wf-space-half)); bottom: auto;
+      right: var(--wf-space-7); left: auto; transform: none;
+      border: var(--ou-space-1) solid transparent; border-bottom-color: var(--ou-neutral-900);
+      pointer-events: none; z-index: 30;
+    }
+
+    /* ── Tooltip on action buttons ───────────────────────────────── */
+    .action-btn { position: relative; }
+    .action-btn[title]:hover::after {
+      content: attr(title);
+      position: absolute; bottom: calc(100% + var(--wf-space-6)); left: 50%; transform: translateX(-50%);
+      background: var(--ou-neutral-900); color: var(--ou-neutral-0);
+      font: var(--ou-text-caption); white-space: nowrap; padding: var(--wf-space-1q) var(--wf-space-7);
+      border-radius: var(--ou-space-1); pointer-events: none; z-index: 30;
+    }
+    .action-btn[title]:hover::before {
+      content: ''; position: absolute; bottom: calc(100% + var(--wf-space-half));
+      left: 50%; transform: translateX(-50%);
+      border: var(--ou-space-1) solid transparent; border-top-color: var(--ou-neutral-900);
+      pointer-events: none; z-index: 30;
+    }
+
+    /* ── Mode badge (Стандарт / Адаптив) ─────────────────────────── */
+    .mode-badge {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-caption); font-weight: 500; padding: var(--wf-space-half) var(--ou-space-2);
+      border-radius: var(--wf-space-10); white-space: nowrap;
+    }
+    .mode-badge.standard {
+      background: var(--ou-bg-hover); color: var(--ou-fg-muted); border: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .mode-badge.adaptive {
+      background: var(--ou-accent-soft); color: var(--ou-accent-active); border: var(--wf-border-w) solid var(--ou-accent-container-hover);
+    }
+
+    /* ── Flow-type chip (Сценарий) ───────────────────────────────── */
+    .flow-chip {
+      display: inline-flex; align-items: center; gap: var(--wf-space-tiny);
+      font: var(--ou-text-caption); font-weight: 500; color: var(--ou-fg-default);
+      padding: var(--wf-space-half) var(--ou-space-2); border-radius: var(--ou-radius-xs);
+      background: var(--ou-accent-soft); border: var(--wf-border-w) solid var(--ou-border-soft);
+      white-space: nowrap; cursor: default; position: relative;
+    }
+    .flow-chip svg { flex-shrink: 0; color: var(--ou-fg-muted); }
+
+    /* ── Delete folder dialog ───────────────────────────────────── */
+    .modal-overlay {
+      position: absolute; inset: 0;
+      background: color-mix(in srgb, var(--ou-neutral-950) 32%, transparent); z-index: 50;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding-top: var(--wf-size-56);
+    }
+    .modal-dialog {
+      background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s); box-shadow: 0 var(--ou-space-4) var(--ou-space-9) color-mix(in srgb, var(--ou-neutral-950) 22%, transparent);
+      width: var(--wf-size-420); padding: var(--ou-space-6); position: relative;
+    }
+    .modal-title { font: var(--ou-text-body-m); font-weight: 700; margin-bottom: var(--wf-space-6); }
+    .modal-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-bottom: var(--wf-space-14); line-height: 1.5; }
+    .modal-actions { display: flex; gap: var(--ou-space-2); justify-content: flex-end; margin-top: var(--ou-space-5); }
+    .btn-destructive { background: var(--ou-error-default); color: var(--ou-neutral-0); border-color: transparent; }
+    .btn-destructive:hover { opacity: .9; }
+    .btn-destructive:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Lazy-load sentinel — appears when more rows are being fetched */
+    .lazy-sentinel {
+      display: flex; align-items: center; justify-content: center;
+      gap: var(--ou-space-2); padding: var(--wf-space-14) var(--ou-space-6);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+    }
+    .lazy-sentinel.hidden { visibility: hidden; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lazy-spin {
+      width: var(--wf-space-14); height: var(--wf-space-14); border-radius: 50%;
+      border: var(--wf-space-half) solid var(--ou-border-default); border-top-color: var(--ou-accent-default);
+      animation: spin .7s linear infinite; flex-shrink: 0;
+    }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: var(--wf-border-w);
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .ou-shell.wf-state { min-height: unset; padding-top: 0; margin-top: var(--wf-nav-offset, var(--wf-size-52)); height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+    .ou-shell.wf-state.active { display: grid; }
+    .ou-shell .ou-shell__main { padding: 0; overflow: hidden; gap: 0; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+
+    /* ── Speed-dial FAB ──────────────────────────────────────────────────── */
+    /* .fab-wrap is a 56×56 anchor fixed at bottom-right.
+       Chrome collapses flex containers with position:fixed+bottom-only to 0px height,
+       so we use explicit size and position .fab-actions absolutely above the FAB. */
+    .fab-wrap {
+      position: fixed; bottom: var(--ou-space-6); right: var(--ou-space-6); z-index: 20;
+      width: var(--wf-size-56); height: var(--wf-size-56);
+    }
+    .ou-fab {
+      width: var(--wf-size-56); height: var(--wf-size-56);
+      border-radius: var(--ou-radius-pill);
+      background: var(--ou-accent-default); color: var(--ou-fg-on-accent);
+      border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: var(--ou-shadow-m);
+      transition: transform .2s;
+    }
+    .ou-fab:hover { filter: brightness(1.1); }
+    .ou-fab--open { transform: rotate(45deg); }
+    /* Actions float above the fab-wrap anchor */
+    .fab-actions {
+      position: absolute; bottom: calc(100% + var(--ou-space-3)); right: calc((var(--wf-size-56) - var(--wf-size-44)) / 2);
+      display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-end;
+      width: max-content;
+    }
+    .fab-action { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .fab-action-label {
+      font: var(--ou-text-body-s); font-weight: 500;
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      padding: var(--ou-space-1) var(--ou-space-3);
+      box-shadow: var(--ou-shadow-xs); white-space: nowrap;
+    }
+    .fab-action-btn {
+      width: var(--wf-size-44); height: var(--wf-size-44);
+      border-radius: var(--ou-radius-pill);
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: var(--ou-shadow-s); flex-shrink: 0;
+    }
+    .fab-action-btn:hover { background: var(--ou-bg-hover); }
+
+    /* FAB folder picker modal */
+    .fab-folder-list { display: flex; flex-direction: column; gap: var(--ou-space-1); margin-top: var(--ou-space-3); }
+    .fab-folder-item {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3); border-radius: var(--ou-radius-xs);
+      cursor: pointer; font: var(--ou-text-body-s); user-select: none;
+      border: var(--wf-border-w) solid transparent;
+    }
+    .fab-folder-item:hover { background: var(--ou-bg-hover); }
+    .fab-folder-item:has(input:checked) {
+      background: var(--ou-accent-soft); border-color: var(--ou-accent-subtle, var(--ou-accent-default));
+    }
+    .fab-folder-item input[type="radio"] { margin: 0; flex-shrink: 0; accent-color: var(--ou-accent-default); }
+    .fab-folder-item__ico { flex-shrink: 0; color: var(--ou-warning-on-soft); }
+    .fab-folder-note {
+      display: flex; align-items: flex-start; gap: var(--ou-space-2);
+      font: var(--ou-text-body-s); color: var(--ou-info-default);
+      background: var(--ou-info-soft); border-radius: var(--ou-radius-xs);
+      padding: var(--ou-space-2) var(--ou-space-3); margin-bottom: var(--ou-space-2);
+    }
+    /* Wireframe: modal sits above shell but below wf-nav (9999) */
+    .ou-modal-root { z-index: 200; top: var(--wf-nav-offset, var(--wf-size-52)); }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Tests list:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-default')">Default</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-collapsed')">Папка свёрнута</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-search')">Результаты поиска</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-menu-open')">Меню: Черновик</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-menu-open-pub')">Меню: Опубликован</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-folder-menu')">Меню папки</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-folder-delete-a')">Удалить: только папку</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-folder-delete-b')">Удалить: с тестами</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-preview')">Предпросмотр</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-lazy')">Lazy load</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-loading')">Загрузка</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-empty')">Пусто</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-error')">Ошибка</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-fab-folder-pick')">FAB: выбор папки</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-fab-restricted')">FAB: ограниченный</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-fab-open')">FAB: раскрыт</button>
+  <a class="wf-link" href="prd7-editor-drawer.html">Reference (Drawer) &rarr;</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <polyline points="9 18 15 12 9 6"/>
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-folder-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/>
+    <circle cx="12" cy="19" r="1" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+  </symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="20" height="5" x="2" y="3" rx="1"/>
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+    <path d="M10 12h4"/>
+  </symbol>
+  <symbol id="i-users2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M14 19a6 6 0 0 0-12 0"/><circle cx="8" cy="9" r="4"/>
+    <path d="M22 19a6 6 0 0 0-6-6 4 4 0 1 0 0-8"/>
+  </symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M12 10v6"/><path d="M9 13h6"/>
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>
+  </symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/>
+    <line x1="12" y1="8" x2="12.01" y2="8"/>
+  </symbol>
+  <!-- Flow type icons -->
+  <symbol id="i-flow-linear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="15 8 19 12 15 16"/>
+  </symbol>
+  <symbol id="i-flow-topics" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="4" y1="7" x2="10" y2="7"/><line x1="4" y1="12" x2="10" y2="12"/><line x1="4" y1="17" x2="10" y2="17"/>
+    <polyline points="14 9 18 12 14 15"/>
+  </symbol>
+  <symbol id="i-flow-mixed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
+    <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+    <line x1="4" y1="4" x2="9" y2="9"/>
+  </symbol>
+  <symbol id="i-flow-router" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+    <path d="M18 9a9 9 0 0 1-9 9"/>
+  </symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+    <line x1="1" y1="1" x2="23" y2="23"/>
+  </symbol>
+  <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
+  </symbol>
+  <symbol id="i-rotate-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="23 4 23 10 17 10"/>
+    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+  </symbol>
+</svg>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Default — дерево, все папки раскрыты
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-default" class="wf-state ou-shell active">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap" role="search">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск теста по названию"></div></div>
+      </div>
+      <div style="font: var(--ou-text-body-s);color:var(--ou-fg-muted);margin-left:var(--ou-space-1);">
+        Фильтры &mdash; отдельный PRD
+      </div>
+    </div>
+
+    <div class="tree-area" role="tree" aria-label="Список тестов">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div>
+        <div>Статус</div>
+        <div>Режим</div>
+        <div>Сценарий</div>
+        <div>Тем</div>
+        <div>Вопросов</div>
+        <div>Назначений</div>
+        <button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+
+      <!-- ── Root ─────────────────────────────────────────────── -->
+      <div class="tree-root" role="treeitem" aria-expanded="true" aria-level="1">
+        <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div>
+      </div>
+
+      <!-- ── Folder: Информационная безопасность ────────────── -->
+      <div class="tree-folder" role="treeitem" aria-expanded="true" aria-level="2"
+           aria-label="Папка: Информационная безопасность, 2 теста, раскрыта">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность
+          <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions">
+          <button class="action-btn" type="button" aria-label="Действия с папкой">
+            <svg width="14" height="14"><use href="#i-more"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Test 1 (child of folder): standard, linear_flat -->
+      <div class="tree-test indent-1" role="treeitem" aria-level="3"
+           aria-label="Основы информационной безопасности, Опубликован, стандартный, линейный, 3 темы, 45 вопросов, 12 назначений">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info">
+            <div class="test-name">Основы информационной безопасности</div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--success" aria-label="Статус: опубликован">Опубликован</span></div>
+        <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
+        <div>
+          <span class="flow-chip" title="Линейный — все вопросы в одном потоке">
+            <svg width="12" height="12" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный
+          </span>
+        </div>
+        <div class="tree-num">3</div>
+        <div class="tree-num">45</div>
+        <div class="tree-num">12</div>
+        <div class="tree-test-actions">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать тест">
+            <svg width="14" height="14"><use href="#i-pencil"/></svg>
+          </button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить пользователям">
+            <svg width="14" height="14"><use href="#i-users2"/></svg>
+          </button>
+          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика">
+            <svg width="14" height="14"><use href="#i-chart"/></svg>
+          </button>
+          <div class="more-btn-wrap">
+            <button class="action-btn" type="button" aria-label="Ещё действия">
+              <svg width="14" height="14"><use href="#i-more"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test 2 (child of folder): adaptive, linear_by_topics -->
+      <div class="tree-test indent-1" role="treeitem" aria-level="3"
+           aria-label="GDPR для разработчиков, Черновик, адаптивный, по темам, 2 темы, 30 вопросов, 0 назначений">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info">
+            <div class="test-name">GDPR для разработчиков</div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div><span class="mode-badge adaptive" title="Адаптивный режим (IRT)">Адаптив</span></div>
+        <div>
+          <span class="flow-chip" title="Линейный по темам — последовательно по каждой теме">
+            <svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам
+          </span>
+        </div>
+        <div class="tree-num">2</div>
+        <div class="tree-num">30</div>
+        <div class="tree-num">0</div>
+        <div class="tree-test-actions">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать тест"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить пользователям"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap">
+            <button class="action-btn" type="button" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test 3 (no folder — root level): standard, router_by_topics; template drift -->
+      <div class="tree-test" role="treeitem" aria-level="2"
+           aria-label="Аудит логов SCORM, Черновик, требует обновления (шаблон обновлён), стандартный, роутер по темам, 1 тема, 20 вопросов, 3 назначения, без папки">
+        <div class="tree-test-name">
+          <div class="test-info">
+            <div class="test-name">Аудит логов SCORM</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--ou-space-1);align-items:flex-start">
+          <span class="ou-tag ou-tag--neutral">Черновик</span>
+          <span class="ou-tag ou-tag--warning" title="Шаблон обновлён: при открытии будет показан диалог сопоставления вариантов (§8, s-mapping)">Требует обновления</span>
+        </div>
+        <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
+        <div>
+          <span class="flow-chip" title="Роутер по темам — переход по результатам каждой темы">
+            <svg width="12" height="12" aria-hidden="true"><use href="#i-flow-router"/></svg>Роутер
+          </span>
+        </div>
+        <div class="tree-num">1</div>
+        <div class="tree-num">20</div>
+        <div class="tree-num">3</div>
+        <div class="tree-test-actions">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать тест"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить пользователям"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap">
+            <button class="action-btn" type="button" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- sentinel is hidden when all items loaded; spinner shown on scroll-to-bottom -->
+    <div class="lazy-sentinel hidden" aria-hidden="true">
+      <span class="lazy-spin"></span>Загрузка...
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Папка свёрнута
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-collapsed" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск"></div></div>
+      </div>
+    </div>
+    <div class="tree-area" role="tree" aria-label="Список тестов">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+
+      <div class="tree-root" role="treeitem" aria-expanded="true" aria-level="1">
+        <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div>
+      </div>
+
+      <!-- Collapsed folder -->
+      <div class="tree-folder" role="treeitem" aria-expanded="false" aria-level="2"
+           aria-label="Папка: Информационная безопасность, 2 теста, свёрнута">
+        <div class="tree-folder-name">
+          <span class="chevron" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder"/></svg>
+          Информационная безопасность
+          <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions">
+          <button class="action-btn" type="button" aria-label="Действия с папкой"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <!-- Children hidden (collapsed) — nothing rendered -->
+
+      <!-- Test without folder — root level (aria-level="2") -->
+      <div class="tree-test" role="treeitem" aria-level="2"
+           aria-label="Аудит логов SCORM, Черновик, стандартный, роутер по темам, 1 тема, 20 вопросов, 3 назначения, без папки">
+        <div class="tree-test-name">
+          <div class="test-info">
+            <div class="test-name">Аудит логов SCORM</div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
+        <div><span class="flow-chip" title="Роутер по темам"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-router"/></svg>Роутер</span></div>
+        <div class="tree-num">1</div>
+        <div class="tree-num">20</div>
+        <div class="tree-num">3</div>
+        <div class="tree-test-actions">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap">
+            <button class="action-btn" type="button" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="lazy-sentinel hidden" aria-hidden="true">
+      <span class="lazy-spin"></span>Загрузка...
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Результаты поиска — плоский список, все папки раскрыты, путь виден
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-search" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="безопасность" aria-label="Поиск"></div></div>
+      </div>
+      <button class="search-clear" type="button" aria-label="Сбросить поиск">Сбросить</button>
+    </div>
+
+    <!-- Search results banner -->
+    <div class="search-banner" role="status" aria-live="polite"
+         aria-label="Результаты поиска по запросу безопасность: 2 теста">
+      <svg width="14" height="14" aria-hidden="true"><use href="#i-info"/></svg>
+      Результаты поиска по <strong>&ldquo;безопасность&rdquo;</strong>: 2 теста. Все папки раскрыты.
+    </div>
+
+    <!-- Flat list — no tree indentation, path shown per row -->
+    <div class="tree-area" role="list" aria-label="Результаты поиска">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+
+      <!-- Result 1 -->
+      <div class="tree-test" role="listitem"
+           aria-label="Основы информационной безопасности, папка Информационная безопасность">
+        <div class="tree-test-name" style="padding-left:var(--ou-space-6);">
+          <div class="test-info">
+            <div class="test-name">Основы информационной безопасности</div>
+            <div class="tree-test-path">
+              <svg width="11" height="11" aria-hidden="true"><use href="#i-folder"/></svg>
+              <span>Информационная безопасность</span>
+            </div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
+        <div><span class="flow-chip" title="Линейный"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный</span></div>
+        <div class="tree-num">3</div>
+        <div class="tree-num">45</div>
+        <div class="tree-num">12</div>
+        <div class="tree-test-actions" style="opacity:1;">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap">
+            <button class="action-btn" type="button" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result 2 -->
+      <div class="tree-test" role="listitem"
+           aria-label="GDPR для разработчиков, папка Информационная безопасность">
+        <div class="tree-test-name" style="padding-left:var(--ou-space-6);">
+          <div class="test-info">
+            <div class="test-name">GDPR для разработчиков</div>
+            <div class="tree-test-path">
+              <svg width="11" height="11" aria-hidden="true"><use href="#i-folder"/></svg>
+              <span>Информационная безопасность</span>
+            </div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div><span class="mode-badge adaptive" title="Адаптивный режим (IRT)">Адаптив</span></div>
+        <div><span class="flow-chip" title="Линейный по темам"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам</span></div>
+        <div class="tree-num">2</div>
+        <div class="tree-num">30</div>
+        <div class="tree-num">0</div>
+        <div class="tree-test-actions">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap">
+            <button class="action-btn" type="button" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lazy-sentinel hidden" aria-hidden="true">
+      <span class="lazy-spin"></span>Загрузка...
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Меню действий (dropdown open)
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-menu-open" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск"></div></div>
+      </div>
+    </div>
+    <div class="tree-area" role="tree">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+
+      <div class="tree-root" role="treeitem" aria-level="1">
+        <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div>
+      </div>
+
+      <div class="tree-folder" role="treeitem" aria-expanded="true" aria-level="2">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions" style="opacity:1;">
+          <button class="action-btn" type="button" aria-label="Действия с папкой"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+
+      <div class="tree-test indent-1 selected" role="treeitem" aria-level="3" style="position:relative;">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info">
+            <div class="test-name">GDPR для разработчиков</div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div><span class="mode-badge adaptive" title="Адаптивный режим (IRT)">Адаптив</span></div>
+        <div><span class="flow-chip" title="Линейный по темам"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам</span></div>
+        <div class="tree-num">2</div>
+        <div class="tree-num">30</div>
+        <div class="tree-num">0</div>
+        <div class="tree-test-actions" style="opacity:1;position:relative;">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap" style="position:relative;">
+            <button class="action-btn" type="button" aria-label="Ещё действия"
+                    style="background:var(--ou-bg-hover);border-color:var(--ou-border-default);">
+              <svg width="14" height="14"><use href="#i-more"/></svg>
+            </button>
+            <div class="dropdown-menu" role="menu" aria-label="Действия с тестом">
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-pencil"/></svg>Редактировать</div>
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-download"/></svg>Экспорт SCORM</div>
+              <hr class="dropdown-sep">
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-globe"/></svg>Опубликовать</div>
+              <hr class="dropdown-sep">
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-folder"/></svg>Переместить в папку</div>
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-archive"/></svg>Архивировать</div>
+              <hr class="dropdown-sep">
+              <div class="dropdown-item danger" role="menuitem"><svg width="14" height="14"><use href="#i-trash"/></svg>Удалить тест...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Меню действий — Опубликован (Снять с публикации)
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-menu-open-pub" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск"></div></div>
+      </div>
+    </div>
+    <div class="tree-area" role="tree">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+
+      <div class="tree-root" role="treeitem" aria-level="1">
+        <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div>
+      </div>
+
+      <div class="tree-folder" role="treeitem" aria-expanded="true" aria-level="2">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions" style="opacity:1;">
+          <button class="action-btn" type="button" aria-label="Действия с папкой"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+
+      <div class="tree-test indent-1 selected" role="treeitem" aria-level="3" style="position:relative;">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info">
+            <div class="test-name">Основы информационной безопасности</div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
+        <div><span class="flow-chip" title="Линейный"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный</span></div>
+        <div class="tree-num">3</div>
+        <div class="tree-num">45</div>
+        <div class="tree-num">12</div>
+        <div class="tree-test-actions" style="opacity:1;position:relative;">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap" style="position:relative;">
+            <button class="action-btn" type="button" aria-label="Ещё действия"
+                    style="background:var(--ou-bg-hover);border-color:var(--ou-border-default);">
+              <svg width="14" height="14"><use href="#i-more"/></svg>
+            </button>
+            <div class="dropdown-menu" role="menu" aria-label="Действия с тестом">
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-pencil"/></svg>Редактировать</div>
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-download"/></svg>Экспорт SCORM</div>
+              <hr class="dropdown-sep">
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-eye-off"/></svg>Снять с публикации</div>
+              <hr class="dropdown-sep">
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-folder"/></svg>Переместить в папку</div>
+              <div class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-archive"/></svg>Архивировать</div>
+              <hr class="dropdown-sep">
+              <div class="dropdown-item danger" role="menuitem"><svg width="14" height="14"><use href="#i-trash"/></svg>Удалить тест...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Предпросмотр — панель открыта, выбран тест
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-preview" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap" role="search">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск"></div></div>
+      </div>
+      <div style="font: var(--ou-text-body-s);color:var(--ou-fg-muted);margin-left:var(--ou-space-1);">Фильтры &mdash; отдельный PRD</div>
+    </div>
+
+    <div class="content-split">
+      <!-- ── Tree section ─────────────────────────────────────── -->
+      <div class="tree-section">
+        <div class="tree-area" role="tree" aria-label="Список тестов">
+          <div class="tree-header" aria-hidden="true">
+            <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><button class="preview-toggle-btn active" type="button" aria-pressed="true" data-tooltip="Скрыть предпросмотр" aria-label="Скрыть предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+          </div>
+
+          <div class="tree-root" role="treeitem" aria-expanded="true" aria-level="1">
+            <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div>
+          </div>
+
+          <div class="tree-folder" role="treeitem" aria-expanded="true" aria-level="2">
+            <div class="tree-folder-name">
+              <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+              <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+              Информационная безопасность <span class="folder-count">(2)</span>
+            </div>
+            <div></div><div></div><div></div><div></div><div></div><div></div>
+            <div class="tree-folder-actions">
+              <button class="action-btn" aria-label="Действия с папкой"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Selected test row -->
+          <div class="tree-test indent-1 selected" role="treeitem" aria-level="3" aria-selected="true">
+            <div class="tree-test-name">
+              <span class="indent-line" aria-hidden="true"></span>
+              <div class="test-info">
+                <div class="test-name">Основы информационной безопасности</div>
+              </div>
+            </div>
+            <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+            <div><span class="mode-badge standard">Стандарт</span></div>
+            <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный</span></div>
+            <div class="tree-num">3</div>
+            <div class="tree-num">45</div>
+            <div class="tree-num">12</div>
+            <div class="tree-test-actions">
+              <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+              <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>
+
+              <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+              <div class="more-btn-wrap"><button class="action-btn" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+            </div>
+          </div>
+
+          <div class="tree-test indent-1" role="treeitem" aria-level="3">
+            <div class="tree-test-name">
+              <span class="indent-line" aria-hidden="true"></span>
+              <div class="test-info"><div class="test-name">GDPR для разработчиков</div></div>
+            </div>
+            <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+            <div><span class="mode-badge adaptive">Адаптив</span></div>
+            <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам</span></div>
+            <div class="tree-num">2</div><div class="tree-num">30</div><div class="tree-num">0</div>
+            <div class="tree-test-actions">
+              <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+              <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>
+
+              <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+              <div class="more-btn-wrap"><button class="action-btn" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+            </div>
+          </div>
+
+          <div class="tree-test" role="treeitem" aria-level="2">
+            <div class="tree-test-name">
+              <div class="test-info"><div class="test-name">Аудит логов SCORM</div></div>
+            </div>
+            <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+            <div><span class="mode-badge standard">Стандарт</span></div>
+            <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="tree-num">1</div><div class="tree-num">20</div><div class="tree-num">3</div>
+            <div class="tree-test-actions">
+              <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+              <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>
+
+              <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+              <div class="more-btn-wrap"><button class="action-btn" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Preview panel ────────────────────────────────────── -->
+      <aside class="preview-panel" aria-label="Предпросмотр теста">
+        <!-- Header: name + key badges -->
+        <div class="preview-header">
+          <div class="preview-name">Основы информационной безопасности</div>
+          <div class="preview-badges">
+            <span class="ou-tag ou-tag--success">Опубликован</span>
+            <span class="mode-badge standard">Стандарт</span>
+            <span class="flow-chip" style="font: var(--ou-text-caption);">
+              <svg width="11" height="11" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный
+            </span>
+          </div>
+        </div>
+
+        <div class="preview-body">
+          <!-- Section 1: Topics -->
+          <div>
+            <div class="preview-section-title">Темы</div>
+            <div class="preview-topic-row">
+              <span class="preview-topic-name">Базовые понятия ИБ</span>
+              <span class="preview-topic-dots">············</span>
+              <span class="preview-topic-count">15 вопр.</span>
+            </div>
+            <div class="preview-topic-row">
+              <span class="preview-topic-name">Угрозы и виды атак</span>
+              <span class="preview-topic-dots">··········</span>
+              <span class="preview-topic-count">18 вопр.</span>
+            </div>
+            <div class="preview-topic-row">
+              <span class="preview-topic-name">Защита персональных данных</span>
+              <span class="preview-topic-dots">·····</span>
+              <span class="preview-topic-count">12 вопр.</span>
+            </div>
+            <div class="preview-topic-total">
+              В пуле: 45 вопр. &nbsp;&middot;&nbsp; Задаётся: 45
+            </div>
+          </div>
+
+          <!-- Section 2: Scenario & pass settings -->
+          <div>
+            <div class="preview-section-title">Прохождение</div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Сценарий</span>
+              <span class="preview-kv-val">Линейный (все вопросы)</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Порог успеха</span>
+              <span class="preview-kv-val">75 %</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Лимит времени</span>
+              <span class="preview-kv-val" style="color:var(--ou-fg-muted);">не задан</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Попыток</span>
+              <span class="preview-kv-val" style="color:var(--ou-fg-muted);">не ограничено</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Перемешать вопросы</span>
+              <span class="preview-kv-val">Да</span>
+            </div>
+          </div>
+
+          <!-- Section 3: Usage & history -->
+          <div>
+            <div class="preview-section-title">Использование</div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Назначений</span>
+              <span class="preview-kv-val">12</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Попыток всего</span>
+              <span class="preview-kv-val">87</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Создан</span>
+              <span class="preview-kv-val">15 янв 2026</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Изменён</span>
+              <span class="preview-kv-val">3 мая 2026</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Lazy load — дерево прокручено вниз, подгружается следующая порция
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-lazy" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск"></div></div>
+      </div>
+    </div>
+    <div class="tree-area" role="tree" aria-label="Список тестов">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+      <div class="tree-root" role="treeitem" aria-expanded="true" aria-level="1">
+        <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(47)</span></div>
+      </div>
+      <!-- ... older folders already rendered above the scroll viewport ... -->
+      <!-- Folder: Охрана труда (last visible) -->
+      <div class="tree-folder" role="treeitem" aria-expanded="true" aria-level="2">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Охрана труда <span class="folder-count">(3)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions">
+          <button class="action-btn" type="button" aria-label="Действия с папкой"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <div class="tree-test indent-1" role="treeitem" aria-level="3">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info">
+            <div class="test-name">Инструктаж по электробезопасности</div>
+          </div>
+        </div>
+        <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
+        <div><span class="flow-chip" title="Линейный"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный</span></div>
+        <div class="tree-num">2</div>
+        <div class="tree-num">18</div>
+        <div class="tree-num">9</div>
+        <div class="tree-test-actions">
+          <button class="action-btn" type="button" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil"/></svg></button>
+          <button class="action-btn" type="button" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users2"/></svg></button>          <button class="action-btn" type="button" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart"/></svg></button>
+          <div class="more-btn-wrap"><button class="action-btn" type="button" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+        </div>
+      </div>
+
+    </div>
+    <!-- Sentinel outside role="tree" — role="status" не может быть внутри tree -->
+    <div class="lazy-sentinel" role="status" aria-live="polite" aria-label="Загрузка дополнительных тестов">
+      <span class="lazy-spin" aria-hidden="true"></span>
+      Загрузка...
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Loading
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-loading" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="ou-skel" style="width:var(--wf-size-300);height:var(--wf-size-34);border-radius:var(--ou-radius-xs);"></div>
+    </div>
+    <div style="padding:var(--ou-space-4) var(--ou-space-6);">
+      <!-- Root skeleton -->
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--ou-space-2) 0;border-bottom:var(--wf-border-w) solid var(--ou-border-default);">
+        <div class="ou-skel" style="width:var(--wf-space-14);height:var(--wf-space-14);border-radius:var(--wf-space-half);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-120);height:var(--wf-space-13);"></div>
+      </div>
+      <!-- Folder skeleton -->
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--wf-space-10) 0;border-bottom:var(--wf-border-w) solid var(--ou-border-default);">
+        <div class="ou-skel" style="width:var(--ou-space-3);height:var(--ou-space-3);border-radius:var(--wf-space-half);"></div>
+        <div class="ou-skel" style="width:var(--wf-space-14);height:var(--wf-space-14);border-radius:var(--wf-space-half);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-200);height:var(--wf-space-13);"></div>
+      </div>
+      <!-- Test skeleton x2 (indented) -->
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--wf-space-10) 0 var(--wf-space-10) var(--wf-size-28);border-bottom:var(--wf-border-w) solid var(--ou-border-default);">
+        <div class="ou-skel" style="width:var(--wf-size-180);height:var(--wf-space-13);margin-right:auto;"></div>
+        <div class="ou-skel" style="width:var(--wf-size-70);height:var(--ou-space-5);border-radius:var(--wf-space-10);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-28);height:var(--wf-space-13);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-28);height:var(--wf-space-13);"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--wf-space-10) 0 var(--wf-space-10) var(--wf-size-28);border-bottom:var(--wf-border-w) solid var(--ou-border-default);">
+        <div class="ou-skel" style="width:var(--wf-size-140);height:var(--wf-space-13);margin-right:auto;"></div>
+        <div class="ou-skel" style="width:var(--wf-size-70);height:var(--ou-space-5);border-radius:var(--wf-space-10);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-28);height:var(--wf-space-13);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-28);height:var(--wf-space-13);"></div>
+      </div>
+      <!-- Folder 2 skeleton -->
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--wf-space-10) 0;border-bottom:var(--wf-border-w) solid var(--ou-border-default);">
+        <div class="ou-skel" style="width:var(--ou-space-3);height:var(--ou-space-3);border-radius:var(--wf-space-half);"></div>
+        <div class="ou-skel" style="width:var(--wf-space-14);height:var(--wf-space-14);border-radius:var(--wf-space-half);"></div>
+        <div class="ou-skel" style="width:var(--ou-space-11);height:var(--wf-space-13);"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--wf-space-10) 0 var(--wf-space-10) var(--wf-size-28);border-bottom:var(--wf-border-w) solid var(--ou-border-default);">
+        <div class="ou-skel" style="width:var(--wf-size-160);height:var(--wf-space-13);margin-right:auto;"></div>
+        <div class="ou-skel" style="width:var(--wf-size-70);height:var(--ou-space-5);border-radius:var(--wf-space-10);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-28);height:var(--wf-space-13);"></div>
+        <div class="ou-skel" style="width:var(--wf-size-28);height:var(--wf-space-13);"></div>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Пусто (нет тестов)
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-empty" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="tree-area">
+      <div class="tree-root" role="treeitem" aria-level="1">
+        <div class="tree-root-label">
+          <svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder"/></svg>
+          Все тесты <span class="folder-count">&nbsp;(0)</span>
+        </div>
+      </div>
+      <div class="empty-tree" aria-label="Тесты отсутствуют">
+        <div class="empty-icon" aria-hidden="true">
+          <svg width="22" height="22"><use href="#i-clipboard"/></svg>
+        </div>
+        <div style="font: var(--ou-text-body-m);font-weight:600;margin-bottom:var(--wf-space-6);">Тестов пока нет</div>
+        <div style="font: var(--ou-text-body-s);color:var(--ou-fg-muted);max-width:var(--wf-size-280);line-height:1.6;margin-bottom:var(--ou-space-4);">
+          Создайте первый тест или сначала добавьте папку для организации.
+        </div>
+        <div style="display:flex;gap:var(--ou-space-2);">
+          <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-folder-plus"/></svg> Создать папку</button>
+          <button class="ou-btn ou-btn--primary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-plus"/></svg> Новый тест</button>
+        </div>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Ошибка загрузки списка — state-level error с retry
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-error" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="tree-area">
+      <div class="empty-tree" role="alert" aria-live="assertive" aria-label="Ошибка загрузки тестов">
+        <div class="empty-icon" aria-hidden="true" style="color: var(--ou-error-default); background: var(--ou-error-soft); border-color: var(--ou-error-default);">
+          <svg width="22" height="22"><use href="#i-alert-circle"/></svg>
+        </div>
+        <div style="font: var(--ou-text-body-m);font-weight:600;margin-bottom:var(--wf-space-6);">Не удалось загрузить тесты</div>
+        <div style="font: var(--ou-text-body-s);color:var(--ou-fg-muted);max-width:var(--wf-size-280);line-height:1.6;margin-bottom:var(--ou-space-4);">
+          Проверьте подключение к сети и попробуйте ещё раз. Если ошибка повторяется — свяжитесь с поддержкой.
+        </div>
+        <div style="display:flex;gap:var(--ou-space-2);">
+          <button class="ou-btn ou-btn--primary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-rotate-cw"/></svg> Повторить</button>
+          <a class="ou-btn ou-btn--secondary ou-btn--s" href="prd7-tests-archive.html" style="text-decoration:none;">Открыть архив</a>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Меню папки — dropdown открыт для строки папки
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-folder-menu" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск"></div></div>
+      </div>
+    </div>
+    <div class="tree-area" role="tree">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+
+      <div class="tree-root" role="treeitem" aria-expanded="true" aria-level="1">
+        <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div>
+      </div>
+
+      <!-- Folder row — dropdown open -->
+      <div class="tree-folder" role="treeitem" aria-expanded="true" aria-level="2" style="background:var(--ou-bg-hover);"
+           aria-label="Папка: Информационная безопасность, 2 теста, раскрыта">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность
+          <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions" style="opacity:1;">
+          <div class="more-btn-wrap" style="position:relative;">
+            <button class="action-btn" type="button" aria-label="Действия с папкой"
+                    style="background:var(--ou-bg-hover);border-color:var(--ou-border-default);">
+              <svg width="14" height="14"><use href="#i-more"/></svg>
+            </button>
+            <div class="dropdown-menu" role="menu" aria-label="Действия с папкой">
+              <div class="dropdown-item" role="menuitem">
+                <svg width="14" height="14"><use href="#i-pencil"/></svg>Переименовать
+              </div>
+              <hr class="dropdown-sep">
+              <div class="dropdown-item danger" role="menuitem">
+                <svg width="14" height="14"><use href="#i-trash"/></svg>Удалить папку...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Children (dimmed, behind dropdown overlay) -->
+      <div class="tree-test indent-1" role="treeitem" aria-level="3" style="opacity:.45;">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info"><div class="test-name">Основы информационной безопасности</div></div>
+        </div>
+        <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div><span class="mode-badge standard">Стандарт</span></div>
+        <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный</span></div>
+        <div class="tree-num">3</div><div class="tree-num">45</div><div class="tree-num">12</div>
+        <div class="tree-test-actions"></div>
+      </div>
+      <div class="tree-test indent-1" role="treeitem" aria-level="3" style="opacity:.45;">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info"><div class="test-name">GDPR для разработчиков</div></div>
+        </div>
+        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div><span class="mode-badge adaptive">Адаптив</span></div>
+        <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам</span></div>
+        <div class="tree-num">2</div><div class="tree-num">30</div><div class="tree-num">0</div>
+        <div class="tree-test-actions"></div>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Удалить папку — вариант A: только папку, тесты перемещаются
+     Реф: PowerPoint «Удалить раздел» — Delete Section Only
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-folder-delete-a" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+    <div class="tree-area" role="tree" aria-hidden="true" style="opacity:.4;pointer-events:none;">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><div></div>
+      </div>
+      <div class="tree-root"><div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div></div>
+      <div class="tree-folder">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions"></div>
+      </div>
+      <div class="tree-test indent-1">
+        <div class="tree-test-name"><span class="indent-line" aria-hidden="true"></span><div class="test-info"><div class="test-name">Основы информационной безопасности</div></div></div>
+        <div></div><div></div><div></div><div class="tree-num">3</div><div class="tree-num">45</div><div class="tree-num">12</div><div></div>
+      </div>
+    </div>
+
+    <!-- Modal overlay -->
+    <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="del-a-title">
+      <div class="ou-modal__backdrop"></div>
+      <div class="ou-modal ou-modal--m">
+        <div class="ou-modal__head">
+          <div class="ou-modal__head-text">
+            <p class="ou-modal__title" id="del-a-title">Удалить папку «Информационная безопасность»?</p>
+            <p class="ou-modal__desc">Папка содержит 2 теста. Выберите, что сделать с тестами.</p>
+          </div>
+          <button class="ou-modal__close" type="button" aria-label="Закрыть">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg>
+          </button>
+        </div>
+        <div class="ou-modal__body" style="padding-top: var(--ou-space-2);">
+          <fieldset class="ou-choice-card-group">
+            <div class="ou-choice-card-group__items">
+              <!-- Option A — selected -->
+              <label class="ou-choice-card is-selected">
+                <input class="ou-choice-card__input" type="radio" name="del-a-action" value="folder-only" checked>
+                <span class="ou-choice-card__lead" aria-hidden="true">
+                  <svg width="20" height="20"><use href="#i-folder"/></svg>
+                </span>
+                <span class="ou-choice-card__body">
+                  <span class="ou-choice-card__title">Только папку</span>
+                  <span class="ou-choice-card__desc">Тесты сохраняются и перемещаются в указанное место.</span>
+                  <span class="ou-choice-card__inset">
+                    <label for="del-a-dest">Переместить тесты в:</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" id="del-a-dest">
+                      <option value="">Корень (Все тесты)</option>
+                      <option>Онбординг</option>
+                      <option>Охрана труда</option>
+                    </select></div></div>
+                  </span>
+                </span>
+              </label>
+
+              <!-- Option B — not selected -->
+              <label class="ou-choice-card ou-choice-card--destructive">
+                <input class="ou-choice-card__input" type="radio" name="del-a-action" value="folder-and-tests">
+                <span class="ou-choice-card__lead" aria-hidden="true">
+                  <svg width="20" height="20"><use href="#i-trash"/></svg>
+                </span>
+                <span class="ou-choice-card__body">
+                  <span class="ou-choice-card__title">Папку и все тесты</span>
+                  <span class="ou-choice-card__desc">2 теста будут удалены без возможности восстановления.</span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="ou-modal__foot">
+          <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить папку</button>
+        </div>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Удалить папку — вариант B: папку вместе с тестами
+     Реф: PowerPoint «Удалить раздел» — Delete Section and Slides
+     Требует жёсткого подтверждения: ввод точного имени папки
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-folder-delete-b" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+    <div class="tree-area" role="tree" aria-hidden="true" style="opacity:.4;pointer-events:none;">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><div></div>
+      </div>
+      <div class="tree-root"><div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div></div>
+      <div class="tree-folder">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions"></div>
+      </div>
+      <div class="tree-test indent-1">
+        <div class="tree-test-name"><span class="indent-line" aria-hidden="true"></span><div class="test-info"><div class="test-name">Основы информационной безопасности</div></div></div>
+        <div></div><div></div><div></div><div class="tree-num">3</div><div class="tree-num">45</div><div class="tree-num">12</div><div></div>
+      </div>
+    </div>
+
+    <!-- Modal overlay -->
+    <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="del-b-title">
+      <div class="ou-modal__backdrop"></div>
+      <div class="ou-modal ou-modal--m">
+        <div class="ou-modal__head">
+          <div class="ou-modal__head-text">
+            <p class="ou-modal__title" id="del-b-title">Удалить папку «Информационная безопасность»?</p>
+            <p class="ou-modal__desc">Папка содержит 2 теста. Выберите, что сделать с тестами.</p>
+          </div>
+          <button class="ou-modal__close" type="button" aria-label="Закрыть">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg>
+          </button>
+        </div>
+        <div class="ou-modal__body" style="padding-top: var(--ou-space-2);">
+          <fieldset class="ou-choice-card-group">
+            <div class="ou-choice-card-group__items">
+              <!-- Option A — not selected -->
+              <label class="ou-choice-card">
+                <input class="ou-choice-card__input" type="radio" name="del-b-action" value="folder-only">
+                <span class="ou-choice-card__lead" aria-hidden="true">
+                  <svg width="20" height="20"><use href="#i-folder"/></svg>
+                </span>
+                <span class="ou-choice-card__body">
+                  <span class="ou-choice-card__title">Только папку</span>
+                  <span class="ou-choice-card__desc">Тесты сохраняются и перемещаются в указанное место.</span>
+                </span>
+              </label>
+
+              <!-- Option B — selected (destructive) -->
+              <label class="ou-choice-card ou-choice-card--destructive is-selected">
+                <input class="ou-choice-card__input" type="radio" name="del-b-action" value="folder-and-tests" checked>
+                <span class="ou-choice-card__lead" aria-hidden="true">
+                  <svg width="20" height="20"><use href="#i-trash"/></svg>
+                </span>
+                <span class="ou-choice-card__body">
+                  <span class="ou-choice-card__title">Папку и все тесты</span>
+                  <span class="ou-choice-card__desc">2 теста будут удалены без возможности восстановления.</span>
+                  <span class="ou-banner ou-banner--warning">
+                    <svg width="14" height="14" aria-hidden="true" style="flex-shrink:0;margin-top:var(--wf-border-w);"><use href="#i-info"/></svg>
+                    Это действие необратимо. Все попытки прохождения, назначения и вопросы этих тестов также будут удалены.
+                  </span>
+                  <span class="ou-choice-card__inset">
+                    <div style="display: flex; flex-direction: column; gap: var(--ou-space-1);">
+                      <label for="del-b-confirm">Введите название папки для подтверждения:</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" id="del-b-confirm" placeholder="Информационная безопасность"
+                             aria-describedby="del-b-hint"></div></div>
+                      <span id="del-b-hint" style="font: var(--ou-text-body-xs); color: var(--ou-fg-muted);">
+                        Введите точно: <strong>Информационная безопасность</strong>
+                      </span>
+                    </div>
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        </div>
+        <div class="ou-modal__foot">
+          <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--destructive ou-btn--s" type="button" disabled
+                  title="Введите название папки для активации кнопки">Удалить всё</button>
+        </div>
+      </div>
+    </div>
+    <div class="fab-wrap">
+      <button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: FAB — выбор папки для нового теста (без ограничений)
+     Пользователь кликнул FAB; доступны все папки + корень.
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-fab-folder-pick" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+    <div class="toolbar" style="opacity:.4;pointer-events:none;">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск" tabindex="-1"></div></div>
+      </div>
+    </div>
+    <div class="tree-area" role="tree" aria-hidden="true" style="opacity:.4;pointer-events:none;">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><div></div>
+      </div>
+      <div class="tree-root"><div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div></div>
+      <div class="tree-folder">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+      </div>
+      <div class="tree-folder">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Охрана труда <span class="folder-count">(1)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+      </div>
+    </div>
+
+    <!-- FAB behind modal (pointer-events:none; backdrop covers it via z-index) -->
+    <div class="fab-wrap" aria-hidden="true" style="pointer-events:none;">
+      <button class="ou-fab" type="button" aria-label="Создать"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+
+    <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="fab-pick-title">
+      <div class="ou-modal__backdrop"></div>
+      <div class="ou-modal ou-modal--s">
+        <div class="ou-modal__head">
+          <div class="ou-modal__head-text">
+            <p class="ou-modal__title" id="fab-pick-title">Новый тест</p>
+            <p class="ou-modal__desc">Выберите папку для размещения теста</p>
+          </div>
+          <button class="ou-modal__close" type="button" aria-label="Закрыть">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg>
+          </button>
+        </div>
+        <div class="ou-modal__body">
+          <div class="fab-folder-list">
+            <label class="fab-folder-item">
+              <input type="radio" name="fab-pick-folder" value="root">
+              <svg width="14" height="14" class="fab-folder-item__ico" style="color:var(--ou-fg-muted);" aria-hidden="true"><use href="#i-folder"/></svg>
+              Корень (без папки)
+            </label>
+            <label class="fab-folder-item">
+              <input type="radio" name="fab-pick-folder" value="ib" checked>
+              <svg width="14" height="14" class="fab-folder-item__ico" aria-hidden="true"><use href="#i-folder"/></svg>
+              Информационная безопасность
+            </label>
+            <label class="fab-folder-item">
+              <input type="radio" name="fab-pick-folder" value="ot">
+              <svg width="14" height="14" class="fab-folder-item__ico" aria-hidden="true"><use href="#i-folder"/></svg>
+              Охрана труда
+            </label>
+            <label class="fab-folder-item">
+              <input type="radio" name="fab-pick-folder" value="onb">
+              <svg width="14" height="14" class="fab-folder-item__ico" aria-hidden="true"><use href="#i-folder"/></svg>
+              Онбординг
+            </label>
+          </div>
+          <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" style="margin-top:var(--ou-space-2);">
+            <svg width="14" height="14" aria-hidden="true"><use href="#i-folder-plus"/></svg>
+            Создать новую папку...
+          </button>
+        </div>
+        <div class="ou-modal__foot">
+          <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Создать тест</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: FAB — выбор папки (ограниченный пользователь)
+     Пользователь может создавать тесты только в разрешённых папках.
+     Недоступные папки не показываются. Опция «Корень» скрыта.
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-fab-restricted" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+    <div class="toolbar" style="opacity:.4;pointer-events:none;">
+      <div class="search-input-wrap">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск" tabindex="-1"></div></div>
+      </div>
+    </div>
+    <div class="tree-area" role="tree" aria-hidden="true" style="opacity:.4;pointer-events:none;">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><div></div>
+      </div>
+      <div class="tree-root"><div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div></div>
+      <div class="tree-folder">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+      </div>
+    </div>
+
+    <!-- FAB behind modal -->
+    <div class="fab-wrap" aria-hidden="true" style="pointer-events:none;">
+      <button class="ou-fab" type="button" aria-label="Создать"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+    </div>
+
+    <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="fab-restr-title">
+      <div class="ou-modal__backdrop"></div>
+      <div class="ou-modal ou-modal--s">
+        <div class="ou-modal__head">
+          <div class="ou-modal__head-text">
+            <p class="ou-modal__title" id="fab-restr-title">Новый тест</p>
+            <p class="ou-modal__desc">Выберите папку для размещения теста</p>
+          </div>
+          <button class="ou-modal__close" type="button" aria-label="Закрыть">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-x"/></svg>
+          </button>
+        </div>
+        <div class="ou-modal__body">
+          <div class="fab-folder-note">
+            <svg width="14" height="14" aria-hidden="true" style="flex-shrink:0;margin-top:1px;"><use href="#i-info"/></svg>
+            Вы можете создавать тесты только в папках, доступных вашей роли.
+          </div>
+          <div class="fab-folder-list" style="margin-top:var(--ou-space-2);">
+            <label class="fab-folder-item">
+              <input type="radio" name="fab-restr-folder" value="ib" checked>
+              <svg width="14" height="14" class="fab-folder-item__ico" aria-hidden="true"><use href="#i-folder"/></svg>
+              Информационная безопасность
+            </label>
+          </div>
+          <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" style="margin-top:var(--ou-space-2);">
+            <svg width="14" height="14" aria-hidden="true"><use href="#i-folder-plus"/></svg>
+            Создать папку в доступном разделе...
+          </button>
+        </div>
+        <div class="ou-modal__foot">
+          <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Создать тест</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: FAB раскрыт — speed-dial с двумя sub-actions
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-fab-open" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="toolbar" style="pointer-events:none;opacity:.6;">
+      <div class="search-input-wrap" role="search">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск теста по названию" tabindex="-1"></div></div>
+      </div>
+    </div>
+
+    <div class="tree-area" role="tree" aria-label="Список тестов" style="pointer-events:none;opacity:.6;">
+      <div class="tree-header" aria-hidden="true">
+        <div>Название</div>
+        <div>Статус</div>
+        <div>Режим</div>
+        <div>Сценарий</div>
+        <div>Тем</div>
+        <div>Вопросов</div>
+        <div>Назначений</div>
+        <button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр" tabindex="-1"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+      </div>
+      <div class="tree-root" role="treeitem" aria-expanded="true" aria-level="1">
+        <div class="tree-root-label"><svg width="14" height="14" style="margin-right:var(--wf-space-6);color:var(--ou-warning-default);" aria-hidden="true"><use href="#i-folder-open"/></svg>Все тесты <span class="folder-count">&nbsp;(3)</span></div>
+      </div>
+      <div class="tree-folder" role="treeitem" aria-expanded="true" aria-level="2">
+        <div class="tree-folder-name">
+          <span class="chevron open" aria-hidden="true"><svg width="12" height="12"><use href="#i-chevron-right"/></svg></span>
+          <svg width="15" height="15" class="folder-icon" aria-hidden="true"><use href="#i-folder-open"/></svg>
+          Информационная безопасность <span class="folder-count">(2)</span>
+        </div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div class="tree-folder-actions">
+          <button class="action-btn" type="button" aria-label="Действия с папкой" tabindex="-1"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+      <div class="tree-test indent-1" role="treeitem" aria-level="3">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info"><div class="test-name">Основы информационной безопасности</div></div>
+        </div>
+        <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div><span class="mode-badge standard">Стандарт</span></div>
+        <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-linear"/></svg>Линейный</span></div>
+        <div class="tree-num">3</div><div class="tree-num">45</div><div class="tree-num">12</div>
+        <div class="tree-test-actions"></div>
+      </div>
+      <div class="tree-test indent-1" role="treeitem" aria-level="3">
+        <div class="tree-test-name">
+          <span class="indent-line" aria-hidden="true"></span>
+          <div class="test-info"><div class="test-name">GDPR для разработчиков</div></div>
+        </div>
+        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div><span class="mode-badge adaptive">Адаптив</span></div>
+        <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам</span></div>
+        <div class="tree-num">2</div><div class="tree-num">30</div><div class="tree-num">0</div>
+        <div class="tree-test-actions"></div>
+      </div>
+      <div class="tree-test" role="treeitem" aria-level="2">
+        <div class="tree-test-name">
+          <div class="test-info"><div class="test-name">Аудит логов SCORM</div></div>
+        </div>
+        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div><span class="mode-badge standard">Стандарт</span></div>
+        <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-router"/></svg>Роутер</span></div>
+        <div class="tree-num">1</div><div class="tree-num">20</div><div class="tree-num">3</div>
+        <div class="tree-test-actions"></div>
+      </div>
+    </div>
+
+    <!-- Speed-dial FAB — expanded state -->
+    <div class="fab-wrap">
+      <div class="fab-actions">
+        <div class="fab-action">
+          <span class="fab-action-label">Новая папка</span>
+          <button class="fab-action-btn" type="button" aria-label="Новая папка">
+            <svg width="18" height="18" aria-hidden="true"><use href="#i-folder-plus"/></svg>
+          </button>
+        </div>
+        <div class="fab-action">
+          <span class="fab-action-label">Новый тест</span>
+          <button class="fab-action-btn" type="button" aria-label="Новый тест">
+            <svg width="18" height="18" aria-hidden="true"><use href="#i-clipboard"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="ou-fab ou-fab--open" type="button" aria-label="Закрыть меню" aria-expanded="true">
+        <svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg>
+      </button>
+    </div>
+  </main>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td class="no-code">—</td><td>Структура списка: Explorer-модель. Корень "Все тесты" &#8594; папки с chevron (expand/collapse, <code>aria-level="2"</code>) &#8594; тесты внутри папки с отступом и indent-guide (<code>aria-level="3"</code>). Тесты без папки лежат в корне на уровне <code>aria-level="2"</code> рядом с папками -- без псевдопапки "Без папки".</td></tr>
+      <tr><td class="no-code">—</td><td>Папка свёрнута: chevron без rotate, дочерние тесты не рендерятся. Папка раскрыта: chevron повёрнут 90&deg;, тесты видны с indent-line.</td></tr>
+      <tr><td class="no-code">—</td><td>Поиск: переключает дерево в плоский список-выборку (<code>role="list"</code>). Все папки раскрыты принудительно. У каждого результата показывается breadcrumb-путь (папка / тест). Banner с <code>role="status" aria-live="polite"</code>. Кнопка "Сбросить" возвращает к дереву.</td></tr>
+      <tr><td class="no-code">—</td><td>Фильтры -- отдельный PRD (placeholder в toolbar, без реализации в текущем scope).</td></tr>
+      <tr><td>FR-30</td><td>Удаление только из dropdown, кнопка "Удалить тест..." ведёт к confirmation dialog.</td></tr>
+      <tr><td>FR-31</td><td>"Архивировать" в dropdown; подпункт «Архив» в сайдбаре ведёт к <code>prd7-tests-archive.html</code>.</td></tr>
+      <tr><td>§1</td><td>Видимые кнопки на каждой карточке теста (при наведении): Редактировать (#i-pencil), Назначить (#i-users2), Аналитика (#i-chart), Ещё (#i-more). Экспорт SCORM перенесён в dropdown.</td></tr>
+      <tr><td>§1</td><td>Dropdown «...» содержит: Редактировать / Экспорт SCORM / separator / [Опубликовать | Снять с публикации] (контекстно по статусу) / separator / Переместить в папку / Архивировать / separator / Удалить тест...</td></tr>
+      <tr><td>FR-08 BRD</td><td>Inline actions (редактировать, назначить, аналитика) visible on hover; dropdown через «...» содержит Экспорт SCORM и уникальные операции.</td></tr>
+      <tr><td class="no-code">—</td><td>Dropdown папки: Переименовать / separator / Удалить папку... (всегда активна — оба варианта доступны вне зависимости от наличия тестов).</td></tr>
+      <tr><td class="no-code">—</td><td>Удаление папки — два варианта (реф: PowerPoint «Удалить раздел»): (A) Только папку — тесты перемещаются в выбранное место (Корень или другую папку); (B) Папку и все тесты — требует ввода точного имени папки в поле подтверждения, кнопка активируется только при совпадении. Кнопка подтверждения в обоих вариантах — destructive (UX-конвенция: слово «Удалить» → красный цвет всегда).</td></tr>
+      <tr><td class="no-code">—</td><td>Состояния: default (дерево), collapsed (папка свёрнута), search (плоская выборка), Меню: Черновик (dropdown с «Опубликовать»), Меню: Опубликован (dropdown с «Снять с публикации»), Меню папки, Удалить: только папку, Удалить: с тестами, Предпросмотр, Lazy load, Загрузка (skeleton), Пусто, FAB: выбор папки, FAB: ограниченный, FAB: раскрыт (speed-dial).</td></tr>
+      <tr><td>FAB</td><td>Speed-dial FAB (d=56px, pill, accent, z-index: 20, position: absolute bottom/right space-6). Заменяет кнопки «Новый тест» и «Папка» в шапке. Виден всегда (desktop + mobile). Клик открывает speed-dial с двумя sub-actions: «Новый тест» и «Новая папка» — кнопки d=44px над FAB. FAB поворачивается на 45° (→ ×-иконка закрытия). Backdrop модала перекрывает FAB через z-index: 50.</td></tr>
+      <tr><td>FAB</td><td>Неограниченный пользователь: клик FAB → модал «Создать тест» со списком всех папок + опция «Корень (без папки)». Выбранная строка подсвечивается accent-soft. Кнопка «Создать тест» запускает создание в выбранной папке.</td></tr>
+      <tr><td>FAB (ограниченный)</td><td>Пользователь с ограниченными правами: FAB → модал только с разрешёнными папками, info-баннер «Вы можете создавать тесты только в папках, доступных вашей роли.» Опция «Корень» и недоступные папки не показываются.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = '/docs/wireframes/wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
+</body>
+</html>

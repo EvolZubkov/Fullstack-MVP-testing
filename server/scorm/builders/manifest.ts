@@ -1,11 +1,21 @@
-import type { Test, TestSection, Topic, Question, TopicCourse, PassRule } from "@shared/schema";
+import type {
+  Test, TestSection, Topic, Question, TopicCourse, PassRule,
+  TestQuestionScoring, ByVariantThreshold,
+} from "@shared/schema";
 import { escapeXml } from "../utils/escape";
+import { buildTestScoringContext } from "../../services/effective-scoring";
 import * as fs from "fs";
 import * as path from "path";
 
 interface ExportData {
   test: Test;
   sections: (TestSection & { topic: Topic; questions: Question[]; courses: TopicCourse[] })[];
+  /**
+   * PRD-15 block D: per-(test, question) scoring overrides. Needed here only to
+   * resolve a variant's attainable points for the PRD-24 `by_variant` threshold —
+   * price is a property of the TEST, not of the question (T-40).
+   */
+  questionScoring?: TestQuestionScoring[];
 }
 
 // ---- SCORM identifier (stable per test) ----
@@ -90,7 +100,10 @@ export function buildManifest(test: Test, data: ExportData, extraFiles: string[]
   const resId = `${code}_r`;
 
   const overallPassRule = test.overallPassRuleJson as PassRule;
-  const totalQuestions = data.sections.reduce((sum, s) => sum + s.drawCount, 0);
+  // Effective per-topic draw: drawAll / adaptive draw the whole current pool.
+  const effectiveDraw = (s: ExportData["sections"][number]): number =>
+    (test.mode || "standard") === "adaptive" || s.drawAll ? s.questions.length : s.drawCount;
+  const totalQuestions = data.sections.reduce((sum, s) => sum + effectiveDraw(s), 0);
 
   const overallThreshold =
     overallPassRule.type === "percent"
@@ -99,15 +112,49 @@ export function buildManifest(test: Test, data: ExportData, extraFiles: string[]
         ? (overallPassRule.value / totalQuestions).toFixed(2)
         : "0.8";
 
+  // PRD-24: attainable points of a variant come from the EFFECTIVE price chain
+  // (override → section default → test default → system), never from the question.
+  const scoringCtx = buildTestScoringContext(test, data.sections, data.questionScoring ?? []);
+
+  /**
+   * PRD-24 (FR-17): a `by_variant` topic has no single threshold, so advertise the
+   * LOWEST normalized one across its variants — `percent/100`, or `value / Σ points
+   * of that variant` for an absolute rule. Metadata stricter than the applied rule
+   * could block a learner who cleared their own variant. Returns null when the rule
+   * is not per-variant (or carries no usable entries), so the caller falls through.
+   */
+  const byVariantThreshold = (s: ExportData["sections"][number]): string | null => {
+    const rule = s.topicPassRuleJson as { source?: string; byForm?: Record<string, ByVariantThreshold> } | null;
+    if (!rule || rule.source !== "by_variant" || !s.formSetJson) return null;
+    const pointsById = new Map(s.questions.map((q) => [q.id, scoringCtx.resolve(q).points]));
+    const norms: number[] = [];
+    for (const form of s.formSetJson.forms) {
+      const entry = rule.byForm?.[form.id];
+      if (!entry) continue;
+      if (entry.type === "percent") {
+        norms.push(entry.value / 100);
+      } else {
+        const sum = form.questionIds.reduce((acc, id) => acc + (pointsById.get(id) ?? 1), 0);
+        norms.push(sum > 0 ? entry.value / sum : 0);
+      }
+    }
+    return norms.length ? Math.min(...norms).toFixed(2) : null;
+  };
+
   const objectives = data.sections
     .map((s) => {
       const topicPassRule = s.topicPassRuleJson as PassRule | null;
+      const perVariant = byVariantThreshold(s);
       let threshold = "0.5";
-      if (topicPassRule) {
+      if (perVariant !== null) {
+        threshold = perVariant;
+      } else if (topicPassRule && topicPassRule.type) {
+        // `type` guard: a `by_variant` rule carries no type/value of its own, so a
+        // topic left without a usable variant map keeps the neutral default.
         threshold =
           topicPassRule.type === "percent"
             ? (topicPassRule.value / 100).toFixed(2)
-            : (topicPassRule.value / s.drawCount).toFixed(2);
+            : (topicPassRule.value / Math.max(effectiveDraw(s), 1)).toFixed(2);
       }
       return `
         <imsss:objective objectiveID="obj_topic_${s.topic.id}">
@@ -178,6 +225,8 @@ export function buildManifest(test: Test, data: ExportData, extraFiles: string[]
       <file href="styles.css"/>
       <file href="runtime.js"/>
       <file href="app.js"/>
+      <file href="vendor/html2canvas.min.js"/>
+      <file href="vendor/jspdf.umd.min.js"/>
 ${extraFileTags ? extraFileTags + "\n" : ""}    </resource>
   </resources>
 </manifest>`;

@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: вопрос типа «шкала» (Ликерт) в шаблоне «Стандартный».
+    Файл: docs/wireframes/approved/question-scale.html
+    Источник данных: docs/references/workbook_Выгорание_Маслач.xlsx
+                     (опросник профессионального выгорания Маслач, 22 утверждения,
+                      6 градаций, три шкалы MBI + показатель «Состояние»).
+    Спека: docs/specs/prd-26/scale-question-type.md (FR-14..FR-20, FR-39..FR-42).
+    Статус: СОГЛАСОВАН 2026-07-30. Вариант А на существующем Stepper.
+
+    Холст взят один в один с согласованного экрана вопроса
+    (docs/wireframes/prohozhdenie/Прохождение теста.html): шапка, карта вопросов,
+    полоса прогресса, подвал и колонка вопроса скопированы без изменений.
+    Дельта ровно одна — блок ответа вместо вертикального списка ou-radio-card.
+
+    Состояния (переключатель в навбаре):
+      s-rail    — вариант А (ПРИНЯТ): дорожка с точками — существующий ou-stepper
+                  в режиме выбора
+      s-seg     — вариант Б: сегментированная лента на существующем ou-seg
+      s-cards   — вариант В: существующие ou-radio-card, выложенные в строку
+      s-review  — вариант А в режиме проверки (переключатель «правильный ответ» ВКЛ)
+      s-narrow  — вариант А на узком экране: шкала разворачивается вертикально
+
+    Решения, зафиксированные до эскиза:
+      - одно утверждение на экран, модель «один вопрос = один экран» не меняется;
+      - тип вопроса новый (scale): порядок градаций содержательный и не перемешивается;
+      - подписаны ВСЕ градации, числовые баллы ученику не показываются;
+      - правильный ответ опционален (переключатель в свойствах вопроса): выключен —
+        измерительный режим без проверки и без баллов, включён — проверка и баллы
+        как у одиночного выбора.
+  -->
+  <title>Вопрос типа «шкала» — стандартный шаблон</title>
+
+  <link rel="stylesheet" href="/vendor/ui-kit/css/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+
+  <style>
+    /* ─── Эскизный фрейм ──────────────────────────────────────────────────
+       Перенесён из approved/prd25-home.html без изменений. */
+    .wf-annot-wrap { position: relative; display: inline-flex; }
+    .wf-annot-wrap--block { position: relative; }
+    .wf-annot {
+      display: none;
+      position: absolute;
+      top: calc(-1 * var(--ou-space-2));
+      right: calc(-1 * var(--ou-space-1));
+      z-index: 200;
+      background: var(--ou-warning-default);
+      color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-s);
+      padding: 0 var(--ou-space-1);
+      font-weight: 700;
+      font-size: var(--wf-space-10);
+      line-height: var(--ou-space-5);
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: var(--ou-shadow-sm);
+    }
+    body.wf-annots-on .wf-annot { display: block; }
+
+    /* Сцена занимает окно под навбаром эскиза. Состояния переключают ТОЛЬКО
+       блок ответа, поэтому вложенным .wf-state отступ под навбар не нужен. */
+    .wf-scene {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      display: flex; flex-direction: column; overflow: hidden;
+      font-family: var(--ou-font-family-base);
+    }
+    .wf-answers > .wf-state { padding-top: 0; }
+    .wf-answers > .wf-state.active { display: flex; flex-direction: column; gap: var(--ou-space-5); }
+
+    /* ─── Предлагаемое дополнение ui-kit: режим выбора у Stepper ────────────
+       Геометрия шкалы уже существует в DS: Stepper (ou-stepper) — bullets в ряд,
+       коннектор на уровне центра bullet, подпись под bullet, вертикальный режим,
+       статусы is-done / is-current / is-error, шаги как настоящие button.
+       Новый компонент не вводится. Режим ou-stepper--choice меняет ровно то, что
+       мешает применить Stepper как ответ на вопрос:
+         1) bullet крупнее и ПУСТОЙ (без номера шага и без галочки);
+         2) подписи переносятся вместо обрезки многоточием и берут масштаб
+            ответов сцены (--tb-answer-fs);
+         3) пройденные градации красят ТОЛЬКО коннектор — точка остаётся
+            нейтральной: заливка показывает положение на шкале, а не
+            «выполненные шаги»;
+         4) добавляется статус is-success — правильная градация в проверке
+            (у Stepper есть только is-error).
+       При согласовании этот блок переезжает в vendor/ui-kit (Stepper.css +
+       пропс choice у Stepper.tsx) и из эскиза удаляется. */
+    .ou-stepper--choice .ou-stepper__bullet { width: 44px; height: 44px; color: transparent; }
+    .ou-stepper--choice .ou-stepper__bullet svg { display: none; }
+    /* Коннектор пересчитан под bullet 44px: центр 22px, отступ = радиус + зазор. */
+    .ou-stepper--choice .ou-stepper__step:not(:last-child)::after {
+      top: 20px; left: calc(50% + 26px); right: calc(-50% + 26px); height: 4px; border-radius: 999px;
+    }
+    .ou-stepper--choice .ou-stepper__step { gap: var(--ou-space-3); }
+    .ou-stepper--choice .ou-stepper__title {
+      white-space: normal; overflow: visible; text-overflow: clip;
+      font-size: var(--tb-answer-fs, 20px); font-weight: 400; line-height: 1.3; text-wrap: balance;
+    }
+    .ou-stepper--choice .ou-stepper__step.is-current .ou-stepper__title { font-weight: 600; }
+    .ou-stepper--choice .ou-stepper__step.is-current .ou-stepper__bullet { box-shadow: 0 0 0 6px var(--ou-accent-soft); }
+    /* Пройденная градация: нейтральная точка, акцентный коннектор (от DS). */
+    .ou-stepper--choice .ou-stepper__step.is-done .ou-stepper__bullet {
+      background: var(--ou-bg-elevated); border-color: var(--ou-border-default);
+    }
+    .ou-stepper--choice .ou-stepper__step.is-done .ou-stepper__title { color: var(--ou-fg-muted); font-weight: 400; }
+    /* Проверка: правильная градация (новый статус) и ошибочно выбранная (is-error DS). */
+    .ou-stepper--choice .ou-stepper__step.is-success .ou-stepper__bullet {
+      background: var(--ou-success-default); border-color: var(--ou-success-default);
+      box-shadow: 0 0 0 6px var(--ou-success-soft);
+    }
+    .ou-stepper--choice .ou-stepper__step.is-success .ou-stepper__title { color: var(--ou-success-on-soft); font-weight: 600; }
+    .ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__bullet { box-shadow: 0 0 0 6px var(--ou-error-soft); }
+    .ou-stepper--choice .ou-stepper__step.is-error .ou-stepper__title { color: var(--ou-error-on-soft); font-weight: 600; }
+    /* В проверке заливка «где я на шкале» гасится: цветов на экране остаётся два —
+       красный сегмент от ошибочной градации к правильной и зелёная правильная.
+       Акцентная полоса здесь спорила бы с вердиктом. */
+    .ou-stepper--choice.ou-stepper--review .ou-stepper__step.is-done::after { background: var(--ou-border-default); }
+    /* Вертикальный режим: bullet 28px как в DS, коннектор той же толщины. */
+    .ou-stepper--choice.ou-stepper--vertical .ou-stepper__bullet { width: 28px; height: 28px; }
+    .ou-stepper--choice.ou-stepper--vertical .ou-stepper__step:not(:last-child)::after {
+      top: 28px; bottom: -8px; left: 13px; right: auto; width: 4px; height: auto;
+    }
+  </style>
+</head>
+<body class="ou ou--dark ou--normal">
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Вопрос «шкала» — вариант интерактива:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-rail')">А · Дорожка</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-seg')">Б · Сегменты</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-cards')">В · Карточки в строку</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-review')">А · Проверка</button>
+  <button class="wf-btn"        type="button" onclick="showState(this,'s-narrow')">А · Узкий экран</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Light</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+  <button class="wf-btn" type="button" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ХОЛСТ. Сцена скопирована с согласованного экрана вопроса; переключатель
+     состояний меняет ТОЛЬКО содержимое блока ответа.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-scene" style="padding-top:var(--wf-nav-offset,52px);box-sizing:content-box">
+
+  <header style="background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px 0;display:flex;flex-direction:column;gap:var(--ou-space-3);position:relative">
+    <div style="display:flex;align-items:flex-start;gap:var(--ou-space-4)">
+      <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.02em">РТ</span>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+        <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em;text-wrap:pretty">Опросник профессионального выгорания Маслач</h1>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Диагностика · Попытка 1 из 1</span>
+      </div>
+    </div>
+
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m" style="width:100%;flex-direction:row;align-items:center;gap:var(--ou-space-5);padding-bottom:var(--ou-space-4)">
+      <div class="ou-quiz__dots" style="flex:none">
+        <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1">1</button>
+        <button type="button" class="ou-quiz__dot is-current"  aria-label="Вопрос 2">2</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 3">3</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 4">4</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 5">5</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 6">6</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 7">7</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 8">8</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 9">9</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 10">10</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 11">11</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 12">12</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 13">13</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 14">14</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 15">15</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 16">16</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 17">17</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 18">18</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 19">19</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 20">20</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 21">21</button>
+        <button type="button" class="ou-quiz__dot" aria-label="Вопрос 22">22</button>
+      </div>
+      <div class="ou-quiz__legend" style="margin-top:0;align-items:center">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot" style="background:transparent;box-shadow:inset 0 0 0 2px var(--ou-accent-default)"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <span style="margin-left:auto;flex:none;text-align:right;font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">1</strong> из 22 · пропущено 0</span>
+    </div>
+
+    <div style="position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--ou-bg-surface-3)">
+      <div style="height:100%;width:9%;background:var(--ou-accent-default);border-radius:0 999px 999px 0;transition:width 240ms var(--ou-easing-standard)"></div>
+    </div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:75%;height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+        <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">Вопрос 2 из 22</span>
+        <span class="ou-tag ou-tag--neutral">Профессиональное выгорание</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:var(--ou-space-2)">
+        <h2 style="margin:0;font-weight:600;font-size:30px;line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">После работы я чувствую себя как «выжатый лимон»</h2>
+        <span class="wf-annot-wrap" style="display:inline-block">
+          <span class="wf-annot">подсказка типа</span>
+          <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Выберите ответ на шкале</span>
+        </span>
+      </div>
+
+      <!-- ─── БЛОК ОТВЕТА — единственная дельта относительно согласованного экрана ─── -->
+      <div class="wf-answers" style="flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;padding-block:var(--ou-space-8)">
+
+        <!-- ВАРИАНТ А — дорожка с точками: существующий ou-stepper в режиме выбора.
+             Градации до выбранной несут is-done (акцентный коннектор от DS),
+             выбранная — is-current. Роли radiogroup/radio ставит хост: компонент
+             прокидывает атрибуты на корень и рендерит шаги как button. -->
+        <div id="s-rail" class="wf-state active">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">вариант А</span>
+            <div class="ou-stepper ou-stepper--choice" role="radiogroup" aria-label="Как часто это про вас">
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false">
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Никогда</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false">
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Очень редко</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn is-current" role="radio" aria-checked="true">
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Редко</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false">
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Часто</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false">
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Очень часто</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false">
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Постоянно</span></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ВАРИАНТ Б — сегментированная лента на существующем ou-seg -->
+        <div id="s-seg" class="wf-state">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">вариант Б</span>
+            <div class="ou-seg ou-seg--stretch ou-seg--l ou-seg--accent" role="radiogroup" aria-label="Как часто это про вас">
+              <button type="button" class="ou-seg__item" role="radio" aria-checked="false">Никогда</button>
+              <button type="button" class="ou-seg__item" role="radio" aria-checked="false">Очень редко</button>
+              <button type="button" class="ou-seg__item is-active" role="radio" aria-checked="true">Редко</button>
+              <button type="button" class="ou-seg__item" role="radio" aria-checked="false">Часто</button>
+              <button type="button" class="ou-seg__item" role="radio" aria-checked="false">Очень часто</button>
+              <button type="button" class="ou-seg__item" role="radio" aria-checked="false">Постоянно</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ВАРИАНТ В — существующие ou-radio-card, выложенные в строку -->
+        <div id="s-cards" class="wf-state">
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">вариант В</span>
+            <div class="ou-radio-group" style="width:100%">
+              <div class="ou-radio-group__items" style="flex-direction:row;gap:8px;align-items:stretch">
+                <label class="ou-radio-card" style="flex:1;flex-direction:column;align-items:center;text-align:center;gap:var(--ou-space-3);padding:var(--ou-space-4) var(--ou-space-3);box-sizing:border-box">
+                  <span class="ou-radio ou-radio--m"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title" style="font-weight:400;font-size:18px;line-height:1.3;text-wrap:balance">Никогда</span></span>
+                </label>
+                <label class="ou-radio-card" style="flex:1;flex-direction:column;align-items:center;text-align:center;gap:var(--ou-space-3);padding:var(--ou-space-4) var(--ou-space-3);box-sizing:border-box">
+                  <span class="ou-radio ou-radio--m"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title" style="font-weight:400;font-size:18px;line-height:1.3;text-wrap:balance">Очень редко</span></span>
+                </label>
+                <label class="ou-radio-card is-on" style="flex:1;flex-direction:column;align-items:center;text-align:center;gap:var(--ou-space-3);padding:var(--ou-space-4) var(--ou-space-3);box-sizing:border-box">
+                  <span class="ou-radio ou-radio--m is-on"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title" style="font-weight:400;font-size:18px;line-height:1.3;text-wrap:balance">Редко</span></span>
+                </label>
+                <label class="ou-radio-card" style="flex:1;flex-direction:column;align-items:center;text-align:center;gap:var(--ou-space-3);padding:var(--ou-space-4) var(--ou-space-3);box-sizing:border-box">
+                  <span class="ou-radio ou-radio--m"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title" style="font-weight:400;font-size:18px;line-height:1.3;text-wrap:balance">Часто</span></span>
+                </label>
+                <label class="ou-radio-card" style="flex:1;flex-direction:column;align-items:center;text-align:center;gap:var(--ou-space-3);padding:var(--ou-space-4) var(--ou-space-3);box-sizing:border-box">
+                  <span class="ou-radio ou-radio--m"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title" style="font-weight:400;font-size:18px;line-height:1.3;text-wrap:balance">Очень часто</span></span>
+                </label>
+                <label class="ou-radio-card" style="flex:1;flex-direction:column;align-items:center;text-align:center;gap:var(--ou-space-3);padding:var(--ou-space-4) var(--ou-space-3);box-sizing:border-box">
+                  <span class="ou-radio ou-radio--m"><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span>
+                  <span class="ou-radio-card__text"><span class="ou-radio-card__title" style="font-weight:400;font-size:18px;line-height:1.3;text-wrap:balance">Постоянно</span></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ВАРИАНТ А, режим проверки: переключатель «правильный ответ» ВКЛЮЧЁН -->
+        <div id="s-review" class="wf-state">
+          <div class="ou-banner ou-banner--subtle ou-banner--error" role="status">
+            <span class="ou-banner__body">
+              <span class="ou-banner__title">Ответ неверный</span>
+              <span class="ou-banner__text">Правильный ответ — «Часто».</span>
+            </span>
+          </div>
+          <div class="wf-annot-wrap wf-annot-wrap--block">
+            <span class="wf-annot">правильный ответ ВКЛ</span>
+            <div class="ou-stepper ou-stepper--choice ou-stepper--review" role="radiogroup" aria-label="Как часто это про вас">
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false" disabled>
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Никогда</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false" disabled>
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Очень редко</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn is-error" role="radio" aria-checked="true" disabled>
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Редко</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn is-success" role="radio" aria-checked="false" disabled>
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Часто</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false" disabled>
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Очень часто</span></span>
+              </button>
+              <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false" disabled>
+                <span class="ou-stepper__bullet"></span>
+                <span class="ou-stepper__label"><span class="ou-stepper__title">Постоянно</span></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ВАРИАНТ А на узком экране: та же разметка + существующий ou-stepper--vertical -->
+        <div id="s-narrow" class="wf-state">
+          <div class="wf-annot-wrap wf-annot-wrap--block" style="max-width:420px">
+            <span class="wf-annot">до 640px</span>
+            <div class="ou-stepper ou-stepper--choice ou-stepper--vertical" role="radiogroup" aria-label="Как часто это про вас">
+                <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false">
+                  <span class="ou-stepper__bullet"></span>
+                  <span class="ou-stepper__label"><span class="ou-stepper__title">Никогда</span></span>
+                </button>
+                <button type="button" class="ou-stepper__step ou-stepper__step--btn is-done" role="radio" aria-checked="false">
+                  <span class="ou-stepper__bullet"></span>
+                  <span class="ou-stepper__label"><span class="ou-stepper__title">Очень редко</span></span>
+                </button>
+                <button type="button" class="ou-stepper__step ou-stepper__step--btn is-current" role="radio" aria-checked="true">
+                  <span class="ou-stepper__bullet"></span>
+                  <span class="ou-stepper__label"><span class="ou-stepper__title">Редко</span></span>
+                </button>
+                <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false">
+                  <span class="ou-stepper__bullet"></span>
+                  <span class="ou-stepper__label"><span class="ou-stepper__title">Часто</span></span>
+                </button>
+                <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false">
+                  <span class="ou-stepper__bullet"></span>
+                  <span class="ou-stepper__label"><span class="ou-stepper__title">Очень часто</span></span>
+                </button>
+                <button type="button" class="ou-stepper__step ou-stepper__step--btn" role="radio" aria-checked="false">
+                  <span class="ou-stepper__bullet"></span>
+                  <span class="ou-stepper__label"><span class="ou-stepper__title">Постоянно</span></span>
+                </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer style="background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:center;gap:var(--ou-space-3)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">
+      <span class="ou-btn__ico" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path></svg>
+      </span>
+      Назад
+    </button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">К обзору ответов</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:var(--ou-space-3)">
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Пропустить</button>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--l">Далее</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+  /* Wireframe-only controls, идентичны approved/prd25-home.html. */
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+    document.documentElement.style.setProperty('--wf-nav-h', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     ПОЯСНЕНИЯ И DS MAPPING (вне холста)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<section class="wf-notes" aria-label="Сравнение вариантов">
+  <h3 class="wf-notes-title">Три варианта интерактива — чем отличаются</h3>
+  <table>
+    <thead>
+      <tr><th>Вариант</th><th>Из чего собран</th><th>За</th><th>Против</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>А · Дорожка</strong> (рекомендуется)</td>
+        <td>Существующий <code>Stepper</code> (<code>ou-stepper</code>) с новым режимом <code>ou-stepper--choice</code>. Геометрия, коннектор, статусы и вертикальный режим — уже в DS; режим меняет четыре вещи: пустой bullet вместо номера, переносимые подписи в масштабе ответов, нейтральная точка у пройденных градаций, новый статус <code>is-success</code>.</td>
+        <td>Единственный вариант, который показывает шкалу шкалой: видно направление и «где я» между полюсами. Заливка дорожки до выбранной точки читается без чисел. Одинаково работает на 6, 5 и 10 градациях. Крупная зона нажатия — точка вместе с подписью. Нового компонента не требует: <code>is-done</code> у DS уже красит коннектор акцентом, <code>is-error</code> даёт красный вердикт, шаги — настоящие <code>button</code>.</td>
+        <td>Требует правки существующего компонента в <code>vendor/ui-kit</code> (режим <code>choice</code> у <code>Stepper</code> + статус <code>is-success</code>) и сторис на этот режим.</td>
+      </tr>
+      <tr>
+        <td><strong>Б · Сегменты</strong></td>
+        <td>Существующий <code>SegmentedControl</code> (<code>ou-seg--stretch ou-seg--l ou-seg--accent</code>).</td>
+        <td>Ноль новых компонентов. Компактно по высоте.</td>
+        <td>В DS это управляющий элемент интерфейса (переключатель режима), а не ответ на вопрос: мелкая типографика, малая высота, вид «панель настроек» посреди экрана прохождения. Порядок читается как набор кнопок, а не как шкала. Длинные подписи ломают равные сегменты. Отдельно: в тёмной теме модификатор <code>ou-seg--accent</code> не действует — правило <code>.ou--dark .ou-seg__item.is-active</code> объявлено в бандле позже и при равной специфичности перебивает акцент, поэтому выбранная градация остаётся серой (видно на снимке состояния «Б · Сегменты»). Это дефект DS, его пришлось бы править в ui-kit ещё до применения варианта Б.</td>
+      </tr>
+      <tr>
+        <td><strong>В · Карточки в строку</strong></td>
+        <td>Существующий <code>ou-radio-card</code>, выложенный горизонтально.</td>
+        <td>Ноль новых компонентов. Полная преемственность с остальными типами вопросов: те же карточки, те же классы проверки.</td>
+        <td>Карточка рассчитана на горизонтальную композицию «контрол + текст»; постановка контрола над текстом — это уже правка компонента, а не его применение. Шесть равных прямоугольников не передают порядок: между «Редко» и «Часто» столько же визуальной дистанции, сколько между любыми двумя вариантами обычного вопроса.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Пояснения к экрану">
+  <h3 class="wf-notes-title">Пояснения — поведение экрана</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент</th><th>Условие</th><th>Примечание</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Холст экрана</td>
+        <td>—</td>
+        <td>Шапка, карта вопросов, полоса прогресса, колонка вопроса и подвал взяты один в один с согласованного экрана вопроса (<code>prohozhdenie/Прохождение теста.html</code>). Дельта ровно одна — блок ответа. Таймеры в опроснике не заданы, поэтому блок таймеров отсутствует (условный элемент шаблона).</td>
+      </tr>
+      <tr>
+        <td>Подсказка типа</td>
+        <td>всегда</td>
+        <td>Строка под вопросом, как у остальных типов (<code>questionHint</code>). Формулировка «Выберите ответ на шкале» — на согласование.</td>
+      </tr>
+      <tr>
+        <td>Порядок градаций</td>
+        <td>всегда</td>
+        <td>Фиксированный, перемешивание к шкале не применяется: порядок несёт смысл. Колонка «Следование вариантов ответов» для типа <code>scale</code> игнорируется.</td>
+      </tr>
+      <tr>
+        <td>Подписи</td>
+        <td>всегда</td>
+        <td>Подписаны ВСЕ градации. Числовые значения ученику не показываются: видимый балл подсказывает «выгодный» ответ и портит диагностику.</td>
+      </tr>
+      <tr>
+        <td>Заливка дорожки</td>
+        <td>ответ дан</td>
+        <td>От первой точки до выбранной. Это индикатор положения на шкале, а не «правильности»: тон акцентный, не успех/ошибка.</td>
+      </tr>
+      <tr>
+        <td>Проверка (состояние «А · Проверка»)</td>
+        <td>переключатель «правильный ответ» ВКЛ</td>
+        <td>Правильная градация — <code>is-success</code> (зелёная), ошибочно выбранная — <code>is-error</code> (красная, красный коннектор ведёт от неё к правильной), баннер обратной связи над шкалой. Корень получает <code>ou-stepper--review</code>: акцентная заливка «где я на шкале» гасится, чтобы на экране остались только цвета вердикта. Продуктовые классы <code>correct-answer</code> / <code>incorrect-answer</code>, которыми размечены остальные типы вопросов, хост переводит в статусы Stepper.</td>
+      </tr>
+      <tr>
+        <td>Измерительный режим</td>
+        <td>переключатель «правильный ответ» ВЫКЛ (умолчание)</td>
+        <td>Ни подсветки, ни баннера, ни баллов. Экран обзора и итоги показывают выбранную градацию текстом. Вклад идёт только в шкалы и показатели.</td>
+      </tr>
+      <tr>
+        <td>Узкий экран</td>
+        <td>ширина колонки ответов меньше ~640px или подписи не умещаются</td>
+        <td>Та же разметка с существующим модификатором <code>ou-stepper--vertical</code>: дорожка вертикальная, подпись справа от точки. Отдельного макета и отдельной логики нет.</td>
+      </tr>
+      <tr>
+        <td>Клавиатура</td>
+        <td>всегда</td>
+        <td><code>role="radiogroup"</code> + точки как <code>role="radio"</code>: стрелки влево/вправо двигают по шкале, пробел выбирает. Совпадает с поведением одиночного выбора.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-mapping" aria-label="DS mapping">
+  <h3 class="wf-notes-title">DS Mapping</h3>
+  <table>
+    <thead>
+      <tr><th>Элемент холста</th><th>Компонент DS</th><th>Токены</th><th>Примечание</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Шкала ответа (вариант А)</td>
+        <td><code>Stepper</code> (<code>ou-stepper--choice</code>, <code>__step</code> / <code>__bullet</code> / <code>__label</code> / <code>__title</code>; статусы <code>is-done</code> / <code>is-current</code> / <code>is-error</code> / <code>is-success</code>)</td>
+        <td><code>--ou-accent-default</code>, <code>--ou-accent-soft</code>, <code>--ou-bg-surface-3</code>, <code>--ou-border-default</code>, <code>--ou-space-*</code></td>
+        <td>СУЩЕСТВУЮЩИЙ компонент + новый режим. Правки ui-kit: пропс <code>choice</code> у <code>Stepper.tsx</code> (пустой bullet), статус <code>success</code> в <code>StepperStatus</code>, правила <code>ou-stepper--choice</code> и <code>ou-stepper--review</code> в CSS. В эскизе они объявлены локально в <code>&lt;style&gt;</code> и после согласования оттуда удаляются.</td>
+      </tr>
+      <tr>
+        <td>Шкала ответа (вариант Б)</td>
+        <td><code>SegmentedControl</code> (<code>ou-seg--stretch ou-seg--l ou-seg--accent</code>)</td>
+        <td><code>--ou-bg-surface-*</code>, <code>--ou-accent-default</code></td>
+        <td>Существующий компонент, применяется без правок.</td>
+      </tr>
+      <tr>
+        <td>Шкала ответа (вариант В)</td>
+        <td><code>ChoiceCard</code> (<code>ou-radio-card</code>) + <code>Radio</code> (<code>ou-radio</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-soft</code></td>
+        <td>Существующие компоненты, но с вертикальной композицией внутри карточки — это правка компонента, не его применение.</td>
+      </tr>
+      <tr>
+        <td>Баннер обратной связи</td>
+        <td><code>Banner</code> (<code>ou-banner--subtle ou-banner--error</code> / <code>--success</code>)</td>
+        <td><code>--ou-error-soft</code>, <code>--ou-error-on-soft</code></td>
+        <td>Существующий компонент; тот же слот <code>question-feedback</code>, что у остальных типов.</td>
+      </tr>
+      <tr>
+        <td>Шапка, карта вопросов, подвал</td>
+        <td><code>Timer</code>, <code>QuizMap</code> (<code>ou-quiz</code>), <code>Tag</code>, <code>Button</code></td>
+        <td><code>--ou-*</code></td>
+        <td>Без изменений относительно согласованного экрана вопроса.</td>
+      </tr>
+      <tr>
+        <td>Метанавигация состояний, метки требований, «Пояснения», «DS Mapping»</td>
+        <td><code>Wireframe utility</code> (<code>wf-nav</code>, <code>wf-annot</code>, <code>wf-notes</code>, <code>wf-mapping</code>)</td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code></td>
+        <td>Не мигрирует в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="wf-notes" aria-label="Вопросы к согласованию">
+  <h3 class="wf-notes-title">Вопросы к согласованию</h3>
+  <table>
+    <thead>
+      <tr><th>Место</th><th>Неоднозначность</th><th>Решение в эскизе</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Вариант интерактива</td>
+        <td>Три варианта решают задачу; вопрос был, нужен ли новый компонент ui-kit.</td>
+        <td>Выбран вариант А на существующем <code>Stepper</code> (решение 2026-07-30). Состояния Б и В оставлены в эскизе как обоснование выбора.</td>
+      </tr>
+      <tr>
+        <td>Подсказка типа</td>
+        <td>Формулировка строки под вопросом.</td>
+        <td>«Выберите ответ на шкале». Альтернативы: «Отметьте подходящую градацию», «Насколько это про вас».</td>
+      </tr>
+      <tr>
+        <td>Книга импорта</td>
+        <td>Переключатель «есть правильный ответ» в книге отдельной колонкой или по заполненности «Номера правильных ответов».</td>
+        <td>В спеке принято: пусто = проверки нет, заполнено = есть. Отдельная колонка не вводится.</td>
+      </tr>
+      <tr>
+        <td>Число градаций</td>
+        <td>Верхняя граница числа точек, при которой горизонтальная шкала остаётся читаемой.</td>
+        <td>Эскиз рассчитан на 4–7 точек; свыше — автоматический переход в вертикальную раскладку. Порог требует подтверждения на приёмке.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+</body>
+</html>

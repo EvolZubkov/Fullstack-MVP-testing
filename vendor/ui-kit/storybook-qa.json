@@ -1,0 +1,122 @@
+{
+  "Pickers/Calendar": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/Primary": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/Destructive": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/Disabled": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/Ghost": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/Loading": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/Secondary": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/Sizes": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Button/With Leading Icon": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Checkbox": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Checkbox/Card": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Checkbox/Default": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Checkbox/Indeterminate": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Checkbox/States": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Checkbox/With Description": {
+    "status": "stable",
+    "visual": "ok",
+    "functional": "ok",
+    "a11y": "ok"
+  },
+  "Inputs/Combobox": {
+    "status": "review",
+    "visual": "ok",
+    "functional": "todo",
+    "a11y": "ok"
+  },
+  "Inputs/Combobox/Empty": {
+    "status": "review",
+    "visual": "ok",
+    "functional": "todo",
+    "a11y": "ok"
+  },
+  "Inputs/Combobox/Multi": {
+    "status": "review",
+    "visual": "ok",
+    "functional": "todo",
+    "a11y": "ok"
+  },
+  "Inputs/Combobox/Single": {
+    "status": "review",
+    "visual": "ok",
+    "functional": "todo",
+    "a11y": "ok"
+  }
+}

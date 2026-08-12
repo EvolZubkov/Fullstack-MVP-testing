@@ -1,37 +1,17 @@
-function renderRankingQuestionInput(q, answer, locked, correct, shuffleMapping) {
-  var items = (q.data && Array.isArray(q.data.items)) ? q.data.items : [];
-
-  var userOrder = Array.isArray(answer) ? answer.slice() : null;
-  if (!userOrder || userOrder.length !== items.length) {
-    userOrder = items.map(function(_, i){ return i; });
-    state.answers[q.id] = userOrder;
-  }
-
-  var html = '<div class="ranking-board" data-qid="' + escapeHtml(q.id) + '">';
-
-  userOrder.forEach(function(itemIdx, pos){
-    var text = (items[itemIdx] != null) ? String(items[itemIdx]) : ('#' + itemIdx);
-
-    html += ''
-      + '<div class="rank-item rank-draggable"'
-      + ' draggable="true"'
-      + ' data-qid="' + escapeHtml(q.id) + '"'
-      + ' data-pos="' + pos + '"'
-      + ' data-item="' + itemIdx + '">'
-      +   '<span class="rank-grip">' + burgerSvgInline() + '</span>'
-      +   '<span class="rank-text">' + escapeHtml(text) + '</span>'
-      + '</div>';
-  });
-
-  html += '</div>';
-  return html;
-
-  function burgerSvgInline(){
-    return ''
-      + '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-      + '<path d="M2.5 4.99524H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>'
-      + '<path d="M14.1667 9.9952H2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>'
-      + '<path d="M2.5 14.9951H10.8333" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>'
-      + '</svg>';
-  }
+/**
+ * @module render/questions/ranking
+ * @description Ranking input for the SCORM runtime. Delegates to the SHARED emission
+ * (`TBTemplate.renderRanking`) so the `.ou-rank` markup matches the web host. Rows are
+ * reordered by drag (`data-drag`/`data-drop` position → the shared pointer engine) and
+ * by keyboard up/down (`data-action="rank-up|rank-down:pos"`), both routed to the shared
+ * reorder path (dnd/ranking). The order is NOT seeded here: the pure render shows the
+ * shuffle order via fallback, and the first reorder seeds the answer — parity with the
+ * web, where an untouched ranking stays "not answered" until the learner reorders.
+ *
+ * Depends on globals: window.TBTemplate.
+ */
+function renderRankingQuestionInput(q, answer, showReview, correct, shuffleMapping) {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.renderRanking) return '';
+  return TB.renderRanking({ type: 'ranking', dataJson: q.data }, answer, shuffleMapping, showReview ? correct : undefined);
 }

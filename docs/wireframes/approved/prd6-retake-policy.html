@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-6 — Ограничение повторного прохождения (retake gate).
+    Спека: docs/specs/prd-6/retake-cooldown-gate.md (§4.1 настройка, §4.4 блок-экран).
+    Поверхности:
+      1) Блок «Повторное прохождение» во вкладке «Настройки» редактора теста
+         (client/.../editor/sections/basic-settings-section.tsx — rail-пейн, ui-kit).
+      2) Учащийся: экран блокировки (block-wall) внутри SCORM-пакета.
+    Phase 1: реестр плагинов сидируется в коде; страница блокировки =
+    системная страница шаблона (layout system.blocked), retake.* заполняется
+    через path-DSL; встроенный экран остаётся только как фолбэк.
+    Состояния:
+      s-off            — гейт выключен (легаси-поведение)
+      s-on-webtutor    — включён, плагин WebTutor cooldown
+      s-on-suspend     — включён, suspend_data (best-effort) + warning
+      s-error          — период вне диапазона (валидация)
+      s-blockwall      — экран блокировки (учащийся): cooldown активен
+      s-blockwall-err  — экран блокировки при ошибке проверки (failClosed)
+      s-docs           — Пояснения + DS Mapping
+    DRAFT — не перенесён в approved/ до согласования.
+    -->
+    <title>PRD-6 — Повторное прохождение (retake gate)</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      .wf-sprite { display: none; }
+      /* Neutralize the legacy .ou-select fallback in wf-utils.css (its own
+         border/padding/bg) so only the DS .ou-select__trigger border shows —
+         otherwise the trigger renders a double frame in the sketch. */
+      .ou-select { padding: 0; border: 0; background: transparent; line-height: inherit; border-radius: 0; }
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      .wf-pane { max-width: var(--wf-size-560); }
+      .wf-stack { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      .wf-fieldrow { display: flex; flex-wrap: wrap; gap: var(--ou-space-4); }
+      .wf-muted { color: var(--ou-fg-muted); }
+      .wf-ico-inline { vertical-align: -2px; }
+      /* Learner block-wall — sketch of the template system.blocked page. */
+      .wf-wall { display: flex; align-items: center; justify-content: center; padding: var(--ou-space-8) var(--ou-space-4); }
+      .wf-wall__card { max-width: var(--wf-size-520); width: 100%; text-align: center; }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-state { display: none; padding: var(--wf-size-72) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-720); }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Retake gate:</span>
+      <button type="button" class="active" onclick="showState(this, 'off')">настройки · выкл</button>
+      <button type="button" onclick="showState(this, 'on-webtutor')">вкл · WebTutor</button>
+      <button type="button" onclick="showState(this, 'on-suspend')">вкл · suspend_data</button>
+      <button type="button" onclick="showState(this, 'error')">ошибка периода</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'blockwall')">блок-экран</button>
+      <button type="button" onclick="showState(this, 'blockwall-err')">блок-экран · ошибка</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="approved/prd7-editor-settings-tab.html">&harr; Настройки</a>
+    </nav>
+
+    <!-- ════════════════ s-off: гейт выключен ════════════════ -->
+    <div id="wf-off" class="wf-state active">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
+              <span class="ou-switch-field__desc">Выключено — учащийся может перезапускать курс без ограничений (как сейчас).</span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-on-webtutor: включён, WebTutor cooldown ════════════════ -->
+    <div id="wf-on-webtutor" class="wf-state">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
+              <span class="ou-switch-field__desc">Допуск проверяется до старта курса.</span>
+            </span>
+          </label>
+
+          <div class="ou-number ou-number--m ou-number--split">
+            <label class="ou-number__lbl" for="rp-days">Период охлаждения, календарных дней</label>
+            <div class="ou-number__box">
+              <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="16" height="16"><use href="#i-minus" /></svg></button>
+              <input class="ou-number__input" id="rp-days" type="text" inputmode="numeric" value="30" aria-label="Период охлаждения, дней" />
+              <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="16" height="16"><use href="#i-plus" /></svg></button>
+            </div>
+            <span class="ou-number__hint">От 1 до 3650 дней.</span>
+          </div>
+
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="rp-plugin">Способ проверки (плагин)</label>
+            <div class="ou-select ou-field--m ou-field--full" id="rp-plugin" data-ou-options="WebTutor: период охлаждения|SCORM suspend_data (best-effort)">
+              <button type="button" class="ou-select__trigger"><span class="ou-select__value">WebTutor: период охлаждения</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+            </div>
+          </div>
+
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">При ошибке проверки допуска</label>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Политика ошибки">
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Разрешить старт</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Заблокировать</button>
+            </div>
+            <div class="ou-formfield__msg">Если проверку не удалось выполнить — открыть курс или показать экран блокировки.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-on-suspend: suspend_data (best-effort) ════════════════ -->
+    <div id="wf-on-suspend" class="wf-state">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
+              <span class="ou-switch-field__desc">Допуск проверяется до старта курса.</span>
+            </span>
+          </label>
+
+          <div class="ou-number ou-number--m ou-number--split">
+            <label class="ou-number__lbl">Период охлаждения, календарных дней</label>
+            <div class="ou-number__box">
+              <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="16" height="16"><use href="#i-minus" /></svg></button>
+              <input class="ou-number__input" type="text" inputmode="numeric" value="14" aria-label="Период охлаждения, дней" />
+              <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="16" height="16"><use href="#i-plus" /></svg></button>
+            </div>
+            <span class="ou-number__hint">От 1 до 3650 дней.</span>
+          </div>
+
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Способ проверки (плагин)</label>
+            <div class="ou-select ou-field--m" data-ou-options="WebTutor: период охлаждения|SCORM suspend_data (best-effort)">
+              <button type="button" class="ou-select__trigger"><span class="ou-select__value">SCORM suspend_data (best-effort)</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+            </div>
+          </div>
+
+          <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle" /></svg></div>
+            <div class="ou-banner__body">
+              <div class="ou-banner__desc">Надёжно работает только в пределах одной регистрации курса в LMS. Для строгого ограничения между новыми попытками используйте проверку через WebTutor.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-error: период вне диапазона ════════════════ -->
+    <div id="wf-error" class="wf-state">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
+            </span>
+          </label>
+
+          <div class="ou-number ou-number--m ou-number--split is-invalid">
+            <label class="ou-number__lbl">Период охлаждения, календарных дней</label>
+            <div class="ou-number__box">
+              <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="16" height="16"><use href="#i-minus" /></svg></button>
+              <input class="ou-number__input" type="text" inputmode="numeric" value="0" aria-invalid="true" aria-label="Период охлаждения, дней" />
+              <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="16" height="16"><use href="#i-plus" /></svg></button>
+            </div>
+            <span class="ou-number__hint ou-number__hint--error">Период должен быть от 1 до 3650 дней.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-blockwall: экран блокировки (учащийся) ════════════════ -->
+    <div id="wf-blockwall" class="wf-state">
+      <div class="wf-wall">
+        <div class="ou-card ou-card--outlined wf-wall__card">
+          <div class="ou-card__body wf-stack">
+            <h1 class="ou-card__title">Повторное прохождение пока недоступно</h1>
+            <p class="wf-muted">Этот курс можно проходить не чаще, чем раз в 30 дней.</p>
+            <p>Повторный запуск будет доступен с <strong>29.06.2026</strong>.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-blockwall-err: ошибка проверки (failClosed) ════════════════ -->
+    <div id="wf-blockwall-err" class="wf-state">
+      <div class="wf-wall">
+        <div class="ou-card ou-card--outlined wf-wall__card">
+          <div class="ou-card__body wf-stack">
+            <h1 class="ou-card__title">Не удалось проверить доступ</h1>
+            <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+              <div class="ou-banner__body">
+                <div class="ou-banner__desc">Проверка периода охлаждения недоступна. Старт заблокирован (политика «Заблокировать»). Обратитесь к администратору курса.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Поверхность 1</td><td>вкладка «Настройки» → пейн «Повторное прохождение»</td><td><code>basic-settings-section.tsx</code> (ui-kit, rail-пейн как «Ограничения»/«Интеграция»)</td></tr>
+            <tr><td>Поверхность 2</td><td>экран блокировки в SCORM-пакете</td><td>Системная страница шаблона — layout <code>system.blocked</code> (ветки cooldown/error/default); гейт заполняет <code>retake.*</code> через path-DSL; встроенный экран — фолбэк</td></tr>
+            <tr><td>Свич «Ограничить…»</td><td><code>retakePolicy.enabled</code></td><td>Выкл = легаси-поведение (FR-02, allowed=true)</td></tr>
+            <tr><td>Момент проверки</td><td>до старта курса</td><td>Гейт отрабатывает до SCORM Initialize (NFR-01/02): при блокировке cmi.* не трогается</td></tr>
+            <tr><td>Период охлаждения</td><td><code>cooldownPeriodDays</code> (1–3650)</td><td>Календарные дни; <code>allowed = (today − last) ≥ days</code></td></tr>
+            <tr><td>Плагин</td><td><code>eligibilityPlugin.key</code></td><td>Select из активного реестра (Phase 1 — сидируется в коде): webtutor_cooldown / suspend_data_cooldown; версия плагина WebTutor — 1.0.0</td></tr>
+            <tr><td>Конфигурация</td><td><code>eligibilityPlugin.configId</code> — авто</td><td>Phase 1: у плагина один активный конфиг → подставляется неявно, поле скрыто (избыточно). Видимый Select вернётся в Фазе 2 (админ-реестр, ≥2 конфига)</td></tr>
+            <tr><td>Политика ошибки</td><td><code>eligibilityPlugin.failPolicy</code></td><td>fail-open (старт) / fail-closed (блок) — SegmentedControl (взаимоисключающий)</td></tr>
+            <tr><td>Warning suspend_data</td><td>плагин = suspend_data_cooldown</td><td>Best-effort: suspend_data надёжен только внутри одной SCORM-регистрации; строгий cooldown между попытками — через внешний/LMS-источник (WebTutor). Banner-предупреждение (§4.6)</td></tr>
+            <tr><td>Блок-экран</td><td><code>retake.availableDate</code></td><td>Дата следующего доступа; ошибка failClosed — Banner error</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент — блокер.</p>
+        <table>
+          <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead>
+          <tbody>
+            <tr><td>Пейн настроек</td><td><code>Card</code> (<code>ou-card--outlined</code>) + <code>CardHeader</code></td><td><code>--ou-bg-elevated</code>, <code>--ou-radius-l</code></td><td>Как существующие пейны «Настроек»</td></tr>
+            <tr><td>Свич «Ограничить…»</td><td><code>Switch</code> (<code>ou-switch-field</code>)</td><td><code>--ou-accent-*</code></td><td>label + desc</td></tr>
+            <tr><td>Период охлаждения</td><td><code>NumberInput</code> (<code>ou-number--split</code>)</td><td><code>--ou-border-default</code></td><td>min/max + ошибка <code>is-invalid</code></td></tr>
+            <tr><td>Плагин</td><td><code>Select</code> (<code>ou-select</code>)</td><td><code>--ou-radius-m</code></td><td>Опции из активного реестра; выбор конфига (при >1) — Фаза 2</td></tr>
+            <tr><td>Политика ошибки</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Взаимоисключающий выбор (не Tabs)</td></tr>
+            <tr><td>Warning / ошибка</td><td><code>Banner</code> (warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
+            <tr><td>Блок-экран</td><td><code>Card</code> + <code>Banner</code></td><td><code>--ou-*</code></td><td>Рантайм-экран SCORM; токены DS (не хардкод)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

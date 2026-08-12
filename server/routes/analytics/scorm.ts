@@ -1,18 +1,30 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { analyticsScope } from "./helpers";
+import { loadScoringConfig } from "../../services/scoring-config";
+import { computeAttemptResult, type AttemptResultBase } from "../../services/result-compute";
+import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
 
 const router = Router();
 
 // GET /api/analytics/scorm-attempts - Все SCORM попытки
-router.get("/scorm-attempts", requireAuthor, async (_req: Request, res: Response) => {
+router.get("/scorm-attempts", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const attempts = await storage.getAllScormAttempts();
     const packages = await storage.getScormPackages();
 
     const packageMap = new Map(packages.map(p => [p.id, p]));
 
-    const enrichedAttempts = await Promise.all(attempts.map(async (attempt) => {
+    // PRD-15 FR-08 (audit F-5): only attempts of readable tests; packages of
+    // deleted tests remain visible to administrators only.
+    const scope = await analyticsScope(req);
+    const scopedAttempts = attempts.filter((a) =>
+      scope.has(packageMap.get(a.packageId)?.testId ?? null),
+    );
+
+    const enrichedAttempts = await Promise.all(scopedAttempts.map(async (attempt) => {
       const pkg = packageMap.get(attempt.packageId);
       const answers = await storage.getScormAnswersByAttempt(attempt.id);
 
@@ -43,13 +55,13 @@ router.get("/scorm-attempts", requireAuthor, async (_req: Request, res: Response
 
     res.json(enrichedAttempts);
   } catch (error) {
-    console.error("Get SCORM attempts error:", error);
+    logger.error("Get SCORM attempts error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get SCORM attempts" });
   }
 });
 
 // GET /api/analytics/scorm-attempts/:attemptId - Детали SCORM попытки
-router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res: Response) => {
+router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const attempt = await storage.getScormAttempt(req.params.attemptId);
     if (!attempt) {
@@ -57,7 +69,29 @@ router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res
     }
 
     const pkg = await storage.getScormPackage(attempt.packageId);
+
+    // PRD-15 FR-08 (audit F-5): a single LMS attempt is readable only within
+    // the analytics scope of its test.
+    const scope = await analyticsScope(req);
+    if (!scope.has(pkg?.testId ?? null)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const answers = await storage.getScormAnswersByAttempt(attempt.id);
+
+    // Scale/indicator config (PRD-5/PRD-2) for per-answer contributions and the
+    // attempt-level summary. Recomputed from the test's CURRENT config from the
+    // stored answers — may drift if the test changed after the attempt (unlike
+    // baked points, contributions are not persisted). Empty for a deleted test.
+    const scoringConfig = pkg?.testId
+      ? await loadScoringConfig(pkg.testId)
+      : { scales: [], measurements: [], resultVariables: [], budgets: {} };
+    const rawAnswers: Record<string, Answer> = {};
+    const questionTypes: Record<string, QuestionType> = {};
+    for (const a of answers) {
+      rawAnswers[a.questionId] = a.userAnswerJson as Answer;
+      questionTypes[a.questionId] = a.questionType as QuestionType;
+    }
 
     const duration = attempt.startedAt && attempt.finishedAt
       ? (new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000
@@ -84,12 +118,21 @@ router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res
         };
         existing.total++;
         existing.possiblePoints += a.maxPoints || 1;
+        // PRD-18: accrue the BAKED partial points unconditionally — a tiered/weighted
+        // row can be isCorrect=false with points>0 (points = scoreRatio*q.points,
+        // baked at delivery). Gating earnedPoints behind isCorrect dropped that partial
+        // credit, so the topic rollup under-counted vs the stored attempt total.
+        existing.earnedPoints += a.points || 0;
         if (a.isCorrect) {
           existing.correct++;
-          existing.earnedPoints += a.points || 0;
         }
         topicResultsMap.set(a.topicId, existing);
       }
+
+      // PRD-5: how this answer moved each scale; PRD-18: graded ratio from the
+      // baked points (contributions are recomputed, points/ratio are as delivered).
+      const contribs = computeAnswerContributions(scoringConfig.measurements, a.questionId, a.userAnswerJson as Answer, a.questionType as QuestionType);
+      const ratio = (a.maxPoints || 0) > 0 ? (a.points || 0) / (a.maxPoints as number) : (a.isCorrect ? 1 : 0);
 
       return {
         questionId: a.questionId,
@@ -101,8 +144,10 @@ router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res
         userAnswer: a.userAnswerJson,
         correctAnswer: a.correctAnswerJson,
         isCorrect: a.isCorrect,
+        ratio,
         earnedPoints: a.points,
         possiblePoints: a.maxPoints,
+        contribs,
         options: a.optionsJson,
         leftItems: a.leftItemsJson,
         rightItems: a.rightItemsJson,
@@ -121,6 +166,22 @@ router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res
       earnedPoints: tr.earnedPoints,
       possiblePoints: tr.possiblePoints,
     }));
+
+    // PRD-5/PRD-2: attempt-level scale results + result variables (показатели).
+    const gradedBase: AttemptResultBase = {
+      percent: attempt.resultPercent || 0,
+      topicResults: topicResults.map(tr => ({
+        topicId: tr.topicId,
+        percent: tr.percent,
+        passed: tr.passed,
+        earnedPoints: tr.earnedPoints,
+        topicName: tr.topicName,
+        code: null,
+      })),
+    };
+    const graded = scoringConfig.scales.length || scoringConfig.resultVariables.length
+      ? computeAttemptResult(scoringConfig, rawAnswers, questionTypes, gradedBase)
+      : { scaleResults: {}, resultVariables: {}, status: {} };
 
     let achievedLevels = null;
     if (attempt.achievedLevelsJson) {
@@ -150,11 +211,13 @@ router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res
       passed: attempt.resultPassed || false,
       answers: detailedAnswers,
       topicResults,
+      scaleResults: graded.scaleResults,
+      resultVariables: graded.resultVariables,
       achievedLevels,
       source: "lms",
     });
   } catch (error) {
-    console.error("Get SCORM attempt details error:", error);
+    logger.error("Get SCORM attempt details error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get attempt details" });
   }
 });

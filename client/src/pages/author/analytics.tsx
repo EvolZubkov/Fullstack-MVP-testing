@@ -1,28 +1,46 @@
+/**
+ * @module pages/author/analytics
+ * @description Combined analytics dashboard (web + LMS): summary KPIs, trends,
+ * per-test/per-topic stats, an attempts table with a full attempt-details modal,
+ * and a configurable Excel export. Rendered entirely with the UniversityRT design
+ * system — layout via Stack/Cluster/Grid/Box, typography via Text, data via the
+ * DS Table/Card/Tabs/ProgressBar/Select primitives (no raw utility classes).
+ */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingState } from "@/components/loading-state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
-  BarChart3,
+  Box,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Checkbox,
+  Cluster,
+  FormGroup,
+  Grid,
+  IconButton,
+  Input,
+  ModalDialog,
+  ProgressBar,
+  ScrollArea,
+  Select,
+  Separator,
+  Stack,
+  Table,
+  Tabs,
+  Tag,
+  Text,
+  type TableColumn,
+  type Tone,
+} from "@universityrt/ui-kit";
+import {
   TrendingUp,
   Users,
   Target,
   AlertTriangle,
   CheckCircle,
   FileSpreadsheet,
-  ChevronDown,
-  ChevronUp,
   Filter,
   Eye,
   Globe,
@@ -31,8 +49,10 @@ import {
   Clock,
   XCircle,
   HelpCircle,
-  ArrowRight,
   Layers,
+  RefreshCw,
+  FileDown,
+  TrendingDown,
 } from "lucide-react";
 import {
   LineChart,
@@ -45,11 +65,7 @@ import {
   BarChart,
   Bar,
   Legend,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
-import { t } from "@/lib/i18n";
 
 // ============================================
 // Интерфейсы
@@ -64,6 +80,8 @@ interface CombinedSummary {
   lmsAttempts: number;
   uniqueWebUsers: number;
   uniqueLmsUsers: number;
+  adaptiveAttempts?: number;
+  adaptivePassed?: number;
 }
 
 interface CombinedAttempt {
@@ -73,6 +91,7 @@ interface CombinedAttempt {
   testMode?: string;
   userId?: string;
   username?: string;
+  userEmail?: string | null;
   lmsUserId?: string | null;
   lmsUserName?: string | null;
   lmsUserEmail?: string | null;
@@ -84,6 +103,9 @@ interface CombinedAttempt {
   totalPoints: number;
   maxPoints: number;
   source: "web" | "lms";
+  isAdaptive?: boolean;
+  achievedTopics?: number | null;
+  totalTopics?: number | null;
 }
 
 interface TestStat {
@@ -120,6 +142,8 @@ interface CombinedAnalyticsData {
   testStats: TestStat[];
   topicStats: TopicStat[];
   trends: TrendData[];
+  top5Tests?: { testId: string; testTitle: string }[];
+  alerts?: { testId: string; testTitle: string; recentPassRate: number; prevPassRate: number; drop: number }[];
 }
 
 // Детальный ответ
@@ -210,7 +234,6 @@ interface ExportConfig {
   };
 }
 
-
 // ============================================
 // Утилиты для форматирования ответов
 // ============================================
@@ -229,6 +252,7 @@ function formatUserAnswer(answer: DetailedAnswer): string {
 
   switch (questionType) {
     case "single":
+    case "scale":
       if (typeof userAnswer === "number" && options) {
         return options[userAnswer] || `Вариант ${userAnswer + 1}`;
       }
@@ -307,6 +331,7 @@ function formatCorrectAnswer(answer: DetailedAnswer): string {
 
   switch (questionType) {
     case "single":
+    case "scale":
       const idx = correctAnswer.correctIndex;
       if (typeof idx === "number" && options) {
         return options[idx] || `Вариант ${idx + 1}`;
@@ -361,71 +386,53 @@ function FiltersBar({
   tests: { id: string; title: string }[];
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 p-4 bg-muted/30 rounded-lg border">
-      <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <Label className="text-sm font-medium">Фильтры:</Label>
-      </div>
+    <Box pad={4} surface="muted" radius="l" border>
+      <Cluster gap={4}>
+        <Cluster gap={2}>
+          <Filter size={16} color="var(--ou-fg-muted)" />
+          <Text variant="body-s" weight="medium">Фильтры:</Text>
+        </Cluster>
 
-      <div className="flex items-center gap-2">
-        <Label className="text-sm text-muted-foreground">Источник:</Label>
-        <Select value={source} onValueChange={onSourceChange}>
-          <SelectTrigger className="w-[140px] h-9">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              <span className="flex items-center gap-2">
-                <Users className="h-3 w-3" />
-                Все
-              </span>
-            </SelectItem>
-            <SelectItem value="web">
-              <span className="flex items-center gap-2">
-                <Globe className="h-3 w-3" />
-                Web
-              </span>
-            </SelectItem>
-            <SelectItem value="lms">
-              <span className="flex items-center gap-2">
-                <Server className="h-3 w-3" />
-                LMS
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+        <Cluster gap={2}>
+          <Text variant="body-s" tone="muted">Источник:</Text>
+          <Select<"all" | "web" | "lms">
+            value={source}
+            onChange={onSourceChange}
+            options={[
+              { value: "all", label: <Cluster gap={2}><Users size={12} />Все</Cluster> },
+              { value: "web", label: <Cluster gap={2}><Globe size={12} />Web</Cluster> },
+              { value: "lms", label: <Cluster gap={2}><Server size={12} />LMS</Cluster> },
+            ]}
+          />
+        </Cluster>
 
-      <div className="flex items-center gap-2">
-        <Label className="text-sm text-muted-foreground">Тест:</Label>
-        <Select value={testId} onValueChange={onTestIdChange}>
-          <SelectTrigger className="w-[220px] h-9">
-            <SelectValue placeholder="Все тесты" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все тесты</SelectItem>
-            {tests.map((test) => (
-              <SelectItem key={test.id} value={test.id}>
-                {test.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+        <Cluster gap={2}>
+          <Text variant="body-s" tone="muted">Тест:</Text>
+          <Select
+            value={testId}
+            onChange={onTestIdChange}
+            placeholder="Все тесты"
+            options={[
+              { value: "all", label: "Все тесты" },
+              ...tests.map((test) => ({ value: test.id, label: test.title })),
+            ]}
+          />
+        </Cluster>
 
-      {(source !== "all" || testId !== "all") && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            onSourceChange("all");
-            onTestIdChange("all");
-          }}
-        >
-          Сбросить
-        </Button>
-      )}
-    </div>
+        {(source !== "all" || testId !== "all") && (
+          <Button
+            variant="ghost"
+            size="s"
+            onClick={() => {
+              onSourceChange("all");
+              onTestIdChange("all");
+            }}
+          >
+            Сбросить
+          </Button>
+        )}
+      </Cluster>
+    </Box>
   );
 }
 
@@ -435,71 +442,56 @@ function FiltersBar({
 
 function SummaryCards({ summary, source }: { summary: CombinedSummary; source: "all" | "web" | "lms" }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <Grid minItem="sm" gap={1}>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Всего попыток</CardTitle>
-          <Users className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{summary.totalAttempts}</div>
+        <CardHeader title="Всего попыток" trail={<Users size={16} color="var(--ou-fg-muted)" />} />
+        <CardBody>
+          <Text variant="display-s" weight="bold">{summary.totalAttempts}</Text>
           {source === "all" && (
-            <p className="text-xs text-muted-foreground mt-1">
-              <Globe className="h-3 w-3 inline mr-1" />
-              {summary.webAttempts}
-              <span className="mx-2">|</span>
-              <Server className="h-3 w-3 inline mr-1" />
-              {summary.lmsAttempts}
-            </p>
+            <Cluster gap={2}>
+              <Cluster gap={1}><Globe size={12} color="var(--ou-fg-muted)" /><Text variant="body-xs" tone="muted">{summary.webAttempts}</Text></Cluster>
+              <Text variant="body-xs" tone="subtle">|</Text>
+              <Cluster gap={1}><Server size={12} color="var(--ou-fg-muted)" /><Text variant="body-xs" tone="muted">{summary.lmsAttempts}</Text></Cluster>
+            </Cluster>
           )}
-        </CardContent>
+        </CardBody>
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Успешных</CardTitle>
-          <CheckCircle className="h-4 w-4 text-green-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold text-green-600">{summary.passedAttempts}</div>
-          <p className="text-xs text-muted-foreground mt-1">
+        <CardHeader title="Успешных" trail={<CheckCircle size={16} color="var(--ou-success-600)" />} />
+        <CardBody>
+          <Text variant="display-s" weight="bold" tone="success">{summary.passedAttempts}</Text>
+          <Text as="p" variant="body-xs" tone="muted">
             из {summary.totalAttempts} ({summary.passRate.toFixed(0)}%)
-          </p>
-        </CardContent>
+          </Text>
+        </CardBody>
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Pass Rate</CardTitle>
-          <Target className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{summary.passRate.toFixed(1)}%</div>
-          <div className="w-full bg-muted rounded-full h-2 mt-2">
-            <div
-              className="bg-primary rounded-full h-2 transition-all"
-              style={{ width: `${Math.min(summary.passRate, 100)}%` }}
-            />
-          </div>
-        </CardContent>
+        <CardHeader title="Pass Rate" trail={<Target size={16} color="var(--ou-fg-muted)" />} />
+        <CardBody>
+          <Stack gap={2}>
+            <Text variant="display-s" weight="bold">{summary.passRate.toFixed(1)}%</Text>
+            <ProgressBar value={summary.passRate} tone="accent" size="s" hideHeader />
+          </Stack>
+        </CardBody>
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Средний балл</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{summary.avgPercent.toFixed(1)}%</div>
-          <div className="w-full bg-muted rounded-full h-2 mt-2">
-            <div
-              className="bg-blue-500 rounded-full h-2 transition-all"
-              style={{ width: `${Math.min(summary.avgPercent, 100)}%` }}
-            />
-          </div>
-        </CardContent>
+        <CardHeader title="Средний балл" trail={<TrendingUp size={16} color="var(--ou-fg-muted)" />} />
+        <CardBody>
+          <Stack gap={2}>
+            <Text variant="display-s" weight="bold">{summary.avgPercent.toFixed(1)}%</Text>
+            <ProgressBar value={summary.avgPercent} tone="accent" size="s" hideHeader />
+            {(summary.adaptiveAttempts ?? 0) > 0 && (
+              <Text variant="body-xs" tone="muted">
+                + {summary.adaptiveAttempts} адаптивных ({summary.adaptivePassed} завершили)
+              </Text>
+            )}
+          </Stack>
+        </CardBody>
       </Card>
-    </div>
+    </Grid>
   );
 }
 
@@ -511,105 +503,150 @@ function AttemptsTable({
   attempts,
   source,
   onViewDetails,
+  sortCol,
+  sortDir,
+  onSort,
+  onExport,
 }: {
   attempts: CombinedAttempt[];
   source: "all" | "web" | "lms";
   onViewDetails: (attempt: CombinedAttempt) => void;
+  sortCol?: "date" | "result" | "user" | "test";
+  sortDir?: "asc" | "desc";
+  onSort?: (col: "date" | "result" | "user" | "test") => void;
+  onExport?: (attempt: CombinedAttempt) => void;
 }) {
   if (attempts.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        <HelpCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-        <p>Нет данных о попытках</p>
-      </div>
+      <Stack align="center" gap={3}>
+        <Box pad={8}>
+          <Stack align="center" gap={3}>
+            <HelpCircle size={48} color="var(--ou-fg-subtle)" />
+            <Text tone="muted">Нет данных о попытках</Text>
+          </Stack>
+        </Box>
+      </Stack>
     );
   }
 
+  const columns: TableColumn<CombinedAttempt>[] = [
+    ...(source === "all"
+      ? [{
+        key: "source",
+        header: "Источник",
+        width: "90px",
+        render: (a: CombinedAttempt) =>
+          a.source === "web"
+            ? <Tag variant="outline" size="s"><Globe />Web</Tag>
+            : <Tag size="s"><Server />LMS</Tag>,
+      } as TableColumn<CombinedAttempt>]
+      : []),
+    {
+      key: "user",
+      header: "Пользователь",
+      sortable: true,
+      render: (a) => (
+        <Text variant="body-s" weight="medium">
+          {a.source === "web"
+            ? (a.username || "—")
+            : (a.lmsUserName || a.lmsUserEmail || a.lmsUserId || "—")}
+        </Text>
+      ),
+    },
+    ...(source !== "web"
+      ? [{
+        key: "email",
+        header: "Email",
+        render: (a: CombinedAttempt) => (
+          <Text variant="body-xs" tone="muted">
+            {a.source === "lms" ? (a.lmsUserEmail || "—") : (a.userEmail || "—")}
+          </Text>
+        ),
+      } as TableColumn<CombinedAttempt>]
+      : []),
+    {
+      key: "test",
+      header: "Тест",
+      sortable: true,
+      render: (a) => <Text variant="body-s">{a.testTitle || "—"}</Text>,
+    },
+    {
+      key: "date",
+      header: "Дата",
+      width: "150px",
+      sortable: true,
+      render: (a) => (
+        <Text variant="body-xs" tone="muted">
+          {a.finishedAt
+            ? new Date(a.finishedAt).toLocaleString("ru-RU", {
+              day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+            })
+            : "В процессе"}
+        </Text>
+      ),
+    },
+    {
+      key: "result",
+      header: "Результат",
+      width: "110px",
+      align: "right",
+      sortable: true,
+      render: (a) =>
+        a.isAdaptive
+          ? <Text variant="body-s" tone="muted">{a.achievedTopics ?? 0}/{a.totalTopics ?? 0} тем</Text>
+          : <Text variant="heading-s" weight="bold">{a.resultPercent?.toFixed(0) || 0}%</Text>,
+    },
+    {
+      key: "status",
+      header: "Статус",
+      width: "120px",
+      align: "center",
+      render: (a) =>
+        a.isAdaptive
+          ? <Tag tone="info" size="s"><CheckCircle />Завершён</Tag>
+          : a.resultPassed
+            ? <Tag tone="success" size="s"><CheckCircle />Сдан</Tag>
+            : <Tag tone="error" variant="solid" size="s"><XCircle />Не сдан</Tag>,
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "96px",
+      align: "center",
+      render: (a) => (
+        <Cluster gap={1} justify="center" wrap={false}>
+          <IconButton
+            variant="ghost"
+            size="s"
+            aria-label="Детали попытки"
+            icon={<Eye size={16} />}
+            onClick={(e) => { e.stopPropagation(); onViewDetails(a); }}
+          />
+          {onExport && (
+            <IconButton
+              variant="ghost"
+              size="s"
+              aria-label="Скачать детали попытки"
+              title="Скачать детали попытки"
+              icon={<FileDown size={16} />}
+              onClick={(e) => { e.stopPropagation(); onExport(a); }}
+            />
+          )}
+        </Cluster>
+      ),
+    },
+  ];
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b bg-muted/50">
-            {source === "all" && <th className="text-left py-3 px-3 font-medium w-20">Источник</th>}
-            <th className="text-left py-3 px-3 font-medium">Пользователь</th>
-            {source !== "web" && <th className="text-left py-3 px-3 font-medium">Email</th>}
-            <th className="text-left py-3 px-3 font-medium">Тест</th>
-            <th className="text-left py-3 px-3 font-medium w-36">Дата</th>
-            <th className="text-right py-3 px-3 font-medium w-24">Результат</th>
-            <th className="text-center py-3 px-3 font-medium w-20">Статус</th>
-            <th className="text-center py-3 px-3 font-medium w-20">Детали</th>
-          </tr>
-        </thead>
-        <tbody>
-          {attempts.map((attempt) => (
-            <tr
-              key={`${attempt.source}-${attempt.id}`}
-              className="border-b hover:bg-muted/30 transition-colors cursor-pointer"
-              onClick={() => onViewDetails(attempt)}
-            >
-              {source === "all" && (
-                <td className="py-3 px-3">
-                  {attempt.source === "web" ? (
-                    <Badge variant="outline" className="text-xs font-normal">
-                      <Globe className="h-3 w-3 mr-1" />
-                      Web
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs font-normal">
-                      <Server className="h-3 w-3 mr-1" />
-                      LMS
-                    </Badge>
-                  )}
-                </td>
-              )}
-              <td className="py-3 px-3 font-medium">
-                {attempt.source === "web"
-                  ? attempt.username
-                  : attempt.lmsUserName || attempt.lmsUserId || "—"}
-              </td>
-              {source !== "web" && (
-                <td className="py-3 px-3 text-muted-foreground text-xs">
-                  {attempt.source === "lms" ? (attempt.lmsUserEmail || "—") : "—"}
-                </td>
-              )}
-              <td className="py-3 px-3">{attempt.testTitle || "—"}</td>
-              <td className="py-3 px-3 text-muted-foreground text-xs">
-                {attempt.finishedAt
-                  ? new Date(attempt.finishedAt).toLocaleString("ru-RU", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                  : "В процессе"}
-              </td>
-              <td className="py-3 px-3 text-right">
-                <span className="font-bold text-lg">{attempt.resultPercent?.toFixed(0) || 0}%</span>
-              </td>
-              <td className="py-3 px-3 text-center">
-                {attempt.resultPassed ? (
-                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Сдан
-                  </Badge>
-                ) : (
-                  <Badge variant="destructive">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Не сдан
-                  </Badge>
-                )}
-              </td>
-              <td className="py-3 px-3 text-center">
-                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onViewDetails(attempt); }}>
-                  <Eye className="h-4 w-4" />
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table
+      columns={columns}
+      rows={attempts}
+      rowKey={(a) => `${a.source}-${a.id}`}
+      onRowClick={(a) => onViewDetails(a)}
+      sortKey={sortCol}
+      sortDir={sortDir}
+      onSort={(key) => onSort?.(key as "date" | "result" | "user" | "test")}
+    />
   );
 }
 
@@ -649,309 +686,252 @@ function AttemptDetailsDialog({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[95vh] p-0">
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="flex items-center gap-3">
-            <span>Детали попытки</span>
-            {attempt?.source === "web" ? (
-              <Badge variant="outline">
-                <Globe className="h-3 w-3 mr-1" />
-                Web
-              </Badge>
+  const emptyState = (message: string) => (
+    <Box pad={8}>
+      <Stack align="center" gap={3}>
+        <HelpCircle size={48} color="var(--ou-fg-subtle)" />
+        <Text tone="muted">{message}</Text>
+      </Stack>
+    </Box>
+  );
+
+  const overviewContent = details && (
+    <ScrollArea maxH="xl">
+      <Stack gap={6}>
+        {/* Основная информация */}
+        <Grid minItem="sm" gap={1}>
+          <Card>
+            <CardBody>
+              <Stack gap={1}>
+                <Text variant="body-xs" tone="muted">Пользователь</Text>
+                <Text variant="body-m" weight="medium">{details.username || details.lmsUserName || "—"}</Text>
+                {details.lmsUserEmail && <Text variant="body-xs" tone="muted">{details.lmsUserEmail}</Text>}
+              </Stack>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <Stack gap={1}>
+                <Text variant="body-xs" tone="muted">Тест</Text>
+                <Text variant="body-m" weight="medium">{details.testTitle}</Text>
+              </Stack>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <Stack gap={1}>
+                <Text variant="body-xs" tone="muted">Время</Text>
+                <Cluster gap={1}><Clock size={16} /><Text variant="body-m" weight="medium">{formatDuration(details.duration)}</Text></Cluster>
+              </Stack>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <Stack gap={1}>
+                <Text variant="body-xs" tone="muted">Дата</Text>
+                <Text variant="body-m" weight="medium">
+                  {details.finishedAt ? new Date(details.finishedAt).toLocaleString("ru-RU") : "—"}
+                </Text>
+              </Stack>
+            </CardBody>
+          </Card>
+        </Grid>
+
+        {/* Результат */}
+        <Card>
+          <CardHeader title="Результат" />
+          <CardBody>
+            {details.testMode === "adaptive" ? (
+              <Cluster gap={4}>
+                <Tag tone="info"><CheckCircle />ЗАВЕРШЁН</Tag>
+                <Text variant="body-s" tone="muted">Результаты по достигнутым уровням — см. ниже</Text>
+              </Cluster>
             ) : (
-              <Badge variant="secondary">
-                <Server className="h-3 w-3 mr-1" />
-                LMS
-              </Badge>
-            )}
-            {details?.testMode === "adaptive" && (
-              <Badge className="bg-purple-100 text-purple-700">
-                <Layers className="h-3 w-3 mr-1" />
-                Адаптивный
-              </Badge>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="p-6">
-            <LoadingState message="Загрузка деталей..." />
-          </div>
-        ) : details ? (
-          <Tabs defaultValue="overview" className="w-full">
-            <div className="px-6">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="overview">Обзор</TabsTrigger>
-                <TabsTrigger value="answers">
-                  Ответы ({details.answers?.length || 0})
-                </TabsTrigger>
-                <TabsTrigger value="topics">Темы</TabsTrigger>
-              </TabsList>
-            </div>
-
-            <ScrollArea className="h-[calc(95vh-180px)]">
-              {/* ===== TAB: Overview ===== */}
-              <TabsContent value="overview" className="p-6 pt-4 space-y-6">
-                {/* Основная информация */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Card>
-                    <CardContent className="pt-4">
-                      <Label className="text-xs text-muted-foreground">Пользователь</Label>
-                      <p className="font-medium mt-1">
-                        {details.username || details.lmsUserName || "—"}
-                      </p>
-                      {details.lmsUserEmail && (
-                        <p className="text-xs text-muted-foreground">{details.lmsUserEmail}</p>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="pt-4">
-                      <Label className="text-xs text-muted-foreground">Тест</Label>
-                      <p className="font-medium mt-1">{details.testTitle}</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="pt-4">
-                      <Label className="text-xs text-muted-foreground">Время</Label>
-                      <p className="font-medium mt-1 flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        {formatDuration(details.duration)}
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="pt-4">
-                      <Label className="text-xs text-muted-foreground">Дата</Label>
-                      <p className="font-medium mt-1">
-                        {details.finishedAt
-                          ? new Date(details.finishedAt).toLocaleString("ru-RU")
-                          : "—"}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Результат */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Результат</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-8">
-                      <div className="text-center">
-                        <div className="text-4xl font-bold">
-                          {details.overallPercent?.toFixed(0)}%
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {details.earnedPoints} / {details.possiblePoints} баллов
-                        </p>
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="w-full bg-muted rounded-full h-4">
-                          <div
-                            className={`rounded-full h-4 transition-all ${details.passed ? "bg-green-500" : "bg-red-500"
-                              }`}
-                            style={{ width: `${Math.min(details.overallPercent, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        {details.passed ? (
-                          <Badge className="bg-green-100 text-green-700 text-lg px-4 py-2">
-                            <CheckCircle className="h-5 w-5 mr-2" />
-                            СДАН
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="text-lg px-4 py-2">
-                            <XCircle className="h-5 w-5 mr-2" />
-                            НЕ СДАН
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Достигнутые уровни (для адаптивных) */}
-                {details.achievedLevels && details.achievedLevels.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Layers className="h-4 w-4" />
-                        Достигнутые уровни
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {details.achievedLevels.map((level) => (
-                          <div
-                            key={level.topicId}
-                            className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                          >
-                            <span className="font-medium">{level.topicName}</span>
-                            <Badge variant="outline">
-                              {level.levelName || `Уровень ${(level.levelIndex || 0) + 1}`}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+              <Cluster gap={6}>
+                <Stack gap={1} align="center">
+                  <Text variant="display-m" weight="bold">{details.overallPercent?.toFixed(0)}%</Text>
+                  <Text variant="body-s" tone="muted">{details.earnedPoints} / {details.possiblePoints} баллов</Text>
+                </Stack>
+                <Box grow>
+                  <ProgressBar value={details.overallPercent} tone={details.passed ? "success" : "error"} size="m" hideHeader />
+                </Box>
+                {details.passed ? (
+                  <Tag tone="success"><CheckCircle />СДАН</Tag>
+                ) : (
+                  <Tag tone="error" variant="solid"><XCircle />НЕ СДАН</Tag>
                 )}
-              </TabsContent>
+              </Cluster>
+            )}
+          </CardBody>
+        </Card>
 
-              {/* ===== TAB: Answers ===== */}
-              <TabsContent value="answers" className="p-6 pt-4">
-                <div className="space-y-3">
-                  {details.answers?.map((answer, index) => (
-                    <Card
-                      key={answer.questionId}
-                      className={`${answer.isCorrect
-                        ? "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30"
-                        : "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
-                        }`}
-                    >
-                      <CardContent className="pt-4">
-                        {/* Заголовок вопроса */}
-                        <div className="flex items-start justify-between gap-4 mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs font-medium text-muted-foreground">
-                                #{index + 1}
-                              </span>
-                              <Badge variant="outline" className="text-xs">
-                                {answer.questionType}
-                              </Badge>
-                              {answer.topicName && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {answer.topicName}
-                                </Badge>
-                              )}
-                              {answer.levelName && (
-                                <Badge className="text-xs bg-purple-100 text-purple-700">
-                                  {answer.levelName}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="font-medium">{answer.questionPrompt}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {answer.earnedPoints}/{answer.possiblePoints}
-                            </span>
-                            {answer.isCorrect ? (
-                              <CheckCircle className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <XCircle className="h-5 w-5 text-red-600" />
-                            )}
-                          </div>
-                        </div>
-
-                        <Separator className="my-3" />
-
-                        {/* Ответы */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <Label className="text-xs text-muted-foreground mb-1 block">
-                              Ответ пользователя:
-                            </Label>
-                            <div
-                              className={`p-3 rounded-lg text-sm ${answer.isCorrect
-                                ? "bg-green-100 dark:bg-green-900/50"
-                                : "bg-red-100 dark:bg-red-900/50"
-                                }`}
-                            >
-                              {formatUserAnswer(answer)}
-                            </div>
-                          </div>
-                          <div>
-                            <Label className="text-xs text-muted-foreground mb-1 block">
-                              Правильный ответ:
-                            </Label>
-                            <div className="p-3 rounded-lg bg-muted text-sm">
-                              {formatCorrectAnswer(answer)}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  {(!details.answers || details.answers.length === 0) && (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <HelpCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>Нет данных об ответах</p>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-
-              {/* ===== TAB: Topics ===== */}
-              <TabsContent value="topics" className="p-6 pt-4">
-                <div className="space-y-3">
-                  {details.topicResults?.map((topic) => (
-                    <Card key={topic.topicId}>
-                      <CardContent className="pt-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{topic.topicName}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {topic.earnedPoints} / {topic.possiblePoints} баллов
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <p className="text-2xl font-bold">{(topic.percent ?? 0).toFixed(0)}%</p>
-                            </div>
-                            {topic.passed !== null && (
-                              topic.passed ? (
-                                <CheckCircle className="h-6 w-6 text-green-500" />
-                              ) : (
-                                <XCircle className="h-6 w-6 text-red-500" />
-                              )
-                            )}
-                          </div>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-2 mt-3">
-                          <div
-                            className={`rounded-full h-2 ${topic.passed === null
-                              ? "bg-blue-500"
-                              : topic.passed
-                                ? "bg-green-500"
-                                : "bg-red-500"
-                              }`}
-                            style={{ width: `${Math.min(topic.percent ?? 0, 100)}%` }}
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-
-                  {(!details.topicResults || details.topicResults.length === 0) && (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <HelpCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>Нет данных по темам</p>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            </ScrollArea>
-          </Tabs>
-        ) : (
-          <div className="p-6 text-center text-muted-foreground">
-            Не удалось загрузить детали
-          </div>
+        {/* Достигнутые уровни (для адаптивных) */}
+        {details.achievedLevels && details.achievedLevels.length > 0 && (
+          <Card>
+            <CardHeader title={<Cluster gap={2}><Layers size={16} />Достигнутые уровни</Cluster>} />
+            <CardBody>
+              <Stack gap={2}>
+                {details.achievedLevels.map((level) => (
+                  <Box key={level.topicId} pad={3} surface="muted" radius="l">
+                    <Cluster justify="between">
+                      <Text weight="medium">{level.topicName}</Text>
+                      <Tag variant="outline">{level.levelName || `Уровень ${(level.levelIndex || 0) + 1}`}</Tag>
+                    </Cluster>
+                  </Box>
+                ))}
+              </Stack>
+            </CardBody>
+          </Card>
         )}
-      </DialogContent>
-    </Dialog>
+      </Stack>
+    </ScrollArea>
+  );
+
+  const answersContent = details && (
+    <ScrollArea maxH="xl">
+      <Stack gap={3}>
+        {details.answers?.map((answer, index) => (
+          <Card key={answer.questionId} variant="outlined">
+            <CardBody>
+              <Stack gap={3}>
+                <Cluster justify="between" align="start" gap={4}>
+                  <Stack gap={1}>
+                    <Cluster gap={2}>
+                      <Text variant="body-xs" weight="medium" tone="muted">#{index + 1}</Text>
+                      <Tag variant="outline" size="s">{answer.questionType}</Tag>
+                      {answer.topicName && <Tag size="s">{answer.topicName}</Tag>}
+                      {answer.levelName && <Tag tone="accent" size="s">{answer.levelName}</Tag>}
+                    </Cluster>
+                    <Text weight="medium">{answer.questionPrompt}</Text>
+                  </Stack>
+                  <Cluster gap={2}>
+                    <Text variant="body-s" weight="medium">{answer.earnedPoints}/{answer.possiblePoints}</Text>
+                    {answer.isCorrect
+                      ? <CheckCircle size={20} color="var(--ou-success-600)" />
+                      : <XCircle size={20} color="var(--ou-error-600)" />}
+                  </Cluster>
+                </Cluster>
+
+                <Separator />
+
+                <Grid minItem="md" gap={4}>
+                  <Stack gap={1}>
+                    <Text variant="body-xs" tone="muted">Ответ пользователя:</Text>
+                    <Box pad={3} radius="l" surface={answer.isCorrect ? "muted" : "muted"}>
+                      <Text variant="body-s" tone={answer.isCorrect ? "success" : "error"}>{formatUserAnswer(answer)}</Text>
+                    </Box>
+                  </Stack>
+                  <Stack gap={1}>
+                    <Text variant="body-xs" tone="muted">Правильный ответ:</Text>
+                    <Box pad={3} radius="l" surface="muted">
+                      <Text variant="body-s">{formatCorrectAnswer(answer)}</Text>
+                    </Box>
+                  </Stack>
+                </Grid>
+              </Stack>
+            </CardBody>
+          </Card>
+        ))}
+
+        {(!details.answers || details.answers.length === 0) && emptyState("Нет данных об ответах")}
+      </Stack>
+    </ScrollArea>
+  );
+
+  const topicsContent = details && (
+    <ScrollArea maxH="xl">
+      <Stack gap={3}>
+        {details.testMode === "adaptive" ? (
+          // Адаптивный — показываем достигнутые уровни
+          details.achievedLevels && details.achievedLevels.length > 0 ? (
+            details.achievedLevels.map((level) => (
+              <Card key={level.topicId}>
+                <CardBody>
+                  <Cluster justify="between">
+                    <Cluster gap={2}>
+                      {level.levelName
+                        ? <CheckCircle size={20} color="var(--ou-info-600)" />
+                        : <XCircle size={20} color="var(--ou-error-600)" />}
+                      <Text weight="medium">{level.topicName}</Text>
+                    </Cluster>
+                    <Tag tone={level.levelName ? "info" : "error"}>{level.levelName || "Не достигнут"}</Tag>
+                  </Cluster>
+                </CardBody>
+              </Card>
+            ))
+          ) : emptyState("Нет данных по уровням")
+        ) : (
+          // Стандартный — показываем процент по темам
+          details.topicResults?.length > 0 ? (
+            details.topicResults.map((topic) => (
+              <Card key={topic.topicId}>
+                <CardBody>
+                  <Stack gap={3}>
+                    <Cluster justify="between">
+                      <Stack gap={1}>
+                        <Text weight="medium">{topic.topicName}</Text>
+                        <Text variant="body-s" tone="muted">{topic.earnedPoints} / {topic.possiblePoints} баллов</Text>
+                      </Stack>
+                      <Cluster gap={3}>
+                        <Text variant="display-s" weight="bold">{(topic.percent ?? 0).toFixed(0)}%</Text>
+                        {topic.passed !== null && (
+                          topic.passed
+                            ? <CheckCircle size={24} color="var(--ou-success-600)" />
+                            : <XCircle size={24} color="var(--ou-error-600)" />
+                        )}
+                      </Cluster>
+                    </Cluster>
+                    <ProgressBar
+                      value={topic.percent ?? 0}
+                      tone={topic.passed === null ? "accent" : topic.passed ? "success" : "error"}
+                      size="s"
+                      hideHeader
+                    />
+                  </Stack>
+                </CardBody>
+              </Card>
+            ))
+          ) : emptyState("Нет данных по темам")
+        )}
+      </Stack>
+    </ScrollArea>
+  );
+
+  return (
+    <ModalDialog
+      open={open}
+      onClose={onClose}
+      size="xl"
+      title={
+        <Cluster gap={3}>
+          Детали попытки
+          {attempt?.source === "web"
+            ? <Tag variant="outline" size="s"><Globe />Web</Tag>
+            : <Tag size="s"><Server />LMS</Tag>}
+          {details?.testMode === "adaptive" && <Tag tone="accent" size="s"><Layers />Адаптивный</Tag>}
+        </Cluster>
+      }
+    >
+      {isLoading ? (
+        <Box pad={6}><LoadingState message="Загрузка деталей..." /></Box>
+      ) : details ? (
+        <Tabs
+          defaultValue="overview"
+          variant="segment"
+          align="stretch"
+          items={[
+            { id: "overview", label: "Обзор", content: overviewContent },
+            { id: "answers", label: `Ответы (${details.answers?.length || 0})`, content: answersContent },
+            { id: "topics", label: "Темы", content: topicsContent },
+          ]}
+        />
+      ) : (
+        <Box pad={6}><Text align="center" tone="muted">Не удалось загрузить детали</Text></Box>
+      )}
+    </ModalDialog>
   );
 }
 
@@ -966,69 +946,56 @@ function TopicStatsSection({ topicStats }: { topicStats: TopicStat[] }) {
     .slice(0, 5);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <Grid minItem="lg" gap={1}>
       {/* Статистика по темам */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Статистика по темам</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
+        <CardHeader title="Статистика по темам" />
+        <CardBody>
+          <Stack gap={3}>
             {topicStats.length > 0 ? (
               topicStats.map((topic) => (
-                <div key={topic.topicId} className="flex items-center justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{topic.topicName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {topic.totalAnswers} ответов | {topic.correctAnswers} верных
-                    </p>
-                  </div>
-                  <Badge
-                    variant={topic.avgPercent >= 70 ? "secondary" : topic.avgPercent >= 50 ? "outline" : "destructive"}
-                  >
+                <Cluster key={topic.topicId} justify="between" gap={4}>
+                  <Stack gap={1} grow>
+                    <Text weight="medium" truncate>{topic.topicName}</Text>
+                    <Text variant="body-xs" tone="muted">{topic.totalAnswers} ответов | {topic.correctAnswers} верных</Text>
+                  </Stack>
+                  <Tag tone={topic.avgPercent >= 70 ? "success" : topic.avgPercent >= 50 ? "warning" : "error"}>
                     {topic.avgPercent.toFixed(0)}%
-                  </Badge>
-                </div>
+                  </Tag>
+                </Cluster>
               ))
             ) : (
-              <p className="text-muted-foreground text-center py-8">Нет данных</p>
+              <Text align="center" tone="muted">Нет данных</Text>
             )}
-          </div>
-        </CardContent>
+          </Stack>
+        </CardBody>
       </Card>
 
       {/* Проблемные темы */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-orange-500" />
-            Проблемные темы
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
+        <CardHeader title={<Cluster gap={2}><AlertTriangle size={20} color="var(--ou-warning-600)" />Проблемные темы</Cluster>} />
+        <CardBody>
+          <Stack gap={3}>
             {sortedByFailure.length > 0 ? (
               sortedByFailure.map((topic, idx) => (
-                <div key={topic.topicId} className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-destructive/10 text-destructive text-xs font-medium">
-                      {idx + 1}
-                    </span>
-                    <p className="font-medium truncate">{topic.topicName}</p>
-                  </div>
-                  <Badge variant="destructive">{topic.failureCount} ошибок</Badge>
-                </div>
+                <Cluster key={topic.topicId} justify="between" gap={4}>
+                  <Cluster gap={3} grow wrap={false}>
+                    <Tag tone="error" variant="solid" size="s">{idx + 1}</Tag>
+                    <Text weight="medium" truncate>{topic.topicName}</Text>
+                  </Cluster>
+                  <Tag tone="error">{topic.failureCount} ошибок</Tag>
+                </Cluster>
               ))
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <CheckCircle className="h-8 w-8 text-green-500 mb-2" />
-                <p className="text-muted-foreground">Нет проблемных тем!</p>
-              </div>
+              <Stack align="center" gap={2}>
+                <CheckCircle size={32} color="var(--ou-success-600)" />
+                <Text tone="muted">Нет проблемных тем!</Text>
+              </Stack>
             )}
-          </div>
-        </CardContent>
+          </Stack>
+        </CardBody>
       </Card>
-    </div>
+    </Grid>
   );
 }
 
@@ -1037,12 +1004,10 @@ function TopicStatsSection({ topicStats }: { topicStats: TopicStat[] }) {
 // ============================================
 
 function ExportSection() {
-  const [isOpen, setIsOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
   const { data: filters, isLoading: filtersLoading } = useQuery<ExportFilters>({
     queryKey: ["/api/export/filters"],
-    enabled: isOpen,
   });
 
   const [config, setConfig] = useState<ExportConfig>({
@@ -1081,146 +1046,41 @@ function ExportSection() {
   const handleSelectAllTests = () => {
     if (!filters) return;
     let testsToSelect = filters.tests;
-
-    // Фильтруем по режиму
-    if (config.testMode === "standard") {
-      testsToSelect = testsToSelect.filter(t => t.mode !== "adaptive");
-    } else if (config.testMode === "adaptive") {
-      testsToSelect = testsToSelect.filter(t => t.mode === "adaptive");
-    }
-
-    // Фильтруем по поиску
-    if (testSearch) {
-      testsToSelect = testsToSelect.filter(t =>
-        t.title.toLowerCase().includes(testSearch.toLowerCase())
-      );
-    }
-
+    if (config.testMode === "standard") testsToSelect = testsToSelect.filter(t => t.mode !== "adaptive");
+    else if (config.testMode === "adaptive") testsToSelect = testsToSelect.filter(t => t.mode === "adaptive");
+    if (testSearch) testsToSelect = testsToSelect.filter(t => t.title.toLowerCase().includes(testSearch.toLowerCase()));
     const allSelected = testsToSelect.every(t => config.testIds.includes(t.id));
-    setConfig(prev => ({
-      ...prev,
-      testIds: allSelected ? [] : testsToSelect.map(t => t.id),
-    }));
+    setConfig(prev => ({ ...prev, testIds: allSelected ? [] : testsToSelect.map(t => t.id) }));
   };
 
   const handleUserToggle = (userId: string) => {
     setConfig(prev => ({
       ...prev,
-      userIds: prev.userIds.includes(userId)
-        ? prev.userIds.filter(id => id !== userId)
-        : [...prev.userIds, userId],
+      userIds: prev.userIds.includes(userId) ? prev.userIds.filter(id => id !== userId) : [...prev.userIds, userId],
     }));
   };
 
   const handleSelectAllUsers = () => {
     if (!filters) return;
     let usersToSelect = filters.users;
-
-    if (userSearch) {
-      usersToSelect = usersToSelect.filter(u =>
-        u.username.toLowerCase().includes(userSearch.toLowerCase())
-      );
-    }
-
+    if (userSearch) usersToSelect = usersToSelect.filter(u => u.username.toLowerCase().includes(userSearch.toLowerCase()));
     const allSelected = usersToSelect.every(u => config.userIds.includes(u.id));
-    setConfig(prev => ({
-      ...prev,
-      userIds: allSelected ? [] : usersToSelect.map(u => u.id),
-    }));
+    setConfig(prev => ({ ...prev, userIds: allSelected ? [] : usersToSelect.map(u => u.id) }));
   };
 
   const handleGroupToggle = (groupId: string) => {
     setConfig(prev => {
-      const newGroupIds = prev.groupIds.includes(groupId)
-        ? prev.groupIds.filter(id => id !== groupId)
-        : [...prev.groupIds, groupId];
-
-      // При изменении групп сбрасываем выбор пользователей
-      return {
-        ...prev,
-        groupIds: newGroupIds,
-        userIds: [],
-      };
+      const newGroupIds = prev.groupIds.includes(groupId) ? prev.groupIds.filter(id => id !== groupId) : [...prev.groupIds, groupId];
+      return { ...prev, groupIds: newGroupIds, userIds: [] };
     });
   };
 
   const handleSelectAllGroups = () => {
     if (!filters) return;
     let groupsToSelect = filters.groups;
-
-    if (groupSearch) {
-      groupsToSelect = groupsToSelect.filter(g =>
-        g.name.toLowerCase().includes(groupSearch.toLowerCase())
-      );
-    }
-
+    if (groupSearch) groupsToSelect = groupsToSelect.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()));
     const allSelected = groupsToSelect.every(g => config.groupIds.includes(g.id));
-    setConfig(prev => ({
-      ...prev,
-      groupIds: allSelected ? [] : groupsToSelect.map(g => g.id),
-      userIds: [], // Сбрасываем выбор пользователей
-    }));
-  };
-
-  const handleExport = async () => {
-    if (config.testIds.length === 0) {
-      alert("Выберите хотя бы один тест");
-      return;
-    }
-
-    setIsExporting(true);
-    try {
-      // Используем разные endpoints в зависимости от источника
-      const endpoint = config.source === "lms"
-        ? "/api/export/excel-lms"
-        : "/api/export/excel";
-
-      // Для "all" делаем два запроса и объединяем
-      if (config.source === "all") {
-        // Сначала Web
-        const webResponse = await fetch("/api/export/excel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(config),
-          credentials: "include",
-        });
-
-        if (!webResponse.ok) throw new Error("Web export failed");
-
-        const blob = await webResponse.blob();
-        downloadBlob(blob, `analytics_combined_${new Date().toISOString().split("T")[0]}.xlsx`);
-      } else if (config.source === "web") {
-        const response = await fetch("/api/export/excel", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(config),
-          credentials: "include",
-        });
-
-        if (!response.ok) throw new Error("Export failed");
-
-        const blob = await response.blob();
-        downloadBlob(blob, `analytics_web_${new Date().toISOString().split("T")[0]}.xlsx`);
-      } else {
-        // LMS export
-        const response = await fetch("/api/export/excel-lms", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(config),
-          credentials: "include",
-        });
-
-        if (!response.ok) throw new Error("LMS export failed");
-
-        const blob = await response.blob();
-        downloadBlob(blob, `analytics_lms_${new Date().toISOString().split("T")[0]}.xlsx`);
-      }
-    } catch (error) {
-      console.error("Export error:", error);
-      alert("Ошибка при создании отчёта");
-    } finally {
-      setIsExporting(false);
-    }
+    setConfig(prev => ({ ...prev, groupIds: allSelected ? [] : groupsToSelect.map(g => g.id), userIds: [] }));
   };
 
   const downloadBlob = (blob: Blob, filename: string) => {
@@ -1234,364 +1094,223 @@ function ExportSection() {
     document.body.removeChild(a);
   };
 
-  // Фильтруем тесты по источнику, режиму и поиску
+  const handleExport = async () => {
+    if (config.testIds.length === 0) { alert("Выберите хотя бы один тест"); return; }
+    setIsExporting(true);
+    try {
+      if (config.source === "lms") {
+        const response = await fetch("/api/export/excel-lms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config), credentials: "include" });
+        if (!response.ok) throw new Error("LMS export failed");
+        downloadBlob(await response.blob(), `analytics_lms_${new Date().toISOString().split("T")[0]}.xlsx`);
+      } else {
+        const response = await fetch("/api/export/excel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(config), credentials: "include" });
+        if (!response.ok) throw new Error("Export failed");
+        downloadBlob(await response.blob(), `analytics_${config.source}_${new Date().toISOString().split("T")[0]}.xlsx`);
+      }
+    } catch (error) {
+      alert("Ошибка при создании отчёта");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const filteredTests = filters?.tests.filter(test => {
-    // Фильтр по источнику данных
     if (config.source === "web" && !test.hasWebAttempts) return false;
     if (config.source === "lms" && !test.hasLmsAttempts) return false;
-    // Фильтр по режиму теста
     if (config.testMode === "standard" && test.mode === "adaptive") return false;
     if (config.testMode === "adaptive" && test.mode !== "adaptive") return false;
-    // Фильтр по поиску
     if (testSearch && !test.title.toLowerCase().includes(testSearch.toLowerCase())) return false;
     return true;
   }) || [];
 
-  // Получаем userIds из выбранных групп
   const groupUserIds = new Set<string>();
   if (config.groupIds.length > 0 && filters?.groups) {
     for (const groupId of config.groupIds) {
       const group = filters.groups.find(g => g.id === groupId);
-      if (group) {
-        group.userIds.forEach(id => groupUserIds.add(id));
-      }
+      if (group) group.userIds.forEach(id => groupUserIds.add(id));
     }
   }
 
-  // Фильтруем пользователей по источнику, поиску и группам
   const filteredUsers = filters?.users.filter(user => {
-    // Фильтр по источнику данных
     if (config.source === "web" && user.source === "lms") return false;
     if (config.source === "lms" && user.source === "web") return false;
-    // Если выбраны группы (только для Web), показываем только пользователей из этих групп
     if (config.source !== "lms" && config.groupIds.length > 0 && !groupUserIds.has(user.id)) return false;
     if (userSearch && !user.username.toLowerCase().includes(userSearch.toLowerCase())) return false;
     return true;
   }) || [];
 
-  // Фильтруем группы по поиску
   const filteredGroups = filters?.groups.filter(group => {
     if (groupSearch && !group.name.toLowerCase().includes(groupSearch.toLowerCase())) return false;
     return true;
   }) || [];
 
-  // Проверяем есть ли адаптивные тесты в выборке
-  const hasAdaptiveSelected = config.testIds.some(id =>
-    filters?.tests.find(t => t.id === id)?.mode === "adaptive"
-  );
+  const hasAdaptiveSelected = config.testIds.some(id => filters?.tests.find(t => t.id === id)?.mode === "adaptive");
+
+  const sheetOptions: { key: keyof ExportConfig["includeSheets"]; label: string; adaptive?: boolean }[] = [
+    { key: "summary", label: "Сводка" },
+    { key: "attempts", label: "Попытки" },
+    { key: "answers", label: "Ответы" },
+    { key: "questionStats", label: "Статистика вопросов" },
+    { key: "levelStats", label: "Статистика уровней", adaptive: true },
+    { key: "recommendations", label: "Рекомендации", adaptive: true },
+  ];
 
   return (
     <Card>
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5" />
-                <CardTitle className="text-lg">Экспорт отчёта</CardTitle>
-              </div>
-              {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
+      <CardHeader title={<Cluster gap={2}><FileSpreadsheet size={20} />Экспорт отчёта</Cluster>} />
+      <CardBody>
+        {filtersLoading ? (
+          <LoadingState message="Загрузка фильтров..." />
+        ) : (
+          <Stack gap={6}>
+            <FormGroup columns="two">
+              <Select<"all" | "web" | "lms">
+                label="Источник данных"
+                fullWidth
+                value={config.source}
+                onChange={(v) => setConfig(prev => ({ ...prev, source: v }))}
+                options={[
+                  { value: "all", label: "Все источники" },
+                  { value: "web", label: "Только Web" },
+                  { value: "lms", label: "Только LMS" },
+                ]}
+              />
+              <Select<"all" | "standard" | "adaptive">
+                label="Режим тестов"
+                fullWidth
+                value={config.testMode}
+                onChange={(v) => setConfig(prev => ({ ...prev, testMode: v, testIds: [] }))}
+                options={[
+                  { value: "all", label: "Все тесты" },
+                  { value: "standard", label: "Стандартные" },
+                  { value: "adaptive", label: "Адаптивные" },
+                ]}
+              />
+            </FormGroup>
 
-        <CollapsibleContent>
-          <CardContent className="space-y-6">
-            {filtersLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <LoadingState message="Загрузка фильтров..." />
-              </div>
-            ) : (
-              <>
-                {/* Источник данных */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Источник данных</Label>
-                  <Select
-                    value={config.source}
-                    onValueChange={(v: "all" | "web" | "lms") =>
-                      setConfig(prev => ({ ...prev, source: v }))
-                    }
-                  >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        <span className="flex items-center gap-2">
-                          <Users className="h-4 w-4" />
-                          Все источники
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="web">
-                        <span className="flex items-center gap-2">
-                          <Globe className="h-4 w-4" />
-                          Только Web
-                        </span>
-                      </SelectItem>
-                      <SelectItem value="lms">
-                        <span className="flex items-center gap-2">
-                          <Server className="h-4 w-4" />
-                          Только LMS
-                        </span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Режим тестов */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Режим тестов</Label>
-                  <Select
-                    value={config.testMode}
-                    onValueChange={(v: "all" | "standard" | "adaptive") =>
-                      setConfig(prev => ({ ...prev, testMode: v, testIds: [] }))
-                    }
-                  >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все тесты</SelectItem>
-                      <SelectItem value="standard">Стандартные</SelectItem>
-                      <SelectItem value="adaptive">Адаптивные</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Тесты */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">
-                      Тесты ({config.testIds.length} выбрано)
-                    </Label>
-                    <Button variant="ghost" size="sm" onClick={handleSelectAllTests}>
-                      {filteredTests.every(t => config.testIds.includes(t.id)) && filteredTests.length > 0
-                        ? "Снять все"
-                        : "Выбрать все"}
-                    </Button>
-                  </div>
-                  <Input
-                    placeholder="Поиск тестов..."
-                    value={testSearch}
-                    onChange={(e) => setTestSearch(e.target.value)}
-                  />
-                  <div className="max-h-[150px] overflow-y-auto space-y-1 border rounded-lg p-2">
-                    {filteredTests.map((test) => (
-                      <div key={test.id} className="flex items-center justify-between gap-2 py-1">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={config.testIds.includes(test.id)}
-                            onCheckedChange={() => handleTestToggle(test.id)}
-                          />
-                          <span className="text-sm">{test.title}</span>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          {test.mode === "adaptive" ? "Адапт." : "Станд."}
-                        </Badge>
-                      </div>
-                    ))}
-                    {filteredTests.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">
-                        Нет тестов
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Даты */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Дата от</Label>
-                    <Input
-                      type="date"
-                      value={config.dateFrom}
-                      onChange={(e) => setConfig(prev => ({ ...prev, dateFrom: e.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">Дата до</Label>
-                    <Input
-                      type="date"
-                      value={config.dateTo}
-                      onChange={(e) => setConfig(prev => ({ ...prev, dateTo: e.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                {/* Группы (только для Web) */}
-                {config.source !== "lms" && filters?.groups && filters.groups.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">
-                        Группы ({config.groupIds.length > 0 ? config.groupIds.length : "все"})
-                      </Label>
-                      <Button variant="ghost" size="sm" onClick={handleSelectAllGroups}>
-                        {filteredGroups.every(g => config.groupIds.includes(g.id)) && filteredGroups.length > 0
-                          ? "Снять все"
-                          : "Выбрать все"}
-                      </Button>
-                    </div>
-                    <Input
-                      placeholder="Поиск групп..."
-                      value={groupSearch}
-                      onChange={(e) => setGroupSearch(e.target.value)}
-                    />
-                    <div className="max-h-[120px] overflow-y-auto space-y-1 border rounded-lg p-2">
-                      {filteredGroups.map((group) => (
-                        <div key={group.id} className="flex items-center gap-2 py-1">
-                          <Checkbox
-                            checked={config.groupIds.includes(group.id)}
-                            onCheckedChange={() => handleGroupToggle(group.id)}
-                          />
-                          <span className="text-sm">{group.name}</span>
-                          <span className="text-xs text-muted-foreground">({group.userCount})</span>
-                        </div>
-                      ))}
-                      {filteredGroups.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-2">Нет групп</p>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Если группы не выбраны — будут доступны все пользователи
-                    </p>
-                  </div>
-                )}
-
-                {/* Пользователи (только для Web) */}
-                {(
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">
-                        Пользователи ({config.userIds.length > 0 ? config.userIds.length : "все"})
-                        {config.groupIds.length > 0 && (
-                          <span className="text-xs text-muted-foreground ml-1">
-                            (из выбранных групп: {filteredUsers.length})
-                          </span>
-                        )}
-                      </Label>
-                      <Button variant="ghost" size="sm" onClick={handleSelectAllUsers}>
-                        {filteredUsers.every(u => config.userIds.includes(u.id)) && filteredUsers.length > 0
-                          ? "Снять всех"
-                          : "Выбрать всех"}
-                      </Button>
-                    </div>
-                    <Input
-                      placeholder="Поиск пользователей..."
-                      value={userSearch}
-                      onChange={(e) => setUserSearch(e.target.value)}
-                    />
-                    <div className="max-h-[120px] overflow-y-auto space-y-1 border rounded-lg p-2">
-                      {filteredUsers.map((user) => (
-                        <div key={user.id} className="flex items-center gap-2 py-1">
-                          <Checkbox
-                            checked={config.userIds.includes(user.id)}
-                            onCheckedChange={() => handleUserToggle(user.id)}
-                          />
-                          <span className="text-sm">{user.username}</span>
-                        </div>
-                      ))}
-                      {filteredUsers.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-2">Нет пользователей</p>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Если никто не выбран — будут включены все пользователи
-                    </p>
-                  </div>
-                )}
-
-                {/* Лучшая попытка */}
-                <div className="space-y-3 p-4 bg-muted/30 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={config.bestAttemptOnly}
-                      onCheckedChange={(checked) =>
-                        setConfig(prev => ({ ...prev, bestAttemptOnly: !!checked }))
-                      }
-                    />
-                    <Label className="text-sm font-medium">
-                      Только лучшая попытка каждого пользователя
-                    </Label>
-                  </div>
-
-                  {config.bestAttemptOnly && hasAdaptiveSelected && (
-                    <div className="ml-6 space-y-2">
-                      <Label className="text-xs text-muted-foreground">
-                        Критерий лучшей попытки (для адаптивных)
-                      </Label>
-                      <Select
-                        value={config.bestAttemptCriteria}
-                        onValueChange={(v: "percent" | "level_sum" | "level_count") =>
-                          setConfig(prev => ({ ...prev, bestAttemptCriteria: v }))
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percent">По проценту</SelectItem>
-                          <SelectItem value="level_sum">По сумме уровней</SelectItem>
-                          <SelectItem value="level_count">По количеству уровней</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Листы в отчёте */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Листы в отчёте</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {[
-                      { key: "summary", label: "Сводка" },
-                      { key: "attempts", label: "Попытки" },
-                      { key: "answers", label: "Ответы" },
-                      { key: "questionStats", label: "Статистика вопросов" },
-                      { key: "levelStats", label: "Статистика уровней", adaptive: true },
-                      { key: "recommendations", label: "Рекомендации", adaptive: true },
-                    ].map(({ key, label, adaptive }) => (
-                      <div key={key} className="flex items-center gap-2">
-                        <Checkbox
-                          checked={config.includeSheets[key as keyof typeof config.includeSheets]}
-                          onCheckedChange={(checked) =>
-                            setConfig(prev => ({
-                              ...prev,
-                              includeSheets: {
-                                ...prev.includeSheets,
-                                [key]: !!checked,
-                              },
-                            }))
-                          }
-                        />
-                        <Label className="text-sm">
-                          {label}
-                          {adaptive && <span className="text-xs text-muted-foreground ml-1">(адапт.)</span>}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Кнопка экспорта */}
-                <Button
-                  onClick={handleExport}
-                  disabled={isExporting || config.testIds.length === 0}
-                  className="w-full"
-                >
-                  {isExporting ? (
-                    "Создание отчёта..."
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      Создать отчёт
-                    </>
-                  )}
+            <Stack gap={2}>
+              <Cluster justify="between">
+                <Text variant="body-s" weight="medium">Тесты ({config.testIds.length} выбрано)</Text>
+                <Button variant="ghost" size="s" onClick={handleSelectAllTests}>
+                  {filteredTests.every(t => config.testIds.includes(t.id)) && filteredTests.length > 0 ? "Снять все" : "Выбрать все"}
                 </Button>
-              </>
+              </Cluster>
+              <Input placeholder="Поиск тестов..." value={testSearch} onChange={(e) => setTestSearch(e.target.value)} fullWidth />
+              <Box border radius="l" pad={2}>
+                <ScrollArea maxH="sm">
+                  <Stack gap={1}>
+                    {filteredTests.map((test) => (
+                      <Cluster key={test.id} justify="between" gap={2}>
+                        <Checkbox label={test.title} checked={config.testIds.includes(test.id)} onChange={() => handleTestToggle(test.id)} />
+                        <Tag variant="outline" size="s">{test.mode === "adaptive" ? "Адапт." : "Станд."}</Tag>
+                      </Cluster>
+                    ))}
+                    {filteredTests.length === 0 && <Text align="center" variant="body-s" tone="muted">Нет тестов</Text>}
+                  </Stack>
+                </ScrollArea>
+              </Box>
+            </Stack>
+
+            <FormGroup columns="two">
+              <Input label="Дата от" type="date" fullWidth value={config.dateFrom} onChange={(e) => setConfig(prev => ({ ...prev, dateFrom: e.target.value }))} />
+              <Input label="Дата до" type="date" fullWidth value={config.dateTo} onChange={(e) => setConfig(prev => ({ ...prev, dateTo: e.target.value }))} />
+            </FormGroup>
+
+            {config.source !== "lms" && filters?.groups && filters.groups.length > 0 && (
+              <Stack gap={2}>
+                <Cluster justify="between">
+                  <Text variant="body-s" weight="medium">Группы ({config.groupIds.length > 0 ? config.groupIds.length : "все"})</Text>
+                  <Button variant="ghost" size="s" onClick={handleSelectAllGroups}>
+                    {filteredGroups.every(g => config.groupIds.includes(g.id)) && filteredGroups.length > 0 ? "Снять все" : "Выбрать все"}
+                  </Button>
+                </Cluster>
+                <Input placeholder="Поиск групп..." value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} fullWidth />
+                <Box border radius="l" pad={2}>
+                  <ScrollArea maxH="xs">
+                    <Stack gap={1}>
+                      {filteredGroups.map((group) => (
+                        <Checkbox
+                          key={group.id}
+                          label={<>{group.name} <Text variant="body-xs" tone="muted">({group.userCount})</Text></>}
+                          checked={config.groupIds.includes(group.id)}
+                          onChange={() => handleGroupToggle(group.id)}
+                        />
+                      ))}
+                    </Stack>
+                  </ScrollArea>
+                </Box>
+              </Stack>
             )}
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
+
+            <Stack gap={2}>
+              <Cluster justify="between">
+                <Text variant="body-s" weight="medium">Пользователи ({config.userIds.length > 0 ? config.userIds.length : "все"})</Text>
+                <Button variant="ghost" size="s" onClick={handleSelectAllUsers}>
+                  {filteredUsers.every(u => config.userIds.includes(u.id)) && filteredUsers.length > 0 ? "Снять всех" : "Выбрать всех"}
+                </Button>
+              </Cluster>
+              <Input placeholder="Поиск пользователей..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)} fullWidth />
+              <Box border radius="l" pad={2}>
+                <ScrollArea maxH="xs">
+                  <Stack gap={1}>
+                    {filteredUsers.map((user) => (
+                      <Checkbox key={user.id} label={user.username} checked={config.userIds.includes(user.id)} onChange={() => handleUserToggle(user.id)} />
+                    ))}
+                    {filteredUsers.length === 0 && <Text align="center" variant="body-s" tone="muted">Нет пользователей</Text>}
+                  </Stack>
+                </ScrollArea>
+              </Box>
+            </Stack>
+
+            <Box pad={4} surface="muted" radius="l">
+              <Stack gap={3}>
+                <Checkbox
+                  label="Только лучшая попытка каждого пользователя"
+                  checked={config.bestAttemptOnly}
+                  onChange={(e) => setConfig(prev => ({ ...prev, bestAttemptOnly: e.target.checked }))}
+                />
+                {config.bestAttemptOnly && hasAdaptiveSelected && (
+                  <Select<"percent" | "level_sum" | "level_count">
+                    label="Критерий лучшей попытки (для адаптивных)"
+                    fullWidth
+                    value={config.bestAttemptCriteria}
+                    onChange={(v) => setConfig(prev => ({ ...prev, bestAttemptCriteria: v }))}
+                    options={[
+                      { value: "percent", label: "По проценту" },
+                      { value: "level_sum", label: "По сумме уровней" },
+                      { value: "level_count", label: "По количеству уровней" },
+                    ]}
+                  />
+                )}
+              </Stack>
+            </Box>
+
+            <Stack gap={2}>
+              <Text variant="body-s" weight="medium">Листы в отчёте</Text>
+              <Grid minItem="sm" gap={3}>
+                {sheetOptions.map(({ key, label, adaptive }) => (
+                  <Checkbox
+                    key={key}
+                    label={<>{label}{adaptive && <Text variant="body-xs" tone="muted"> (адапт.)</Text>}</>}
+                    checked={config.includeSheets[key]}
+                    onChange={(e) => setConfig(prev => ({ ...prev, includeSheets: { ...prev.includeSheets, [key]: e.target.checked } }))}
+                  />
+                ))}
+              </Grid>
+            </Stack>
+
+            <Button
+              fullWidth
+              onClick={handleExport}
+              disabled={isExporting || config.testIds.length === 0}
+              leadingIcon={isExporting ? undefined : <Download size={16} />}
+              loading={isExporting}
+            >
+              {isExporting ? "Создание отчёта..." : "Создать отчёт"}
+            </Button>
+          </Stack>
+        )}
+      </CardBody>
     </Card>
   );
 }
@@ -1605,19 +1324,42 @@ export default function AnalyticsPage() {
   const [testId, setTestId] = useState<string>("all");
   const [selectedAttempt, setSelectedAttempt] = useState<CombinedAttempt | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [attemptsPage, setAttemptsPage] = useState(1);
+  const ATTEMPTS_PER_PAGE = 25;
+  const [sortCol, setSortCol] = useState<"date" | "result" | "user" | "test">("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [trendMode, setTrendMode] = useState<"total" | "byTest">("total");
 
-  const { data, isLoading, error } = useQuery<CombinedAnalyticsData>({
+  const queryParams = new URLSearchParams({ source });
+  if (testId !== "all") queryParams.append("testId", testId);
+
+  const { data, isLoading, error, refetch, isFetching } = useQuery<CombinedAnalyticsData>({
     queryKey: ["/api/analytics/combined-full", source, testId],
     queryFn: async () => {
-      const params = new URLSearchParams({ source });
-      if (testId !== "all") params.append("testId", testId);
-      const response = await fetch(`/api/analytics/combined-full?${params}`, {
+      const response = await fetch(`/api/analytics/combined-full?${queryParams}`, {
         credentials: "include",
       });
       if (!response.ok) throw new Error("Failed to fetch");
       return response.json();
     },
-    refetchInterval: 10000, // Автообновление каждые 10 секунд
+    refetchInterval: false,
+    staleTime: 60000,
+  });
+
+  const { data: summaryData, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<CombinedSummary>({
+    queryKey: ["/api/analytics/summary", source, testId],
+    queryFn: async () => {
+      const response = await fetch(`/api/analytics/summary?${queryParams}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Failed to fetch summary");
+      return response.json();
+    },
+    refetchInterval: false,
+    staleTime: 60000,
   });
 
   const { data: tests } = useQuery<{ id: string; title: string }[]>({
@@ -1630,9 +1372,176 @@ export default function AnalyticsPage() {
     },
   });
 
+  const handleSourceChange = (v: "all" | "web" | "lms") => {
+    setSource(v);
+    setAttemptsPage(1);
+  };
+
+  const handleTestIdChange = (v: string) => {
+    setTestId(v);
+    setAttemptsPage(1);
+  };
+
+  const handleDateFromChange = (v: string) => {
+    setDateFrom(v);
+    setAttemptsPage(1);
+  };
+
+  const handleDateToChange = (v: string) => {
+    setDateTo(v);
+    setAttemptsPage(1);
+  };
+
+  const handleUserSearchChange = (v: string) => {
+    setUserSearch(v);
+    setAttemptsPage(1);
+  };
+
+  const filteredAttempts = (data?.attempts || []).filter(a => {
+    if (dateFrom && a.finishedAt && new Date(a.finishedAt) < new Date(dateFrom)) return false;
+    if (dateTo && a.finishedAt && new Date(a.finishedAt) > new Date(dateTo + "T23:59:59")) return false;
+    if (userSearch) {
+      const q = userSearch.toLowerCase();
+      const name = (a.username || a.lmsUserName || "").toLowerCase();
+      const email = (a.userEmail || a.lmsUserEmail || "").toLowerCase();
+      if (!name.includes(q) && !email.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const handleSort = (col: "date" | "result" | "user" | "test") => {
+    if (sortCol === col) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortCol(col);
+      setSortDir("desc");
+    }
+    setAttemptsPage(1);
+  };
+
+  const sortedAttempts = [...filteredAttempts].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    switch (sortCol) {
+      case "date":
+        return dir * (new Date(a.finishedAt || 0).getTime() - new Date(b.finishedAt || 0).getTime());
+      case "result":
+        return dir * ((a.resultPercent || 0) - (b.resultPercent || 0));
+      case "user":
+        return dir * (a.username || a.lmsUserName || "").localeCompare(b.username || b.lmsUserName || "");
+      case "test":
+        return dir * (a.testTitle || "").localeCompare(b.testTitle || "");
+      default:
+        return 0;
+    }
+  });
+
   const handleViewDetails = (attempt: CombinedAttempt) => {
     setSelectedAttempt(attempt);
     setDetailsOpen(true);
+  };
+
+  const handleExportAttempt = async (attempt: CombinedAttempt) => {
+    try {
+      const endpoint = attempt.source === "web"
+        ? `/api/analytics/attempts/${attempt.id}`
+        : `/api/analytics/scorm-attempts/${attempt.id}`;
+
+      const res = await fetch(endpoint, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      const details = await res.json();
+
+      const rows: any[][] = [
+        ["Попытка", attempt.id],
+        ["Пользователь", attempt.username || attempt.lmsUserName || "—"],
+        ["Email", attempt.userEmail || attempt.lmsUserEmail || "—"],
+        ["Тест", attempt.testTitle],
+        ["Источник", attempt.source === "web" ? "Web" : "LMS"],
+        ["Дата", attempt.finishedAt ? new Date(attempt.finishedAt).toLocaleString("ru-RU") : "—"],
+        [],
+      ];
+
+      // Расчётная информация (баллы, вклады в шкалы) в выгрузке протокола.
+      const round2 = (n: unknown) => (typeof n === "number" ? String(Math.round(n * 100) / 100) : "");
+      const fmtContribs = (contribs: Array<{ scaleKey: string; delta: number }> | undefined) =>
+        (contribs || []).map(c => `${c.scaleKey} ${c.delta >= 0 ? "+" : ""}${c.delta}`).join(" | ");
+      const fmtVar = (v: unknown) =>
+        typeof v === "boolean" ? (v ? "да" : "нет") : typeof v === "number" ? round2(v) : String(v ?? "");
+
+      if (attempt.isAdaptive) {
+        rows.push(["Режим", "Адаптивный"]);
+        rows.push([]);
+        rows.push(["Тема", "Достигнутый уровень"]);
+        for (const level of details.achievedLevels || []) {
+          rows.push([level.topicName, level.levelName || "Не достигнут"]);
+        }
+      } else {
+        rows.push(["Результат", `${details.overallPercent?.toFixed(1)}%`]);
+        rows.push(["Баллы", `${details.earnedPoints} / ${details.possiblePoints}`]);
+        rows.push(["Статус", details.passed ? "Сдан" : "Не сдан"]);
+        rows.push([]);
+        rows.push(["Вопрос", "Тема", "Тип", "Ответ", "Правильный", "Результат", "Баллы", "Сложность", "Доля", "Вклады в шкалы"]);
+        for (const ans of details.answers || []) {
+          rows.push([
+            ans.questionPrompt,
+            ans.topicName,
+            ans.questionType,
+            JSON.stringify(ans.userAnswer),
+            JSON.stringify(ans.correctAnswer),
+            ans.isCorrect ? "Верно" : "Неверно",
+            `${ans.earnedPoints}/${ans.possiblePoints}`,
+            ans.difficulty ?? "",
+            typeof ans.ratio === "number" ? `${Math.round(ans.ratio * 100)}%` : "",
+            fmtContribs(ans.contribs),
+          ]);
+        }
+      }
+
+      // Итоги по шкалам (PRD-5) — абсолютное значение (raw) + интерпретационный
+      // уровень (bands). Процент не выгружаем: это вспомогательное значение для
+      // формул показателей, а не результат шкалы.
+      const scaleEntries = Object.entries(details.scaleResults || {}) as Array<[string, {
+        raw?: number; level?: string; label?: string; hasValue?: boolean;
+      }]>;
+      if (scaleEntries.length) {
+        rows.push([]);
+        rows.push(["Шкалы"]);
+        rows.push(["Шкала", "Значение", "Уровень"]);
+        for (const [key, sc] of scaleEntries) {
+          rows.push([
+            key,
+            sc.hasValue ? round2(sc.raw) : "",
+            sc.label || sc.level || "",
+          ]);
+        }
+      }
+
+      // Показатели (PRD-2, result variables).
+      const varEntries = Object.entries(details.resultVariables || {});
+      if (varEntries.length) {
+        rows.push([]);
+        rows.push(["Показатели"]);
+        rows.push(["Показатель", "Значение"]);
+        for (const [name, val] of varEntries) {
+          rows.push([name, fmtVar(val)]);
+        }
+      }
+
+      // Создаём xlsx через динамический импорт не нужен — используем CSV
+      const csv = rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      const bom = "﻿";
+      const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const userName = (attempt.username || attempt.lmsUserName || "user").replace(/[^a-zA-Zа-яА-Я0-9]/g, "_");
+      a.download = `attempt_${userName}_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch {
+      alert("Не удалось скачать данные попытки");
+    }
   };
 
   if (isLoading) {
@@ -1641,116 +1550,244 @@ export default function AnalyticsPage() {
 
   if (error || !data) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Не удалось загрузить аналитику</p>
-      </div>
+      <Box pad={8}>
+        <Text align="center" tone="muted">Не удалось загрузить аналитику</Text>
+      </Box>
     );
   }
 
+  const totalPages = Math.ceil(filteredAttempts.length / ATTEMPTS_PER_PAGE);
+  const chartTooltipStyle = { backgroundColor: "var(--ou-bg-elevated)", border: "1px solid var(--ou-border-soft)" };
+
   return (
-    <div className="space-y-6">
+    <Stack gap={6}>
       {/* Заголовок */}
-      <div>
-        <h1 className="text-2xl font-semibold">Аналитика</h1>
-        <p className="text-muted-foreground">
-          Обзор эффективности тестов и статистика по источникам
-        </p>
-      </div>
+      <Cluster justify="between">
+        <Stack gap={1}>
+          <Text as="h1" variant="display-s" weight="semibold">Аналитика</Text>
+          <Text tone="muted">Обзор эффективности тестов и статистика по источникам</Text>
+        </Stack>
+        <Button variant="secondary" size="s" leadingIcon={<RefreshCw size={16} />} loading={isFetching} onClick={() => { refetch(); refetchSummary(); }}>
+          Обновить
+        </Button>
+      </Cluster>
 
       {/* Фильтры */}
       <FiltersBar
         source={source}
-        onSourceChange={setSource}
+        onSourceChange={handleSourceChange}
         testId={testId}
-        onTestIdChange={setTestId}
+        onTestIdChange={handleTestIdChange}
         tests={tests || []}
       />
 
-      {/* Карточки статистики */}
-      <SummaryCards summary={data.summary} source={source} />
+      {/* Табы */}
+      <Tabs
+        defaultValue="overview"
+        items={[
+          {
+            id: "overview",
+            label: "Обзор",
+            content: (
+              <Stack gap={1}>
+                {summaryLoading ? (
+                  <Grid minItem="sm" gap={1}>
+                    {[1, 2, 3, 4].map(i => <Card key={i}><CardBody><ProgressBar indeterminate hideHeader /></CardBody></Card>)}
+                  </Grid>
+                ) : summaryData ? (
+                  <SummaryCards summary={summaryData} source={source} />
+                ) : null}
 
-      {/* Графики */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Тренды (30 дней)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.trends.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={data.trends}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(val) =>
-                      new Date(val).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
-                    }
-                    className="text-xs"
-                  />
-                  <YAxis className="text-xs" />
-                  <Tooltip
-                    labelFormatter={(val) => new Date(val).toLocaleDateString("ru-RU")}
-                    contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
-                  />
-                  <Legend />
-                  <Line type="monotone" dataKey="attempts" stroke="hsl(var(--primary))" strokeWidth={2} name="Попытки" />
-                  <Line type="monotone" dataKey="passRate" stroke="hsl(var(--chart-2))" strokeWidth={2} name="Pass Rate %" />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[280px] text-muted-foreground">Нет данных</div>
-            )}
-          </CardContent>
-        </Card>
+                {/* Алерты */}
+                {(data.alerts || []).length > 0 && (
+                  <Stack gap={2}>
+                    {data.alerts!.map(alert => (
+                      <Box key={alert.testId} pad={3} surface="muted" radius="l" border>
+                        <Cluster gap={3} wrap={false}>
+                          <TrendingDown size={20} color="var(--ou-warning-600)" />
+                          <Stack gap={1} grow>
+                            <Text variant="body-s" weight="medium" truncate>{alert.testTitle}</Text>
+                            <Text variant="body-xs" tone="muted">
+                              Pass rate упал на <Text variant="body-xs" tone="warning" weight="medium">{alert.drop.toFixed(0)}%</Text>
+                              {" "}за последние 7 дней: {alert.prevPassRate.toFixed(0)}% → {alert.recentPassRate.toFixed(0)}%
+                            </Text>
+                          </Stack>
+                          <Tag variant="outline" tone="warning">−{alert.drop.toFixed(0)}%</Tag>
+                        </Cluster>
+                      </Box>
+                    ))}
+                  </Stack>
+                )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Эффективность тестов</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.testStats.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={data.testStats}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="testTitle" className="text-xs" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
-                  <YAxis className="text-xs" />
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }} />
-                  <Legend />
-                  <Bar dataKey="avgPercent" fill="hsl(var(--primary))" name="Средний %" />
-                  <Bar dataKey="passRate" fill="hsl(var(--chart-2))" name="Pass Rate" />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[280px] text-muted-foreground">Нет данных</div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                <Grid minItem="lg" gap={1}>
+                  <Card>
+                    <CardHeader
+                      title="Тренды (30 дней)"
+                      trail={
+                        <Tabs
+                          value={trendMode}
+                          onChange={(v) => setTrendMode(v as "total" | "byTest")}
+                          variant="segment"
+                          size="s"
+                          hidePanel
+                          items={[
+                            { id: "total", label: "Общие" },
+                            { id: "byTest", label: "По тестам" },
+                          ]}
+                        />
+                      }
+                    />
+                    <CardBody>
+                      {data.trends.some(t => t.attempts > 0) ? (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <LineChart data={data.trends}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--ou-border-soft)" />
+                            <XAxis
+                              dataKey="date"
+                              tickFormatter={(val) =>
+                                new Date(val).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })
+                              }
+                              fontSize={12}
+                            />
+                            <YAxis fontSize={12} />
+                            <Tooltip
+                              labelFormatter={(val) => new Date(val).toLocaleDateString("ru-RU")}
+                              contentStyle={chartTooltipStyle}
+                            />
+                            <Legend />
+                            {trendMode === "total" ? (
+                              <>
+                                <Line type="monotone" dataKey="attempts" stroke="var(--ou-accent-default)" strokeWidth={2} name="Попытки" />
+                                <Line type="monotone" dataKey="passRate" stroke="var(--ou-success-default)" strokeWidth={2} name="Pass Rate %" />
+                              </>
+                            ) : (
+                              (data.top5Tests || []).map((test, i) => (
+                                <Line
+                                  key={test.testId}
+                                  type="monotone"
+                                  dataKey={test.testId}
+                                  // Series colour from the shared categorical set — the
+                                  // hue-rotation formula guaranteed neither contrast nor
+                                  // distinguishable neighbours, and ignored the theme.
+                                  stroke={`var(--tb-chart-${(i % 8) + 1})`}
+                                  strokeWidth={2}
+                                  name={test.testTitle.length > 20 ? test.testTitle.slice(0, 20) + "…" : test.testTitle}
+                                />
+                              ))
+                            )}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <Box pad={8}><Text align="center" tone="muted">Нет данных</Text></Box>
+                      )}
+                    </CardBody>
+                  </Card>
 
-      {/* Статистика по темам */}
-      <TopicStatsSection topicStats={data.topicStats} />
+                  <Card>
+                    <CardHeader title="Эффективность тестов" />
+                    <CardBody>
+                      {data.testStats.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={data.testStats}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--ou-border-soft)" />
+                            <XAxis dataKey="testTitle" fontSize={10} tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
+                            <YAxis fontSize={12} />
+                            <Tooltip contentStyle={chartTooltipStyle} />
+                            <Legend />
+                            <Bar dataKey="avgPercent" fill="var(--ou-accent-default)" name="Средний %" />
+                            <Bar dataKey="passRate" fill="var(--ou-success-default)" name="Pass Rate" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <Box pad={8}><Text align="center" tone="muted">Нет данных</Text></Box>
+                      )}
+                    </CardBody>
+                  </Card>
+                </Grid>
 
-      {/* Экспорт отчёта */}
-      <ExportSection />
+                <TopicStatsSection topicStats={data.topicStats} />
+              </Stack>
+            ),
+          },
+          {
+            id: "attempts",
+            label: `Попытки${data.attempts.length > 0 ? ` (${data.attempts.length})` : ""}`,
+            content: (
+              <Card>
+                <CardHeader
+                  title="Попытки"
+                  trail={
+                    <Text variant="body-s" tone="muted">
+                      {filteredAttempts.length !== data.attempts.length
+                        ? `${filteredAttempts.length} из ${data.attempts.length}`
+                        : `Всего: ${data.attempts.length}`}
+                    </Text>
+                  }
+                />
+                <CardBody>
+                  <Stack gap={4}>
+                    <Cluster gap={3}>
+                      <Input
+                        placeholder="Имя или email..."
+                        value={userSearch}
+                        onChange={(e) => handleUserSearchChange(e.target.value)}
+                        size="s"
+                      />
+                      <Cluster gap={2}>
+                        <Text variant="body-xs" tone="muted">С:</Text>
+                        <Input type="date" value={dateFrom} onChange={(e) => handleDateFromChange(e.target.value)} size="s" />
+                      </Cluster>
+                      <Cluster gap={2}>
+                        <Text variant="body-xs" tone="muted">По:</Text>
+                        <Input type="date" value={dateTo} onChange={(e) => handleDateToChange(e.target.value)} size="s" />
+                      </Cluster>
+                      {(userSearch || dateFrom || dateTo) && (
+                        <Button
+                          variant="ghost"
+                          size="s"
+                          onClick={() => {
+                            setUserSearch("");
+                            setDateFrom("");
+                            setDateTo("");
+                            setAttemptsPage(1);
+                          }}
+                        >
+                          Сбросить
+                        </Button>
+                      )}
+                    </Cluster>
 
-      {/* Таблица попыток */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Попытки</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AttemptsTable
-            attempts={data.attempts.slice(0, 50)}
-            source={source}
-            onViewDetails={handleViewDetails}
-          />
-          {data.attempts.length > 50 && (
-            <p className="text-sm text-muted-foreground text-center mt-4">
-              Показаны последние 50 из {data.attempts.length} попыток
-            </p>
-          )}
-        </CardContent>
-      </Card>
+                    <AttemptsTable
+                      attempts={sortedAttempts.slice((attemptsPage - 1) * ATTEMPTS_PER_PAGE, attemptsPage * ATTEMPTS_PER_PAGE)}
+                      source={source}
+                      onViewDetails={handleViewDetails}
+                      sortCol={sortCol}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                      onExport={handleExportAttempt}
+                    />
+
+                    {filteredAttempts.length > ATTEMPTS_PER_PAGE && (
+                      <Cluster justify="between">
+                        <Text variant="body-s" tone="muted">Страница {attemptsPage} из {totalPages}</Text>
+                        <Cluster gap={2}>
+                          <Button variant="secondary" size="s" onClick={() => setAttemptsPage(p => Math.max(1, p - 1))} disabled={attemptsPage === 1}>←</Button>
+                          <Button variant="secondary" size="s" onClick={() => setAttemptsPage(p => Math.min(totalPages, p + 1))} disabled={attemptsPage === totalPages}>→</Button>
+                        </Cluster>
+                      </Cluster>
+                    )}
+                  </Stack>
+                </CardBody>
+              </Card>
+            ),
+          },
+          {
+            id: "export",
+            label: "Экспорт",
+            content: <ExportSection />,
+          },
+        ]}
+      />
 
       {/* Модальное окно деталей */}
       <AttemptDetailsDialog
@@ -1758,6 +1795,6 @@ export default function AnalyticsPage() {
         open={detailsOpen}
         onClose={() => setDetailsOpen(false)}
       />
-    </div>
+    </Stack>
   );
 }

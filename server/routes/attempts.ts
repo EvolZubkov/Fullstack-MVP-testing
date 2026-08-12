@@ -1,15 +1,295 @@
 import { Router } from "express";
+import path from "node:path";
+import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireLearner } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
-import type { TestVariant, AttemptResult, TopicResult, PassRule } from "@shared/schema";
+import {
+  aggregateStandardResult,
+  aggregateAdaptiveResult,
+  adaptiveResultAsStandard,
+  type AggregateSection,
+} from "@shared/scoring/aggregate";
+import type { CorrectData, Answer } from "@shared/scoring/engine";
+import { drawSection } from "@shared/draw/blueprint";
+import { selectForm } from "@shared/draw/forms";
+import { orderQuestions } from "@shared/draw/order-questions";
+import {
+  assembleDelivery,
+  effectiveSectionOrder,
+  type DeliverySection,
+} from "@shared/draw/assemble-delivery";
+import { ipsativeScalesForDelivery } from "../services/scale-composition";
+import { loadScoringConfig } from "../services/scoring-config";
+import { loadTestScoringContext } from "../services/effective-scoring";
+import { computeAttemptResult } from "../services/result-compute";
+import { decideRetake, countAttemptsInAssignment } from "../services/retake-gate";
+import {
+  readResultsRenderPayload,
+  readReportRenderPayload,
+  completeMeasuresSource,
+} from "../services/template-render";
+import { reportKindForMode } from "@shared/report/report-variants";
+import {
+  buildReportInput,
+  buildAdaptiveReportInput,
+  buildMeasuresInput,
+  type MeasuresSource,
+} from "../services/result-context";
+import type { MeasuresInput } from "@shared/template/result-context";
+import type { ResultsBlockSettings } from "@shared/template/results-blocks";
+import type { ChartKindSettings } from "@shared/template/scales-chart";
+import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
+import { pingSection } from "../services/section-timer";
+import { buildResultsNav, RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
+import { resolveSystemScreenDir, resolveTemplateDir } from "../services/template-dir";
+import {
+  liveDataSource,
+  snapshotDataSource,
+  dataSourceForAttempt,
+  type TestDataSource,
+  type TestSnapshotContent,
+} from "../services/test-snapshot";
+import type { QuestionType } from "@shared/scales/engine";
+import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
+import { isMeasurementOnly } from "@shared/questions/question-type";
+// PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
+// the topic's feedback text — the same helpers the SCORM bake runs.
+import { feedbackAssets, topicFeedbackTexts } from "@shared/template/result-context";
+// issue #34: общий/условный режим обратной связи вопроса — одно правило на оба хоста.
+import { feedbackTextFor } from "@shared/template/feedback-banner";
+import { isReportEnabled } from "@shared/schema";
+import type {
+  Test,
+  Question,
+  TestVariant,
+  AttemptResult,
+  TopicResult,
+  PassRule,
+  RetakePolicy,
+  ReportSettings,
+  TestIntro,
+  FeedbackContent,
+  QuestionScoring,
+} from "@shared/schema";
+// Brings the `SessionData.magic` augmentation (PRD magic-link scope) into scope.
+import "../middleware/magic-scope";
 
 const router = Router();
 
-// GET /api/learner/tests - Тесты для ученика
-router.get("/learner/tests", requireLearner, async (req, res) => {
+/**
+ * PRD-19 (Block B): the runtime navigation settings the web learner host reads
+ * from the attempt start / resume responses (the web analogue of TEST_DATA in
+ * the SCORM package). `answerCommitScope` is resolved here from mode + flow mode
+ * through the SAME shared resolver the SCORM exporter uses, so both hosts agree.
+ */
+function prd19RuntimeSettings(test: Test) {
+  return {
+    allowReturnToUnanswered: test.allowReturnToUnanswered ?? true,
+    allowAnswerChange: test.allowAnswerChange ?? false,
+    // PRD-43: independent of allowReturnToUnanswered.
+    quickAdvance: test.quickAdvance ?? false,
+    showSectionResults: test.showSectionResults ?? true,
+    // Отсутствие в СТАРОМ снимке публикации = прежнее поведение, обзор показывается.
+    skipReviewWhenComplete: test.skipReviewWhenComplete ?? false,
+    // PRD-34 (FR-01, FR-05): настройки защиты. Отсутствие поля в СТАРОМ снимке
+    // публикации читается как умолчание — тест, опубликованный до PRD-34, получает защиту.
+    copyProtection: test.copyProtection ?? true,
+    protectionWatermark: test.protectionWatermark ?? false,
+    protectionHideOnBlur: test.protectionHideOnBlur ?? false,
+    answerCommitScope: resolveAnswerCommitScope({
+      mode: test.mode,
+      flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode,
+    }),
+  };
+}
+
+/**
+ * The questions of a standard run as the web learner host receives them.
+ *
+ * The answer key ships ONLY for a test that shows correctness («показывать
+ * правильность ответа»); otherwise `correctJson` is stripped and the run carries
+ * no key at all.
+ *
+ * PRD-10 (FR-12): the EFFECTIVE graded config rides on exactly the same gate. The
+ * instant per-answer verdict is computed in the browser (no round trip, like the
+ * package's), so without this field every question resolved to the system default
+ * `exact` and a weighted/tiered question could never report partial credit live —
+ * even though the results screen scored it correctly through
+ * `shared/scoring/aggregate`. The field is named `scoring` and the system default
+ * is omitted, mirroring the SCORM bake (`builders/test-json.ts`), so both hosts
+ * read one shape.
+ *
+ * Resolved through `src` (live storage or a publication snapshot, PRD-15 block B),
+ * so a pinned attempt is graded live by the config it was published with.
+ */
+async function questionsForClient(
+  src: TestDataSource,
+  test: Test,
+  questions: Question[],
+): Promise<Array<Question & { scoring?: QuestionScoring }>> {
+  if (!test.showCorrectAnswers) {
+    return questions.map((q) => ({ ...q, correctJson: undefined })) as Question[];
+  }
+  const scoring = await loadTestScoringContext(test.id, src);
+  return questions.map((q) => {
+    const effective = scoring.resolve(q);
+    return effective.source.scoring === "system" ? q : { ...q, scoring: effective.scoring };
+  });
+}
+
+/**
+ * PRD-12 FR-6: the author's structure — content pages in all four placements
+ * («До теста» / «После теста» / перед темой / после темы) plus the flow mode —
+ * delivered to the web learner host so it can build the SAME run as the SCORM
+ * package (`shared/flow/page-sequence`). Without this the web host only ever saw
+ * the drawn questions, and every content page the author placed was silently
+ * skipped at run time while «Структура» kept promising it.
+ *
+ * Read through `src`, not `storage`, so a snapshot-pinned attempt (PRD-15 block B)
+ * gets the PUBLISHED structure rather than today's live edits.
+ */
+async function flowPayload(src: TestDataSource, test: Test) {
+  const contentPages = await src.getContentPages(test.id);
+  return {
+    flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode ?? "linear_flat",
+    contentPages: contentPages.map((p) => ({
+      id: p.id,
+      kind: p.kind,
+      type: p.type,
+      topicId: p.topicId,
+      position: p.position,
+      sortOrder: p.sortOrder,
+      mode: p.mode,
+      templateKey: p.templateKey,
+      valuesJson: p.valuesJson,
+      // PRD-22: page PROPERTIES (sequence identifier, «Далее» caption, background).
+      // The SCORM package has shipped them since FR-20; without them here the web
+      // run computed no sequence at all, so a gallery lost its indicator.
+      settingsJson: p.settingsJson,
+      autoAdvance: p.autoAdvance,
+      autoAdvanceDelayMs: p.autoAdvanceDelayMs,
+    })),
+  };
+}
+
+/**
+ * Resolves the data source for STARTING an attempt (PRD-15 block B). A published
+ * test with a snapshot is delivered frozen — the attempt is pinned to that
+ * snapshot and every read (sections, questions, scales, ...) comes from it.
+ * Drafts, preview and published tests without a snapshot (transitional) fall
+ * back to live storage with no pin.
+ */
+async function sourceForStart(
+  testId: string,
+): Promise<{ src: TestDataSource; snapshotId: string | null; test: Test } | null> {
+  const liveTest = await storage.getTest(testId);
+  if (!liveTest) return null;
+  if (liveTest.status === "published") {
+    const snap = await storage.getLatestSnapshot(testId);
+    if (snap) {
+      const src = snapshotDataSource(snap.contentJson as TestSnapshotContent);
+      const test = (await src.getTest(testId)) ?? liveTest;
+      return { src, snapshotId: snap.id, test };
+    }
+  }
+  return { src: liveDataSource(), snapshotId: null, test: liveTest };
+}
+
+/**
+ * The material the results screen is built from beyond the saved result itself — the
+ * test's scale and indicator ROWS (PRD-29), the settings of its «Итоги» variant,
+ * whether the test has a pass threshold at all, and the test's OWN feedback block
+ * (PRD-32).
+ *
+ * Rows are read through the SAME source the attempt was graded against (the one
+ * `loadScoringConfig` takes): an attempt pinned to a snapshot (PRD-15 block B) reads
+ * the FROZEN scales and indicators, so an interpretation edited today cannot rewrite
+ * the verdict of an attempt taken yesterday. The measured VALUES are deliberately NOT
+ * gathered here — they are already in the saved `AttemptResult` and must never be
+ * recomputed.
+ *
+ * Gathered for EVERY standard attempt, including a test with neither scales nor
+ * indicators. It used to bail out early in that case, and the test's feedback block —
+ * read further down, in the same function — was lost with it: the commonest
+ * configuration in the product showed no recommendations at all. Whether the screen
+ * gets measurement blocks is decided in ONE place, `buildResultContext`
+ * (`server/services/result-context.ts`), off the emptiness of these two arrays; this
+ * function only reads. `undefined` therefore means «could not be read», nothing else.
+ */
+async function resultsMaterialForAttempt(
+  attempt: { testId: string; snapshotId: string | null },
+  liveTest: Test | undefined,
+): Promise<MeasuresSource | undefined> {
   try {
-    const assignedTests = await storage.getAssignedTestsForUser(req.session.userId!);
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const [scales, variables] = await Promise.all([
+      src.getScales(attempt.testId),
+      src.getResultVariables(attempt.testId),
+    ]);
+    const deliveredTest = (await src.getTest(attempt.testId)) ?? liveTest;
+    const pages = await src.getContentPages(attempt.testId);
+    // No `results` page, or a page with no settings: all three blocks stay on
+    // «Автоматически» and the state of the test decides.
+    const blockSettings = (pages.find((p) => p.kind === "results")?.settingsJson ?? {}) as ResultsBlockSettings;
+    const passRule = deliveredTest?.overallPassRuleJson as PassRule | null | undefined;
+    // PRD-47 §5.3: у отчёта свой переключатель вида, и «авто» в нём требует того же
+    // признака. `tests.report_settings_json` ветвится по РЕЖИМУ теста, а не по виду
+    // манифеста, поэтому берётся ветка своего режима. Отсутствие ветки означает вариант
+    // по умолчанию, а на «авто» умолчания манифеста не ставятся.
+    const reportBranch =
+      deliveredTest?.mode === "adaptive"
+        ? deliveredTest?.reportSettingsJson?.adaptive
+        : deliveredTest?.reportSettingsJson?.standard;
+    const reportChartSettings = (reportBranch?.values ?? {}) as ChartKindSettings;
+    return {
+      scales,
+      variables,
+      blockSettings,
+      // PRD-46 §5: read from the SAME delivered source as the scales, so a finished attempt
+      // is judged on the content it was taken on. Costs nothing unless the author left the
+      // choice of the diagram to the system — on the screen or in the report.
+      ipsativeScales: await ipsativeScalesForDelivery(
+        src,
+        attempt.testId,
+        scales,
+        blockSettings,
+        reportChartSettings,
+      ),
+      hasPassThreshold: !!passRule && passRule.type !== "none",
+      testFeedback: (deliveredTest?.feedbackJson as Partial<FeedbackContent> | null) ?? null,
+      // Вводные блоки: экрана и отчёта. Берутся из ВЫДАННОЙ версии теста, как и всё
+      // остальное здесь, — попытка показывает то содержание, на котором её проходили.
+      intro: (deliveredTest?.introJson as TestIntro | null) ?? null,
+    };
+  } catch (error) {
+    // The results screen must not fail because this material could not be read: the
+    // score, the per-topic rows and the report do not depend on it. The learner then
+    // sees the screen a test without measurements and without feedback would produce.
+    logger.warn("PRD-29: results material unavailable — " + (error as Error).message);
+    return undefined;
+  }
+}
+
+/** Fisher-Yates in-place shuffle for the server-side variant draw (PRD-11). */
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
+// GET /api/learner/tests - Тесты для ученика
+router.get("/learner/tests", requirePermission("attempts.self.read"), async (req, res) => {
+  try {
+    const allAssigned = await storage.getAssignedTestsForUser(req.session.userId!);
+    // A magic-link session sees ONE test: the list is the start screen's data
+    // source, and it must not enumerate the learner's other assignments.
+    const magic = req.session.magic;
+    const assignedTests = magic ? allAssigned.filter((t) => t.id === magic.testId) : allAssigned;
 
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
@@ -23,71 +303,329 @@ router.get("/learner/tests", requireLearner, async (req, res) => {
         }));
 
         const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-        const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+        const completed = userAttempts.filter((a) => a.finishedAt !== null);
         const inProgressAttempt = userAttempts.find((a) => a.finishedAt === null);
+        // PRD-31 (FR-07): the attempt counter belongs to the ASSIGNMENT, so a
+        // re-assignment hands out a fresh set — the start screen must count the same
+        // way the start route does, or it would offer a run the server then refuses.
+        const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+        const attemptFacts = userAttempts.map((a) => ({
+          assignmentId: a.assignmentId,
+          finishedAt: a.finishedAt,
+          // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+          passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
+        }));
+        const completedAttempts = countAttemptsInAssignment(attemptFacts, currentAssignmentId);
+
+        // Resume position from the in-progress variant (PRD-12 §10 start parity):
+        // index = saved currentIndex, total = drawn question count.
+        let resumeIndex: number | null = null;
+        let resumeTotal: number | null = null;
+        if (inProgressAttempt) {
+          const v = inProgressAttempt.variantJson as { currentIndex?: number; sections?: Array<{ questionIds?: string[] }> } | null;
+          resumeIndex = v?.currentIndex || 0;
+          resumeTotal = Array.isArray(v?.sections)
+            ? v!.sections.reduce((n, s) => n + (s.questionIds?.length || 0), 0)
+            : 0;
+        }
+        // Most recent completed attempt — target of the start screen's "Мой результат".
+        const lastCompleted = completed
+          .slice()
+          .sort((a, b) => new Date(b.finishedAt as Date).getTime() - new Date(a.finishedAt as Date).getTime())[0];
+
+        // PRD-19 Block F (FR-19/20) + PRD-31: resolve the access decision up front so
+        // the START screen can render the blocked state (moment + disabled button +
+        // prior summary) ON the standard start page — parity with the SCORM gate's
+        // `renderCooldownStart`, no separate block-wall. Facts are scoped to the
+        // current assignment; inert unless a barrier is configured, so legacy tests
+        // carry `retakeGate: null`.
+        const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+        const gate = decideRetake(retakePolicy, {
+          currentAssignmentId,
+          attempts: attemptFacts,
+          now: new Date(),
+        });
+        const retakeGate =
+          gate.allowed
+            ? null
+            : {
+                blockedBy: gate.blockedBy ?? null,
+                cooldownPeriodDays: gate.cooldownPeriodDays ?? null,
+                intervalHours: gate.intervalHours ?? null,
+                availableDate: gate.availableDate ?? null,
+                availableAt: gate.availableAt ?? null,
+                daysUntil: gate.daysUntil ?? null,
+              };
+
+        // PRD-19 Block F (FR-19/20): prior-attempt summary for the start screen.
+        // The web uses the MOST RECENT completed attempt — the same one
+        // `lastCompletedAttemptId` ("Мой результат") points at, so the shown
+        // percent and the linked result agree. Present whenever a completed
+        // attempt exists (eligible «повтор: можно» AND cooldown).
+        const lastResult = lastCompleted?.resultJson as AttemptResult | null | undefined;
+        const priorResult =
+          lastResult && typeof lastResult.overallPercent === "number"
+            ? {
+                percent: lastResult.overallPercent,
+                passed: lastResult.overallPassed ?? null,
+                // PRD-31: «попытка K из M» counts inside the assignment, so it may only
+                // label a result that belongs to the CURRENT one. A result carried over
+                // from a previous assignment keeps its percent but loses the number —
+                // otherwise a fresh assignment would caption it «попытка 0 из 3».
+                attemptNumber:
+                  lastCompleted?.assignmentId === currentAssignmentId ? completedAttempts : null,
+                maxAttempts: test.maxAttempts ?? null,
+              }
+            : null;
 
         return {
           ...test,
           sections: sectionsWithNames,
           completedAttempts,
           inProgressAttemptId: inProgressAttempt?.id || null,
+          resumeIndex,
+          resumeTotal,
+          lastCompletedAttemptId: lastCompleted?.id || null,
+          retakeGate,
+          priorResult,
         };
       })
     );
 
-    res.json(testsWithSections);
+    // Does each test GRADE at all? The start screen drops «проходной балл» when it
+    // does not (a measurement method — see `shared/template/start-state`). Resolved
+    // for the whole list in ONE query over the topics it draws from, since the answer
+    // is a property of the content, not of the learner's attempts.
+    const gradedTopics = new Set<string>();
+    const listedTopicIds = Array.from(
+      new Set(testsWithSections.flatMap((t) => t.sections.map((s) => s.topicId))),
+    );
+    for (const q of await storage.getGradingTraitsByTopics(listedTopicIds)) {
+      if (!isMeasurementOnly(q)) gradedTopics.add(q.topicId);
+    }
+
+    res.json(
+      testsWithSections.map((t) => ({
+        ...t,
+        hasGradedContent: t.sections.some((s) => gradedTopics.has(s.topicId)),
+      })),
+    );
   } catch (error) {
-    console.error("Get learner tests error:", error);
+    logger.error("Get learner tests error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch tests" });
   }
 });
 
+/**
+ * The delivered set of an abandoned run, stripped of its progress. `sections`
+ * (composition, PRD-17 variant pins, PRD-4 per-topic budgets) and `deliveryOrder`
+ * (the PRD-30 stream) are exactly what was handed out; `currentIndex`,
+ * `questionStatus` and `sectionPositions` are progress the runtime wrote on top,
+ * and a restart drops them. Returns null when the stored variant holds no
+ * questions — there is then nothing to carry and the caller draws anew.
+ */
+function carryOverVariant(v: TestVariant | null): TestVariant | null {
+  const sections = v?.sections;
+  if (!Array.isArray(sections) || sections.length === 0) return null;
+  if (!sections.some((s) => (s.questionIds?.length ?? 0) > 0)) return null;
+  return {
+    sections: sections.map((s) => ({
+      topicId: s.topicId,
+      topicName: s.topicName,
+      questionIds: [...s.questionIds],
+      ...(s.formId ? { formId: s.formId } : {}),
+      timeLimitMinutes: s.timeLimitMinutes ?? null,
+    })),
+    ...(v?.deliveryOrder ? { deliveryOrder: [...v.deliveryOrder] } : {}),
+  };
+}
+
 // POST /api/tests/:testId/attempts/start - Начать обычный тест
-router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) => {
+router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"), async (req, res) => {
   try {
-    const test = await storage.getTest(req.params.testId);
-    if (!test) {
+    // PRD-15 block B: a published test is delivered from its snapshot; the
+    // attempt is pinned to it so later bank edits do not change this attempt.
+    const resolved = await sourceForStart(req.params.testId);
+    if (!resolved) {
       return res.status(404).json({ error: "Test not found" });
     }
+    const { src, snapshotId, test } = resolved;
 
-    // Проверяем ограничение попыток
-    if (test.maxAttempts !== null) {
-      const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+    // Attempt gates (PRD-6 barrier A + PRD-31 barrier B) and the attempt counter,
+    // all scoped to the CURRENT ASSIGNMENT — the unit of access (PRD-31 §3). The
+    // assignment is resolved unconditionally because a started attempt is pinned to
+    // it even when no barrier is configured.
+    const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+    const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+    // Loaded ONCE: the barriers, the PRD-17 rotation history and the abandoned-run
+    // lookup below all read the learner's attempts of this test.
+    const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
+    const barriersOn =
+      retakePolicy?.enabled === true || retakePolicy?.attemptInterval?.enabled === true;
+    if (barriersOn || test.maxAttempts !== null) {
+      const attemptFacts = userAttempts.map((a) => ({
+        assignmentId: a.assignmentId,
+        finishedAt: a.finishedAt,
+        // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+        passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
+      }));
 
-      if (completedAttempts >= test.maxAttempts) {
+      const gate = decideRetake(retakePolicy, {
+        currentAssignmentId,
+        attempts: attemptFacts,
+        now: new Date(),
+      });
+      if (!gate.allowed) {
+        const interval = gate.blockedBy === "attemptInterval";
+        return res.status(403).json({
+          error: interval ? "Attempt interval active" : "Retake cooldown active",
+          code: interval ? "ATTEMPT_INTERVAL" : "RETAKE_COOLDOWN",
+          ...gate,
+        });
+      }
+
+      // FR-07: the limit belongs to the assignment, so a re-assignment hands out a
+      // fresh set of attempts — the same rule the SCORM package has always had.
+      if (
+        test.maxAttempts !== null &&
+        countAttemptsInAssignment(attemptFacts, currentAssignmentId) >= test.maxAttempts
+      ) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
 
-    const sections = await storage.getTestSections(test.id);
-    const topics = await storage.getTopics();
+    const sections = await src.getTestSections(test.id);
+    const topics = await src.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
 
-    const variant: TestVariant = { sections: [] };
-    const allQuestionIds: string[] = [];
+    // PRD-17 (FR-07): variants rotation needs the variant ids the learner already
+    // saw per topic, in prior COMPLETED attempts.
+    const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null);
+    const previousFormIdsForTopic = (topicId: string): string[] => {
+      const out: string[] = [];
+      for (const a of completedAttempts) {
+        const v = a.variantJson as TestVariant | null;
+        for (const s of v?.sections ?? []) {
+          if (s.topicId === topicId && s.formId) out.push(s.formId);
+        }
+      }
+      return out;
+    };
+
+    // The learner's own abandoned run, newest first. A restart must NOT hand out a
+    // fresh draw: both barriers and the attempt counter read FINISHED attempts only,
+    // so starting and abandoning costs nothing — and a new draw each time turns that
+    // into a way to leaf through the whole question pool. The delivered set is carried
+    // over instead, and only the progress is dropped.
+    const openAttempt = userAttempts
+      .filter((a) => a.finishedAt === null)
+      .sort((a, b) => new Date(b.startedAt as Date).getTime() - new Date(a.startedAt as Date).getTime())[0];
+    // Only from the SAME content: a republished test has a new snapshot and a new
+    // pool, where carried ids could deliver questions the test no longer contains.
+    const carried =
+      openAttempt && (openAttempt.snapshotId ?? null) === (snapshotId ?? null)
+        ? carryOverVariant(openAttempt.variantJson as TestVariant | null)
+        : null;
+
+    let variant: TestVariant;
+    let allQuestionIds: string[];
+
+    if (carried) {
+      variant = carried;
+      allQuestionIds = carried.sections.flatMap((s) => s.questionIds);
+    } else {
+    variant = { sections: [] };
+    allQuestionIds = [];
+    // PRD-30 раздел 14: selection happens per topic (below), the delivery ORDER
+    // of the whole test is decided once, by `assembleDelivery`, after the loop.
+    const drawnSections: DeliverySection<Question>[] = [];
 
     for (const section of sections) {
-      const questions = await storage.getQuestionsByTopic(section.topicId);
-      const shuffled = questions.sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, section.drawCount);
-      const qIds = selected.map((q) => q.id);
+      const questions = await src.getQuestionsByTopic(section.topicId);
+      const byId = new Map(questions.map((q) => [q.id, q]));
+      let qIds: string[];
+      let formId: string | undefined;
+
+      if (section.formSetJson) {
+        // PRD-17 (BR-12): variants mode — pick one author-curated variant, deliver
+        // it WHOLE in random order, rotating away from variants seen in prior
+        // completed attempts. draw_count/draw_all/quotas are not applied here.
+        const picked = selectForm(section.formSetJson.forms, {
+          // PRD-30 FR-07: in `fixed` the variant's own list is the order.
+          order: effectiveSectionOrder(test.questionOrder, section.questionOrder),
+          previousFormIds: previousFormIdsForTopic(section.topicId),
+          availableIds: new Set(questions.map((q) => q.id)),
+          shuffle: shuffleInPlace,
+        });
+        qIds = picked.questionIds;
+        formId = picked.formId;
+        // The variant's list IS the order — `assembleDelivery` must not re-sort it.
+        drawnSections.push({
+          questions: qIds.map((id) => byId.get(id)!).filter(Boolean),
+          questionOrder: section.questionOrder,
+          preordered: true,
+        });
+      } else {
+        // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
+        // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
+        const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
+        // PRD-30 (FR-06): selection stays as it was — quotas and the random pick
+        // are untouched; the ORDER is decided for the whole test below.
+        qIds = selected.map((q) => q.id);
+        drawnSections.push({ questions: selected, questionOrder: section.questionOrder });
+      }
 
       variant.sections.push({
         topicId: section.topicId,
         topicName: topicMap.get(section.topicId) || "Unknown",
         questionIds: qIds,
+        // PRD-17 (FR-08): pin the chosen variant id for rotation history (omitted
+        // for non-variant sections).
+        ...(formId ? { formId } : {}),
+        // PRD-4 v1.1 §3.2: carry the per-topic time budget so the web runtime
+        // can run a per-topic timer (parity with the SCORM package).
+        timeLimitMinutes: section.timeLimitMinutes ?? null,
       });
 
       allQuestionIds.push(...qIds);
     }
 
-    const allQuestions = await storage.getQuestionsByIds(allQuestionIds);
+    // PRD-30 раздел 14: ONE place decides the order. Topics stay blocks unless
+    // the test asks for «полное перемешивание» in the flat flow, and then a topic
+    // left on `fixed` travels as an unbroken block (FR-19/FR-20). The per-section
+    // lists keep the composition; `deliveryOrder` carries the stream when it no
+    // longer follows from concatenating them.
+    const assembled = assembleDelivery(
+      drawnSections,
+      test.questionOrder,
+      (test.flowPolicyJson as { mode?: string } | null)?.mode,
+      shuffleInPlace,
+    );
+    assembled.sections.forEach((questions, i) => {
+      variant.sections[i].questionIds = questions.map((q) => q.id);
+    });
+    // Written whenever the test MIXES across topics — a property of the settings,
+    // not of the draw: a shuffle can land on the section order by chance, and a
+    // field that appeared only then would make the attempt shape random.
+    if (assembled.mixed) variant.deliveryOrder = assembled.flat.map((q) => q.id);
+    }
+
+    const allQuestions = await src.getQuestionsByIds(allQuestionIds);
+
+    // The carried-over run is now superseded, and an abandoned row left behind would
+    // both pile up orphans and give the resume lookup (`find(finishedAt === null)`) an
+    // arbitrary one to return. Unfinished attempts never counted toward the limit, so
+    // dropping them consumes nothing (PRD-15 FR-14).
+    if (openAttempt) await storage.annulInProgressAttempts(test.id, req.session.userId!);
 
     const attempt = await storage.createAttempt({
       userId: req.session.userId!,
       testId: test.id,
       testVersion: test.version || 1,
+      snapshotId,
+      // PRD-31 (FR-12): pin the attempt to the assignment it was taken under, so the
+      // access barriers and the attempt counter can be scoped to it later.
+      assignmentId: currentAssignmentId,
       variantJson: variant,
       answersJson: null,
       resultJson: null,
@@ -95,37 +633,71 @@ router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) =>
       finishedAt: null,
     });
 
-    const questionsForClient = test.showCorrectAnswers
-      ? allQuestions
-      : allQuestions.map((q) => ({ ...q, correctJson: undefined }));
-
     res.status(201).json({
       ...attempt,
       testTitle: test.title,
       showCorrectAnswers: test.showCorrectAnswers || false,
       timeLimitMinutes: test.timeLimitMinutes || null,
-      questions: questionsForClient,
+      // PRD-19 (Block B): runtime navigation settings for the web host.
+      ...prd19RuntimeSettings(test),
+      // PRD-12 (FR-6): the author's content pages + flow mode, so the web run
+      // follows the same structure as the SCORM package.
+      ...(await flowPayload(src, test)),
+      questions: await questionsForClient(src, test, allQuestions),
     });
   } catch (error) {
-    console.error("Start attempt error:", error);
+    logger.error("Start attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to start attempt" });
   }
 });
 
 // POST /api/tests/:testId/attempts/start-adaptive - Начать адаптивный тест
-router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req, res) => {
+router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempts.take"), async (req, res) => {
   try {
-    const test = await storage.getTest(req.params.testId);
-    if (!test) {
+    // PRD-15 block B: published adaptive tests are delivered from their snapshot.
+    const resolved = await sourceForStart(req.params.testId);
+    if (!resolved) {
       return res.status(404).json({ error: "Test not found" });
     }
+    const { src, snapshotId, test } = resolved;
 
-    // Проверяем ограничение попыток
-    if (test.maxAttempts !== null) {
-      const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+    // Attempt gates (PRD-6 barrier A + PRD-31 barrier B) and the attempt counter,
+    // scoped to the CURRENT ASSIGNMENT. Deliberately identical to the standard
+    // start above — the two paths deciding differently is what produced the defect
+    // PRD-31 fixes, so they must stay word-for-word the same.
+    const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+    const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, test.id);
+    // Loaded ONCE: the barriers and the abandoned-run cleanup below both read the
+    // learner's attempts of this test.
+    const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
+    const barriersOn =
+      retakePolicy?.enabled === true || retakePolicy?.attemptInterval?.enabled === true;
+    if (barriersOn || test.maxAttempts !== null) {
+      const attemptFacts = userAttempts.map((a) => ({
+        assignmentId: a.assignmentId,
+        finishedAt: a.finishedAt,
+        // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+        passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
+      }));
 
-      if (completedAttempts >= test.maxAttempts) {
+      const gate = decideRetake(retakePolicy, {
+        currentAssignmentId,
+        attempts: attemptFacts,
+        now: new Date(),
+      });
+      if (!gate.allowed) {
+        const interval = gate.blockedBy === "attemptInterval";
+        return res.status(403).json({
+          error: interval ? "Attempt interval active" : "Retake cooldown active",
+          code: interval ? "ATTEMPT_INTERVAL" : "RETAKE_COOLDOWN",
+          ...gate,
+        });
+      }
+
+      if (
+        test.maxAttempts !== null &&
+        countAttemptsInAssignment(attemptFacts, currentAssignmentId) >= test.maxAttempts
+      ) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
@@ -134,14 +706,31 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
       return res.status(400).json({ error: "This is not an adaptive test" });
     }
 
-    const adaptiveSettings = await storage.getAdaptiveTopicSettingsByTest(test.id);
-    const adaptiveLevels = await storage.getAdaptiveLevelsByTest(test.id);
-    const topics = await storage.getTopics();
+    const adaptiveSettings = await src.getAdaptiveTopicSettingsByTest(test.id);
+    const adaptiveLevels = await src.getAdaptiveLevelsByTest(test.id);
+    const topics = await src.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
+    // PRD-4 v1.1 §3.2: per-topic time budgets live on test_sections; join them
+    // onto the adaptive topics by topicId so the runtime can run a topic timer.
+    const adaptiveSections = await src.getTestSections(test.id);
+    const sectionLimitMap = new Map(
+      adaptiveSections.map((s) => [s.topicId, s.timeLimitMinutes ?? null]),
+    );
+    // PRD-30 §6.3: the ordering setting lives on the section; adaptive delivery
+    // joins it by topicId exactly like the per-topic time budget above.
+    // The topic's own value is an override, so the effective mode is resolved
+    // against the test's default here as everywhere else (FR-18).
+    const sectionOrderMap = new Map(
+      adaptiveSections.map((s) => [s.topicId, effectiveSectionOrder(test.questionOrder, s.questionOrder)]),
+    );
 
     if (adaptiveSettings.length === 0) {
       return res.status(400).json({ error: "Adaptive test has no settings configured" });
     }
+
+    // PRD-15 block D (FR-34): level matching uses the EFFECTIVE difficulty —
+    // the per-test override wins over the question's base value.
+    const scoring = await loadTestScoringContext(test.id, src);
 
     // Build adaptive variant
     const adaptiveTopics: any[] = [];
@@ -153,17 +742,27 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
 
       if (topicLevels.length === 0) continue;
 
-      const allQuestions = await storage.getQuestionsByTopic(topicSettings.topicId);
+      const allQuestions = await src.getQuestionsByTopic(topicSettings.topicId);
       const levelsState: any[] = [];
 
       for (const level of topicLevels) {
-        const levelQuestions = allQuestions.filter(
-          (q) => (q.difficulty ?? 50) >= level.minDifficulty && (q.difficulty ?? 50) <= level.maxDifficulty
-        );
+        const levelQuestions = allQuestions.filter((q) => {
+          const difficulty = scoring.difficultyOf(q);
+          // PRD-16: a question with no difficulty («не задано») can't be placed in a level band.
+          if (difficulty == null) return false;
+          return difficulty >= level.minDifficulty && difficulty <= level.maxDifficulty;
+        });
 
         const shuffled = levelQuestions.sort(() => Math.random() - 0.5);
         const selected = shuffled.slice(0, level.questionsCount);
-        const questionIds = selected.map((q) => q.id);
+        // PRD-30 §6.3: ordering applies INSIDE the level — which questions the
+        // level got (the random pick above) and the order of the levels
+        // themselves are not touched.
+        const questionIds = orderQuestions(
+          selected,
+          sectionOrderMap.get(topicSettings.topicId) ?? "random",
+          shuffleInPlace,
+        ).map((q) => q.id);
 
         levelsState.push({
           levelIndex: level.levelIndex,
@@ -189,6 +788,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
         levelsState,
         finalLevelIndex: null,
         status: "in_progress",
+        // Per-topic time budget (null = no limit); read by the topic timer.
+        timeLimitMinutes: sectionLimitMap.get(topicSettings.topicId) ?? null,
       });
     }
 
@@ -208,10 +809,23 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
       currentQuestionId: firstQuestionId,
     };
 
+    // An abandoned adaptive run is superseded by this one; leaving it behind would
+    // pile up orphan rows and give the resume lookup an arbitrary one to return.
+    // Its questions are NOT carried over the way the standard start carries them:
+    // the adaptive variant is a level state machine drawn as the run progresses, so
+    // there is no fixed delivered set to hand back. Unfinished attempts never counted
+    // toward the limit, so dropping them consumes nothing (PRD-15 FR-14).
+    if (userAttempts.some((a) => a.finishedAt === null)) {
+      await storage.annulInProgressAttempts(test.id, req.session.userId!);
+    }
+
     const attempt = await storage.createAttempt({
       userId: req.session.userId!,
       testId: test.id,
       testVersion: test.version || 1,
+      snapshotId,
+      // PRD-31 (FR-12): pin the attempt to the assignment it was taken under.
+      assignmentId: currentAssignmentId,
       variantJson: variant,
       answersJson: {},
       resultJson: null,
@@ -221,7 +835,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
 
     let firstQuestion = null;
     if (firstQuestionId) {
-      const questions = await storage.getQuestionsByIds([firstQuestionId]);
+      const questions = await src.getQuestionsByIds([firstQuestionId]);
       firstQuestion = questions[0] || null;
     }
 
@@ -236,6 +850,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
             id: firstQuestion.id,
             question: firstQuestion,
             topicName: firstTopic.topicName,
+            topicId: firstTopic.topicId,
+            sectionTimeLimitMinutes: firstTopic.timeLimitMinutes ?? null,
             levelName: firstLevel.levelName,
             questionNumber: 1,
             totalInLevel: firstLevel.questionIds.length,
@@ -245,13 +861,13 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
       currentTopicIndex: 0,
     });
   } catch (error) {
-    console.error("Start adaptive attempt error:", error);
+    logger.error("Start adaptive attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to start adaptive attempt" });
   }
 });
 
 // POST /api/attempts/:attemptId/answer-adaptive - Ответить на вопрос адаптивного теста
-router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -273,7 +889,9 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
       return res.status(400).json({ error: "This is not an adaptive attempt" });
     }
 
-    const test = await storage.getTest(attempt.testId);
+    // PRD-15 block B: grade against the pinned snapshot, not the live bank.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
@@ -285,13 +903,15 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
       return res.status(400).json({ error: "Unexpected question ID" });
     }
 
-    const questions = await storage.getQuestionsByIds([questionId]);
+    const questions = await src.getQuestionsByIds([questionId]);
     const question = questions[0];
     if (!question) {
       return res.status(404).json({ error: "Question not found" });
     }
 
-    const isCorrect = checkAnswer(question, answer) === 1;
+    // PRD-15 block D (FR-32): grade with the test-effective graded config.
+    const scoring = await loadTestScoringContext(test.id, src);
+    const isCorrect = checkAnswer(question, answer, scoring.resolve(question).scoring) === 1;
     const updatedAnswers = { ...((attempt.answersJson as any) || {}), [questionId]: answer };
 
     currentLevel.answeredQuestionIds.push(questionId);
@@ -338,13 +958,13 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
           currentTopic.currentLevelIndex = nextLevelIndex;
           nextLevel.status = "in_progress";
           variant.currentQuestionId = nextLevel.questionIds[0];
-          nextQuestionData = await getNextQuestionData(nextLevel, currentTopic, 0, storage);
+          nextQuestionData = await getNextQuestionData(nextLevel, currentTopic, 0, src);
         } else {
           ({ topicTransition, nextQuestionData, isFinished } = await moveToNextTopicOrFinish(
             variant,
             currentTopic,
             currentLevel,
-            storage
+            src
           ));
         }
       } else {
@@ -352,7 +972,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
           variant,
           currentTopic,
           currentLevel,
-          storage
+          src
         ));
       }
     } else if (alreadyFailed || (allAnswered && correctCount < requiredCorrect)) {
@@ -363,7 +983,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
           variant,
           currentTopic,
           currentLevel,
-          storage
+          src
         ));
       } else {
         const prevLevelIndex = currentTopic.currentLevelIndex - 1;
@@ -379,14 +999,14 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
             currentTopic.currentLevelIndex = prevLevelIndex;
             prevLevel.status = "in_progress";
             variant.currentQuestionId = prevLevel.questionIds[0];
-            nextQuestionData = await getNextQuestionData(prevLevel, currentTopic, 0, storage);
+            nextQuestionData = await getNextQuestionData(prevLevel, currentTopic, 0, src);
           } else {
             currentTopic.finalLevelIndex = null;
             ({ topicTransition, nextQuestionData, isFinished } = await moveToNextTopicOrFinish(
               variant,
               currentTopic,
               currentLevel,
-              storage
+              src
             ));
           }
         } else {
@@ -395,7 +1015,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
             variant,
             currentTopic,
             currentLevel,
-            storage
+            src
           ));
         }
       }
@@ -403,12 +1023,12 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
       const currentQuestionIndex = currentLevel.questionIds.indexOf(questionId);
       const nextQuestionId = currentLevel.questionIds[currentQuestionIndex + 1];
       variant.currentQuestionId = nextQuestionId;
-      nextQuestionData = await getNextQuestionData(currentLevel, currentTopic, currentQuestionIndex + 1, storage);
+      nextQuestionData = await getNextQuestionData(currentLevel, currentTopic, currentQuestionIndex + 1, src);
     }
 
     let result: any = null;
     if (isFinished) {
-      result = await buildAdaptiveResult(variant, test.id, storage);
+      result = await buildAdaptiveResult(variant, test.id, src, updatedAnswers);
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -429,18 +1049,144 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
 
     if (test.showCorrectAnswers) {
       response.correctAnswer = question.correctJson;
-      response.feedback = question.feedback;
+      // issue #34: ветку общего/условного режима выбирает ОБЩЕЕ правило — то же, что
+      // у стандартного режима и у рантайма пакета. Отдавать один `feedback` было
+      // нельзя: у вопроса с условной обратной связью редактор обнуляет это поле, и
+      // ученик на вебе получал вердикт без пояснения.
+      response.feedback = feedbackTextFor(question, isCorrect);
     }
 
     res.json(response);
   } catch (error) {
-    console.error("Answer adaptive error:", error);
+    logger.error("Answer adaptive error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to process answer" });
   }
 });
 
+// POST /api/attempts/:attemptId/expire-topic-adaptive - PRD-4 v1.1 §3.2:
+// the per-topic timer ran out. Force-complete the current adaptive topic (with
+// whatever was answered) and move to the next topic or finish. Idempotent: a
+// retried/duplicate request whose `topicId` no longer matches the current topic
+// (the move already happened — e.g. the first response was lost) re-syncs the
+// client to the current question instead of advancing again.
+router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) {
+      return res.status(404).json({ error: "Attempt not found" });
+    }
+    if (attempt.userId !== req.session.userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { topicId } = req.body;
+    const variant = attempt.variantJson as any;
+    if (variant.mode !== "adaptive") {
+      return res.status(400).json({ error: "This is not an adaptive attempt" });
+    }
+
+    // PRD-15 block B: this transition reads questions/adaptive config; source
+    // from the pinned snapshot.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
+    if (!test) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+
+    // Already finished (possibly by a prior expiry) — idempotent finished state.
+    if (attempt.finishedAt) {
+      return res.json({
+        nextQuestion: null,
+        levelTransition: null,
+        topicTransition: null,
+        isFinished: true,
+        result: attempt.resultJson ?? null,
+      });
+    }
+
+    const currentTopic = variant.topics[variant.currentTopicIndex];
+    // Idempotent: the expired topic was already advanced past. Re-send the
+    // current question so a lost-response retry re-syncs without double-advancing.
+    if (!currentTopic || currentTopic.topicId !== topicId) {
+      const cur = await currentAdaptiveQuestion(variant, src);
+      return res.json({
+        nextQuestion: cur,
+        levelTransition: null,
+        topicTransition: null,
+        isFinished: false,
+        result: null,
+      });
+    }
+
+    const currentLevel = currentTopic.levelsState[currentTopic.currentLevelIndex];
+    const { levelTransition, topicTransition, nextQuestionData, isFinished } =
+      await moveToNextTopicOrFinish(variant, currentTopic, currentLevel, src);
+
+    let result: any = null;
+    if (isFinished) {
+      // The timer closed the topic, so nothing new was answered: the attempt's stored
+      // answers ARE the input the measurements are computed from.
+      result = await buildAdaptiveResult(
+        variant,
+        test.id,
+        src,
+        (attempt.answersJson ?? {}) as Record<string, unknown>,
+      );
+    }
+
+    await storage.updateAttempt(attempt.id, {
+      variantJson: variant,
+      resultJson: isFinished ? result : null,
+      finishedAt: isFinished ? new Date() : null,
+    });
+
+    res.json({
+      nextQuestion: nextQuestionData,
+      levelTransition,
+      topicTransition,
+      isFinished,
+      result,
+    });
+  } catch (error) {
+    logger.error("Expire adaptive topic error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to expire topic" });
+  }
+});
+
+// POST /api/attempts/:attemptId/section-timer — пинг «я в этом разделе».
+//
+// The SERVER owns the remaining time of a section (see services/section-timer):
+// the host reports where the learner is, the server credits the elapsed active
+// time (capped by the grace window) and answers with what is left and what is
+// locked. Keeping this off the browser is what makes «закрыл вкладку — вернулся с
+// полным лимитом» impossible.
+router.post("/attempts/:attemptId/section-timer", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.userId !== req.session.userId) return res.status(403).json({ error: "Forbidden" });
+    if (attempt.finishedAt) return res.status(400).json({ error: "Attempt already finished" });
+
+    const topicId = typeof req.body?.topicId === "string" ? req.body.topicId : null;
+    // The limit comes from the TEST, never from the client: a forged body must not
+    // be able to widen a section's budget.
+    let limitMinutes: number | null = null;
+    if (topicId) {
+      const sections = await storage.getTestSections(attempt.testId);
+      limitMinutes = sections.find((s) => s.topicId === topicId)?.timeLimitMinutes ?? null;
+    }
+
+    const view = await pingSection(attempt.id, topicId, limitMinutes);
+    if (!view) return res.status(400).json({ error: "Attempt already finished" });
+    res.json(view);
+  } catch (error) {
+    logger.error("Section timer ping error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to update section timer" });
+  }
+});
+
 // POST /api/attempts/:attemptId/save-progress - Сохранить прогресс
-router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -455,7 +1201,7 @@ router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, re
       return res.status(400).json({ error: "Attempt already finished" });
     }
 
-    const { answers, currentIndex, shuffleMappings } = req.body;
+    const { answers, currentIndex, shuffleMappings, questionStatus, sectionPositions } = req.body;
 
     const updatedVariant: any = {
       ...(attempt.variantJson as any),
@@ -466,6 +1212,20 @@ router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, re
       updatedVariant.shuffleMappings = shuffleMappings;
     }
 
+    // PRD-19 (Block B): per-question navigation status travels with the variant
+    // (web analogue of suspend_data.currentSession.questionStatuses). Absent =
+    // legacy progress (treated as all-'unanswered' on resume).
+    if (questionStatus) {
+      updatedVariant.questionStatus = questionStatus;
+    }
+
+    // Per-section resume position: re-entering a section continues from the question
+    // the learner stopped on (the web twin of the package's currentRouterTopic +
+    // currentPageIndex checkpoint), instead of restarting the section.
+    if (sectionPositions && typeof sectionPositions === "object") {
+      updatedVariant.sectionPositions = sectionPositions;
+    }
+
     await storage.updateAttempt(attempt.id, {
       answersJson: answers,
       variantJson: updatedVariant,
@@ -473,13 +1233,13 @@ router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, re
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Save progress error:", error);
+    logger.error("Save progress error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to save progress" });
   }
 });
 
 // GET /api/tests/:testId/resume - Возобновить попытку
-router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
+router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.testId);
     if (!test) {
@@ -493,13 +1253,12 @@ router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
       return res.json({ hasInProgress: false });
     }
 
+    // PRD-15 block B: resume the in-progress attempt from its pinned snapshot,
+    // so the questions match exactly what was started.
+    const src = await dataSourceForAttempt(inProgressAttempt.snapshotId);
     const variant = inProgressAttempt.variantJson as any;
     const allQuestionIds = variant.sections.flatMap((s: any) => s.questionIds);
-    const allQuestions = await storage.getQuestionsByIds(allQuestionIds);
-
-    const questionsForClient = test.showCorrectAnswers
-      ? allQuestions
-      : allQuestions.map((q) => ({ ...q, correctJson: undefined }));
+    const allQuestions = await src.getQuestionsByIds(allQuestionIds);
 
     res.json({
       hasInProgress: true,
@@ -508,19 +1267,91 @@ router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
         testTitle: test.title,
         showCorrectAnswers: test.showCorrectAnswers || false,
         timeLimitMinutes: test.timeLimitMinutes || null,
-        questions: questionsForClient,
+        // PRD-19 (Block B): runtime navigation settings for the web host.
+        ...prd19RuntimeSettings(test),
+        // PRD-12 (FR-6): structure (content pages + flow mode) for the resumed run.
+        ...(await flowPayload(src, test)),
+        questions: await questionsForClient(src, test, allQuestions),
       },
       savedAnswers: inProgressAttempt.answersJson || {},
       currentIndex: variant.currentIndex || 0,
+      // PRD-19 (Block B): restore per-question statuses; absent = all-'unanswered'.
+      questionStatus: variant.questionStatus || {},
+      sectionPositions: variant.sectionPositions || {},
     });
   } catch (error) {
-    console.error("Resume attempt error:", error);
+    logger.error("Resume attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to resume attempt" });
   }
 });
 
+// POST /api/attempts/:attemptId/section-result - PRD-19 D5 (FR-05a): grade ONE
+// section's answers-so-far through the SAME shared engine the final results use
+// (`aggregateStandardResult` + the test-side effective scoring), so the web
+// section-results screen (итоги раздела) matches the SCORM-baked
+// `computeSectionResult` (parity, PRD-12). Read-only — it neither finishes nor
+// persists the attempt; the web host calls it when a section is committed.
+router.post("/attempts/:attemptId/section-result", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.userId !== req.session.userId) return res.status(403).json({ error: "Forbidden" });
+
+    const { topicId, answers } = req.body as { topicId?: string; answers?: Record<string, unknown> };
+    if (!topicId) return res.status(400).json({ error: "topicId required" });
+
+    const variant = attempt.variantJson as TestVariant;
+    const variantSection = variant.sections.find((s) => s.topicId === topicId);
+    if (!variantSection) return res.status(404).json({ error: "Section not found in attempt" });
+
+    // PRD-15 block B: grade against the pinned snapshot, like /finish.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const sections = await src.getTestSections(test.id);
+    const section = sections.find((s) => s.topicId === topicId);
+    const scoring = await loadTestScoringContext(test.id, src);
+    const questions = await src.getQuestionsByIds(variantSection.questionIds);
+
+    const aggSection: AggregateSection = {
+      topicId: variantSection.topicId,
+      topicName: variantSection.topicName,
+      topicPassRule: section?.topicPassRuleJson ?? null,
+      // PRD-24: the variant delivered for this topic decides which threshold gates it.
+      formId: variantSection.formId ?? null,
+      questions: questions.map((q) => {
+        const effective = scoring.resolve(q);
+        return {
+          type: q.type as QuestionType,
+          correct: (q.correctJson ?? {}) as CorrectData,
+          scoring: effective.scoring,
+          points: effective.points,
+          answer: (answers ?? {})[q.id] as Answer,
+        };
+      }),
+    };
+    // Same overall pass rule as /finish so a topic with an inherit/none rule
+    // resolves its verdict identically (resolveTopicRule -> overall).
+    const agg = aggregateStandardResult({ sections: [aggSection], overallPassRule: test.overallPassRuleJson });
+    const tr = agg.topicResults[0];
+    res.json({
+      topicId: tr.topicId,
+      topicName: tr.topicName,
+      correct: tr.correct,
+      total: tr.total,
+      percent: tr.percent,
+      passed: tr.passed,
+      earnedPoints: tr.earnedPoints,
+      possiblePoints: tr.possiblePoints,
+    });
+  } catch (error) {
+    logger.error("Section result error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to compute section result" });
+  }
+});
+
 // POST /api/attempts/:attemptId/finish - Завершить попытку
-router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -533,87 +1364,127 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
 
     const { answers } = req.body;
     const variant = attempt.variantJson as TestVariant;
-    const test = await storage.getTest(attempt.testId);
+    // PRD-15 block B: grade against the pinned snapshot, not the live bank.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
 
-    const sections = await storage.getTestSections(test.id);
+    const sections = await src.getTestSections(test.id);
     const sectionMap = new Map(sections.map((s) => [s.topicId, s]));
+    // PRD-15 block D (FR-32): price and graded config come from the test-side
+    // chain (override -> section default -> test default -> system), resolved
+    // against the SAME source as delivery (snapshot or live).
+    const scoring = await loadTestScoringContext(test.id, src);
 
-    let totalCorrect = 0;
-    let totalQuestions = 0;
-    let totalEarnedPoints = 0;
-    let totalPossiblePoints = 0;
-    const topicResults: TopicResult[] = [];
+    // PRD-12 §3.5: question types for the scale engine's percent-normalization.
+    const questionTypes: Record<string, QuestionType> = {};
 
+    // PRD-18: result aggregation + pass-rule evaluation run through the SINGLE
+    // shared engine (`aggregateStandardResult`, the SAME one the SCORM runtime
+    // runs). Effective price / graded config (block D) is resolved here; the engine
+    // owns per-answer scoring, per-topic/overall percent and pass-rule resolution
+    // (inherit_overall -> overall, none -> no gate, count basis = Σ earned points).
+    const aggSections: AggregateSection<{
+      recommendedCourses: { title: string; url: string }[];
+      recommendedEvents: { title: string }[];
+      recommendedAssets: { title: string; url: string }[];
+      feedbackTexts: string[];
+    }>[] = [];
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
-      const questions = await storage.getQuestionsByIds(variantSection.questionIds);
-      const courses = await storage.getTopicCourses(variantSection.topicId);
-
-      let sectionCorrect = 0;
-      let sectionEarnedPoints = 0;
-      let sectionPossiblePoints = 0;
-      const sectionTotal = questions.length;
-
-      for (const q of questions) {
-        const answer = answers?.[q.id];
-        const scoreRatio = checkAnswer(q, answer);
-        const qPoints = q.points || 1;
-        sectionPossiblePoints += qPoints;
-
-        if (scoreRatio === 1) {
-          sectionCorrect++;
-        }
-        sectionEarnedPoints += qPoints * scoreRatio;
-      }
-
-      totalCorrect += sectionCorrect;
-      totalQuestions += sectionTotal;
-      totalEarnedPoints += sectionEarnedPoints;
-      totalPossiblePoints += sectionPossiblePoints;
-
-      const sectionPercent = sectionPossiblePoints > 0 ? (sectionEarnedPoints / sectionPossiblePoints) * 100 : 0;
-      const passRule = section?.topicPassRuleJson as PassRule | null;
-      let passed: boolean | null = null;
-
-      if (passRule) {
-        if (passRule.type === "percent") {
-          passed = sectionPercent >= passRule.value;
-        } else {
-          passed = sectionCorrect >= passRule.value;
-        }
-      }
-
-      topicResults.push({
+      const questions = await src.getQuestionsByIds(variantSection.questionIds);
+      const courses = await src.getTopicCourses(variantSection.topicId);
+      const events = await src.getTopicEvents(variantSection.topicId);
+      // PRD-32: PDF attachments of the topic AND of this test's section over it — two
+      // different storage points, both authored through the same feedback editor, both
+      // due to the learner. Read from the SAME source the attempt is graded against, so
+      // a snapshot-pinned attempt hands out the materials that were published with it.
+      const topic = await src.getTopic(variantSection.topicId);
+      const feedbackAttachments = feedbackAssets(topic?.feedbackJson, section?.feedbackJson);
+      aggSections.push({
         topicId: variantSection.topicId,
         topicName: variantSection.topicName,
-        correct: sectionCorrect,
-        total: sectionTotal,
-        percent: sectionPercent,
-        earnedPoints: sectionEarnedPoints,
-        possiblePoints: sectionPossiblePoints,
-        passed,
-        passRule,
-        recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
+        topicPassRule: section?.topicPassRuleJson ?? null,
+        // PRD-24: the variant delivered for this topic decides which threshold gates it.
+        formId: variantSection.formId ?? null,
+        questions: questions.map((q) => {
+          questionTypes[q.id] = q.type as QuestionType;
+          const effective = scoring.resolve(q);
+          return {
+            type: q.type as QuestionType,
+            correct: (q.correctJson ?? {}) as CorrectData,
+            scoring: effective.scoring,
+            points: effective.points,
+            answer: answers?.[q.id] as Answer,
+          };
+        }),
+        extra: {
+          recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
+          recommendedEvents: events.map((e) => ({ title: e.title })),
+          recommendedAssets: feedbackAttachments.map((a) => ({ title: a.title, url: a.url ?? "" })),
+          // Same two blocks, same source: the text an author wrote for the topic and for
+          // this test's section over it travels WITH the attempt, so a snapshot-pinned
+          // attempt keeps the wording it was published with.
+          feedbackTexts: topicFeedbackTexts(topic, section?.feedbackJson),
+        },
       });
     }
 
-    const overallPercent = totalPossiblePoints > 0 ? (totalEarnedPoints / totalPossiblePoints) * 100 : 0;
-    const overallPassRule = test.overallPassRuleJson as PassRule;
-    let overallPassed = true;
+    const agg = aggregateStandardResult({ sections: aggSections, overallPassRule: test.overallPassRuleJson });
+    const totalCorrect = agg.correct;
+    const totalQuestions = agg.totalQuestions;
+    const totalEarnedPoints = agg.earnedPoints;
+    const totalPossiblePoints = agg.possiblePoints;
+    const overallPercent = agg.percent;
+    let overallPassed = agg.passed;
+    const topicResults: TopicResult[] = agg.topicResults.map((t) => ({
+      topicId: t.topicId,
+      topicName: t.topicName,
+      correct: t.correct,
+      total: t.total,
+      percent: t.percent,
+      earnedPoints: t.earnedPoints,
+      possiblePoints: t.possiblePoints,
+      passed: t.passed,
+      passRule: t.passRule as PassRule | null,
+      recommendedCourses: t.extra!.recommendedCourses,
+      recommendedEvents: t.extra!.recommendedEvents,
+      recommendedAssets: t.extra!.recommendedAssets,
+      feedbackTexts: t.extra!.feedbackTexts,
+    }));
 
-    if (overallPassRule.type === "percent") {
-      overallPassed = overallPercent >= overallPassRule.value;
-    } else {
-      overallPassed = totalCorrect >= overallPassRule.value;
-    }
-
-    for (const tr of topicResults) {
-      if (tr.passed === false) {
-        overallPassed = false;
-        break;
+    // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
+    // shared engines, mirroring the SCORM runtime. No-op when the test has none.
+    const scoringConfig = await loadScoringConfig(test.id, src);
+    let scaleResults: AttemptResult["scaleResults"];
+    let resultVariables: AttemptResult["resultVariables"];
+    let status: AttemptResult["status"];
+    if (scoringConfig.scales.length > 0 || scoringConfig.resultVariables.length > 0) {
+      // Topic codes enable `topicById("<code>")` (readable id); names already on
+      // topicResults enable `topicByName("<name>")` (PRD-2 §4.2).
+      const topicCodeById = new Map(
+        (await src.getTopics()).map((t) => [t.id, t.code ?? null] as const),
+      );
+      const computation = computeAttemptResult(
+        scoringConfig,
+        answers ?? {},
+        questionTypes,
+        {
+          percent: overallPercent,
+          topicResults: topicResults.map((t) => ({ ...t, code: topicCodeById.get(t.topicId) ?? null })),
+        },
+      );
+      if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
+      if (Object.keys(computation.resultVariables).length > 0) resultVariables = computation.resultVariables;
+      if (computation.status.success !== undefined || computation.status.completion !== undefined) {
+        status = computation.status;
+      }
+      // A boolean controls_status="success" variable overrides the pass flag
+      // (parity with the SCORM runtime, resultsPage.js).
+      if (typeof computation.status.success === "boolean") {
+        overallPassed = computation.status.success;
       }
     }
 
@@ -625,6 +1496,9 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
       totalPossiblePoints,
       overallPassed,
       topicResults,
+      ...(scaleResults ? { scaleResults } : {}),
+      ...(resultVariables ? { resultVariables } : {}),
+      ...(status ? { status } : {}),
     };
 
     await storage.updateAttempt(attempt.id, {
@@ -635,13 +1509,13 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
 
     res.json({ success: true, result });
   } catch (error) {
-    console.error("Finish attempt error:", error);
+    logger.error("Finish attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to finish attempt" });
   }
 });
 
 // GET /api/attempts/:attemptId/result - Результат попытки
-router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
+router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -655,15 +1529,216 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
     const test = await storage.getTest(attempt.testId);
 
     const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, attempt.testId);
-    const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+    // PRD-31 (FR-07): «Пройти ещё раз» and «попытка K из M» count inside the CURRENT
+    // assignment — the same scope the start route enforces, so the results screen
+    // cannot offer a retry the server would refuse (or hide one it would allow).
+    const currentAssignmentId = await storage.getCurrentAssignmentId(req.session.userId!, attempt.testId);
+    const attemptFacts = userAttempts.map((a) => ({
+      assignmentId: a.assignmentId,
+      finishedAt: a.finishedAt,
+      // PRD-40: outcome of THIS attempt, for barrier A's outcome-split cooldown.
+      passed: (a.resultJson as AttemptResult | null)?.overallPassed ?? null,
+    }));
+    const completedAttempts = countAttemptsInAssignment(attemptFacts, currentAssignmentId);
     const maxAttempts = test?.maxAttempts || null;
-    const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
+    // PRD-31 (FR-10): a CLOSED barrier withdraws «Пройти ещё раз» here as well — the
+    // start route would refuse the click anyway, and an offered button that bounces
+    // reads as a broken screen. This is the same rule the package applies on its own
+    // results screen (`viewResults.js` / `adaptiveRender.js` consult
+    // `attemptIntervalState()`), and without it the web offered a retry the barriers
+    // had already closed. Deliberately NOT folded into an "exhausted" state: a wait of
+    // a few hours is not a terminal one.
+    const retakeGate = decideRetake(test?.retakePolicyJson as RetakePolicy | null, {
+      currentAssignmentId,
+      attempts: attemptFacts,
+      now: new Date(),
+    });
+    const canRetake = (maxAttempts === null || completedAttempts < maxAttempts) && retakeGate.allowed;
+    // NB: the attempt counter is deliberately NOT put in the header subtitle any
+    // more — the scene header carries the test's identity, not run parameters.
+
+    // PRD-12 web-host: render payload (template layout + css + context) for the
+    // results screen. Covers BOTH standard (results.html) and adaptive
+    // (results.adaptive.html) — readResultsRenderPayload branches on result.mode.
+    // Null only when the layout is missing or the result lacks topic rows, in which
+    // case the client falls back to its React markup.
+    const resultJson = attempt.resultJson as (AttemptResult & { mode?: string }) | null;
+    let render = null;
+    let report: ReportInput | AdaptiveReportInput | null = null;
+    let reportRender: ReturnType<typeof readReportRenderPayload> = null;
+    // PRD-35: измерения нужны не только экрану, но и ОТЧЁТУ, который собирается на
+    // клиенте. Объявлены здесь, а не внутри ветки экрана, чтобы уехать в ответ.
+    //
+    // Уезжает НОРМАЛИЗОВАННЫЙ вид (`MeasuresInput`), а не сырьё, из которого экран его
+    // получает: правила разрешения — рампа, виды отображения шкал и показателей — живут
+    // в параметрах шаблона, которые есть только здесь. Клиент отдаёт это поле общему
+    // сборщику отчёта как есть, и раньше сюда клалось сырьё (строки БД `scales` и
+    // `variables`): у сборщика в нём не было `indicators`, и скачивание отчёта у теста
+    // со шкалами или показателями падало.
+    let measures: MeasuresInput | undefined;
+    if (resultJson && Array.isArray(resultJson.topicResults)) {
+      const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
+      // Learner-facing render: never serve a non-active template, and when the
+      // active template declares no `results` contentTemplate, render the results
+      // screen from `default` (same fallback as «Структура» / the preview).
+      const dir = await resolveSystemScreenDir(templateId, "results", { activeOnly: true });
+      // Branding/cssVars resolve against the ACTIVE template manifest even when the
+      // results layout falls back to `default` (active template owns no `results`).
+      const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
+      // Материал экрана итогов: шкалы/показатели (PRD-29) И обратная связь теста
+      // (PRD-32). Собирается для ЛЮБОГО теста, в том числе без измерений: обратная связь
+      // теста ему положена ровно так же, а решение «есть ли что показывать из измерений»
+      // принимает `buildResultContext` — одно, в одном месте.
+      //
+      // АДАПТИВНЫЙ результат материал тоже берёт: раньше эта ветка получала `undefined`,
+      // и вместе с измерениями (которых у адаптивного теста и нет) терялась обратная
+      // связь ТЕСТА — источник блока рекомендаций, никакого отношения к режиму не
+      // имеющий. Из материала адаптивная ветка читает только её (см. `readResultsRenderPayload`).
+      const material = await resultsMaterialForAttempt(attempt, test);
+      render = readResultsRenderPayload(
+        dir,
+        resultJson,
+        test?.title || "",
+        test?.designSettingsJson as any,
+        paramsDir,
+        undefined,
+        material,
+      );
+      // File-level fallback (PRD-1 §4.3.2, PRD-3 NFR-06): a template that declares a
+      // `results` variant but ships no results layout still renders — from the
+      // standard template — instead of dropping to the legacy React markup.
+      if (!render) {
+        const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
+        if (path.resolve(fallbackDir) !== path.resolve(dir)) {
+          render = readResultsRenderPayload(
+            fallbackDir,
+            resultJson,
+            test?.title || "",
+            test?.designSettingsJson as any,
+            paramsDir,
+            undefined,
+            material,
+          );
+        }
+      }
+      // В ОТВЕТ едут только настоящие измерения: по ним клиент печатает шкалы, показатели
+      // и радар в отчёте, и пустой набор заставил бы его рисовать блок измерений у теста,
+      // который их не объявляет. С issue #33 они едут ОБОИМ режимам: шкалу питают вклады,
+      // навешенные на вопросы, а адаптивный тест задаёт вопросы, как любой другой —
+      // значения по нему считались и уезжали в LMS ещё до этой работы, не доходя только
+      // до экрана и до отчёта.
+      //
+      // Нормализуется ЗДЕСЬ, после разрешения макета: рампу и виды отображения задают
+      // параметры того самого экрана (`render.params`) — ровно те, с которыми
+      // `readResultsRenderPayload` только что собрал контекст итогов, — поэтому отчёт не
+      // может разойтись с экраном, с которого его скачали. Макета нет вовсе (клиент
+      // рисует свою разметку) — остаются значения по умолчанию из манифеста.
+      measures =
+        material && (material.scales.length > 0 || material.variables.length > 0)
+          ? buildMeasuresInput(completeMeasuresSource(material, render?.params, resultJson))
+          : undefined;
+      // Footer state for the layout-drawn results row (the package fills the same
+      // block). «Скачать отчёт» is on now that the web host produces the report from
+      // the SHARED generator (shared/report/*) — the same PDF the package hands out,
+      // unless the author switched the report off for this test (`report.enabled`).
+      if (render?.context && typeof render.context === "object") {
+        const ctx = render.context as { result?: Record<string, unknown> };
+        if (ctx.result) {
+          ctx.result.nav = buildResultsNav({
+            canReport: isReportEnabled(test?.reportSettingsJson as ReportSettings | null),
+            canRetry: !resultJson?.overallPassed && canRetake,
+            // Attempts alone — the adaptive footer re-runs the test rather than
+            // offering a remedy, so a pass does not close it (see results-nav).
+            canRetake,
+            hasPostPages: false,
+            finishLabel: "К списку тестов",
+          });
+        }
+      }
+
+      // Input for the shared PDF report the browser builds on demand. Assembled here
+      // because the report needs the RAW per-topic numbers and the learner's name,
+      // neither of which the presentational render context carries.
+      const learner = await storage.getUser(req.session.userId!);
+      const reportMeta = {
+        learnerName: learner?.name || null,
+        timestamp: (attempt.finishedAt ?? attempt.startedAt)?.toISOString() ?? null,
+        attemptsCount: completedAttempts || 1,
+      };
+      // `material` уходит и сюда: консолидированный блок обратной связи отчёта собирает
+      // ТОТ ЖЕ сборщик, что рисует экран, и ему нужны те же два факта, которых нет в
+      // результате попытки, — обратная связь теста и наличие порога. Отчёт строит
+      // браузер, поэтому они едут с ВХОДОМ отчёта, а не параметром сборки.
+      report =
+        resultJson.mode === "adaptive"
+          ? buildAdaptiveReportInput(resultJson, test?.title || "", reportMeta, material)
+          : buildReportInput(resultJson, test?.title || "", reportMeta, material);
+
+      // PRD-27 Фаза 2: страницу отчёта рисует МАКЕТ шаблона. Активный шаблон, не
+      // объявивший нужного вида, отчёта не лишает: макет берётся из «Стандартного», а
+      // брендинг остаётся этого теста (FR-10) — то же правило, что у системных экранов.
+      const reportKind = reportKindForMode(resultJson.mode);
+      const activeDir = await resolveTemplateDir(templateId, { activeOnly: true });
+      // PRD-27 FR-24: вариант и значения полей берутся из теста, КОТОРЫЙ ВЫДАВАЛСЯ.
+      // Попытка, приколотая к снапшоту (PRD-15), обязана собрать отчёт тем макетом и
+      // теми параметрами, что действовали на момент выдачи: иначе автор меняет вид
+      // отчёта — и документы по старым попыткам задним числом становятся другими.
+      // Живой тест остаётся источником всего остального (название, счётчик попыток).
+      // Читается ОДНА строка снапшота, а не собирается целый источник данных: попытке
+      // здесь нужен только выбор варианта, а сборка источника тянет весь замороженный
+      // пул вопросов.
+      const deliveredTest = attempt.snapshotId
+        ? ((await storage.getSnapshot(attempt.snapshotId))?.contentJson as
+            | { test?: Test }
+            | undefined)?.test ?? test
+        : test;
+      // Выбор автора хранится по РЕЖИМУ теста (PRD-27 §4.1); его отсутствие означает
+      // вариант с `isDefault`.
+      const authoredReport =
+        (deliveredTest?.reportSettingsJson as ReportSettings | null)?.[
+          resultJson.mode === "adaptive" ? "adaptive" : "standard"
+        ] ?? null;
+      reportRender = readReportRenderPayload(
+        activeDir,
+        reportKind,
+        authoredReport,
+        test?.designSettingsJson as any,
+        activeDir,
+        templateId,
+      );
+      if (!reportRender) {
+        const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
+        if (path.resolve(fallbackDir) !== path.resolve(activeDir)) {
+          // Деградация на «Стандартный»: выбранного варианта там нет, поэтому берётся
+          // его `isDefault`, а значения полей чужого варианта не переносятся. Картинки
+          // приезжают оттуда же, откуда макет, — из «Стандартного» (FR-05).
+          reportRender = readReportRenderPayload(
+            fallbackDir,
+            reportKind,
+            null,
+            test?.designSettingsJson as any,
+            activeDir,
+            "default",
+          );
+        }
+      }
+    }
 
     res.json({
       ...attempt,
       testTitle: test?.title || "Unknown Test",
+      // PRD-34 (FR-16): экран итогов несёт водяной знак, хотя от копирования по FR-09
+      // не защищается. Настройка нужна клиенту здесь, а не только на старте попытки.
+      protectionWatermark: test?.protectionWatermark ?? false,
       result: attempt.resultJson as AttemptResult,
       canRetake,
+      render,
+      report,
+      reportRender,
+      // PRD-35: те же измерения, что у экрана. Клиент печатает по ним шкалы и радар
+      // в отчёте; включает ли он диаграмму — решает СВОЙ переключатель варианта
+      // отчёта, который лежит в `reportRender.values`.
+      measures,
       attemptsInfo:
         maxAttempts !== null
           ? {
@@ -673,13 +1748,13 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
           : null,
     });
   } catch (error) {
-    console.error("Get result error:", error);
+    logger.error("Get result error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch result" });
   }
 });
 
 // GET /api/learner/attempts - История попыток ученика
-router.get("/learner/attempts", requireLearner, async (req, res) => {
+router.get("/learner/attempts", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const attempts = await storage.getAttemptsByUser(req.session.userId!);
     const tests = await storage.getTests();
@@ -709,6 +1784,13 @@ router.get("/learner/attempts", requireLearner, async (req, res) => {
         };
       }
 
+      const isAdaptive = (result as any)?.mode === "adaptive";
+      const adaptiveResult = isAdaptive ? (result as any) : null;
+      const achievedCount = adaptiveResult
+        ? adaptiveResult.topicResults.filter((tr: any) => tr.achievedLevelIndex !== null).length
+        : null;
+      const totalTopics = adaptiveResult ? adaptiveResult.topicResults.length : null;
+
       groupedByTest[attempt.testId].attempts.push({
         id: attempt.id,
         testVersion: attempt.testVersion,
@@ -717,6 +1799,9 @@ router.get("/learner/attempts", requireLearner, async (req, res) => {
         overallPassed: result?.overallPassed || false,
         totalEarnedPoints: result?.totalEarnedPoints || 0,
         totalPossiblePoints: result?.totalPossiblePoints || 0,
+        isAdaptive,
+        achievedCount,
+        totalTopics,
       });
     }
 
@@ -746,7 +1831,7 @@ router.get("/learner/attempts", requireLearner, async (req, res) => {
 
     res.json(testGroups);
   } catch (error) {
-    console.error("Fetch learner attempts error:", error);
+    logger.error("Fetch learner attempts error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch attempt history" });
   }
 });
@@ -764,10 +1849,27 @@ async function getNextQuestionData(level: any, topic: any, questionIndex: number
     id: questionId,
     question: questions[0],
     topicName: topic.topicName,
+    topicId: topic.topicId,
+    // PRD-4 v1.1 §3.2: carry the topic's time budget so the runtime can run a
+    // per-topic timer for the topic that owns this question.
+    sectionTimeLimitMinutes: topic.timeLimitMinutes ?? null,
     levelName: level.levelName,
     questionNumber: questionIndex + 1,
     totalInLevel: level.questionIds.length,
   };
+}
+
+/**
+ * Build the question-data payload for the variant's CURRENT position (the
+ * `currentQuestionId` within the current topic/level). Used by the idempotent
+ * branch of expire-topic-adaptive to re-sync a client after a lost response.
+ */
+async function currentAdaptiveQuestion(variant: any, storage: any) {
+  const topic = variant.topics?.[variant.currentTopicIndex];
+  if (!topic) return null;
+  const level = topic.levelsState[topic.currentLevelIndex];
+  const idx = level.questionIds.indexOf(variant.currentQuestionId);
+  return getNextQuestionData(level, topic, idx >= 0 ? idx : 0, storage);
 }
 
 async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentLevel: any, storage: any) {
@@ -805,76 +1907,142 @@ async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentL
   return { levelTransition, topicTransition: null, nextQuestionData: null, isFinished: true };
 }
 
-async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
+// PRD-18 «ВСЕ РАСЧЕТЫ ПО ЕДИНОМУ АЛГОРИТМУ»: thin host adapter over the shared
+// `aggregateAdaptiveResult`. This side's only job is to normalize DB-backed data
+// (per-level feedback + links from separate tables, topic failure feedback) into
+// the engine's input. `levels` is sorted by `levelIndex` ascending — the SAME order
+// `levelsState` was built in — so the engine's POSITIONAL `finalLevelIndex` lookup
+// aligns. `failureLinks` mirrors the SCORM failure branch (lowest level's links).
+//
+// issue #33: it also computes the graded namespaces — scales (PRD-5) and result
+// variables (PRD-2) — and stores them WITH the attempt, exactly as the standard
+// `/finish` does. A scale is fed by the measurements an author hung on questions, and
+// an adaptive test asks questions like any other; the package had been computing them
+// for an adaptive run all along (and shipping them to the LMS), while the web computed
+// nothing at all, so the adaptive results screen had nothing to show even after the
+// layout learned to show it.
+//
+// @param answers The attempt's answers — the ONE input the values depend on besides the
+//   test's own configuration. Values are computed ONCE, here, and never recomputed on
+//   read: regrading a finished attempt against today's interpretation would change what
+//   the learner already scored (PRD-29, the same rule the standard mode follows).
+async function buildAdaptiveResult(
+  variant: any,
+  testId: string,
+  storage: any,
+  answers: Record<string, unknown> = {},
+) {
   const adaptiveSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
   const adaptiveLevels = await storage.getAdaptiveLevelsByTest(testId);
+  // Sections of THIS test: the section over a topic is the second authoring point of
+  // the topic's feedback, exactly as in the standard mode (`/finish`). An adaptive test
+  // has sections too — the start route already reads them for the per-topic timer and
+  // the delivery order.
+  const sections = (await storage.getTestSections(testId)) ?? [];
 
-  const topicResults: any[] = [];
-  let overallPassed = true;
+  const topics = await Promise.all(
+    variant.topics.map(async (topic: any) => {
+      const topicSettings = adaptiveSettings.find((s: any) => s.topicId === topic.topicId);
+      const section = sections.find((s: any) => s.topicId === topic.topicId);
+      // The topic row itself — read through the SAME source the attempt is delivered
+      // from, so an attempt pinned to a snapshot (PRD-15 block B) hands out the texts
+      // and files that were published with it.
+      const topicRow = await storage.getTopic(topic.topicId);
+      const topicLevels = adaptiveLevels
+        .filter((l: any) => l.topicId === topic.topicId)
+        .sort((a: any, b: any) => a.levelIndex - b.levelIndex);
 
-  for (const topic of variant.topics) {
-    const topicSettings = adaptiveSettings.find((s: any) => s.topicId === topic.topicId);
-    const topicLevels = adaptiveLevels.filter((l: any) => l.topicId === topic.topicId);
+      const levels = await Promise.all(
+        topicLevels.map(async (l: any) => ({
+          levelName: l.levelName,
+          feedback: l.feedback ?? null,
+          links: ((await storage.getAdaptiveLevelLinks(l.id)) || []).map((x: any) => ({ title: x.title, url: x.url })),
+        })),
+      );
 
-    let totalQuestionsAnswered = 0;
-    let totalCorrect = 0;
-    const levelsAttempted: any[] = [];
+      const levelsState = (topic.levelsState as any[]).map((ls) => ({
+        levelIndex: ls.levelIndex,
+        levelName: ls.levelName,
+        status: ls.status,
+        answeredCount: ls.answeredQuestionIds.length,
+        correctCount: ls.correctCount,
+      }));
 
-    for (const levelState of topic.levelsState) {
-      if (levelState.status === "passed" || levelState.status === "failed") {
-        totalQuestionsAnswered += levelState.answeredQuestionIds.length;
-        totalCorrect += levelState.correctCount;
-        levelsAttempted.push({
-          levelIndex: levelState.levelIndex,
-          levelName: levelState.levelName,
-          questionsAnswered: levelState.answeredQuestionIds.length,
-          correctCount: levelState.correctCount,
-          status: levelState.status,
-        });
-      }
-    }
+      return {
+        topicId: topic.topicId,
+        topicName: topic.topicName,
+        finalLevelIndex: topic.finalLevelIndex,
+        levelsState,
+        levels,
+        failureFeedback: topicSettings?.failureFeedback || null,
+        failureLinks: levels[0]?.links ?? [],
+        // What the author wrote and attached for this topic, gathered through the SAME
+        // two shared rules the standard `/finish` runs — source priority, the
+        // topic-before-section order and the address rule included. The engine echoes
+        // `extra` verbatim, so it lands on the stored topic result below.
+        extra: {
+          feedbackTexts: topicFeedbackTexts(topicRow, section?.feedbackJson),
+          recommendedAssets: feedbackAssets(topicRow?.feedbackJson, section?.feedbackJson).map(
+            (a) => ({ title: a.title, url: a.url ?? "" }),
+          ),
+        },
+      };
+    }),
+  );
 
-    let achievedLevelName: string | null = null;
-    let levelPercent = 0;
-    let feedback: string | null = null;
-    let recommendedLinks: any[] = [];
+  const aggregated = aggregateAdaptiveResult<{
+    feedbackTexts: string[];
+    recommendedAssets: { title: string; url: string }[];
+  }>({ topics });
 
-    if (topic.finalLevelIndex !== null) {
-      const achievedLevel = topicLevels.find((l: any) => l.levelIndex === topic.finalLevelIndex);
-      if (achievedLevel) {
-        achievedLevelName = achievedLevel.levelName;
-        const levelState = topic.levelsState.find((ls: any) => ls.levelIndex === topic.finalLevelIndex);
-        if (levelState && levelState.answeredQuestionIds.length > 0) {
-          levelPercent = (levelState.correctCount / levelState.answeredQuestionIds.length) * 100;
-        }
-        feedback = achievedLevel.feedback;
-
-        const links = await storage.getAdaptiveLevelLinks(achievedLevel.id);
-        recommendedLinks = links.map((l: any) => ({ title: l.title, url: l.url }));
-      }
-    } else {
-      overallPassed = false;
-      feedback = topicSettings?.failureFeedback || null;
-    }
-
-    topicResults.push({
-      topicId: topic.topicId,
-      topicName: topic.topicName,
-      achievedLevelIndex: topic.finalLevelIndex,
-      achievedLevelName,
-      levelPercent,
-      totalQuestionsAnswered,
-      totalCorrect,
-      levelsAttempted,
-      feedback,
-      recommendedLinks,
+  // issue #33: scales and indicators of THIS attempt, through the SAME shared engines the
+  // standard `/finish` runs. No-op for a test that declares neither — an adaptive result
+  // then keeps exactly the shape it has always had, and attempts finished before this
+  // work stay valid (both fields are optional in `adaptiveAttemptResultSchema`).
+  const scoringConfig = await loadScoringConfig(testId, storage);
+  let scaleResults: Record<string, unknown> | undefined;
+  let resultVariables: Record<string, unknown> | undefined;
+  if (scoringConfig.scales.length > 0 || scoringConfig.resultVariables.length > 0) {
+    // Types of the questions actually ANSWERED: the scale engine needs them to decide
+    // which measurement units fired, and it bounds `percent` normalization by the
+    // DELIVERED set — which in the adaptive mode is precisely what the ladder asked.
+    const answeredIds = Object.keys(answers);
+    const answeredQuestions = answeredIds.length > 0 ? await storage.getQuestionsByIds(answeredIds) : [];
+    const questionTypes: Record<string, QuestionType> = {};
+    for (const q of answeredQuestions) questionTypes[q.id] = q.type as QuestionType;
+    // The formulas of PRD-2 speak percent / score / topicById(...).passed — words the
+    // level ladder does not have. The shared restatement gives them those words, and it
+    // is the very one the package feeds them through (`getAdaptiveResultForScorm`).
+    const flat = adaptiveResultAsStandard(aggregated);
+    const topicCodeById = new Map(
+      ((await storage.getTopics()) as Array<{ id: string; code?: string | null }>).map(
+        (t) => [t.id, t.code ?? null] as const,
+      ),
+    );
+    const computation = computeAttemptResult(scoringConfig, answers as Record<string, Answer>, questionTypes, {
+      percent: flat.percent,
+      topicResults: flat.topicResults.map((t) => ({ ...t, code: topicCodeById.get(t.topicId) ?? null })),
     });
+    if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
+    if (Object.keys(computation.resultVariables).length > 0) resultVariables = computation.resultVariables;
+    // `controls_status` is deliberately NOT applied here, unlike in the standard mode.
+    // An adaptive verdict is pronounced by the LADDER — `overallPassed` means «every
+    // topic confirmed a level» — and letting a formula overwrite it would make the
+    // level tags on the screen and the verdict above them state opposite things.
   }
 
+  // Hoist the passthrough onto the topic result itself: `adaptiveTopicResultSchema`
+  // spells these two out (and the shared results builder reads them by those names), so
+  // an `extra` envelope would only be a second spelling of the same fact.
   return {
-    mode: "adaptive",
-    overallPassed,
-    topicResults,
+    ...aggregated,
+    topicResults: aggregated.topicResults.map(({ extra, ...t }) => ({
+      ...t,
+      feedbackTexts: extra?.feedbackTexts ?? [],
+      recommendedAssets: extra?.recommendedAssets ?? [],
+    })),
+    ...(scaleResults ? { scaleResults } : {}),
+    ...(resultVariables ? { resultVariables } : {}),
   };
 }
 

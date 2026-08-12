@@ -1,8 +1,94 @@
 import { Router, Request, Response } from "express";
-import * as XLSX from "xlsx";
+import { logger } from "../logger";
+import ExcelJS from "exceljs";
+import {
+  addAoaSheet,
+  addJsonSheet,
+  readWorkbookFromBuffer,
+  sheetHeaders,
+  sheetToObjects,
+  workbookToBuffer,
+} from "../utils/excel";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
+import { syncEntityUsages, canonicalizeEntityMedia, clearCascadedUsages } from "../services/media/usage-index";
+import { normalizeTags } from "@shared/tags";
+import { normalizeAuthorText } from "@shared/text";
+import { normalizeOptionalText, normalizeQuestionData } from "../services/question-text";
+import { importQuestionRows } from "../services/questions-import";
+import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
+import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
+import {
+  respondForbiddenContent,
+  respondIfBlocked,
+  mergeAssessments,
+  isDryRun,
+  respondDryRun,
+} from "../services/content-guard";
+import {
+  visibleTopicScope,
+  canManageTopicContent,
+  isAdminOrSuper,
+} from "../services/topic-access";
+import { allocationDataSchema } from "@shared/schema";
+import { distributesBudget } from "@shared/questions/question-type";
+import type { Question } from "@shared/schema";
+
+/**
+ * PRD-44 FR-46: границы полей и ВЫПОЛНИМОСТЬ распределения проверяются на сервере,
+ * а не только в редакторе. Без этого сохраняется вопрос, который нельзя заполнить ни
+ * одним способом, — и узнает об этом первым учащийся, а не автор. Возвращает текст
+ * ошибки или `null`.
+ *
+ * Остальные типы здесь не трогаются намеренно: их конфигурация не может стать
+ * невыполнимой, и вводить общую проверку «на всякий случай» значит менять поведение,
+ * о котором PRD-44 не просил.
+ */
+function allocationConfigError(type: string | undefined, dataJson: unknown): string | null {
+  if (!distributesBudget(type ?? "")) return null;
+  const parsed = allocationDataSchema.safeParse(dataJson);
+  if (parsed.success) return null;
+  return parsed.error.issues.map((i) => i.message).join("; ");
+}
+
+// PRD-15 FR-02: fields whose change affects delivery or grading of dependent
+// tests; such edits are restricted to the creator/administrator and, for
+// tags/difficulty/topic moves, run the draw-feasibility check (E-3/E-4).
+function gradingOrDrawFieldsChanged(existing: Question, body: UpdateQuestionBody): boolean {
+  const changed = (next: unknown, current: unknown) =>
+    next !== undefined && JSON.stringify(next) !== JSON.stringify(current);
+  return (
+    changed(body.type, existing.type) ||
+    changed(body.dataJson, existing.dataJson) ||
+    changed(body.correctJson, existing.correctJson) ||
+    changed(body.difficulty, existing.difficulty) ||
+    changed(body.topicId, existing.topicId) ||
+    (Array.isArray(body.tags) &&
+      JSON.stringify(normalizeTags(body.tags)) !== JSON.stringify(existing.tags ?? []))
+  );
+}
+
+/**
+ * PRD-15 block C (FR-22): a question is governed by its topic. CRUD on it
+ * requires `manage` on that topic (owner, manage grant, or admin). This
+ * replaces the block-A creator gate (`created_by`). A dangling question whose
+ * topic was deleted is administrator-only.
+ *
+ * @param req - the authenticated request (roles and current user).
+ * @param topicId - the question's topic id (or null for a dangling row).
+ * @returns whether the actor may create/update/delete this question.
+ */
+async function canManageQuestion(
+  req: Request,
+  topicId: string | null | undefined,
+): Promise<boolean> {
+  const roles = req.effectiveRoles ?? [];
+  if (isAdminOrSuper(roles)) return true;
+  if (!topicId) return false;
+  const topic = await storage.getTopic(topicId);
+  return topic ? canManageTopicContent(roles, req.currentUser?.id ?? "", topic) : false;
+}
 
 const router = Router();
 
@@ -24,15 +110,22 @@ interface CreateQuestionBody {
   prompt: string;
   dataJson: unknown;
   correctJson: unknown;
-  points?: number;
   difficulty?: number;
   mediaUrl?: string;
-  mediaType?: string;
+  mediaType?: "image" | "audio" | "video" | null;
   shuffleAnswers?: boolean;
   feedback?: string;
-  feedbackMode?: "general" | "per_answer";
+  feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
+  /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
+  tags?: string[];
+  /**
+   * PRD-30 FR-01: author-defined index inside the topic («Индекс в теме»).
+   * `null` clears it («не задано»); an absent field leaves the stored value
+   * alone. Values need not be dense or unique.
+   */
+  orderIndex?: number | null;
 }
 
 interface UpdateQuestionBody extends Partial<CreateQuestionBody> {}
@@ -46,41 +139,31 @@ interface ExportQuery {
   testId?: string;
 }
 
-// Маппинг типов: внутренний -> Excel
-const typeToExcel: Record<string, string> = {
-  single: "multiple_choice",
-  multiple: "multiple_response",
-  matching: "matching",
-  ranking: "ranking",
-};
-
-// Маппинг типов: Excel -> внутренний
-const typeFromExcel: Record<string, string> = {
-  multiple_choice: "single",
-  multiple_response: "multiple",
-  matching: "matching",
-  ranking: "ranking",
-  single: "single",
-  multiple: "multiple",
-};
+// Сериализация строки вопроса (экспорт) — server/services/questions-export.ts;
+// разбор (импорт) — server/services/questions-import.ts.
 
 // ============================================
 // GET /api/questions - Список вопросов
 // ============================================
-router.get("/", requireAuth, async (_req: Request, res: Response) => {
+router.get("/", requirePermission("questions.read"), async (req: Request, res: Response) => {
   try {
     const questions = await storage.getQuestions();
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
 
-    const questionsWithTopics = questions.map((q) => ({
+    // PRD-15 block C (FR-22): questions inherit their topic's visibility — only
+    // those in topics the actor may see are returned.
+    const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const visible = scope.all ? questions : questions.filter((q) => scope.ids.has(q.topicId));
+
+    const questionsWithTopics = visible.map((q) => ({
       ...q,
       topicName: topicMap.get(q.topicId) || "Unknown",
     }));
 
     res.json(questionsWithTopics);
   } catch (error) {
-    console.error("Get questions error:", error);
+    logger.error("Get questions error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get questions" });
   }
 });
@@ -90,7 +173,7 @@ router.get("/", requireAuth, async (_req: Request, res: Response) => {
 // ============================================
 router.post(
   "/",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request<{}, {}, CreateQuestionBody>, res: Response) => {
     try {
       const {
@@ -99,7 +182,6 @@ router.post(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -108,34 +190,70 @@ router.post(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        tags,
+        orderIndex,
       } = req.body;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
 
-      if (!topicId || !type || !prompt) {
+      // Canonical form BEFORE the required-field check: a prompt of nothing but
+      // spaces is an empty prompt, not a filled one.
+      const canonicalPrompt = normalizeAuthorText(prompt);
+
+      if (!topicId || !type || !canonicalPrompt) {
         return res.status(400).json({ error: "TopicId, type and prompt required" });
       }
 
-      const question = await storage.createQuestion({
+      // PRD-15 block C: adding a question requires manage on the target topic.
+      if (!(await canManageQuestion(req, topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+
+      const allocationError = allocationConfigError(type, dataJson);
+      if (allocationError) {
+        return res.status(422).json({ error: allocationError, field: "dataJson" });
+      }
+
+      const questionInput = {
         topicId,
         type,
-        prompt,
-        dataJson,
+        prompt: canonicalPrompt,
+        dataJson: normalizeQuestionData(dataJson),
         correctJson,
-        points: points || 1,
         difficulty: difficulty || 50,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
         shuffleAnswers: shuffleAnswers ?? true,
-        feedback: feedback || null,
+        feedback: normalizeAuthorText(feedback) || null,
         feedbackMode: feedbackMode || "general",
-        feedbackCorrect: feedbackCorrect || null,
-        feedbackIncorrect: feedbackIncorrect || null,
-      });
+        feedbackCorrect: normalizeAuthorText(feedbackCorrect) || null,
+        feedbackIncorrect: normalizeAuthorText(feedbackIncorrect) || null,
+        tags: normalizeTags(Array.isArray(tags) ? tags : []),
+        // PRD-30 FR-01: `??` and not `||` — 0 is a legitimate index; absent
+        // means «не задано» and stores NULL.
+        orderIndex: orderIndex ?? null,
+        createdBy: req.currentUser?.id ?? null,
+      };
+
+      // Медиатека §5: пре-реестровый адрес приводится к каноническому в момент правки —
+      // так наследие вымывается редактированием, а не миграцией по чужим JSON.
+      const payload = await canonicalizeEntityMedia(questionInput);
+
+      const question = await storage.createQuestion(payload as any);
+
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", question.id, question);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${question.id}: ${(error as Error).message}`);
+      }
 
       res.status(201).json(question);
     } catch (error) {
-      console.error("Create question error:", error);
+      logger.error("Create question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to create question" });
     }
   }
@@ -146,8 +264,8 @@ router.post(
 // ============================================
 router.put(
   "/:id",
-  requireAuthor,
-  async (req: Request<IdParams, {}, UpdateQuestionBody>, res: Response) => {
+  requirePermission("questions.manage"),
+  async (req: Request, res: Response) => {
     try {
       const {
         topicId,
@@ -155,7 +273,6 @@ router.put(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -164,34 +281,109 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-      } = req.body;
+        tags,
+        orderIndex,
+      } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
 
-      const updated = await storage.updateQuestion(req.params.id, {
+      // PRD-15 FR-05: tag/difficulty/move edits additionally pass the
+      // draw-feasibility check against dependent tests (E-3/E-4).
+      const existing = await storage.getQuestion(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      // PRD-15 block C: editing any question requires manage on its topic; a
+      // move additionally requires manage on the destination topic.
+      if (!(await canManageQuestion(req, existing.topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+      const movesTopic = topicId !== undefined && topicId !== existing.topicId;
+      if (movesTopic && !(await canManageQuestion(req, topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+
+      // Правка может СДЕЛАТЬ конфигурацию невыполнимой (поднять минимум, урезать
+      // бюджет), поэтому проверка нужна и здесь, а не только на создании. Тип берётся
+      // из тела, а при его отсутствии — из сохранённого вопроса.
+      if (dataJson !== undefined) {
+        const allocationError = allocationConfigError(type ?? existing.type, dataJson);
+        if (allocationError) {
+          return res.status(422).json({ error: allocationError, field: "dataJson" });
+        }
+      }
+      let feasibilityWarnings: unknown[] = [];
+      const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
+      if (affectsDelivery) {
+        const nextTags = Array.isArray(tags) ? normalizeTags(tags) : undefined;
+        const assessments = [];
+        if (nextTags !== undefined || difficulty !== undefined) {
+          assessments.push(await assessQuestionChange(req.params.id, { tags: nextTags, difficulty }));
+        }
+        if (movesTopic) {
+          // Leaving the old topic shrinks its pool exactly like a removal.
+          assessments.push(await assessQuestionsRemoval([req.params.id]));
+        }
+        const assessment =
+          assessments.length > 0 ? mergeAssessments(assessments) : { blocking: [], warnings: [] };
+        if (isDryRun(req)) return respondDryRun(req, res, assessment);
+        if (respondIfBlocked(req, res, assessment)) return;
+        feasibilityWarnings = assessment.warnings;
+      } else if (isDryRun(req)) {
+        // Nothing delivery-affecting changes -> the edit is always safe.
+        return respondDryRun(req, res, { blocking: [], warnings: [] });
+      }
+
+      const questionUpdate = {
         topicId,
         type,
-        prompt,
-        dataJson,
+        // A field the client did not send stays `undefined` — the storage layer
+        // reads that as «leave unchanged», so normalisation must not turn it
+        // into an empty string.
+        prompt: normalizeOptionalText(prompt),
+        dataJson: normalizeQuestionData(dataJson),
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
         shuffleAnswers,
-        feedback,
+        feedback: normalizeOptionalText(feedback),
         feedbackMode,
-        feedbackCorrect,
-        feedbackIncorrect,
-      });
+        feedbackCorrect: normalizeOptionalText(feedbackCorrect),
+        feedbackIncorrect: normalizeOptionalText(feedbackIncorrect),
+        // Only touch tags when the client sent them; otherwise leave unchanged.
+        tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
+        // PRD-30 FR-01: `null` CLEARS the index, `undefined` leaves it alone —
+        // the storage layer reads undefined as «unchanged».
+        orderIndex,
+      };
+
+      // Медиатека §5: пре-реестровый адрес приводится к каноническому в момент правки —
+      // так наследие вымывается редактированием, а не миграцией по чужим JSON.
+      const payload = await canonicalizeEntityMedia(questionUpdate);
+
+      const updated = await storage.updateQuestion(req.params.id, payload as any);
 
       if (!updated) {
         return res.status(404).json({ error: "Question not found" });
       }
 
-      res.json(updated);
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", updated.id, updated);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${updated.id}: ${(error as Error).message}`);
+      }
+
+      res.json(
+        feasibilityWarnings.length > 0 ? { ...updated, warnings: feasibilityWarnings } : updated,
+      );
     } catch (error) {
-      console.error("Update question error:", error);
+      logger.error("Update question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to update question" });
     }
   }
@@ -200,18 +392,41 @@ router.put(
 // ============================================
 // DELETE /api/questions/:id - Удалить вопрос
 // ============================================
+// PRD-15 FR-02/FR-05 (E-1/E-3/E-4/E-5): creator/admin only; blocked while
+// published tests depend on the question (409 with the dependents list).
 router.delete(
   "/:id",
-  requireAuthor,
-  async (req: Request<IdParams>, res: Response) => {
+  requirePermission("questions.manage"),
+  async (req: Request, res: Response) => {
     try {
+      const question = await storage.getQuestion(req.params.id);
+      if (!question) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      if (!(await canManageQuestion(req, question.topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+      const assessment = await assessQuestionsRemoval([req.params.id]);
+      if (isDryRun(req)) return respondDryRun(req, res, assessment);
+      if (respondIfBlocked(req, res, assessment)) return;
       const success = await storage.deleteQuestion(req.params.id);
       if (!success) {
         return res.status(404).json({ error: "Question not found" });
       }
-      res.json({ success: true });
+
+      // Медиатека: сбой индексации не должен стоить автору его правки. Недостающая
+      // строка индекса безопасна (она отказывает в доступе, а не выдаёт лишнее) и
+      // чинится пересборкой; потерянное сохранение вопроса не чинится ничем.
+      try {
+        await syncEntityUsages("question", req.params.id, null);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${req.params.id}: ${(error as Error).message}`);
+      }
+
+      res.json({ success: true, warnings: assessment.warnings });
     } catch (error) {
-      console.error("Delete question error:", error);
+      logger.error("Delete question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete question" });
     }
   }
@@ -220,19 +435,34 @@ router.delete(
 // ============================================
 // POST /api/questions/bulk-delete - Массовое удаление
 // ============================================
+// PRD-15 FR-05 (E-10): bulk paths run the same guards as single deletes.
 router.post(
   "/bulk-delete",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request<{}, {}, BulkDeleteBody>, res: Response) => {
     try {
       const { ids } = req.body;
       if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: "IDs array required" });
       }
+      for (const id of ids) {
+        const question = await storage.getQuestion(id);
+        if (question && !(await canManageQuestion(req, question.topicId))) {
+          respondForbiddenContent(res);
+          return;
+        }
+      }
+      const assessment = await assessQuestionsRemoval(ids);
+      if (isDryRun(req)) return respondDryRun(req, res, assessment);
+      if (respondIfBlocked(req, res, assessment)) return;
       const deletedCount = await storage.deleteQuestionsBulk(ids);
-      res.json({ success: true, deletedCount });
+      // Медиатека: сбой чистки индекса не должен стоить автору его удаления (см.
+      // тот же выбор в одиночном DELETE /:id выше). `ids` — запрошенные к удалению,
+      // не только реально удалённые: очистка несуществующей записи индекса — no-op.
+      await clearCascadedUsages(ids.map((id) => ({ entityType: "question" as const, entityId: id })));
+      res.json({ success: true, deletedCount, warnings: assessment.warnings });
     } catch (error) {
-      console.error("Bulk delete questions error:", error);
+      logger.error("Bulk delete questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete questions" });
     }
   }
@@ -243,16 +473,26 @@ router.post(
 // ============================================
 router.post(
   "/:id/duplicate",
-  requireAuthor,
-  async (req: Request<IdParams>, res: Response) => {
+  requirePermission("questions.manage"),
+  async (req: Request, res: Response) => {
     try {
-      const result = await (storage as any).duplicateQuestion(req.params.id);
+      const result = await storage.duplicateQuestion(req.params.id);
       if (!result) {
         return res.status(404).json({ error: "Question not found" });
       }
+
+      // Медиатека: дубликат — НОВАЯ сущность со своим id; индексируется под
+      // ним, а не под id оригинала. Сбой индексации не должен стоить автору
+      // его правки — недостающая строка чинится пересборкой.
+      try {
+        await syncEntityUsages("question", result.id, result);
+      } catch (error) {
+        logger.error(`Media usage sync failed for question ${result.id}: ${(error as Error).message}`);
+      }
+
       res.status(201).json(result);
     } catch (error) {
-      console.error("Duplicate question error:", error);
+      logger.error("Duplicate question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to duplicate question" });
     }
   }
@@ -263,7 +503,7 @@ router.post(
 // ============================================
 router.get(
   "/export",
-  requireAuthor,
+  requirePermission("questions.importExport"),
   async (req: Request<{}, {}, {}, ExportQuery>, res: Response) => {
     try {
       let questions = await storage.getQuestions();
@@ -297,6 +537,13 @@ router.get(
         questions = questions.filter((q) => filterTopicIds.includes(q.topicId));
       }
 
+      // PRD-15 block C (FR-22): never export answer keys from topics the actor
+      // cannot see — restrict to the visible scope (admins see everything).
+      const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+      if (!scope.all) {
+        questions = questions.filter((q) => scope.ids.has(q.topicId));
+      }
+
       // Сортировка по теме
       questions.sort((a, b) => {
         const topicA = topicMap.get(a.topicId) || "";
@@ -304,65 +551,13 @@ router.get(
         return topicA.localeCompare(topicB, "ru");
       });
 
-      // Формируем строки
-      const rows = questions.map((q) => {
-        const data = q.dataJson as any;
-        const correct = q.correctJson as any;
+      // Формируем строки (общая сериализация — server/services/questions-export.ts)
+      const rows = questions.map((q) => serializeQuestionRow(q, topicMap.get(q.topicId) || ""));
 
-        let optionsStr = "";
-        let correctStr = "";
+      const wb = new ExcelJS.Workbook();
+      addJsonSheet(wb, "Вопросы", rows, QUESTION_WIDTHS);
 
-        if (q.type === "single" || q.type === "multiple") {
-          optionsStr = (data.options || []).join("#");
-
-          if (q.type === "single") {
-            correctStr = String((correct.correctIndex ?? 0) + 1);
-          } else {
-            correctStr = (correct.correctIndices || [])
-              .map((i: number) => i + 1)
-              .join(",");
-          }
-        } else if (q.type === "matching") {
-          const left = data.left || [];
-          const right = data.right || [];
-          const pairs: string[] = [];
-          for (let i = 0; i < left.length; i++) {
-            pairs.push(`${left[i]}#${right[i] || ""}`);
-          }
-          optionsStr = pairs.join("#");
-          correctStr = (correct.pairs || [])
-            .map((p: any) => `${p.left + 1}-${p.right + 1}`)
-            .join(",");
-        } else if (q.type === "ranking") {
-          optionsStr = (data.items || []).join("#");
-          correctStr = (correct.correctOrder || [])
-            .map((i: number) => i + 1)
-            .join(",");
-        }
-
-        return {
-          "Тема": topicMap.get(q.topicId) || "",
-          "Тип вопроса": typeToExcel[q.type] || q.type,
-          "Текст вопроса": q.prompt,
-          "Балл": q.points || 1,
-          "Сложность": q.difficulty || 50,
-          "Тексты вариантов ответа": optionsStr,
-          "Номера правильных ответов": correctStr,
-          "Следование вариантов ответов": q.shuffleAnswers === false ? "Fixed" : "Random",
-          "Обратная связь": q.feedback || "",
-        };
-      });
-
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws["!cols"] = [
-        { wch: 25 }, { wch: 18 }, { wch: 50 }, { wch: 8 },
-        { wch: 12 }, { wch: 60 }, { wch: 25 }, { wch: 15 }, { wch: 40 },
-      ];
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Вопросы");
-
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const buffer = await workbookToBuffer(wb);
 
       const timestamp = new Date().toISOString().slice(0, 10);
       let filename = `questions_${timestamp}.xlsx`;
@@ -378,8 +573,65 @@ router.get(
       res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
       res.send(buffer);
     } catch (error) {
-      console.error("Export questions error:", error);
+      logger.error("Export questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to export questions" });
+    }
+  }
+);
+
+// ============================================
+// GET /api/questions/template - Шаблон Excel для импорта (PRD-14 Ф2, FR-12)
+// ============================================
+// Canonical column order (must match the export — see спецификация формата §3).
+// T-40: «Балл» / «Цена ответа» left the bank sheet — scoring is a property of
+// the test (the test-scoped «Оценка» sheet of the workbook), not the question.
+// The template's columns ARE the export's columns — a hand-kept copy of the list
+// is how a template silently lags behind the format it is supposed to seed.
+const TEMPLATE_HEADERS = QUESTION_HEADERS;
+
+router.get(
+  "/template",
+  requirePermission("questions.importExport"),
+  async (_req: Request, res: Response) => {
+    try {
+      const wb = new ExcelJS.Workbook();
+      // Sheet 1 — headers only (the author fills rows below).
+      addAoaSheet(wb, "Вопросы", [TEMPLATE_HEADERS],
+        [36, 25, 18, 50, 12, 60, 25, 15, 40, 25, 12, 30, 30]);
+
+      // Sheet 2 — format reference per column / question type.
+      const help: string[][] = [
+        ["Колонка", "Описание / формат"],
+        ["ID", "Пусто — создать вопрос; заполнен и найден — обновить (см. экспорт)"],
+        ["Тема", "Обязательно. Имя темы; если её нет — будет создана"],
+        ["Тип вопроса", "Обязательно. multiple_choice | multiple_response | matching | ranking | scale"],
+        ["Текст вопроса", "Обязательно. Формулировка"],
+        ["Сложность", "Целое 0..100; по умолчанию 50"],
+        ["Тексты вариантов ответа", "Разделитель вариантов — #. Для matching: «лево # ... || право # ...». Для scale — градации по порядку, от полюса к полюсу"],
+        ["Номера правильных ответов", "1-based. multiple_choice: «2». multiple_response: «1,3». matching: «1-1, 2-2». ranking: порядок «3,1,2». scale: один номер ЛИБО пусто — пустая ячейка означает вопрос без правильного ответа"],
+        ["Следование вариантов ответов", "Random (по умолчанию) | Fixed. К типу scale не применяется: градации не перемешиваются"],
+        ["Обратная связь", "Общая обратная связь (режим «общая»)"],
+        ["Теги", "Список; разделители «;» и «,». Напр.: финансы; учёт"],
+        ["Режим ОС", "общая (по умолчанию) | условная"],
+        ["ОС при верном", "Текст; только при режиме «условная»"],
+        ["ОС при неверном", "Текст; только при режиме «условная»"],
+        ["", ""],
+        ["Балл и «Цена ответа»", "Здесь их нет: сколько стоит вопрос — свойство ТЕСТА, а не вопроса (один вопрос может стоить по-разному в разных тестах). Задаются на листе «Оценка» книги теста: раздел «Импорт» → «Скачать шаблон»"],
+        ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],
+        ["Пример (multiple_response)", "Варианты «A # B # C», правильные «1,3»"],
+        ["Пример (matching)", "«Кошка # Собака || Мяу # Гав # Буль», пары «1-1, 2-2» (третий вариант справа — ловушка)"],
+        ["Пример (ranking)", "Элементы «Шаг А # Шаг Б # Шаг В», порядок «3,1,2» — сначала 3-й элемент, затем 1-й, затем 2-й"],
+        ["Пример (scale)", "Градации «Никогда # Редко # Иногда # Часто # Постоянно», правильный ответ ПУСТО — опросник без верных и неверных ответов"],
+      ];
+      addAoaSheet(wb, "Справка", help, [32, 90]);
+
+      const buffer = await workbookToBuffer(wb);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent("questions_template.xlsx")}"`);
+      res.send(buffer);
+    } catch (error) {
+      logger.error("Questions template error: " + (error as Error).message);
+      res.status(500).json({ error: "Failed to build template" });
     }
   }
 );
@@ -387,9 +639,10 @@ router.get(
 // ============================================
 // POST /api/questions/import - Импорт из Excel
 // ============================================
+// `?dryRun=true` (FR-13): валидирует и считает план без записи в БД.
 router.post(
   "/import",
-  requireAuthor,
+  requirePermission("questions.importExport"),
   memoryUpload.single("file"),
   async (req: Request, res: Response) => {
     try {
@@ -397,155 +650,34 @@ router.post(
         return res.status(400).json({ error: "File required" });
       }
 
-      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+      const dryRun = String(req.query.dryRun ?? "").toLowerCase() === "true";
 
-      const topics = await storage.getTopics();
-      const topicByName = new Map(topics.map((t) => [t.name.toLowerCase().trim(), t]));
+      const workbook = await readWorkbookFromBuffer(req.file.buffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) return res.status(400).json({ error: "File is empty" });
 
-      const results = { created: 0, updated: 0, errors: [] as string[] };
-
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const rowNum = i + 2;
-
-        try {
-          // Тема
-          const topicName = String(row["Тема"] || "").trim().toLowerCase();
-          const topic = topicByName.get(topicName);
-          if (!topic) {
-            results.errors.push(`Строка ${rowNum}: тема "${row["Тема"]}" не найдена`);
-            continue;
-          }
-
-          // Тип вопроса
-          const rawType = String(row["Тип вопроса"] || row["Тип"] || "").trim().toLowerCase();
-          const type = typeFromExcel[rawType] as "single" | "multiple" | "matching" | "ranking" | undefined;
-          if (!type) {
-            results.errors.push(`Строка ${rowNum}: неизвестный тип "${row["Тип вопроса"] || row["Тип"]}"`);
-            continue;
-          }
-
-          // Текст вопроса
-          const prompt = String(row["Текст вопроса"] || row["Вопрос"] || "").trim();
-          if (!prompt) {
-            results.errors.push(`Строка ${rowNum}: пустой вопрос`);
-            continue;
-          }
-
-          // Варианты и правильные ответы
-          const optionsStr = String(row["Тексты вариантов ответа"] || row["Варианты"] || "").trim();
-          const correctStr = String(row["Номера правильных ответов"] || row["Правильный ответ"] || "").trim();
-
-          let dataJson: unknown = {};
-          let correctJson: unknown = {};
-
-          if (type === "single" || type === "multiple") {
-            const separator = optionsStr.includes("#") ? "#" : "|";
-            const options = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
-
-            if (options.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 варианта ответа`);
-              continue;
-            }
-            dataJson = { options };
-
-            if (type === "single") {
-              const idx = parseInt(correctStr, 10) - 1;
-              if (isNaN(idx) || idx < 0 || idx >= options.length) {
-                results.errors.push(`Строка ${rowNum}: некорректный номер правильного ответа "${correctStr}"`);
-                continue;
-              }
-              correctJson = { correctIndex: idx };
-            } else {
-              const indices = correctStr
-                .split(/[,.\s]+/)
-                .map((s) => parseInt(s.trim(), 10) - 1)
-                .filter((i) => !isNaN(i));
-
-              if (indices.length === 0) {
-                results.errors.push(`Строка ${rowNum}: не указаны правильные ответы`);
-                continue;
-              }
-              if (indices.some((i) => i < 0 || i >= options.length)) {
-                results.errors.push(`Строка ${rowNum}: номера правильных ответов выходят за пределы`);
-                continue;
-              }
-              correctJson = { correctIndices: indices };
-            }
-          } else if (type === "matching") {
-            const left: string[] = [];
-            const right: string[] = [];
-
-            if (optionsStr.includes("→")) {
-              const pairs = optionsStr.split("|").map((s) => s.trim()).filter(Boolean);
-              for (const pair of pairs) {
-                const [l, r] = pair.split("→").map((s) => s.trim());
-                if (l && r) {
-                  left.push(l);
-                  right.push(r);
-                }
-              }
-            } else {
-              const parts = optionsStr.split("#").map((s) => s.trim()).filter(Boolean);
-              for (let j = 0; j < parts.length - 1; j += 2) {
-                left.push(parts[j]);
-                right.push(parts[j + 1] || "");
-              }
-            }
-
-            if (left.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 пары для сопоставления`);
-              continue;
-            }
-
-            dataJson = { left, right };
-            correctJson = { pairs: left.map((_, idx) => ({ left: idx, right: idx })) };
-          } else if (type === "ranking") {
-            const separator = optionsStr.includes("#") ? "#" : "|";
-            const items = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
-
-            if (items.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 элемента для ранжирования`);
-              continue;
-            }
-
-            dataJson = { items };
-            correctJson = { correctOrder: items.map((_, idx) => idx) };
-          }
-
-          // Следование вариантов
-          const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
-          const shuffleAnswers = shuffleStr !== "fixed";
-
-          // Создаём вопрос
-          await storage.createQuestion({
-            topicId: topic.id,
-            type,
-            prompt,
-            dataJson,
-            correctJson,
-            points: parseInt(String(row["Балл"]), 10) || 1,
-            difficulty: parseInt(String(row["Сложность"]), 10) || 50,
-            shuffleAnswers,
-            feedback: String(row["Обратная связь"] || "").trim() || null,
-          });
-
-          results.created++;
-        } catch (err) {
-          results.errors.push(`Строка ${rowNum}: ${(err as Error).message}`);
-        }
-      }
+      const result = await importQuestionRows(
+        sheetToObjects(sheet),
+        sheetHeaders(sheet),
+        {
+          dryRun,
+          // PRD-15 FR-02/FR-05: import respects the same creator and
+          // feasibility guards as the editor path.
+          actor: req.currentUser
+            ? { id: req.currentUser.id, roles: req.effectiveRoles ?? [] }
+            : undefined,
+        },
+      );
 
       res.json({
-        imported: results.created,
-        created: results.created,
-        errors: results.errors,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+        errors: result.errors,
+        dryRun,
       });
     } catch (error) {
-      console.error("Import questions error:", error);
+      logger.error("Import questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to import questions" });
     }
   }

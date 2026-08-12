@@ -3,26 +3,21 @@ import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { KeyRound, ArrowLeft, CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/password-input";
+import { KeyRound, ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 import {
+  Box,
+  Button,
   Card,
-  CardContent,
-  CardDescription,
+  CardBody,
   CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+  Center,
+  Cluster,
+  IconBadge,
+  Input,
+  Spinner,
+  Stack,
+  Text,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 
@@ -43,7 +38,7 @@ type ResetPasswordData = z.infer<typeof resetPasswordSchema>;
 export default function ResetPasswordPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  
+
   const [token, setToken] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(true);
   const [isValidToken, setIsValidToken] = useState(false);
@@ -58,7 +53,7 @@ export default function ResetPasswordPage() {
     },
   });
 
-  // Получаем токен из URL
+  // Get the token from the URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlToken = params.get("token");
@@ -121,143 +116,137 @@ export default function ResetPasswordPage() {
     }
   };
 
-  // Загрузка
+  // Loading
   if (isVerifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </CardContent>
-        </Card>
-      </div>
+      <Center minH="screen" pad={4}>
+        <Box full maxW="md">
+          <Card>
+            <CardBody>
+              <Cluster justify="center">
+                <Spinner size="l" tone="neutral" />
+              </Cluster>
+            </CardBody>
+          </Card>
+        </Box>
+      </Center>
     );
   }
 
-  // Невалидный токен
+  // Invalid token
   if (!isValidToken && !isSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center">
-              <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
-            </div>
-            <CardTitle>{t.auth.invalidOrExpiredToken}</CardTitle>
-            <CardDescription className="mt-2">
-              {t.auth.invalidOrExpiredTokenDescription}
-            </CardDescription>
-          </CardHeader>
-          <CardFooter className="flex flex-col gap-2">
-            <Link href="/forgot-password" className="w-full">
-              <Button className="w-full">
-                {t.auth.requestNewLink}
-              </Button>
-            </Link>
-            <Link href="/login" className="w-full">
-              <Button variant="ghost" className="w-full">
-                <ArrowLeft className="h-4 w-4 mr-2" />
+      <Center minH="screen" pad={4}>
+        <Box full maxW="md">
+          <Card>
+            <CardBody>
+              <Stack gap={3} align="center">
+                <IconBadge tone="error" size="l" icon={<XCircle />} />
+                <Text as="h1" variant="heading-m" weight="semibold">{t.auth.invalidOrExpiredToken}</Text>
+                <Text variant="body-s" tone="muted" align="center">
+                  {t.auth.invalidOrExpiredTokenDescription}
+                </Text>
+              </Stack>
+            </CardBody>
+            <CardFooter>
+              <Stack gap={2} full>
+                <Link href="/forgot-password">
+                  <Button fullWidth>{t.auth.requestNewLink}</Button>
+                </Link>
+                <Link href="/login">
+                  <Button variant="ghost" fullWidth leadingIcon={<ArrowLeft size={16} />}>
+                    {t.auth.backToLogin}
+                  </Button>
+                </Link>
+              </Stack>
+            </CardFooter>
+          </Card>
+        </Box>
+      </Center>
+    );
+  }
+
+  // Success
+  if (isSuccess) {
+    return (
+      <Center minH="screen" pad={4}>
+        <Box full maxW="md">
+          <Card>
+            <CardBody>
+              <Stack gap={3} align="center">
+                <IconBadge tone="success" size="l" icon={<CheckCircle />} />
+                <Text as="h1" variant="heading-m" weight="semibold">{t.auth.passwordResetSuccess}</Text>
+                <Text variant="body-s" tone="muted" align="center">
+                  {t.auth.passwordResetSuccessDescription}
+                </Text>
+              </Stack>
+            </CardBody>
+            <CardFooter>
+              <Link href="/login">
+                <Button fullWidth>{t.auth.signInButton}</Button>
+              </Link>
+            </CardFooter>
+          </Card>
+        </Box>
+      </Center>
+    );
+  }
+
+  // New password form
+  return (
+    <Center minH="screen" pad={4}>
+      <Box full maxW="md">
+        <Card>
+          <CardBody>
+            <Stack gap={6}>
+              <Stack gap={3} align="center">
+                <IconBadge tone="accent" size="l" icon={<KeyRound />} />
+                <Text as="h1" variant="heading-m" weight="semibold">{t.auth.resetPassword}</Text>
+                <Text variant="body-s" tone="muted" align="center">
+                  Введите новый пароль для вашего аккаунта
+                </Text>
+              </Stack>
+
+              <form onSubmit={form.handleSubmit(onSubmit)}>
+                <Stack gap={4}>
+                  <Input
+                    label={t.auth.newPassword}
+                    revealToggle
+                    placeholder="Минимум 8 символов"
+                    autoComplete="new-password"
+                    fullWidth
+                    error={form.formState.errors.newPassword?.message}
+                    {...form.register("newPassword")}
+                  />
+                  <Input
+                    label={t.auth.confirmNewPassword}
+                    revealToggle
+                    placeholder="Повторите пароль"
+                    autoComplete="new-password"
+                    fullWidth
+                    error={form.formState.errors.confirmPassword?.message}
+                    {...form.register("confirmPassword")}
+                  />
+                  <Button
+                    type="submit"
+                    fullWidth
+                    loading={isSubmitting}
+                  >
+                    {t.auth.resetPassword}
+                  </Button>
+                </Stack>
+              </form>
+            </Stack>
+          </CardBody>
+          <CardFooter>
+            <Link href="/login">
+              <Button variant="ghost" fullWidth leadingIcon={<ArrowLeft size={16} />}>
                 {t.auth.backToLogin}
               </Button>
             </Link>
           </CardFooter>
         </Card>
-      </div>
-    );
-  }
-
-  // Успех
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-            </div>
-            <CardTitle>{t.auth.passwordResetSuccess}</CardTitle>
-            <CardDescription className="mt-2">
-              {t.auth.passwordResetSuccessDescription}
-            </CardDescription>
-          </CardHeader>
-          <CardFooter>
-            <Link href="/login" className="w-full">
-              <Button className="w-full">
-                {t.auth.signInButton}
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  }
-
-  // Форма ввода нового пароля
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <KeyRound className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle>{t.auth.resetPassword}</CardTitle>
-          <CardDescription>
-            Введите новый пароль для вашего аккаунта
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="newPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.auth.newPassword}</FormLabel>
-                    <FormControl>
-                      <PasswordInput
-                        placeholder="Минимум 8 символов"
-                        autoComplete="new-password"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.auth.confirmNewPassword}</FormLabel>
-                    <FormControl>
-                      <PasswordInput
-                        placeholder="Повторите пароль"
-                        autoComplete="new-password"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {t.auth.resetPassword}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-        <CardFooter>
-          <Link href="/login" className="w-full">
-            <Button variant="ghost" className="w-full">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              {t.auth.backToLogin}
-            </Button>
-          </Link>
-        </CardFooter>
-      </Card>
-    </div>
+      </Box>
+    </Center>
   );
 }

@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-19 — Навигация прохождения (пропуск/возврат), пиллы, поэтапное завершение.
+    Спека: docs/specs/prd-19/skip-return-navigation.md + test-structure-contract.md.
+    Состояния — кнопки навбара; пояснения и DS-маппинг — в состоянии «Пояснения».
+    НЕ согласован — черновик к ревью.
+    -->
+    <title>PRD-19 — Навигация прохождения</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <style>
+      /* wireframe-only faux-chrome (учебный вьюпорт пакета): размеры каркаса и
+         нейтральные цвета, не продуктовый DS. */
+      .wf-sprite { display: none; }
+
+      /* Учебный экран — центрированная карточка на странице пакета. */
+      .wf-screen {
+        max-width: var(--wf-size-820, 820px);
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-4);
+      }
+      .wf-screen-head { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); }
+      .wf-screen-head .wf-q-meta { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+      /* Карточка вопроса. */
+      .wf-q-card {
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l);
+        box-shadow: var(--ou-shadow-s);
+        padding: var(--ou-space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-4);
+      }
+      .wf-q-prompt { font: var(--ou-text-heading-s); }
+      .wf-q-hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: calc(-1 * var(--ou-space-2)); }
+
+      /* Реальный вариант single (как шаблонный .option): радио + текст, рамка 2px. */
+      .q-opt { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border: 2px solid var(--ou-border-default); border-radius: 10px; background: var(--ou-bg-elevated); font: var(--ou-text-body-m); cursor: pointer; }
+      .q-opt + .q-opt { margin-top: var(--ou-space-2); }
+      .q-opt input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--ou-accent-default); }
+      .q-opt.is-sel { border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
+
+      /* Ряд навигации внизу карточки: пропуск слева, отправка справа. */
+      .wf-q-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); }
+      .wf-q-nav .spacer { flex: 1; }
+
+      /* Экран-обзор / итоги — карточка. */
+      .wf-panel {
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l);
+        box-shadow: var(--ou-shadow-s);
+        padding: var(--ou-space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-4);
+      }
+      .wf-panel-title { font: var(--ou-text-heading-s); }
+      .wf-panel-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--ou-space-3); }
+      .wf-panel--center { align-items: center; text-align: center; }
+      .wf-panel-foot--center { justify-content: center; width: 100%; }
+      .wf-q-hint--flush { margin: 0; }
+      /* Locked/future dot + legend swatches the DS legend doesn't cover (skipped / current-ring /
+         locked) — faux-styled so the wireframe legend mirrors the dots 1:1.
+         DS gap: QuizMap needs a locked dot state + skipped/current legend entries. */
+      .ou-quiz__dot:disabled { opacity: .4; cursor: not-allowed; }
+      .ou-quiz__legend-dot.is-current { background: var(--ou-bg-elevated); box-shadow: inset 0 0 0 2px var(--ou-accent-default); }
+      .ou-quiz__legend-dot.is-skipped { background: transparent; box-shadow: inset 0 0 0 1px var(--ou-border-default); }
+      .ou-quiz__legend-dot.is-locked  { background: var(--ou-bg-hover); box-shadow: inset 0 0 0 1px var(--ou-border-soft); opacity: .4; }
+
+      /* Explicit unanswered-list on the section-finish page: a discoverable duplicate of pill
+         navigation — each row jumps to its question (clicking a pill alone is non-obvious). */
+      .wf-unanswered { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+      .wf-unanswered-head { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+      .wf-unanswered-row { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); width: 100%; padding: var(--ou-space-3) var(--ou-space-4); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: 10px; background: var(--ou-bg-elevated); cursor: pointer; text-align: left; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+      .wf-unanswered-row:hover { background: var(--ou-bg-hover); border-color: var(--ou-accent-default); }
+      .wf-unanswered-q { display: inline-flex; align-items: center; gap: var(--ou-space-2); min-width: 0; }
+      .wf-unanswered-go { display: inline-flex; align-items: center; gap: 6px; color: var(--ou-accent-default); font-weight: 600; white-space: nowrap; }
+
+      /* Большой круг-итог (faux, как на экране результатов пакета). */
+      .wf-score-ring { width: 132px; height: 132px; border-radius: 50%; border: 10px solid var(--ou-success-default); display: inline-flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto; }
+      .wf-score-ring b { font: var(--ou-text-heading-l); }
+      .wf-score-ring span { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+      /* Router-хаб: карточки тем (свободный порядок). Завершённые заблокированы (без действия). */
+      .wf-hub { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+      .wf-topic-card { display: flex; align-items: center; gap: var(--ou-space-3); width: 100%; text-align: left; padding: var(--ou-space-3) var(--ou-space-4); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: 10px; background: var(--ou-bg-elevated); color: var(--ou-fg-default); }
+      button.wf-topic-card { cursor: pointer; }
+      button.wf-topic-card:hover { background: var(--ou-bg-hover); border-color: var(--ou-accent-default); }
+      .wf-topic-card--done { background: var(--ou-bg-surface-2); border-style: dashed; }
+      .wf-topic-card__icon { display: inline-flex; flex-shrink: 0; width: 30px; height: 30px; align-items: center; justify-content: center; border-radius: 50%; background: var(--ou-bg-surface-3); color: var(--ou-fg-muted); font: var(--ou-text-body-s); font-weight: 600; }
+      .wf-topic-card__icon--done { background: var(--ou-success-soft); color: var(--ou-success-default); }
+      .wf-topic-card__body { flex: 1; min-width: 0; }
+      .wf-topic-card__name { font: var(--ou-text-body-m); font-weight: 600; }
+      .wf-topic-card__meta { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      .wf-topic-card__go { display: inline-flex; align-items: center; gap: 6px; color: var(--ou-accent-default); font-weight: 600; white-space: nowrap; }
+    </style>
+
+    <style data-wf-template-overrides>
+      :root { --wf-nav-offset: 92px; }
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-stage { padding: var(--wf-nav-offset) var(--ou-space-6) var(--ou-space-10); }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: 0 var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960, 960px); margin: 0 auto; }
+      .wf-state > .ou-modal-root { top: var(--wf-nav-offset); place-items: start center; }
+      .wf-state > .ou-modal-root .ou-modal { max-height: calc(100vh - var(--wf-nav-offset) - var(--ou-space-8)); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></symbol>
+      <symbol id="i-skip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 15 12 5 20 5 4" /><line x1="19" y1="5" x2="19" y2="19" /></symbol>
+      <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">PRD-19 поток:</span>
+      <button type="button" class="active" onclick="showState(this, 'question')">вопрос</button>
+      <button type="button" onclick="showState(this, 'review')">обзор раздела</button>
+      <button type="button" onclick="showState(this, 'finish')">модал завершения</button>
+      <button type="button" onclick="showState(this, 'section')">итоги раздела</button>
+      <button type="button" onclick="showState(this, 'router')">router-хаб</button>
+      <button type="button" onclick="showState(this, 'flat')">linear_flat</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd19-structure-obzor.html">&harr; Структура</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ ВОПРОС ░░░ -->
+      <div class="wf-state active" data-state="question">
+        <div class="wf-screen">
+          <div class="wf-screen-head">
+            <span class="wf-q-meta">Раздел «Сеть» · вопрос 3 из 8</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Тема: Сеть</span>
+          </div>
+
+          <div class="ou-quiz ou-quiz--circle ou-quiz--s" role="group" aria-label="Карта вопросов раздела">
+            <div class="ou-quiz__head">
+              <span class="ou-quiz__lbl">Вопросы раздела</span>
+              <span class="ou-quiz__val">отвечено 1 · пропущено 1</span>
+            </div>
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1, отвечен">1</button>
+              <button type="button" class="ou-quiz__dot is-skipped" aria-label="Вопрос 2, пропущен">2</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 3, текущий">3</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 4, ещё не выдан">4</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 5, ещё не выдан">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6, ещё не выдан">6</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 7, ещё не выдан">7</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 8, ещё не выдан">8</button>
+            </div>
+            <div class="ou-quiz__legend">
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-locked"></span>не выдан</span>
+            </div>
+          </div>
+
+          <div class="wf-q-card">
+            <div class="wf-q-prompt">Какой протокол чаще всего используется для потокового IPTV?</div>
+            <div class="wf-q-hint">Выберите один вариант ответа.</div>
+            <label class="q-opt"><input type="radio" name="q3"><span>HTTP</span></label>
+            <label class="q-opt is-sel"><input type="radio" name="q3" checked><span>RTP / RTSP</span></label>
+            <label class="q-opt"><input type="radio" name="q3"><span>SMTP</span></label>
+            <label class="q-opt"><input type="radio" name="q3"><span>FTP</span></label>
+
+            <div class="wf-q-nav">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-skip" /></svg></span><span>Пропустить</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-arrow-left" /></svg></span><span>Вернуться</span></button>
+              <span class="spacer"></span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span>Отправить ответ</span><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-arrow-right" /></svg></span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ОБЗОР РАЗДЕЛА — системный экран шаблона (вариант оформления); навигация (пиллы + явный список) + «Завершить» ░░░ -->
+      <div class="wf-state" data-state="review">
+        <div class="wf-screen">
+          <div class="wf-screen-head">
+            <span class="wf-q-meta">Раздел «Сеть» · обзор</span>
+            <span class="ou-tag ou-tag--warning ou-tag--s">2 без ответа</span>
+          </div>
+
+          <div class="wf-panel">
+            <div class="wf-panel-title">Обзор раздела «Сеть»</div>
+            <div class="ou-quiz ou-quiz--circle ou-quiz--m" role="group" aria-label="Карта вопросов раздела">
+              <div class="ou-quiz__head">
+                <span class="ou-quiz__lbl">Вопросы раздела</span>
+                <span class="ou-quiz__val">отвечено 6 из 8</span>
+              </div>
+              <div class="ou-quiz__dots">
+                <button type="button" class="ou-quiz__dot is-answered">1</button>
+                <button type="button" class="ou-quiz__dot is-skipped">2</button>
+                <button type="button" class="ou-quiz__dot is-answered">3</button>
+                <button type="button" class="ou-quiz__dot is-answered">4</button>
+                <button type="button" class="ou-quiz__dot is-answered">5</button>
+                <button type="button" class="ou-quiz__dot is-skipped">6</button>
+                <button type="button" class="ou-quiz__dot is-answered">7</button>
+                <button type="button" class="ou-quiz__dot is-answered">8</button>
+              </div>
+              <div class="ou-quiz__legend">
+                <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен (6)</span>
+                <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>не отвечен (2)</span>
+              </div>
+            </div>
+
+            <div class="wf-unanswered">
+              <div class="wf-unanswered-head">Без ответа (2) — ответьте перед завершением:</div>
+              <button type="button" class="wf-unanswered-row">
+                <span class="wf-unanswered-q"><strong>Вопрос 2</strong> · Какой протокол использует DNS?</span>
+                <span class="wf-unanswered-go">Перейти <svg width="15" height="15"><use href="#i-arrow-right" /></svg></span>
+              </button>
+              <button type="button" class="wf-unanswered-row">
+                <span class="wf-unanswered-q"><strong>Вопрос 6</strong> · Что выполняет механизм NAT?</span>
+                <span class="wf-unanswered-go">Перейти <svg width="15" height="15"><use href="#i-arrow-right" /></svg></span>
+              </button>
+            </div>
+
+            <div class="wf-panel-foot">
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-check" /></svg></span><span>Завершить раздел</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ МОДАЛ ЗАВЕРШЕНИЯ ░░░ -->
+      <div class="wf-state" data-state="finish">
+        <div class="wf-screen" aria-hidden="true">
+          <div class="wf-screen-head"><span class="wf-q-meta">Раздел «Сеть» · обзор</span></div>
+          <div class="wf-panel"><div class="wf-panel-title">Обзор раздела «Сеть»</div></div>
+        </div>
+        <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="wf-finish-title">
+          <div class="ou-modal__backdrop"></div>
+          <div class="ou-modal ou-modal--s">
+            <header class="ou-modal__head ou-modal__head--icon">
+              <div class="ou-modal__icon ou-modal__icon--warning"><svg width="20" height="20"><use href="#i-alert-triangle" /></svg></div>
+              <div class="ou-modal__head-text">
+                <h2 class="ou-modal__title" id="wf-finish-title">Завершить раздел?</h2>
+                <p class="ou-modal__desc">2 вопроса без ответа будут засчитаны как неверные. После завершения вернуться к ним нельзя.</p>
+              </div>
+              <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="20" height="20"><use href="#i-x" /></svg></button>
+            </header>
+            <div class="ou-modal__body">
+              <p class="wf-q-hint wf-q-hint--flush">Без ответа: вопрос 2, вопрос 6.</p>
+            </div>
+            <footer class="ou-modal__foot">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span>Отмена</span></button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-check" /></svg></span><span>Завершить раздел</span></button>
+            </footer>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ИТОГИ РАЗДЕЛА ░░░ -->
+      <div class="wf-state" data-state="section">
+        <div class="wf-screen">
+          <div class="wf-screen-head"><span class="wf-q-meta">Раздел «Сеть» завершён · итоги раздела</span></div>
+          <div class="wf-panel wf-panel--center">
+            <div class="wf-panel-title">Раздел «Сеть»</div>
+            <div class="wf-score-ring"><b>75%</b><span>Баллы</span></div>
+            <span class="ou-quiz-summary"><span class="ou-quiz-summary__badge">6</span><span class="ou-quiz-summary__lbl">из 8 верно <span>· 75%</span></span></span>
+            <span class="ou-tag ou-tag--success">Раздел пройден</span>
+            <div class="wf-panel-foot wf-panel-foot--center">
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span>Продолжить</span><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-arrow-right" /></svg></span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ ROUTER-ХАБ — свободный выбор тем (router_by_topics) ░░░ -->
+      <div class="wf-state" data-state="router">
+        <div class="wf-screen">
+          <div class="wf-screen-head">
+            <span class="wf-q-meta">Тест «Основы сетей» · выбор темы (свободный порядок)</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--s">2 из 4 пройдено</span>
+          </div>
+          <div class="wf-panel">
+            <div class="wf-panel-title">Выберите тему</div>
+            <div class="wf-hub">
+              <div class="wf-topic-card wf-topic-card--done">
+                <span class="wf-topic-card__icon wf-topic-card__icon--done"><svg width="16" height="16"><use href="#i-check" /></svg></span>
+                <div class="wf-topic-card__body">
+                  <div class="wf-topic-card__name">Сеть</div>
+                  <div class="wf-topic-card__meta">Пройдено · 8 из 8 верно</div>
+                </div>
+                <span class="ou-tag ou-tag--success ou-tag--s">100%</span>
+              </div>
+              <div class="wf-topic-card wf-topic-card--done">
+                <span class="wf-topic-card__icon wf-topic-card__icon--done"><svg width="16" height="16"><use href="#i-check" /></svg></span>
+                <div class="wf-topic-card__body">
+                  <div class="wf-topic-card__name">Безопасность</div>
+                  <div class="wf-topic-card__meta">Пройдено · 9 из 10 верно</div>
+                </div>
+                <span class="ou-tag ou-tag--success ou-tag--s">90%</span>
+              </div>
+              <button type="button" class="wf-topic-card">
+                <span class="wf-topic-card__icon">3</span>
+                <div class="wf-topic-card__body">
+                  <div class="wf-topic-card__name">Протоколы</div>
+                  <div class="wf-topic-card__meta">10 вопросов · не начато</div>
+                </div>
+                <span class="wf-topic-card__go">Начать <svg width="15" height="15"><use href="#i-arrow-right" /></svg></span>
+              </button>
+              <button type="button" class="wf-topic-card">
+                <span class="wf-topic-card__icon">4</span>
+                <div class="wf-topic-card__body">
+                  <div class="wf-topic-card__name">Маршрутизация</div>
+                  <div class="wf-topic-card__meta">8 вопросов · не начато</div>
+                </div>
+                <span class="wf-topic-card__go">Начать <svg width="15" height="15"><use href="#i-arrow-right" /></svg></span>
+              </button>
+            </div>
+            <p class="wf-q-hint">«Завершить тест» станет доступно после прохождения всех тем (осталось 2).</p>
+            <div class="wf-panel-foot">
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-check" /></svg></span><span>Завершить тест</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ LINEAR_FLAT — плоский поток, без разделов (единица = весь тест) ░░░ -->
+      <div class="wf-state" data-state="flat">
+        <div class="wf-screen">
+          <div class="wf-screen-head">
+            <span class="wf-q-meta">Тест «Основы сетей» · вопрос 3 из 10</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Без разделов</span>
+          </div>
+
+          <div class="ou-quiz ou-quiz--circle ou-quiz--s" role="group" aria-label="Карта вопросов теста">
+            <div class="ou-quiz__head">
+              <span class="ou-quiz__lbl">Вопросы теста</span>
+              <span class="ou-quiz__val">отвечено 1 · пропущено 1</span>
+            </div>
+            <div class="ou-quiz__dots">
+              <button type="button" class="ou-quiz__dot is-answered" aria-label="Вопрос 1, отвечен">1</button>
+              <button type="button" class="ou-quiz__dot is-skipped" aria-label="Вопрос 2, пропущен">2</button>
+              <button type="button" class="ou-quiz__dot is-current" aria-label="Вопрос 3, текущий">3</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 4, ещё не выдан">4</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 5, ещё не выдан">5</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 6, ещё не выдан">6</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 7, ещё не выдан">7</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 8, ещё не выдан">8</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 9, ещё не выдан">9</button>
+              <button type="button" class="ou-quiz__dot" disabled aria-label="Вопрос 10, ещё не выдан">10</button>
+            </div>
+            <div class="ou-quiz__legend">
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-skipped"></span>пропущен</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>
+              <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-locked"></span>не выдан</span>
+            </div>
+          </div>
+
+          <div class="wf-q-card">
+            <div class="wf-q-prompt">Какой протокол чаще всего используется для потокового IPTV?</div>
+            <div class="wf-q-hint">Выберите один вариант ответа.</div>
+            <label class="q-opt"><input type="radio" name="qf3"><span>HTTP</span></label>
+            <label class="q-opt is-sel"><input type="radio" name="qf3" checked><span>RTP / RTSP</span></label>
+            <label class="q-opt"><input type="radio" name="qf3"><span>SMTP</span></label>
+            <label class="q-opt"><input type="radio" name="qf3"><span>FTP</span></label>
+
+            <div class="wf-q-nav">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-skip" /></svg></span><span>Пропустить</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-arrow-left" /></svg></span><span>Вернуться</span></button>
+              <span class="spacer"></span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span>Отправить ответ</span><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-arrow-right" /></svg></span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ Пояснения + DS Mapping ░░░ -->
+      <div class="wf-state" data-state="docs">
+        <div class="wf-doc">
+          <div class="wf-notes">
+            <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+            <table>
+              <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr><td>Демонстрируемый сценарий</td><td>что показано на холсте</td><td>Страница вопроса при возврат=ВКЛ и showCorrectAnswers=ВЫКЛ (две кнопки, маркировка только отвечен/не отвечен); обзор / модал / итоги раздела — для секционного теста. Прочие комбинации описаны в строках ниже</td></tr>
+                <tr><td>Прогресс-индикатор (карта вопросов)</td><td>FR-10/FR-11; DS QuizMap shape=circle, компактный</td><td>Кружки с номерами вместо линейного прогресс-бара (дефолтный шаблон). Статусы in-progress: текущий / отвечен / пропущен / не выдан. Клик по пиллу = БЫСТРЫЙ переход к пройденному (выданному) вопросу — быстрый, но неочевидный способ навигации. Скоуп — текущий раздел (секционные) / весь тест (flat). При ВЫКЛ-настройке (возврат) — read-only (без клика)</td></tr>
+                <tr><td>Граница навигации (фронтир)</td><td>FR-10/FR-11</td><td>Переход возможен ТОЛЬКО к уже выданным вопросам (отвечен / пропущен / текущий). Не выданные (за текущей позицией) заблокированы — клик невозможен. DS-gap: у QuizMap нет locked-статуса точки — добавить в ui-kit</td></tr>
+                <tr><td>Навигация — два способа (дублируют)</td><td>FR-08/FR-10</td><td>(1) Пиллы прогресс-индикатора — БЫСТРО, но неочевидно (клик по точке). (2) Кнопка «Вернуться» → ЭКРАН ОБЗОРА — дольше, но ОЧЕВИДНЕЕ (явный список + переходы). Оба ведут к пройденным / неотвеченным вопросам</td></tr>
+                <tr><td>Маркировка корректности</td><td>FR-10a; showCorrectAnswers</td><td>По умолчанию только отвечен/не отвечен. При включённом showCorrectAnswers — три варианта: корректно/некорректно/не отвечен (QuizMap review-режим: is-correct/is-incorrect/is-unanswered)</td></tr>
+                <tr><td>Кнопки страницы вопроса</td><td>FR-04c; два действия</td><td>«Отправить ответ» (СПРАВА; явная фиксация; «Принять» при showCorrectAnswers — фикс + корректность/фидбэк) — доступна при отправляемом ответе. «Пропустить» (СЛЕВА) — переход без ответа. «Вернуться» (СЛЕВА, ранее «К обзору») — ТОЛЬКО при наличии пропущенных, открывает ЭКРАН ОБЗОРА (очевидный способ навигации). При возврате ВКЛ — Пропустить + Отправить ответ; при ВЫКЛ — только «Отправить ответ». Завершения на странице вопроса нет. «Назад» нет — навигация пиллами</td></tr>
+                <tr><td>Черновик</td><td>FR-03b</td><td>Начатый, но не отправленный ответ при «Пропустить» сохраняется как черновик (вопрос «не отвечен»); при возврате виден и редактируем; переживает перезагрузку</td></tr>
+                <tr><td>Экран обзора</td><td>FR-08/FR-16; системный, шаблонный</td><td>СИСТЕМНЫЙ экран; дизайн — через ШАБЛОН (варианты оформления). Очевидная навигация: пиллы-обзор + ЯВНЫЙ список неотвеченных с кнопкой «Перейти» на каждый + «Завершить раздел/тест». В СТРУКТУРЕ теста элемент доступен, если настройка «вернуться» ВКЛ; иначе disabled + комментарий, что для разрешения нужно включить настройку</td></tr>
+                <tr><td>Модал завершения</td><td>FR-09; «перед завершением»</td><td>По «Завершить раздел/тест» при наличии неотвеченных — отдельный МОДАЛ (не экран): «N без ответа → неверные. Завершить?» (DS ou-modal, иконка-предупреждение). После подтверждения — фиксация, возврат невозможен (FR-06)</td></tr>
+                <tr><td>Итоги раздела</td><td>FR-05a; section-results, ОПЦ.</td><td>После «Завершить раздел» при showSectionResults ВКЛ (дефолт). «Продолжить» → следующий раздел / роутер. Выкл — сразу дальше (итоги только по тесту)</td></tr>
+                <tr><td>Завершение</td><td>FR-05/FR-06; явная фиксация</td><td>Поэтапно: раздел → (итоги раздела) → следующий; в конце «Завершить тест» → результаты. После фиксации раздел/тест заблокирован, пиллы прошлого раздела недоступны</td></tr>
+                <tr><td>Router-хаб (свободный порядок)</td><td>FR-05b; router_by_topics</td><td>Экран выбора темы: завершённые темы ЗАБЛОКИРОВАНЫ (без повторного входа, показан результат), доступные — кнопка «Начать». «Завершить тест» доступно (enabled), только когда все темы пройдены. После «Завершить раздел» внутри темы — возврат на хаб. Пиллы — в пределах текущей темы</td></tr>
+                <tr><td>Терминология «раздел»</td><td>зависит от flowMode</td><td>«Раздел» — только в секционных сценариях (linear_by_topics / router_by_topics). В linear_flat разделов нет: единица — весь тест («обзор теста», «Завершить тест»). Показанный холст — секционный (linear_by_topics)</td></tr>
+                <tr><td>linear_flat (плоский, без разделов)</td><td>flowMode; состояние «linear_flat»</td><td>Единица — весь ТЕСТ: «вопрос N из M» по всему тесту, пиллы по ВСЕМУ тесту («Вопросы теста»), один «Обзор теста» + «Завершить тест». НЕТ router-хаба и итогов раздела; структура плоская (зоны До/После + блок вопросов). Экраны обзор/модал/завершение — как у секционных, но на уровне теста</td></tr>
+                <tr><td>Адаптивный режим</td><td>adaptive-session</td><td>Возврат и пропуск-с-возвратом НЕПРИМЕНИМЫ: адаптив строго последовательный (следующий вопрос зависит от ответа). Прогресс-индикатор без навигации (read-only); allowReturnToUnanswered на адаптивные темы не действует</td></tr>
+                <tr><td>Не показано здесь</td><td>след. итерации</td><td>Линейный режим (настройка ВЫКЛ: только «Далее», пиллы read-only), результаты теста, cooldown-старт. Структура и настройки — отдельные эскизы (prd19-structure-obzor / prd19-settings-scenario)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-mapping">
+            <h2 class="wf-mapping-title">DS Mapping</h2>
+            <p class="wf-mapping-sub">UI собран из DS-компонентов (<code>ou-*</code>). Классы <code>wf-*</code> — каркас ТОЛЬКО эскиза (учебный вьюпорт), в прод-код не переносятся.</p>
+            <table>
+              <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+              <tbody>
+                <tr><td>Прогресс-индикатор / карта вопросов</td><td><code>QuizMap</code> (<code>ou-quiz</code>, shape=circle; size=s на странице вопроса, size=m на экране-обзоре), <code>QuizSummary</code></td><td>существующий компонент</td></tr>
+                <tr><td>Кнопки (Отправить/Пропустить/Завершить/Продолжить)</td><td><code>Button</code> (<code>ou-btn</code>)</td><td>существующий компонент</td></tr>
+                <tr><td>Модал завершения</td><td><code>Modal</code> (<code>ou-modal</code>) с иконкой-предупреждением в шапке (<code>ou-modal__icon--warning</code>)</td><td>существующий компонент</td></tr>
+                <tr><td>Экран обзора (системный) + явный список</td><td>Прод: системный экран общего шаблона (PRD-12) с вариантами оформления; строки списка — <code>Button</code>. <code>wf-unanswered*</code> — каркас ТОЛЬКО эскиза</td><td>шаблон + структура</td></tr>
+                <tr><td>Бейджи статусов</td><td><code>Tag</code> (<code>ou-tag</code>)</td><td>существующий компонент</td></tr>
+                <tr><td>Учебный экран/карточка вопроса/опции</td><td>Прод: общий шаблон (PRD-12). <code>wf-screen</code>/<code>wf-q-card</code>/<code>q-opt</code> — каркас ТОЛЬКО эскиза</td><td>faux-chrome</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

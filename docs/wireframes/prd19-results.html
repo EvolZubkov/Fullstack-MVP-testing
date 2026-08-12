@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-19 — экран результатов теста. Разметка 1:1 с
+    server/scorm/templates/default/layouts/results.html (.results-page / .results-hero /
+    .results-main-card / .results-ring / .results-stats / .results-topics-grid / .results-actions);
+    реальные theme.css + base.css; обе темы. Состояния: пройден / не пройден.
+    Показатели (PRD-2) и шкалы (PRD-5) на дефолтной results.html НЕ отображаются (идут в LMS/отчёт) —
+    вывод на ученический экран НЕ показан здесь (открытый вопрос).
+    НЕ согласован — черновик к ревью.
+    -->
+    <title>PRD-19 — Результаты теста (дефолтный шаблон)</title>
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css" />
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/base.css" />
+    <style>
+      body { padding: 0; }
+
+      /* Тема как ВАРИАНТ шаблона (light + dark). Светлые токены — добавить в theme.css. */
+      body.theme-light {
+        --background: 0 0% 98%;
+        --foreground: 225 15% 15%;
+        --border: 220 13% 85%;
+        --card: 0 0% 100%;
+        --card-foreground: 225 15% 15%;
+        --card-border: 220 13% 88%;
+        --primary: 217 91% 42%;
+        --primary-foreground: 0 0% 100%;
+        --muted: 220 14% 96%;
+        --muted-foreground: 220 9% 40%;
+        --accent: 220 14% 92%;
+        --destructive: 0 72% 51%;
+        --success: 142 71% 35%;
+      }
+
+      .wf-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: hsl(var(--card)); border-bottom: 1px solid hsl(var(--card-border)); flex-wrap: wrap; }
+      .wf-nav-title { font-size: 13px; font-weight: 600; color: hsl(var(--muted-foreground)); margin-right: 8px; white-space: nowrap; }
+      .wf-nav button { padding: 4px 12px; border: 1px solid hsl(var(--border)); border-radius: 6px; background: transparent; color: hsl(var(--foreground)); font-size: 13px; cursor: pointer; font-family: inherit; }
+      .wf-nav button:hover { background: hsl(var(--accent)); }
+      .wf-nav button.active { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+      .wf-nav-sep { width: 1px; height: 20px; background: hsl(var(--border)); margin: 0 8px; }
+      .wf-nav-link { font-size: 13px; color: hsl(var(--primary)); white-space: nowrap; text-decoration: none; }
+
+      .wf-stage { padding-top: 48px; }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-state .tb-player { min-height: calc(100vh - 48px); }
+
+      /* topic-bar fill: реальный шаблон ставит style="width:N%"; здесь — фикс-классы (без inline). */
+      .bar-100 { width: 100%; }
+      .bar-80 { width: 80%; }
+      .bar-60 { width: 60%; }
+      .bar-40 { width: 40%; }
+
+      .wf-btn-sm { padding: 12px 22px; }
+      .wf-btn-sm svg { flex-shrink: 0; margin-right: 6px; }
+
+      .wf-doc { max-width: 900px; margin: 0 auto; padding: 24px 18px 48px; }
+      .wf-notes { margin-bottom: 32px; }
+      .wf-notes h3 { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: hsl(var(--muted-foreground)); margin: 0 0 12px; }
+      .wf-doc table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .wf-doc th, .wf-doc td { text-align: left; padding: 8px 10px; border: 1px solid hsl(var(--border)); vertical-align: top; color: hsl(var(--foreground)); }
+      .wf-doc th { background: hsl(var(--muted)); font-weight: 600; }
+      .wf-doc code { background: hsl(var(--muted)); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Результаты теста:</span>
+      <button type="button" class="active" onclick="showState(this, 'pass')">пройден</button>
+      <button type="button" onclick="showState(this, 'fail')">не пройден</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Светлая</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd19-navigation-flow.html">&harr; Поток прохождения</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ ПРОЙДЕН ░░░ -->
+      <div class="wf-state active" data-state="pass">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="results-page">
+              <div class="results-hero">
+                <div class="results-hero-icon is-pass"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10"/><path d="M17 4v5a5 5 0 0 1-10 0V4"/><path d="M5 6h2"/><path d="M17 6h2"/></svg></div>
+                <div class="results-hero-title">Поздравляем!</div>
+                <div class="results-hero-sub">Вы успешно прошли тест.</div>
+              </div>
+
+              <div class="card results-main-card">
+                <div class="results-main-title">Основы сетей</div>
+                <div class="results-main-sub">Результаты теста</div>
+                <div class="results-ring">
+                  <svg viewBox="0 0 140 140" width="140" height="140">
+                    <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
+                    <circle cx="70" cy="70" r="63" class="ring-fg is-pass" stroke-width="14" fill="none" stroke-linecap="round" stroke-dasharray="396" stroke-dashoffset="40"></circle>
+                  </svg>
+                  <div class="results-ring-center">
+                    <div class="results-ring-pct">90%</div>
+                    <div class="results-ring-label">Баллы</div>
+                  </div>
+                </div>
+                <div class="results-stats">
+                  <div class="results-stat"><div class="v">10</div><div class="l">Вопросов</div></div>
+                  <div class="results-stat"><div class="v">9/10</div><div class="l">Верно</div></div>
+                  <div class="results-stat"><div class="v">9</div><div class="l">Баллов</div></div>
+                  <div class="results-pill is-pass">Пройден</div>
+                </div>
+              </div>
+
+              <div class="results-section-title">Результаты по темам</div>
+              <div class="results-topics-grid">
+                <div class="card topic-card">
+                  <div class="topic-head"><div class="topic-name">Сеть</div><div class="results-pill is-pass">Пройдено</div></div>
+                  <div class="topic-bar is-pass"><div class="topic-bar-fill bar-100"></div></div>
+                  <div class="topic-row"><div class="k">Правильно</div><div class="val">5 / 5</div></div>
+                  <div class="topic-row"><div class="k">Баллов</div><div class="val">5</div></div>
+                </div>
+                <div class="card topic-card">
+                  <div class="topic-head"><div class="topic-name">Безопасность</div><div class="results-pill is-pass">Пройдено</div></div>
+                  <div class="topic-bar is-pass"><div class="topic-bar-fill bar-80"></div></div>
+                  <div class="topic-row"><div class="k">Правильно</div><div class="val">4 / 5</div></div>
+                  <div class="topic-row"><div class="k">Баллов</div><div class="val">4</div></div>
+                </div>
+              </div>
+
+              <div class="results-actions">
+                <button type="button" class="btn" data-action="restart">Пройти снова</button>
+                <button type="button" class="btn btn--outline wf-btn-sm" data-action="download-pdf"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Скачать отчёт</button>
+                <button type="button" class="btn btn--outline" data-action="back">К списку тестов</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ НЕ ПРОЙДЕН ░░░ -->
+      <div class="wf-state" data-state="fail">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="results-page">
+              <div class="results-hero">
+                <div class="results-hero-icon is-fail"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/></svg></div>
+                <div class="results-hero-title">Тест не пройден</div>
+                <div class="results-hero-sub">Попробуйте ещё раз.</div>
+              </div>
+
+              <div class="card results-main-card">
+                <div class="results-main-title">Основы сетей</div>
+                <div class="results-main-sub">Результаты теста</div>
+                <div class="results-ring">
+                  <svg viewBox="0 0 140 140" width="140" height="140">
+                    <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
+                    <circle cx="70" cy="70" r="63" class="ring-fg is-fail" stroke-width="14" fill="none" stroke-linecap="round" stroke-dasharray="396" stroke-dashoffset="158"></circle>
+                  </svg>
+                  <div class="results-ring-center">
+                    <div class="results-ring-pct">60%</div>
+                    <div class="results-ring-label">Баллы</div>
+                  </div>
+                </div>
+                <div class="results-stats">
+                  <div class="results-stat"><div class="v">10</div><div class="l">Вопросов</div></div>
+                  <div class="results-stat"><div class="v">6/10</div><div class="l">Верно</div></div>
+                  <div class="results-stat"><div class="v">6</div><div class="l">Баллов</div></div>
+                  <div class="results-pill is-fail">Не пройден</div>
+                </div>
+              </div>
+
+              <div class="results-section-title">Результаты по темам</div>
+              <div class="results-topics-grid">
+                <div class="card topic-card">
+                  <div class="topic-head"><div class="topic-name">Сеть</div><div class="results-pill is-pass">Пройдено</div></div>
+                  <div class="topic-bar is-pass"><div class="topic-bar-fill bar-80"></div></div>
+                  <div class="topic-row"><div class="k">Правильно</div><div class="val">4 / 5</div></div>
+                </div>
+                <div class="card topic-card">
+                  <div class="topic-head"><div class="topic-name">Безопасность</div><div class="results-pill is-fail">Не пройдено</div></div>
+                  <div class="topic-bar is-fail"><div class="topic-bar-fill bar-40"></div></div>
+                  <div class="topic-row"><div class="k">Правильно</div><div class="val">2 / 5</div></div>
+                </div>
+              </div>
+
+              <div class="results-actions">
+                <button type="button" class="btn" data-action="restart">Пройти снова</button>
+                <button type="button" class="btn btn--outline wf-btn-sm" data-action="download-pdf"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Скачать отчёт</button>
+                <button type="button" class="btn btn--outline" data-action="back">К списку тестов</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ Пояснения ░░░ -->
+      <div class="wf-state" data-state="docs">
+        <div class="wf-doc">
+          <div class="wf-notes">
+            <h3>Пояснения — Wireframe</h3>
+            <table>
+              <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr><td>Разметка</td><td>results.html</td><td>1:1 с дефолтным шаблоном (<code>.results-hero</code> / <code>.results-main-card</code> / <code>.results-ring</code> / <code>.results-stats</code> / <code>.results-topics-grid</code> / <code>.results-actions</code>); реальные theme.css + base.css; обе темы</td></tr>
+                <tr><td>Hero</td><td>result.passed</td><td>Пройден: кубок + «Поздравляем!». Не пройден: крест + «Тест не пройден». Цвет — is-pass/is-fail (success/destructive)</td></tr>
+                <tr><td>Кольцо-балл</td><td>result.scorePercent / ringDashoffset</td><td>SVG-кольцо, заполнение по проценту (dasharray=окружность, dashoffset). Цвет is-pass/is-fail</td></tr>
+                <tr><td>Статы + pill</td><td>result.*</td><td>Вопросов / Верно X/Y / Баллов + pill статуса (is-pass/is-fail)</td></tr>
+                <tr><td>Результаты по темам</td><td>result.topicResults</td><td>Карточка темы: имя + pill + прогресс-бар + Правильно X/Y + Баллов (+ required/feedback, если есть). Условный блок</td></tr>
+                <tr><td>Действия</td><td>results.actions</td><td>«Пройти снова» (restart) / «К списку тестов» (backAction). «Скачать отчёт» = «Скачать PDF» (есть в results.adaptive.html; для обычного — условно/при наличии)</td></tr>
+                <tr><td>ПОКАЗАТЕЛИ (PRD-2) и ШКАЛЫ (PRD-5)</td><td>ОТДЕЛЬНЫЙ PRD (дальняя перспектива)</td><td>Демонстрация ученику — отдельный будущий PRD, СЕЙЧАС НЕ выводим. Вычисляются → LMS-отчёт (pseudo-interactions) + отладчик (PRD-18). Тогл «Показывать результат обучающемуся» в редакторе показателей/шкал СКРЫТ до того PRD (поле showToLearner в модели сохранено)</td></tr>
+                <tr><td>Рекомендации</td><td>recommendedCourses/Events</td><td>Опц. секции «Рекомендуемые курсы/мероприятия» (есть в results.html) — не показаны здесь</td></tr>
+                <tr><td>Тема</td><td>вариант шаблона</td><td>light + dark, тогл; светлые токены — добавить в theme.css</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var light = document.body.classList.toggle('theme-light');
+        btn.textContent = light ? 'Тёмная' : 'Светлая';
+        btn.classList.toggle('active', light);
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-11 §3a — Тегирование вопросов: chip-инпут «Теги (подтемы)» в форме ВОПРОСА.
+    Issue: BR-10 / PRD-2 §8.2. Спека: docs/specs/prd-11/tag-draw-quotas.md §3a.
+    Поверхность: редактор вопроса (client/src/pages/author/questions.tsx) = Modal (shadcn).
+    Пререквизит квот (PRD-11): поле questions.tags было, но задать тег нельзя было (нет UI/API).
+    Тег = подтема; квота-Select (prd11-draw-quotas.html) берёт РЕАЛЬНЫЕ теги отсюда.
+    Состояния:
+      s-default  — Есть теги: чипы (removable) + инпут
+      s-suggest  — Ввод: дропдаун подсказок из уже использованных тегов + «Создать тег»
+      s-empty    — Тегов нет (placeholder)
+      s-docs     — Пояснения + DS Mapping
+    DRAFT — не перенесён в approved/ до согласования.
+    -->
+    <title>PRD-11 §3a — Тегирование вопросов</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      .wf-sprite { display: none; }
+      /* Token/tag input: чипы + инлайн-инпут в поле (композиция, токены). */
+      /* Override DS fixed height of .ou-field--m .ou-field__box (2-class specificity)
+         so the box grows with wrapping chips. */
+      .ou-field__box.wf-tags-box {
+        display: flex; flex-wrap: wrap; align-items: center;
+        height: auto;
+        gap: var(--ou-space-2);
+        padding: var(--ou-space-2);
+        min-height: var(--ou-size-control-m);
+      }
+      .wf-tags-input {
+        flex: 1; min-width: 10ch;
+        border: 0; background: transparent; outline: none;
+        font: var(--ou-text-body-m); color: var(--ou-fg-default);
+      }
+      .wf-tags-input::placeholder { color: var(--ou-fg-muted); }
+      /* Дропдаун подсказок под полем. */
+      .wf-suggest { position: relative; }
+      .wf-suggest .ou-menu { margin-top: var(--ou-space-1); width: 100%; max-width: none; }
+      /* Statically emulate the keyboard/hover-highlighted item (DS shows it via :hover). */
+      .wf-menu-active { background: var(--ou-bg-hover); }
+      .wf-muted { color: var(--ou-fg-muted); }
+      .wf-recap { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-4); }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-state { display: none; padding: var(--wf-size-72, 76px) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-560, 560px); }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Теги вопроса:</span>
+      <button type="button" class="active" onclick="showState(this, 'default')">есть теги (дефолт)</button>
+      <button type="button" onclick="showState(this, 'suggest')">ввод · подсказки</button>
+      <button type="button" onclick="showState(this, 'empty')">нет тегов</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd11-draw-quotas.html">&harr; Квоты выдачи</a>
+    </nav>
+
+    <!-- ════════════════ s-default: есть теги ════════════════ -->
+    <div id="wf-default" class="wf-state active">
+      <div class="ou-modal ou-modal--l">
+        <header class="ou-modal__head">
+          <div class="ou-modal__head-text">
+            <h1 class="ou-modal__title">Редактирование вопроса</h1>
+            <p class="ou-modal__desc">Раздел «Вопросы» · банк вопросов темы «Финансы»</p>
+          </div>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+          <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+        </header>
+        <div class="ou-modal__body">
+          <p class="wf-recap">Текст вопроса, варианты ответа и «Цена ответа» (PRD-10) — выше; показано поле тегов.</p>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="tags-input">Теги (подтемы)</label>
+            <div class="ou-field ou-field--m ou-field--full">
+              <div class="ou-field__box wf-tags-box">
+                <span class="ou-chip ou-chip--removable ou-chip--s">
+                  <button type="button" class="ou-chip__action">Базовые понятия</button>
+                  <button type="button" class="ou-chip__close" aria-label="Удалить тег Базовые понятия"><svg width="10" height="10"><use href="#i-x" /></svg></button>
+                </span>
+                <span class="ou-chip ou-chip--removable ou-chip--s">
+                  <button type="button" class="ou-chip__action">Анализ рисков</button>
+                  <button type="button" class="ou-chip__close" aria-label="Удалить тег Анализ рисков"><svg width="10" height="10"><use href="#i-x" /></svg></button>
+                </span>
+                <input class="wf-tags-input" id="tags-input" type="text" placeholder="Добавьте тег…" aria-label="Добавить тег" />
+              </div>
+            </div>
+            <div class="ou-formfield__msg">Теги — это подтемы; по ним задаются квоты выдачи (см. «Квоты выдачи»). Можно с пробелами, до 50 символов, регистр не важен. Enter — добавить.</div>
+          </div>
+        </div>
+        <footer class="ou-modal__foot">
+          <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-suggest: ввод · подсказки ════════════════ -->
+    <div id="wf-suggest" class="wf-state">
+      <div class="ou-modal ou-modal--l">
+        <header class="ou-modal__head">
+          <div class="ou-modal__head-text">
+            <h1 class="ou-modal__title">Редактирование вопроса</h1>
+            <p class="ou-modal__desc">Раздел «Вопросы» · банк вопросов темы «Финансы»</p>
+          </div>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+          <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+        </header>
+        <div class="ou-modal__body">
+          <p class="wf-recap">Текст вопроса, варианты ответа и «Цена ответа» (PRD-10) — выше; показано поле тегов.</p>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Теги (подтемы)</label>
+            <div class="wf-suggest">
+              <div class="ou-field ou-field--m ou-field--full">
+                <div class="ou-field__box wf-tags-box">
+                  <span class="ou-chip ou-chip--removable ou-chip--s">
+                    <button type="button" class="ou-chip__action">Базовые понятия</button>
+                    <button type="button" class="ou-chip__close" aria-label="Удалить тег Базовые понятия"><svg width="10" height="10"><use href="#i-x" /></svg></button>
+                  </span>
+                  <input class="wf-tags-input" type="text" value="Анализ" aria-label="Добавить тег" />
+                </div>
+              </div>
+              <div class="ou-menu ou-menu--sm" role="listbox" aria-label="Подсказки тегов">
+                <div class="ou-menu__label">Существующие теги</div>
+                <button type="button" class="ou-menu__item wf-menu-active" aria-selected="true"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-tag" /></svg></span>Анализ рисков</button>
+                <button type="button" class="ou-menu__item"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-tag" /></svg></span>Анализ отчётности</button>
+                <div class="ou-menu__divider"></div>
+                <button type="button" class="ou-menu__item"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-plus" /></svg></span>Создать тег «Анализ»</button>
+              </div>
+            </div>
+            <div class="ou-formfield__msg">Подсказки из уже использованных тегов банка; можно создать новый.</div>
+          </div>
+        </div>
+        <footer class="ou-modal__foot">
+          <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-empty: нет тегов ════════════════ -->
+    <div id="wf-empty" class="wf-state">
+      <div class="ou-modal ou-modal--l">
+        <header class="ou-modal__head">
+          <div class="ou-modal__head-text">
+            <h1 class="ou-modal__title">Редактирование вопроса</h1>
+            <p class="ou-modal__desc">Раздел «Вопросы» · банк вопросов темы «Финансы»</p>
+          </div>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+          <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+        </header>
+        <div class="ou-modal__body">
+          <p class="wf-recap">Текст вопроса, варианты ответа и «Цена ответа» (PRD-10) — выше; показано поле тегов.</p>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="tags-empty">Теги (подтемы) <span class="ou-formfield__lbl-opt">— опционально</span></label>
+            <div class="ou-field ou-field--m ou-field--full">
+              <div class="ou-field__box wf-tags-box">
+                <input class="wf-tags-input" id="tags-empty" type="text" placeholder="Добавьте тег — напр. Базовые понятия…" aria-label="Добавить тег" />
+              </div>
+            </div>
+            <div class="ou-formfield__msg">Без тегов вопрос участвует в обычной (равномерной) выдаче. Теги нужны, чтобы по ним задавать квоты покрытия подтем.</div>
+          </div>
+        </div>
+        <footer class="ou-modal__foot">
+          <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+          <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead>
+            <tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Поверхность</td><td>редактор вопроса (<code>questions.tsx</code>) = Modal (shadcn)</td><td>Поле «Теги» — в форме вопроса рядом с текстом/вариантами/«Ценой ответа». Реализация на shadcn (как ScoringBuilder PRD-10); эскиз = спека раскладки</td></tr>
+            <tr><td>Пререквизит квот</td><td>поле <code>questions.tags</code> (string[])</td><td>Было в схеме (PRD-2 §8.2), но задать тег нельзя было (нет UI/API). Внесено в охват PRD-11 §3a</td></tr>
+            <tr><td>Тег = подтема</td><td><code>questions.tags[]</code></td><td>По тегам задаются квоты выдачи (prd11-draw-quotas.html); отдельной сущности/иерархии тем нет (FR-07)</td></tr>
+            <tr><td>Именование</td><td>свободная метка + нормализация</td><td>Пробелы разрешены; <code>trim</code> + схлопывание пробелов, 1–50 символов; сравнение/дедуп/выдача — регистронезависимо. Спека §3a</td></tr>
+            <tr><td>Чип тега</td><td>removable chip (X удаляет)</td><td>Добавление: ввод + Enter, или выбор из подсказок</td></tr>
+            <tr><td>Подсказки</td><td>distinct <code>questions.tags</code> банка</td><td>Автодополнение из уже использованных тегов; «Создать тег «…»» для нового (FR-09)</td></tr>
+            <tr><td>Опциональность</td><td>тегов может не быть</td><td>Без тегов — обычная (равномерная) выдача (FR-02)</td></tr>
+            <tr><td>API</td><td><code>tags: string[]</code> в create/update вопроса</td><td>Проброс route + storage, как <code>scoringJson</code> (PRD-10); отсутствие → <code>[]</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент — блокер.</p>
+        <table>
+          <thead>
+            <tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Контейнер редактора вопроса</td><td><code>Modal</code> (<code>ou-modal--l</code>)</td><td><code>--ou-*</code></td><td>Существующий shadcn Dialog; эскиз показывает DS-эквивалент</td></tr>
+            <tr><td>Поле тегов (token-input)</td><td>композиция <code>Field</code> + <code>Chip</code> (<code>ou-field</code> + <code>ou-chip</code>)</td><td><code>--ou-space-2</code>, <code>--ou-border-default</code></td><td>Чипы в поле + инлайн-инпут; DS не имеет единого token-input — композиция через токены (AI-AGENT)</td></tr>
+            <tr><td>Чип тега</td><td><code>Chip</code> (<code>ou-chip--removable</code>)</td><td><code>--ou-radius-pill</code></td><td><code>ou-chip__close</code> — удалить</td></tr>
+            <tr><td>Подсказки</td><td><code>Menu</code> (<code>ou-menu--sm</code>) или <code>Combobox</code></td><td><code>--ou-shadow-lg</code></td><td>Дропдаун существующих тегов + «Создать»</td></tr>
+            <tr><td>Тип вопроса / статусы</td><td><code>Tag</code> (<code>ou-tag</code>)</td><td><code>--ou-*</code></td><td></td></tr>
+            <tr><td>Действия</td><td><code>Button</code> (<code>ou-btn</code>)</td><td><code>--ou-*</code></td><td>Отмена / Сохранить</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

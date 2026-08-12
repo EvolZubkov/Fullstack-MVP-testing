@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd15 — Операция затрагивает опубликованные тесты (T-12)
+    Этап: Wireframes на согласование
+    Файл: docs/wireframes/prd15-content-in-use.html
+    Состояния: s-block-topic (блокировка 409, автор), s-block-admin (блокировка 409,
+    администратор с force), s-warn (только предупреждения, подтверждение),
+    s-publish-block (публикация невыполнима, E-12)
+    Покрывает: PRD-15 FR-05, FR-06; матрица E-1..E-5, E-9, E-12
+  -->
+  <title>prd15 — Операция затрагивает опубликованные тесты</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <style>
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
+
+    .page-title { font: var(--ou-text-heading-s); font-weight: 700; }
+
+    /* Dependent-tests list — new composition (no DS component), tokens only */
+    .wf-dep-list { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-4); }
+    .wf-dep-item {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      padding: var(--ou-space-3) var(--ou-space-4);
+      background: var(--ou-bg-muted);
+    }
+    .wf-dep-item__head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+    .wf-dep-item__title { font: var(--ou-text-body-m); font-weight: 600; color: var(--ou-fg-default); }
+    .wf-dep-item__owner { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-left: auto; }
+    .wf-dep-item__reasons {
+      margin: var(--ou-space-2) 0 0; padding-left: var(--ou-space-5);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+      display: flex; flex-direction: column; gap: var(--ou-space-1);
+    }
+
+    /* Dim main behind modal (wireframe-only visualization) */
+    .wf-main-dimmed { opacity: .4; pointer-events: none; }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: var(--wf-border-w);
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .ou-shell.wf-state { min-height: unset; padding-top: 0; margin-top: var(--wf-nav-offset, var(--wf-size-52)); height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+    .ou-shell.wf-state.active { display: grid; }
+    .ou-shell .ou-shell__main { padding: 0; overflow: hidden; gap: 0; }
+
+    /* Wireframe: modal sits above shell but below wf-nav (9999) */
+    .ou-modal-root { z-index: 200; top: var(--wf-nav-offset, var(--wf-size-52)); }
+  </style>
+</head>
+
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <path d="M12 9v4"/><path d="M12 17h.01"/>
+  </symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd15 — Контент используется тестами:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-block-topic')">Блокировка (автор)</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-block-admin')">Блокировка (админ)</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-warn')">Только предупреждения</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-publish-block')">Публикация невыполнима</button>
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE 1: Блокировка 409 — автор удаляет тему, есть опубликованные зависимые
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-block-topic" class="wf-state ou-shell active">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Темы</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main wf-main-dimmed"></main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-block-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--l">
+      <div class="ou-modal__head ou-modal__head--icon">
+        <div class="ou-modal__icon ou-modal__icon--danger" aria-hidden="true">
+          <svg width="20" height="20"><use href="#i-alert"/></svg>
+        </div>
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-block-title">Тему нельзя удалить: её используют опубликованные тесты</p>
+          <p class="ou-modal__desc">Тема «Финансовая грамотность» входит в выдачу вопросов опубликованных тестов. Удаление нарушит их работу.</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        <div class="wf-dep-list" role="list" aria-label="Зависимые опубликованные тесты">
+          <div class="wf-dep-item" role="listitem">
+            <div class="wf-dep-item__head">
+              <span class="wf-dep-item__title">Сертификация руководителей</span>
+              <span class="ou-tag ou-tag--success">Опубликован</span>
+              <span class="wf-dep-item__owner">Владелец: Мария Петрова</span>
+            </div>
+            <ul class="wf-dep-item__reasons">
+              <li>Выдача вопросов: тест выдаёт 10 вопросов темы, после удаления не останется ни одного</li>
+              <li>Шкалы: будут потеряны вклады 4 вопросов в шкалу «Управленческая зрелость»</li>
+            </ul>
+          </div>
+          <div class="wf-dep-item" role="listitem">
+            <div class="wf-dep-item__head">
+              <span class="wf-dep-item__title">Ежегодная аттестация: финансы</span>
+              <span class="ou-tag ou-tag--success">Опубликован</span>
+              <span class="wf-dep-item__owner">Владелец: вы</span>
+            </div>
+            <ul class="wf-dep-item__reasons">
+              <li>Квота по тегу «бюджетирование»: нужно 3 вопроса, не останется ни одного</li>
+              <li>Страницы контента: будут удалены 2 страницы, привязанные к теме</li>
+            </ul>
+          </div>
+        </div>
+        <div class="ou-banner ou-banner--info ou-banner--subtle" style="margin-top: var(--ou-space-4);">
+          <div class="ou-banner__body">
+            <span class="ou-banner__title">Как разблокировать удаление</span>
+            <span class="ou-banner__desc">Исключите тему из перечисленных тестов (или снимите их с публикации) и повторите удаление. Принудительное удаление доступно администратору.</span>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Понятно</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE 2: Блокировка 409 — администратор, доступно принудительное удаление
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-block-admin" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Темы</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">ОС</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Ольга Смирнова</span>
+        <span class="ou-shell__user-role">Администратор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main wf-main-dimmed"></main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-admin-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--l">
+      <div class="ou-modal__head ou-modal__head--icon">
+        <div class="ou-modal__icon ou-modal__icon--danger" aria-hidden="true">
+          <svg width="20" height="20"><use href="#i-alert"/></svg>
+        </div>
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-admin-title">Тему нельзя удалить: её используют опубликованные тесты</p>
+          <p class="ou-modal__desc">Тема «Финансовая грамотность» входит в выдачу вопросов опубликованных тестов. Удаление нарушит их работу.</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        <div class="wf-dep-list" role="list" aria-label="Зависимые опубликованные тесты">
+          <div class="wf-dep-item" role="listitem">
+            <div class="wf-dep-item__head">
+              <span class="wf-dep-item__title">Сертификация руководителей</span>
+              <span class="ou-tag ou-tag--success">Опубликован</span>
+              <span class="wf-dep-item__owner">Владелец: Мария Петрова</span>
+            </div>
+            <ul class="wf-dep-item__reasons">
+              <li>Выдача вопросов: тест выдаёт 10 вопросов темы, после удаления не останется ни одного</li>
+              <li>Шкалы: будут потеряны вклады 4 вопросов в шкалу «Управленческая зрелость»</li>
+            </ul>
+          </div>
+        </div>
+        <div class="ou-banner ou-banner--warning ou-banner--subtle" style="margin-top: var(--ou-space-4);">
+          <div class="ou-banner__body">
+            <span class="ou-banner__title">Принудительное удаление</span>
+            <span class="ou-banner__desc">Перечисленные тесты начнут выдавать меньше вопросов или перестанут работать; вклады в шкалы и привязанные страницы будут удалены без возможности восстановления. Действие записывается в журнал.</span>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить принудительно</button>
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE 3: Только предупреждения — черновики и drawAll, операция допустима
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-warn" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Вопросы</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main wf-main-dimmed"></main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-warn-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head ou-modal__head--icon">
+        <div class="ou-modal__icon ou-modal__icon--warning" aria-hidden="true">
+          <svg width="20" height="20"><use href="#i-alert"/></svg>
+        </div>
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-warn-title">Удалить вопрос? Это затронет другие тесты</p>
+          <p class="ou-modal__desc">Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        <div class="wf-dep-list" role="list" aria-label="Затронутые тесты">
+          <div class="wf-dep-item" role="listitem">
+            <div class="wf-dep-item__head">
+              <span class="wf-dep-item__title">Адаптация новичков (в работе)</span>
+              <span class="ou-tag ou-tag--neutral">Черновик</span>
+              <span class="wf-dep-item__owner">Владелец: Мария Петрова</span>
+            </div>
+            <ul class="wf-dep-item__reasons">
+              <li>Выдача вопросов: нужно 5, останется 4 — перед публикацией состав придётся пополнить</li>
+            </ul>
+          </div>
+          <div class="wf-dep-item" role="listitem">
+            <div class="wf-dep-item__head">
+              <span class="wf-dep-item__title">Финансовый минимум</span>
+              <span class="ou-tag ou-tag--success">Опубликован</span>
+              <span class="wf-dep-item__owner">Владелец: вы</span>
+            </div>
+            <ul class="wf-dep-item__reasons">
+              <li>Тест выдаёт все вопросы темы — выдача сократится с 12 до 11 вопросов</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить вопрос</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE 4: Публикация невыполнима (E-12) — разбор по темам теста
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-publish-block" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main wf-main-dimmed"></main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-pub-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head ou-modal__head--icon">
+        <div class="ou-modal__icon ou-modal__icon--danger" aria-hidden="true">
+          <svg width="20" height="20"><use href="#i-alert"/></svg>
+        </div>
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-pub-title">Тест нельзя опубликовать: выдача вопросов невыполнима</p>
+          <p class="ou-modal__desc">При текущем составе тем тест «Аттестация отдела продаж» не сможет собрать вариант для прохождения.</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        <div class="wf-dep-list" role="list" aria-label="Темы с невыполнимой выдачей">
+          <div class="wf-dep-item" role="listitem">
+            <div class="wf-dep-item__head">
+              <span class="wf-dep-item__title">Тема «Переговоры»</span>
+            </div>
+            <ul class="wf-dep-item__reasons">
+              <li>Выдача вопросов: настроено 10, в теме доступно 7</li>
+            </ul>
+          </div>
+          <div class="wf-dep-item" role="listitem">
+            <div class="wf-dep-item__head">
+              <span class="wf-dep-item__title">Тема «Продукты компании»</span>
+            </div>
+            <ul class="wf-dep-item__reasons">
+              <li>Квота по тегу «тарифы»: нужно 4 вопроса, доступно 2</li>
+              <li>Уровень «Профи» адаптивной выдачи: нужно 5 вопросов, доступно 3</li>
+            </ul>
+          </div>
+        </div>
+        <div class="ou-banner ou-banner--info ou-banner--subtle" style="margin-top: var(--ou-space-4);">
+          <div class="ou-banner__body">
+            <span class="ou-banner__desc">Уменьшите объём выдачи в настройках секций или добавьте вопросы в перечисленные темы, затем повторите публикацию.</span>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Открыть структуру теста</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * @fileoverview Wireframe state switcher and theme/density toggle.
+ * @module prd15-content-in-use
+ */
+(function () {
+  function resolveState(id) {
+    return document.getElementById(id) || document.getElementById('wf-' + id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      button.classList.toggle('active', button === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme() {
+    document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light');
+  };
+
+  window.toggleDensity = function toggleDensity() {
+    document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal');
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+}());
+</script>
+
+<!-- Пояснения и DS Mapping ══════════════════════════════════════════════ -->
+<section class="wf-page" aria-label="Acceptance criteria">
+  <div class="wf-notes">
+    <h3 class="wf-notes-title">Пояснения — покрытие PRD-15 FR-05/FR-06</h3>
+    <table>
+      <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+      <tbody>
+        <tr><td>FR-05</td><td>Ответ сервера 409 `content_in_use` открывает диалог блокировки: список зависимых опубликованных тестов, по каждому — статус, владелец и причины человеческим языком.</td></tr>
+        <tr><td>FR-05</td><td>Формулировки причин по видам: пул меньше объёма выдачи; квота по тегу невыполнима; уровень адаптивной выдачи пустеет; потеря вкладов в шкалы; удаление привязанных страниц; сокращение выдачи «все вопросы темы».</td></tr>
+        <tr><td>FR-05</td><td>Автору доступно только «Понятно» + подсказка, как разблокировать. Администратору — «Удалить принудительно» (= повтор запроса с `?force=true`) с warning-баннером последствий; действие журналируется.</td></tr>
+        <tr><td>FR-05</td><td>Состояние «Только предупреждения»: black-блокировки нет, но операция затрагивает черновики или drawAll-секции — диалог подтверждения ДО операции. Для этого клиент сначала запрашивает оценку (предпросмотр), затем выполняет операцию; серверу добавляется параметр предпросмотра `?dryRun=true` на DELETE/PUT (оценка уже считается, изменение минимально).</td></tr>
+        <tr><td>FR-06</td><td>Ответ 409 `publish_infeasible` при публикации: разбор по темам теста с теми же формулировками; действие «Открыть структуру теста» ведёт в редактор на вкладку Структура.</td></tr>
+        <tr><td>—</td><td>Тот же диалог блокировки используется для PUT вопроса (перетегирование/сложность/перенос) и массовых операций; заголовок меняется по операции: «Вопрос нельзя изменить…», «Вопросы нельзя удалить…».</td></tr>
+        <tr><td>—</td><td>Ошибка 403 `content_forbidden` (не создатель) диалога не открывает — toast с текстом сервера.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="wf-notes">
+    <h3 class="wf-notes-title">DS Mapping</h3>
+    <table>
+      <thead><tr><th>Элемент</th><th>DS-компонент</th></tr></thead>
+      <tbody>
+        <tr><td>Диалог</td><td>`Modal` (`ou-modal--l` для блокировки, `--m` для подтверждения/публикации), иконка `ou-modal__icon--danger|--warning`</td></tr>
+        <tr><td>Статус теста</td><td>`Tag`: `ou-tag--success` (Опубликован), `ou-tag--neutral` (Черновик) — как в списке тестов</td></tr>
+        <tr><td>Баннеры «Как разблокировать» / «Принудительное удаление»</td><td>`Banner`: `ou-banner--info|--warning ou-banner--subtle`</td></tr>
+        <tr><td>Кнопки</td><td>`Button`: `ou-btn--primary` (Понятно/Открыть структуру), `--secondary` (Отмена/Закрыть), `--destructive` (Удалить…)</td></tr>
+        <tr><td>Список зависимых тестов</td><td>Новая композиция `wf-dep-list` на токенах (карточка: заголовок + теги + список причин); в React — разметка внутри `Modal`, без нового компонента</td></tr>
+        <tr><td>403 не-создателю</td><td>`useToast` (`tone: 'error'`)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</body>
+</html>

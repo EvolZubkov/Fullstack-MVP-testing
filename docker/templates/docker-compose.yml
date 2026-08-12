@@ -1,17 +1,63 @@
+# Docker Compose for test-builder — ONE file for every instance (production and
+# test). Copied verbatim to /srv/app/<project>/docker-compose.yml by deploy.sh;
+# nothing in it is substituted at deploy time.
+#
+# Per-instance values come from the `.env` file deploy.sh writes NEXT TO this file
+# (compose reads ./.env automatically): TB_PROJECT, TB_IMAGE, TB_PORT,
+# TB_NODE_ENV, TB_CONFIG_FILE, TB_LOG_DIR, TB_DATA_DIR. That file configures
+# COMPOSE only — the application's secrets are the separate env/.env mounted into
+# the container below.
+#
+# Usage (on server):
+#   cd /srv/app/<project>
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+
 services:
   app:
-    image: ${IMAGE_NAME}:latest
-    container_name: ${CONTAINER_NAME}
+    image: ${TB_IMAGE}
+    container_name: ${TB_PROJECT}
+    hostname: ${TB_PROJECT}
     restart: unless-stopped
+    # The entrypoint needs root to prepare the volume mount points; it drops to the
+    # unprivileged app user (gosu) before starting the application.
+    user: root
+
     ports:
-      - "${EXPOSE_PORT}:${INTERNAL_PORT}"
+      - "${TB_BIND_IP:-0.0.0.0}:${TB_PORT}:${TB_PORT}"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     volumes:
-      - ${UPLOADS_DIR}:/app/uploads
-    env_file:
-      - ${ENV_DIR}/.env
+      # Application logs
+      - ${TB_LOG_DIR}:/app/logs
+      # Media and SCORM uploads
+      - ${TB_DATA_DIR}/uploads:/app/uploads
+      # Env file — SECRETS only (read-only). loadEnv falls back to /app/.env when
+      # /app/.env.<NODE_ENV> is absent.
+      - ./env/.env:/app/.env:ro
+      # Non-secret configuration — host-side, read-only. The image carries NO
+      # config, so this mount is required. Edit the files here and
+      # `docker compose restart` — no rebuild.
+      - ./config:/app/config:ro
+
+    environment:
+      PORT: ${TB_PORT}
+      TZ: ${TZ:-Europe/Moscow}
+      NODE_ENV: ${TB_NODE_ENV}
+      # Which config file the app loads. Set explicitly because the built server
+      # has NODE_ENV folded to "production" (scripts/build/build.ts) — NODE_ENV alone
+      # cannot select a non-production file. Read at runtime, so it always wins.
+      CONFIG_FILE: ${TB_CONFIG_FILE}
+
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget -q --spider http://127.0.0.1:${PORT}/api/me"]
+      # curl is installed by docker/Dockerfile. Do NOT switch this to wget: the
+      # base image (node:20-slim) ships neither, and a healthcheck calling a
+      # missing binary leaves the container permanently "unhealthy".
+      test: ["CMD-SHELL", "curl -f http://localhost:${TB_PORT}/api/me || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 60s

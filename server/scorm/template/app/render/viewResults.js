@@ -1,171 +1,542 @@
 // app/render/viewResults.js
 
+/**
+ * Renders the saved-results view ("Мой результат"). Primary path renders the
+ * shared `results` layout via the SHARED renderer (TBTemplate.renderScreenInto) —
+ * the SAME layout + renderer the web host mounts — from a public context; the
+ * recommended courses/events, per-topic points/threshold/feedback and the
+ * "back" action are gated layout blocks the web context simply does not set.
+ * Falls back to the original hardcoded chrome if the design template is absent.
+ */
 function renderViewResults() {
   var app = document.getElementById('app');
   var attempt = state.viewedAttempt;
-  
   if (!attempt) {
     app.innerHTML = '<div style="padding:20px;"><p>Нет данных о попытке</p></div>';
     return;
   }
-
-  // Используем сохраненные данные результатов
-  var results = attempt;
-  var pct = Math.round(results.percent);
-  var passed = !!results.passed;
-
-  // ring
-  var size = 140;
-  var stroke = 14;
-  var r = (size - stroke) / 2;
-  var c = 2 * Math.PI * r;
-  var offset = c - (pct / 100) * c;
-
-  var html = '';
-  html += '<div class="results-page">';
-
-  // Top hero
-  html +=   '<div class="results-hero">';
-  html +=     '<div class="results-hero-icon ' + (passed ? 'is-pass' : 'is-fail') + '">';
-  html +=       '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
-  html +=         passed
-    ? '<path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10"/><path d="M17 4v5a5 5 0 0 1-10 0V4"/><path d="M5 6h2"/><path d="M17 6h2"/>'
-    : '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/>';
-  html +=       '</svg>';
-  html +=     '</div>';
-  html +=     '<div class="results-hero-title">' + (passed ? 'Поздравляем!' : 'Тест не пройден') + '</div>';
-  html +=     '<div class="results-hero-sub">' + (passed ? 'Вы успешно прошли тест.' : 'Попробуйте ещё раз.') + '</div>';
-  html +=   '</div>';
-
-  // Main card
-  html +=   '<div class="card results-main-card">';
-  html +=     '<div class="results-main-title">' + escapeHtml(TEST_DATA.title || '') + '</div>';
-  html +=     '<div class="results-main-sub">Результаты теста</div>';
-
-  html +=     '<div class="results-ring">';
-  html +=       '<svg viewBox="0 0 ' + size + ' ' + size + '">';
-  html +=         '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" class="ring-bg" stroke-width="' + stroke + '" fill="none"></circle>';
-  html +=         '<circle cx="' + (size/2) + '" cy="' + (size/2) + '" r="' + r + '" class="ring-fg ' + (passed ? 'is-pass' : 'is-fail') + '" stroke-width="' + stroke + '" fill="none" stroke-linecap="round"';
-  html +=           ' style="stroke-dasharray:' + c.toFixed(2) + ';stroke-dashoffset:' + offset.toFixed(2) + '"></circle>';
-  html +=       '</svg>';
-  html +=       '<div class="results-ring-center">';
-  html +=         '<div class="results-ring-pct">' + pct + '%</div>';
-  html +=         '<div class="results-ring-label">Баллы</div>';
-  html +=       '</div>';
-  html +=     '</div>';
-
-  html +=     '<div class="results-stats">';
-  html +=       '<div class="results-stat"><div class="v">' + results.totalQuestions + '</div><div class="l">Вопросов</div></div>';
-  html +=       '<div class="results-stat"><div class="v">' + (results.totalCorrect || results.correct) + '/' + results.totalQuestions + '</div><div class="l">Верно</div></div>';
-  html +=       '<div class="results-stat"><div class="v">' + (parseFloat(results.earnedPoints) || 0).toFixed(1) + '</div><div class="l">Баллов</div></div>';
-  html +=       '<div class="results-pill ' + (passed ? 'is-pass' : 'is-fail') + '">' + (passed ? 'Пройден' : 'Не пройден') + '</div>';
-  html +=     '</div>';
-  html +=   '</div>';
-
-  // Topics
-  html +=   '<div class="results-section-title">Результаты по темам</div>';
-  html +=   '<div class="results-topics-grid">';
-
-  results.topicResults.forEach(function(tr) {
-    var tpct = Math.round(tr.percent || 0);
-    var tpass = (tr.passed === null) ? null : !!tr.passed;
-
-    html += '<div class="card topic-card">';
-    html +=   '<div class="topic-head">';
-    html +=     '<div class="topic-left">';
-    html +=       '<div class="topic-icon ' + (tpass ? 'is-pass' : 'is-fail') + '">';
-    html +=         '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
-    html +=           tpass ? '<path d="M20 6 9 17l-5-5"/>' : '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>';
-    html +=         '</svg>';
-    html +=       '</div>';
-    html +=       '<div class="topic-name">' + escapeHtml(tr.topicName || '') + '</div>';
-    html +=     '</div>';
-    if (tpass !== null) {
-      html +=   '<div class="results-pill ' + (tpass ? 'is-pass' : 'is-fail') + '">' + (tpass ? 'Пройден' : 'Нет') + '</div>';
-    }
-    html +=   '</div>';
-
-    html +=   '<div class="topic-row">';
-    html +=     '<div class="k">Вопросов</div>';
-    html +=     '<div class="val">' + tr.total + ' / ' + tr.total + ' (' + tpct + '%)</div>';
-    html +=   '</div>';
-
-    html +=   '<div class="topic-row">';
-    html +=     '<div class="k">Баллов</div>';
-    html +=     '<div class="val">' + tr.earnedPoints.toFixed(1) + ' / ' + tr.possiblePoints.toFixed(1) + '</div>';
-    html +=   '</div>';
-
-    html +=   '<div class="topic-bar ' + (tpass ? 'is-pass' : 'is-fail') + '"><div style="width:' + Math.min(100, Math.max(0, tpct)) + '%"></div></div>';
-
-    // если у темы есть passRule percent — покажем "Требуется: X%"
-    var section = TEST_DATA.sections.find(function(s) { return s.topicId === tr.topicId; });
-    if (section && section.topicPassRule && section.topicPassRule.type === 'percent') {
-      html += '<div class="topic-required">Требуется: ' + section.topicPassRule.value + '%</div>';
-    }
-
-    // Обратная связь по теме
-    if (tr.topicFeedback && tr.topicFeedback.trim()) {
-      html += '<div class="topic-feedback">';
-      html += '<div class="topic-feedback-icon">💬</div>';
-      html += '<div class="topic-feedback-text">' + escapeHtml(tr.topicFeedback) + '</div>';
-      html += '</div>';
-    }
-
-    html += '</div>';
-  });
-
-  html +=   '</div>';
-
-  // Recommended Courses Section (только для непройденных тем)
-  var failedTopics = results.topicResults.filter(function(tr) {
-    return tr.passed === false && tr.recommendedCourses && tr.recommendedCourses.length > 0;
-  });
-
-  if (failedTopics.length > 0) {
-    html += '<div class="results-section-title">Рекомендуемые курсы</div>';
-    html += '<div style="margin-bottom:14px;color:hsl(var(--muted-foreground));font-size:14px;">';
-    html += 'Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.';
-    html += '</div>';
-    
-    failedTopics.forEach(function(tr) {
-      html += '<div class="card" style="padding:18px;margin-bottom:12px;">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">';
-      html += '<div class="topic-icon is-fail">';
-      html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
-      html += '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>';
-      html += '</svg>';
-      html += '</div>';
-      html += '<div class="topic-name">' + escapeHtml(tr.topicName) + '</div>';
-      html += '</div>';
-      
-      tr.recommendedCourses.forEach(function(course) {
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:hsl(var(--muted)/.5);border-radius:8px;margin-top:8px;">';
-        html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
-        html += '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>';
-        html += '</svg>';
-        html += '<a href="' + escapeHtml(course.url) + '" target="_blank" rel="noopener noreferrer" style="flex:1;color:hsl(var(--primary));text-decoration:none;font-weight:500;font-size:14px;">';
-        html += escapeHtml(course.title);
-        html += '</a>';
-        html += '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--muted-foreground))" stroke-width="2">';
-        html += '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/>';
-        html += '</svg>';
-        html += '</div>';
-      });
-      
-      html += '</div>';
-    });
+  // PRD-7 G21: `systemLayout('results')` is the bundled default's results layout
+  // when the active template declares no `results` contentTemplate.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('results') : (state && state.templateLayouts && state.templateLayouts['results']);
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto) {
+    renderViewResultsTemplated(app, attempt);
+    return;
   }
+  renderViewResultsFallback();
+}
 
-  // Back button
-  html += '<div class="results-actions">';
-  html += '<button class="btn" onclick="backToStart()" style="padding:12px 32px;font-size:15px;">';
-  html += 'Вернуться к тесту';
-  html += '</button>';
-  html += '</div>';
+/**
+ * Per-topic pass threshold label (SCORM-extra). PRD-24: read from the RESOLVED rule
+ * computed at grading time (`resolvedPassRule`) — for a `by_variant` topic that is the
+ * threshold of the variant THIS attempt was given. It is persisted with the attempt's
+ * topicResults, so viewing a past attempt shows the threshold that actually applied
+ * back then, not one recomputed from the current session's variant.
+ * Attempts saved before PRD-24 carry no resolved rule → fall back to the raw one.
+ */
+function vrRequiredLabel(tr) {
+  var resolved = tr && tr.resolvedPassRule;
+  if (!resolved) {
+    var raw = tr && tr.passRule;
+    return (raw && raw.type === 'percent') ? 'Требуется: ' + raw.value + '%' : undefined;
+  }
+  return resolved.type === 'percent' ? 'Требуется: ' + resolved.value + '%' : undefined;
+}
 
-  html += '</div>';
-  
-  app.innerHTML = html;
+/**
+ * PRD-32 attachments of a topic row: the PDFs the author hung on the TOPIC
+ * (`topics.feedback_json`) and on this test's SECTION over it
+ * (`test_sections.feedback_json`), merged and address-normalised at bake time into
+ * `section.recommendedAssets`.
+ *
+ * Read off TEST_DATA rather than off the attempt: the addresses are in-package paths
+ * resolved when the ZIP was built, so they belong to the package, not to a saved run —
+ * and a run saved by a package built before PRD-32 gets them too.
+ *
+ * A plain reader: it hands over what the package holds for the topic and judges nothing.
+ * The attachments are withheld from the learner only where the topic was EXPLICITLY
+ * passed, exactly like the courses and events of `vrRecommended` — but that gate lives in
+ * the shared builder (`shared/template/result-context.ts`), the one place both hosts go
+ * through, so the web and the package cannot hand out different materials. Until the
+ * consolidation these attachments were shown whatever the verdict, on the reading that a
+ * material hung on the topic's feedback is due for having TAKEN the topic; the owner
+ * settled every resource of a topic on ONE rule once they landed in one block — silent on
+ * a pass, shown on a failure AND on the absent verdict most topics carry.
+ */
+function vrTopicAssets(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.recommendedAssets) || [];
+}
+
+/**
+ * Feedback TEXTS of a topic row: the text the author wrote on the TOPIC
+ * (`topics.feedback_json.text`, falling back to the legacy `topics.feedback` column) and
+ * on this test's SECTION over it (`test_sections.feedback_json.text`), resolved by the
+ * bake into `section.feedbackTexts` — topic first, then section, which is the order the
+ * consolidated block de-duplicates on.
+ *
+ * Read off TEST_DATA for the same reason `vrTopicAssets` is: the text belongs to the
+ * package's content, not to a saved run, so a run saved by an earlier package gets it too.
+ * And gated the same way — not here, but in the shared builder, which drops everything a
+ * topic carries once the topic is explicitly passed. The text is help with a topic the
+ * learner has not mastered, the same as the topic's courses, events and attachments.
+ *
+ * The name matches what the web host stores on the attempt, and it is the ONE name the
+ * shared builder reads — the former `topicFeedback` was a name nothing read, which is
+ * exactly why the topic's text never reached the learner from a package.
+ */
+function vrTopicFeedbackTexts(tr) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  return (section && section.feedbackTexts) || [];
+}
+
+/**
+ * The test's OWN feedback block (`tests.feedback_json`, baked as `TEST_DATA.testFeedbackJson`),
+ * normalised for the recommendations block — the widest source, and the first one.
+ *
+ * Read OUTSIDE `buildResultsMeasures`, which returns null for a test with neither scales
+ * nor indicators: the feedback of such a test is exactly as due to the learner as any
+ * other, and the commonest test in the product has no measurements at all. The address
+ * rule lives in the shared normaliser — the fired band/outcome blocks pass through the
+ * same one inside the builder.
+ */
+function vrTestFeedback() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var raw = (typeof TEST_DATA !== 'undefined' && TEST_DATA.testFeedbackJson) || null;
+  if (!raw || !TB || typeof TB.normalizeFeedback !== 'function') return null;
+  return TB.normalizeFeedback(raw);
+}
+
+/**
+ * Вводный блок ЭКРАНА итогов (`tests.intro_json.results`, PRD-27 §7.1).
+ *
+ * Ветвь отчёта здесь намеренно не читается: у документа своё вводное слово, и подмена
+ * одного другим — ровно та ошибка, ради которой тексты и хранятся раздельно.
+ */
+function vrScreenIntro() {
+  var intro = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.introJson : null;
+  return (intro && intro.results) ? intro.results : null;
+}
+
+/**
+ * Выдавать ли отчёт обучающемуся (PRD-27 §7.1).
+ *
+ * Признак приезжает вместе с выбором вида отчёта (`designSettings.report`), потому что
+ * другого источника у рантайма нет. Его отсутствие означает «выдавать»: пакеты, собранные
+ * до этой настройки, обязаны сохранить кнопку.
+ */
+function vrReportEnabled() {
+  var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.designSettings : null;
+  var report = ds && ds.report;
+  return !report || report.enabled !== false;
+}
+
+/**
+ * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`,
+ * baked as `TEST_DATA.overallPassRule`). It is the one fact that tells an explicit
+ * «Пройден» from a test that pronounces no verdict. The shared builder reads it twice:
+ * it withholds the test's own feedback only on an explicit pass — a measurement method
+ * without a threshold (PRD-29) must keep showing its feedback, since that feedback IS its
+ * result — and it drops the verdict tag itself when nothing was judged, so the header and
+ * the feedback block cannot claim opposite things about the same run (PRD-29 §6.7).
+ *
+ * Read OUTSIDE `buildResultsMeasures` for the same reason `vrTestFeedback` is: that one
+ * returns null for a test with neither scales nor indicators, and the commonest test in
+ * the product is exactly that — it must still be able to say that it grades.
+ */
+function vrHasPassThreshold() {
+  var rule = (typeof TEST_DATA !== 'undefined' && TEST_DATA.overallPassRule) || null;
+  return !!(rule && rule.type && rule.type !== 'none');
+}
+
+/**
+ * Deduped recommended courses/events of the topics of this attempt.
+ *
+ * Skips a topic ONLY on an explicit pass — the owner's one rule for everything a topic
+ * carries (its texts and attachments are gated the same way inside the shared builder).
+ * It used to skip on `tr.passed !== false`, i.e. show only on an explicit failure; but
+ * per-topic thresholds are the exception in a standard test, so most topics carry no
+ * verdict at all, and «nothing was judged» was silencing the author's courses across
+ * every test that never set them.
+ */
+function vrRecommended(results) {
+  var seenC = {}, seenE = {}, courses = [], events = [];
+  results.topicResults.forEach(function (tr) {
+    if (tr.passed === true) return;
+    var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+    var cs = (section && section.recommendedCourses && section.recommendedCourses.length > 0) ? section.recommendedCourses : (tr.recommendedCourses || []);
+    var es = (section && section.recommendedEvents) ? section.recommendedEvents : [];
+    cs.forEach(function (c) { if (!seenC[c.title]) { seenC[c.title] = true; courses.push({ title: c.title, url: c.url }); } });
+    es.forEach(function (e) { if (!seenE[e.title]) { seenE[e.title] = true; events.push({ title: e.title }); } });
+  });
+  return { courses: courses, events: events };
+}
+
+/**
+ * PRD-29: design params the measures block reads (level scheme, ramp colours, render
+ * kinds), resolved the way the WEB host resolves them for the very same screen — base
+ * params plus the colours of the PINNED palette (`readScreenTemplate`). A themed
+ * template keeps its colours in `paramsByTheme`, and under «Авто» no palette is pinned,
+ * so only the palette-independent params travel — exactly as on the web.
+ * Degrades to the flat baked params when the shared resolver is unavailable.
+ */
+function resultsDesignParams() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var design = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || {};
+  var flat = design.params || {};
+  if (!TB || typeof TB.resolveThemeParams !== 'function') return flat;
+  var manifest = (typeof state !== 'undefined' && state && state.templateManifest) || null;
+  var resolved = TB.resolveThemeParams(design, manifest);
+  var pinned = (typeof TB.sceneThemeAttribute === 'function') ? TB.sceneThemeAttribute(design, manifest) : null;
+  var out = {};
+  var key;
+  for (key in resolved.base) {
+    if (Object.prototype.hasOwnProperty.call(resolved.base, key)) out[key] = resolved.base[key];
+  }
+  var themed = (pinned && resolved.byTheme && resolved.byTheme[pinned]) || {};
+  for (key in themed) {
+    if (Object.prototype.hasOwnProperty.call(themed, key)) out[key] = themed[key];
+  }
+  return out;
+}
+
+/**
+ * PRD-29: the level colour ramp — a named scheme, or the author's three triples when
+ * «Своя» is chosen. A missing custom colour falls back to the traffic scheme's own end,
+ * so a half-filled form still paints a sane ramp (mirrors `resolveRamp` on the web).
+ */
+function resultsLevelRamp(params) {
+  var schemes = window.TBTemplate.LEVEL_SCHEMES;
+  var scheme = String(params.levelScheme || 'traffic');
+  if (scheme !== 'custom') return schemes[scheme === 'neutral' ? 'neutral' : 'traffic'];
+  return {
+    favorable: String(params.levelColorFavorable || schemes.traffic.favorable),
+    mid: params.levelColorMid ? String(params.levelColorMid) : null,
+    unfavorable: String(params.levelColorUnfavorable || schemes.traffic.unfavorable)
+  };
+}
+
+/**
+ * PRD-29: settings of the «Итоги» variant — the three-position show/hide/auto switches
+ * of the score summary, the indicators and the scales. No `results` page, or a page
+ * without settings: everything stays on «Автоматически» (mirrors `measuresForAttempt`).
+ */
+function resultsBlockSettings() {
+  var pages = (typeof TEST_DATA !== 'undefined' && TEST_DATA.contentPages) || [];
+  for (var i = 0; i < pages.length; i++) {
+    if (pages[i] && pages[i].kind === 'results') return pages[i].settings || {};
+  }
+  return {};
+}
+
+/** Rows in the author's order — the same ORDER BY the web host reads them with. */
+function measuresBySortOrder(rows) {
+  return rows.slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+}
+
+/**
+ * PRD-29: the measures input for the SHARED results builder, assembled to the very
+ * shape `server/services/result-context.buildMeasuresInput` assembles on the web host —
+ * that is what keeps the two players drawing the same cards.
+ *
+ * Returns null for a test with neither scales nor indicators, so `opts.measures` stays
+ * absent and such a test keeps EXACTLY the results context it has always had (the
+ * score summary is suppressed only when the builder is actually handed measures).
+ *
+ * @param {object|null} scaleComputation `{ values }` — this attempt's scale values.
+ * @param {object|null} varComputation   `{ values }` — this attempt's indicator values.
+ * @returns {object|null} MeasuresInput for `buildResultContext`, or null.
+ */
+function buildResultsMeasures(scaleComputation, varComputation) {
+  var TD = (typeof TEST_DATA !== 'undefined' && TEST_DATA) || {};
+  var rawScales = TD.scales || [];
+  var rawVars = TD.resultVariables || [];
+  if (!rawScales.length && !rawVars.length) return null;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || typeof TB.parseScaleInterpretation !== 'function') return null;
+
+  var params = resultsDesignParams();
+  var scaleValues = (scaleComputation && scaleComputation.values) || {};
+  var varValues = (varComputation && varComputation.values) || {};
+
+  var scales = measuresBySortOrder(rawScales).map(function (s) {
+    var computed = scaleValues[s.key];
+    return {
+      key: s.key,
+      name: s.label || s.key,
+      value: computed ? computed.raw : null,
+      visibility: s.learnerVisibility || 'hidden',
+      // The BAKED scale carries its interpretation flat (domainMin/domainMax/valence/
+      // bands) and the shared parser reads exactly those keys, so the package ends up
+      // with the identical interpretation object the web host parses from config_json.
+      interpretation: TB.parseScaleInterpretation(s)
+    };
+  });
+
+  var indicators = measuresBySortOrder(rawVars).map(function (v) {
+    return {
+      key: v.name,
+      name: v.label || v.name,
+      value: varValues[v.name],
+      visibility: v.learnerVisibility || 'hidden',
+      interpretation: TB.parseIndicatorInterpretation(v.configJson)
+    };
+  });
+
+  var blockSettings = resultsBlockSettings();
+  return {
+    ramp: resultsLevelRamp(params),
+    scaleKind: String(params.scaleRenderKind || 'band_ruler'),
+    indicatorKind: String(params.indicatorRenderKind || 'label'),
+    scales: scales,
+    indicators: indicators,
+    // ONE reading of the pass rule, shared with the top-level option the builder gates
+    // the test's feedback on — two copies could disagree about the very same test.
+    hasPassThreshold: vrHasPassThreshold(),
+    blockSettings: blockSettings,
+    // PRD-35/46: the chart setting travels in the SAME settings of the «Итоги» variant, so
+    // the package hands them over untouched and the ONE decision rule in Core reads them —
+    // including PRD-35's boolean, which it migrates. A package built before either PRD has
+    // no key at all and keeps the screen exactly as it was.
+    chartSettings: blockSettings,
+    // PRD-46: the verdict is BAKED, not derived here. The package carries neither the
+    // contribution rows nor the allocation budgets it is read from, and a second rule for
+    // «what counts as ipsative» would be a second chance to disagree with the web host
+    // (PRD-29 §9). No key ⇒ false, so a package built before this PRD draws what it drew.
+    ipsativeScales: TD.ipsativeScales === true
+  };
+}
+
+/**
+ * PRD-29 measures of the attempt being finished. `renderResults` computes scale.* and
+ * result.* before persisting the attempt, so screen and record agree; recomputing here
+ * is the fallback for any other entry into this renderer and is deterministic — the
+ * same answers yield the same values (NFR-04).
+ */
+function currentAttemptMeasures(results) {
+  var scaleComp = results.scaleComputation ||
+    ((typeof computeTestScales === 'function') ? computeTestScales() : null);
+  var varComp = results.resultComputation ||
+    ((typeof computeTestResultVariables === 'function') ? computeTestResultVariables(results, scaleComp) : null);
+  return buildResultsMeasures(scaleComp, varComp);
+}
+
+/**
+ * Build the results context via the SHARED builder (TBTemplate.buildResultContext)
+ * and mount the shared layout. SCORM adapts its runtime result into the builder's
+ * normalized input; the shaping (passClass/ring/topic rows) lives in shared/.
+ *
+ * Footer: «Скачать отчёт» + the closing action, through the SAME `result.nav` block
+ * the finish screen fills (see shared/template/results-nav) — the report is available
+ * for every saved attempt, «Пройти заново» is not (this screen shows a PAST attempt,
+ * a retry belongs to the start screen), and closing here means going back to the
+ * start screen rather than ending the SCO.
+ */
+function renderViewResultsTemplated(app, results) {
+  var rec = vrRecommended(results);
+  var input = {
+    passed: !!results.passed,
+    percent: results.percent,
+    totalQuestions: results.totalQuestions,
+    correct: (results.totalCorrect != null ? results.totalCorrect : results.correct),
+    earnedPoints: results.earnedPoints,
+    possiblePoints: results.possiblePoints,
+    topicResults: (results.topicResults || []).map(function (tr) {
+      return {
+        topicId: tr.topicId,
+        topicName: tr.topicName,
+        correct: tr.correct,
+        total: tr.total,
+        percent: tr.percent,
+        earnedPoints: tr.earnedPoints,
+        possiblePoints: tr.possiblePoints,
+        passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
+        requiredLabel: vrRequiredLabel(tr),
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
+        recommendedAssets: vrTopicAssets(tr)
+      };
+    })
+  };
+  // PRD-29: a SAVED attempt renders from the values persisted WITH it and never from a
+  // recomputation — regrading a finished attempt against today's interpretation would
+  // change what the learner already scored (the rule the web host follows too).
+  var opts = {
+    withTopicPoints: true,
+    recommendedCourses: rec.courses,
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
+    // its own right, whether or not the test has scales and indicators.
+    testFeedback: vrTestFeedback(),
+    // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
+    // whether this test pronounces a verdict at all. Travels for every test, unlike the
+    // copy inside `measures`, which a test without measurements never sends.
+    hasPassThreshold: vrHasPassThreshold()
+  };
+  var measures = buildResultsMeasures(
+    { values: results.scaleValues || {} },
+    { values: results.resultValues || {} }
+  );
+  if (measures) opts.measures = measures;
+  var screenIntro = vrScreenIntro();
+  if (screenIntro) opts.intro = screenIntro;
+  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
+  // NB: no attempt counter in the header — the scene header names the test, run
+  // parameters belong to the screen's own content (parity with the web host).
+
+  ctx.result.nav = window.TBTemplate.buildResultsNav({
+    canReport: vrReportEnabled(),
+    canRetry: false,
+    hasPostPages: false,
+    finishLabel: 'Вернуться к тесту'
+  });
+
+  // PRD-7 G21: mount default's results layout + activate default's stylesheet
+  // when `results` falls back to the default template.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('results') : state.templateLayouts['results'];
+  if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('results');
+  app.innerHTML = '';
+  // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
+  // mirrors renderGalleryPage (a wrapper div would defeat the child-combinator rule).
+  window.TBTemplate.renderScreenInto(app, {
+    layout: layout,
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
+  wireFinishResultsFooter(app, {
+    // The screen shows the BEST saved attempt, so the report must be that attempt —
+    // not whatever `downloadPDF()` would pick for the CURRENT run.
+    'download-report': function () { if (typeof downloadPDF === 'function') downloadPDF(true); },
+    'results-finish': backToStart
+  });
+}
+
+/**
+ * PRD-12: the FINISH results screen (rendered once the learner passes the last
+ * question) via the SHARED `results` layout + renderer — the SAME scene as
+ * «Мой результат» ({@link renderViewResultsTemplated}) and the web host. Replaces
+ * the legacy hand-built `results-page` markup (renderResultsLegacy), which the
+ * revised «Стандартный» theme no longer styles. Differs from the saved-results view
+ * only in its FOOTER: the finish flow keeps its own actions (report / retry /
+ * finish|next), wired after mount since the shared layout carries one button.
+ */
+function renderResultsTemplated(app, results) {
+  var rec = vrRecommended(results);
+  var input = {
+    passed: !!results.passed,
+    percent: results.percent,
+    totalQuestions: results.totalQuestions,
+    correct: (results.totalCorrect != null ? results.totalCorrect : results.correct),
+    earnedPoints: results.earnedPoints,
+    possiblePoints: results.possiblePoints,
+    topicResults: (results.topicResults || []).map(function (tr) {
+      return {
+        topicId: tr.topicId,
+        topicName: tr.topicName,
+        correct: tr.correct,
+        total: tr.total,
+        percent: tr.percent,
+        earnedPoints: tr.earnedPoints,
+        possiblePoints: tr.possiblePoints,
+        passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
+        requiredLabel: vrRequiredLabel(tr),
+        // Feedback texts of the topic and of this test's section over it, for the ONE
+        // recommendations block, under the very name the web host fills. Handed over for
+        // every topic — the shared builder is what gates them by the topic's verdict.
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        // PRD-32 attachments of the topic and of the section, for the ONE «Материалы»
+        // block; gated by the same verdict rule inside the shared builder.
+        recommendedAssets: vrTopicAssets(tr)
+      };
+    })
+  };
+  var opts = {
+    withTopicPoints: true,
+    recommendedCourses: rec.courses,
+    recommendedEvents: rec.events,
+    // PRD-29 §7.1 / PRD-32: the test's own feedback is a source of recommendations in
+    // its own right, whether or not the test has scales and indicators.
+    testFeedback: vrTestFeedback(),
+    // …and the builder withholds it on an EXPLICIT pass only, so it needs to know
+    // whether this test pronounces a verdict at all. Travels for every test, unlike the
+    // copy inside `measures`, which a test without measurements never sends.
+    hasPassThreshold: vrHasPassThreshold()
+  };
+  // PRD-29: scales and indicators of THIS attempt (null for a test that declares none,
+  // which leaves the context byte-identical to what it has always been).
+  var measures = currentAttemptMeasures(results);
+  if (measures) opts.measures = measures;
+  var screenIntro = vrScreenIntro();
+  if (screenIntro) opts.intro = screenIntro;
+  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
+
+  ctx.result.nav = window.TBTemplate.buildResultsNav({
+    canReport: vrReportEnabled(),
+    // PRD-31 barrier B: hide the retry while the interval between attempts is still
+    // closed — the start route would refuse it anyway, and an offered click that
+    // bounces reads as a broken screen. Note this is deliberately NOT folded into
+    // `attemptsExhausted` (resultsPage.js): that flag force-closes the course in the
+    // LMS, which must stay reserved for a terminal state, not a wait of a few hours.
+    canRetry: !results.passed &&
+      (typeof hasAttemptsLeft === 'function') && hasAttemptsLeft() &&
+      (typeof attemptIntervalState !== 'function' || attemptIntervalState().allowed),
+    hasPostPages: !!(state.postResultsPages && state.postResultsPages.length > 0)
+  });
+
+  var layout = (typeof systemLayout === 'function') ? systemLayout('results') : state.templateLayouts['results'];
+  if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('results');
+  app.innerHTML = '';
+  window.TBTemplate.renderScreenInto(app, {
+    layout: layout,
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
+  wireFinishResultsFooter(app);
+}
+
+/**
+ * Binds the results footer the LAYOUT rendered to this runtime's handlers. The row
+ * itself (which buttons, in what order, with what classes) is the template's — this
+ * only reacts to its `data-action` values.
+ *
+ * @param {Element} app The mounted screen root.
+ * @param {Object} [overrides] Per-screen handlers replacing the finish-flow defaults
+ *   («Мой результат» downloads the saved attempt and closes back to the start screen).
+ */
+function wireFinishResultsFooter(app, overrides) {
+  var foot = app.querySelector('.tb-scene__foot');
+  if (!foot) return;
+  var handlers = {
+    'download-report': function () { if (typeof downloadPDF === 'function') downloadPDF(); },
+    'restart': function () { if (typeof restart === 'function') restart(); },
+    'results-next': function () { if (typeof enterPostResults === 'function') enterPostResults(); },
+    'results-finish': function () { if (typeof finishAndClose === 'function') finishAndClose(); }
+  };
+  if (overrides) {
+    for (var key in overrides) {
+      if (Object.prototype.hasOwnProperty.call(overrides, key)) handlers[key] = overrides[key];
+    }
+  }
+  Array.prototype.forEach.call(foot.querySelectorAll('button[data-action]'), function (b) {
+    var handler = handlers[b.getAttribute('data-action')];
+    if (handler) b.addEventListener('click', handler);
+  });
+}
+
+function renderViewResultsFallback() {
+// Dead last-resort safety net: reached only if neither the active template nor the
+// bundled standard template supplies this layout — the package always bundles the
+// standard scene layout as the fallback, so it never fires. Renders a
+// minimal, stylesheet-independent notice instead of a competing hardcoded design
+// (the standard scene IS the fallback; PRD-12).
+  var app = document.getElementById('app');
+  if (app) app.innerHTML = '<div style="padding:24px;font:16px/1.5 system-ui,sans-serif">Экран результатов недоступен: шаблон не предоставил макет.</div>';
 }
 
 function backToStart() {

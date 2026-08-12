@@ -1,0 +1,287 @@
+/**
+ * PRD-18 Phase 4 — debug-player window layout. Faithful translation of the
+ * approved wireframe (docs/wireframes/approved/prd18-debug-player.html) to plain
+ * CSS over DS tokens; the inner content uses real DS components/classes. No
+ * wireframe `wf-*` classes in production.
+ */
+
+.dbg {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--ou-bg-elevated);
+  color: var(--ou-fg-default);
+  overflow: hidden;
+}
+
+/* ── Toolbar: title + subtitle + info, actions right ── */
+.dbg__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border-bottom: 1px solid var(--ou-border-soft);
+  flex: 0 0 auto;
+}
+.dbg__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+}
+.dbg__title svg { color: var(--ou-accent-default); }
+.dbg__sub {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  padding-left: var(--ou-space-2);
+  border-left: 1px solid var(--ou-border-soft);
+  margin-left: var(--ou-space-1);
+}
+.dbg__bar-spacer { flex: 1; }
+.dbg__bar-sep {
+  width: 1px;
+  height: var(--ou-space-5);
+  background: var(--ou-border-soft);
+  margin: 0 var(--ou-space-1);
+}
+
+/* ── Status bar over the stage: Прогресс (left) / Оценка + alarm (right) ── */
+.dbg__status {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--ou-space-2) var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  background: var(--ou-bg-page);
+  border-bottom: 1px solid var(--ou-border-soft);
+}
+.dbg__status-left { flex: 0 1 auto; min-width: 0; }
+.dbg__status-right { flex: 0 0 auto; }
+.dbg__status-left,
+.dbg__status-right {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: var(--ou-space-2) var(--ou-space-4);
+}
+.dbg__stat { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+.dbg__stat-lbl {
+  font: var(--ou-text-caption);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ou-fg-muted);
+}
+.dbg__stat-val {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+}
+.dbg__stat-num { font: var(--ou-text-body-m); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dbg__stat-sub { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+.dbg__pbar { display: inline-block; width: 84px; }
+
+/* ── Body: stage (left) + inspector (right) ── */
+.dbg__body { flex: 1 1 auto; min-height: 0; display: flex; }
+
+.dbg__stage { flex: 1; min-width: 0; background: var(--ou-bg-page); display: flex; flex-direction: column; }
+.dbg__canvas { flex: 1; min-height: 0; position: relative; display: flex; padding: var(--ou-space-5); }
+
+/* Package frame — a card; the iframe fills its whole area. */
+.dbg__frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* Theme switches through .ou--dark on body, so a literal white stayed white
+     there — the surface comes from the DS token. */
+  background: var(--ou-bg-surface-1);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  box-shadow: var(--ou-shadow-s);
+  overflow: hidden;
+}
+.dbg__ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-2);
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  background: var(--ou-bg-muted);
+  padding: var(--ou-space-1) var(--ou-space-2) var(--ou-space-1) var(--ou-space-3);
+  border-bottom: 1px dashed var(--ou-border-default);
+}
+.dbg__ref-toggle { display: inline-flex; align-items: center; gap: var(--ou-space-2); cursor: pointer; }
+.dbg__ref-lbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.dbg__frame-screen { flex: 1; min-height: 0; display: flex; }
+.dbg__iframe { flex: 1; width: 100%; border: 0; background: var(--ou-bg-surface-1); }
+
+/* Access (forbidden) screen — standalone, no player chrome. */
+.dbg__center { display: grid; place-items: center; height: 100vh; padding: var(--ou-space-6); }
+
+/* Build / error overlays OVER the stage canvas — the toolbar, status bar and
+   inspector stay mounted (wireframe: «Индетерминированный прогресс над стейджем,
+   действия недоступны»). The opaque page background hides the frame underneath. */
+.dbg__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-6);
+  text-align: center;
+  background: var(--ou-bg-page);
+}
+.dbg__overlay .ou-progress { width: 100%; max-width: 280px; }
+.dbg__overlay-text { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.dbg__overlay .ou-banner { max-width: 480px; text-align: start; }
+
+/* ── Inspector: collapsible sidebar ── */
+.dbg__inspector {
+  position: relative;
+  flex: 0 0 34%;
+  min-width: 420px;
+  border-left: 1px solid var(--ou-border-soft);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--ou-bg-elevated);
+}
+/* Round edge toggle on the sidebar's LEFT edge, protruding half a diameter.
+   Positioned via margin (NOT transform) so the FAB's hover-lift can't fight the
+   centring; the lift is suppressed — the toggle is pinned, not floating. */
+/* `.ou-fab` is `position: fixed` by default — beat it with a more specific selector
+   so the toggle anchors to the inspector's left edge (its relative offset parent). */
+.dbg__inspector .dbg__collapse.ou-fab {
+  position: absolute;
+  top: var(--ou-space-2);
+  left: 0;
+  margin-left: -20px;
+  z-index: 6;
+}
+.dbg__inspector .dbg__collapse.ou-fab:hover,
+.dbg__inspector .dbg__collapse.ou-fab:active { transform: none; }
+.dbg__collapse svg { transition: transform var(--ou-motion-fast) ease; }
+.dbg.is-collapsed .dbg__inspector { flex: 0 0 48px; min-width: 0; width: 48px; }
+.dbg.is-collapsed .dbg__ins-main { display: none; }
+.dbg.is-collapsed .dbg__collapse svg { transform: rotate(180deg); }
+
+.dbg__ins-main { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.dbg__ins-head { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3) 0; }
+.dbg__ins-head .ou-tabs { flex: 1; min-width: 0; }
+/* Tabs in one row WITH text labels; if they overflow the row scrolls via ‹/› arrows. */
+.dbg__ins-head .ou-tabs__list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth; }
+.dbg__ins-head .ou-tabs__list::-webkit-scrollbar { display: none; }
+.dbg__ins-head .ou-tabs__tab { flex: 0 0 auto; }
+.dbg__tabscroll { flex: 0 0 auto; }
+.dbg__tabscroll:disabled { opacity: 0.4; cursor: default; }
+
+.dbg__ins-body { flex: 1; min-height: 0; overflow: auto; padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-5); }
+.dbg__ins-h {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  margin: var(--ou-space-3) 0 var(--ou-space-1);
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+}
+.dbg__ins-h:first-child { margin-top: 0; }
+/* PRD-24: secondary line inside a table cell (delivered variant under its threshold). */
+.dbg__ins-sub { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+.dbg__ins-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
+.dbg__ins-toolbar .dbg__bar-spacer { flex: 1; }
+
+/* Результаты — KPI grid (ou-kpi has no React component; use the DS class). */
+.dbg__kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-3); margin-bottom: var(--ou-space-3); }
+
+/* Выдача — sections flow with light separators (not cards), matching the wireframe. */
+.dbg__draw-section { padding-bottom: var(--ou-space-3); margin-bottom: var(--ou-space-3); border-bottom: 1px solid var(--ou-border-soft); }
+.dbg__draw-section:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
+
+/* Выдача — one question row in the expandable list: prompt left, delivery status right. */
+.dbg__q-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ou-space-3); padding: var(--ou-space-1) 0; }
+.dbg__q-row > .dbg__q-label { flex: 1 1 auto; }
+.dbg__q-row > :last-child { flex: 0 0 auto; }
+
+.dbg__contrib { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.dbg__price { font: var(--ou-text-caption); color: var(--ou-accent-default); }
+.dbg__qico { flex: 0 0 auto; margin-top: 3px; color: var(--ou-fg-muted); }
+.dbg__q-label { display: flex; align-items: flex-start; gap: var(--ou-space-1); font: var(--ou-text-body-s); min-width: 0; }
+.dbg__q-topic { color: var(--ou-fg-muted); }
+.dbg__sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-2);
+}
+.dbg__ins-body .tb-table td { vertical-align: top; }
+.dbg__path { font-family: var(--ou-font-mono, ui-monospace, monospace); word-break: break-all; }
+.dbg__panel-empty { padding: var(--ou-space-6); text-align: center; }
+
+/* LMS — a long value (suspend_data) toggles a full-width expanded row (N4): the
+   «N КБ» button stays in the row, the formatted payload expands below on full width. */
+.dbg__disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.dbg__disclosure-chevron { flex: 0 0 auto; transition: transform var(--ou-motion-fast) ease; }
+.dbg__disclosure-chevron.is-open { transform: rotate(90deg); }
+.dbg__payload-body {
+  font: var(--ou-text-body-xs, var(--ou-text-caption));
+  font-family: var(--ou-font-mono, ui-monospace, monospace);
+  color: var(--ou-fg-muted);
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: var(--ou-space-2) var(--ou-space-3);
+  max-height: 280px;
+  overflow: auto;
+}
+
+/* LMS — raw RTE traffic disclosure: a scannable list, one call per line. */
+.dbg__rawlog {
+  margin-top: var(--ou-space-2);
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+}
+.dbg__rte-line {
+  font: var(--ou-text-body-xs, var(--ou-text-caption));
+  font-family: var(--ou-font-mono, ui-monospace, monospace);
+  color: var(--ou-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px var(--ou-space-2);
+  border-bottom: 1px solid var(--ou-border-soft);
+}
+.dbg__rte-line:last-child { border-bottom: 0; }
+.dbg__rte-line:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+
+/* LMS narrative — kind tints the row's leading edge. */
+.dbg__lms {
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border-left: 3px solid var(--ou-border-default);
+  background: var(--ou-bg-page);
+  border-radius: var(--ou-radius-s);
+}
+.dbg__lms--sess { border-left-color: var(--ou-fg-muted); }
+.dbg__lms--commit,
+.dbg__lms--finish { border-left-color: var(--ou-success-default); }
+.dbg__lms--read { border-left-color: var(--ou-accent-soft); }
+.dbg__lms--status,
+.dbg__lms--suspend { border-left-color: var(--ou-accent-default); }
+.dbg__lms--answer { border-left-color: var(--ou-accent-default); }
+.dbg__lms--warn { border-left-color: var(--ou-warning-default); }

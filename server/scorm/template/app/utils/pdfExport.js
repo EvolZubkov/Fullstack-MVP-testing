@@ -1,362 +1,23 @@
-// PDF Export Utility - Генерация красивого PDF с подложкой
-// Использует html2canvas для рендеринга HTML в картинку
+// app/utils/pdfExport.js
+//
+// The package's side of the attempt REPORT. The markup and the export pipeline are
+// SHARED (shared/report/*, reached through the TBTemplate bundle) — the web host runs
+// the same two functions, so a learner gets the same PDF in the LMS and in the browser.
+// What stays here is package-specific: how the runtime result maps onto the normalized
+// report input, and the loading overlay.
+//
+// The report's pictures are NOT known here: since PRD-27 FR-05 the background and the
+// logo are files of the TEMPLATE, declared by the chosen variant and resolved to
+// package paths by the builder — this side only inlines them for the rasterizer.
 
-var pdfAssets = {
-  backgrounds: [],
-  logo: null,
-  loaded: false
-};
+/** Inlined pictures of the report variant, resolved once per session. */
+var pdfImageValues = null;
 
-// Загрузка изображения как Data URL
-function loadImageAsDataUrl(src) {
-  return new Promise(function (resolve) {
-    var img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function () {
-      var canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      resolve({
-        dataUrl: canvas.toDataURL('image/png'),
-        width: img.width,
-        height: img.height
-      });
-    };
-    img.onerror = function () {
-      console.warn('⚠️ Не удалось загрузить:', src);
-      resolve(null);
-    };
-    img.src = src;
-  });
-}
-
-// Загрузка всех PDF-ассетов
-async function loadPdfAssets() {
-  if (pdfAssets.loaded) return;
-
-  console.log('🔍 Загружаем PDF ассеты...');
-
-  var basePath = 'assets/media/';
-
-  var bg1 = await loadImageAsDataUrl(basePath + 'pdf-bg-1.png');
-  var bg2 = await loadImageAsDataUrl(basePath + 'pdf-bg-2.png');
-  var bg3 = await loadImageAsDataUrl(basePath + 'pdf-bg-3.png');
-  var logo = await loadImageAsDataUrl(basePath + 'logo-light.png');
-
-  if (bg1) pdfAssets.backgrounds.push(bg1);
-  if (bg2) pdfAssets.backgrounds.push(bg2);
-  if (bg3) pdfAssets.backgrounds.push(bg3);
-  pdfAssets.logo = logo;
-
-  pdfAssets.loaded = true;
-  console.log('✅ PDF ассеты загружены:', pdfAssets.backgrounds.length, 'подложек');
-}
-
-// Генерация HTML для PDF
-function generatePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
-  var percent = Math.round(results.percent);
-  var passed = results.passed;
-  var attempts = typeof getAllAttempts === 'function' ? getAllAttempts().length : 1;
-
-  var statusColor = passed ? '#22c55e' : '#ef4444';
-  var statusText = passed ? 'Тест пройден' : 'Тест не пройден';
-  var statusBadge = passed ? 'пройден' : 'не пройден';
-  var statusBadgeBg = passed ? 'rgba(34, 197, 94, 0.2)' : '#432027';
-  var statusBadgeBorder = passed ? '#22c55e' : '#eb1e1e';
-  var statusBadgeColor = passed ? '#22c55e' : '#ff3131';
-
-  // Определяем количество колонок для тем (макс 3)
-  var topicCount = results.topicResults ? results.topicResults.length : 0;
-  var gridColumns = topicCount === 1 ? 1 : (topicCount === 2 ? 2 : 3);
-
-  // Фон
-  var bgStyle = bgDataUrl
-    ? 'background-image: url(' + bgDataUrl + '); background-size: cover; background-position: center;'
-    : 'background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);';
-
-  var html = '';
-  html += '<div style="' + bgStyle + ' width: 595px; min-height: 842px; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; color: #ffffff; position: relative;">';
-  html += '<div style="padding: 20px 25px;">';
-
-  // Логотип
-  if (logoDataUrl) {
-    html += '<div style="margin-bottom: 15px;">';
-    html += '<img src="' + logoDataUrl + '" style="height: 32px;" />';
-    html += '</div>';
-  }
-
-  // Главный заголовок
-  html += '<div style="font-size: 42px; font-weight: 900; margin-bottom: 4px; line-height: 1; color: ' + (passed ? '#22c55e' : '#ffffff') + ';">' + escapeHtml(statusText) + '</div>';
-  html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 15px;">Лучший результат за ' + attempts + ' ' + pluralize(attempts, 'попытку', 'попытки', 'попыток') + '</div>';
-
-  // Карточка с результатами
-  html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
-  html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 4px;">' + escapeHtml(testName || 'Результаты теста') + '</div>';
-  html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 20px;">Результат теста</div>';
-
-  // Секция с метриками
-  html += '<div style="display: flex; align-items: center; gap: 20px;">';
-
-  // Метрики
-  html += '<div style="display: flex; gap: 30px;">';
-  html += createMetric(results.totalQuestions, 'вопросов');
-  html += createMetric((results.totalCorrect || results.correct) + '/' + results.totalQuestions, 'верно');
-  html += createMetric(results.earnedPoints.toFixed(1), 'баллов');
-  html += '</div>';
-
-  // Круг с процентом (SVG)
-  var circumference = 2 * Math.PI * 44;
-  var offset = circumference - (circumference * percent / 100);
-  html += '<div style="width: 100px; height: 100px; position: relative; display: flex; align-items: center; justify-content: center;">';
-  html += '<svg viewBox="0 0 100 100" style="position: absolute; width: 100%; height: 100%; transform: rotate(-90deg);">';
-  html += '<circle cx="50" cy="50" r="44" fill="none" stroke="#2f2f2f" stroke-width="12"/>';
-  html += '<circle cx="50" cy="50" r="44" fill="none" stroke="' + statusColor + '" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + circumference + '" stroke-dashoffset="' + offset + '"/>';
-  html += '</svg>';
-  html += '<div style="font-size: 28px; font-weight: 900; z-index: 1;">' + percent + '%</div>';
-  html += '</div>';
-
-  // Бейдж статуса
-  html += '<div style="margin-left: auto; padding: 10px 20px; border-radius: 50px; font-size: 12px; font-weight: 500; background: ' + statusBadgeBg + '; border: 2px solid ' + statusBadgeBorder + '; color: ' + statusBadgeColor + ';">' + statusBadge + '</div>';
-
-  html += '</div>'; // score-section
-  html += '</div>'; // info-card
-
-  // Результаты по темам
-  if (topicCount > 0) {
-    html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
-    html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 15px;">Результаты по темам</div>';
-
-    html += '<div style="display: grid; grid-template-columns: repeat(' + gridColumns + ', 1fr); gap: 10px;">';
-
-    results.topicResults.forEach(function (topic) {
-      var topicPercent = Math.round(topic.percent);
-      var topicPassed = topic.passed;
-      var topicColor = topicPassed ? '#22c55e' : '#ef4444';
-      var topicStatusBg = topicPassed ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)';
-
-      html += '<div style="background: linear-gradient(135deg, #2a2a3d 0%, #1f1f2e 100%); border-radius: 10px; padding: 10px; position: relative; overflow: hidden;">';
-
-      // Верхняя полоса
-      html += '<div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: ' + topicColor + ';"></div>';
-
-      // Заголовок темы
-      html += '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; gap: 5px;">';
-      html += '<div style="font-size: 12px; font-weight: 700; line-height: 1.2; flex: 1;">' + escapeHtml(topic.topicName || 'Тема') + '</div>';
-      html += '<div style="font-size: 6px; font-weight: 500; padding: 2px 6px; border-radius: 3px; white-space: nowrap; background: ' + topicStatusBg + '; color: ' + topicColor + ';">' + (topicPassed ? 'Пройден' : 'Не пройден') + '</div>';
-      html += '</div>';
-
-      // Статистика
-      html += '<div style="display: flex; justify-content: space-between; font-size: 7px; color: #aca9a9; margin-bottom: 5px;">';
-      html += '<span>' + topic.correct + ' из ' + topic.total + ' (' + topicPercent + '%)</span>';
-      html += '<span>' + topic.earnedPoints.toFixed(1) + '/' + topic.possiblePoints.toFixed(1) + '</span>';
-      html += '</div>';
-
-      // Прогресс-бар
-      html += '<div style="height: 3px; background: #2f2f2f; border-radius: 2px; overflow: hidden; margin-bottom: 6px;">';
-      html += '<div style="height: 100%; width: ' + topicPercent + '%; background: ' + topicColor + '; border-radius: 2px;"></div>';
-      html += '</div>';
-
-      // Обратная связь (только для непройденных)
-      if (!topicPassed && topic.topicFeedback && topic.topicFeedback.trim()) {
-        html += '<div style="font-size: 10px; font-weight: 300; color: rgba(255, 255, 255, 0.7); line-height: 1.3; margin-top: 4px;">' + escapeHtml(topic.topicFeedback) + '</div>';
-      }
-
-      html += '</div>'; // topic-card
-    });
-
-    html += '</div>'; // topics-grid
-    html += '</div>'; // section-card
-  }
-
-  // Рекомендации по курсам (только для непройденных тем)
-  var recommendations = [];
-  if (results.topicResults) {
-    results.topicResults.forEach(function (topic) {
-      if (!topic.passed && topic.recommendedCourses && topic.recommendedCourses.length > 0) {
-        topic.recommendedCourses.forEach(function (course) {
-          recommendations.push({
-            topicName: topic.topicName,
-            courseTitle: course.title,
-            courseUrl: course.url
-          });
-        });
-      }
-    });
-  }
-
-  if (recommendations.length > 0) {
-    html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
-    html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">Рекомендации по курсам</div>';
-    html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>';
-    
-    recommendations.forEach(function(rec, index) {
-      html += '<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
-      html += '<div style="font-size: 14px; font-weight: 700;">' + escapeHtml(rec.topicName) + '</div>';
-      html += '<div class="pdf-link-btn" data-url="' + escapeHtml(rec.courseUrl) + '" data-index="' + index + '" style="background: #59209b; border-radius: 8px; padding: 10px 25px; font-size: 12px; font-weight: 300; color: #fafafa;">' + escapeHtml(rec.courseTitle) + '</div>';
-      html += '</div>';
-    });
-    
-    html += '</div>'; // recommendations
-  }
-
-  // Футер
-  html += '<div style="text-align: center; padding-top: 15px; font-size: 9px; color: rgba(255, 255, 255, 0.3);">';
-  html += 'Документ сформирован: ' + new Date().toLocaleString('ru-RU');
-  html += '</div>';
-
-  html += '</div>'; // padding
-  html += '</div>'; // page
-
-  return html;
-}
-
-// Генерация HTML для PDF адаптивного теста
-function generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
-  // Определяем количество колонок для тем (макс 3)
-  var topicCount = results.topicResults ? results.topicResults.length : 0;
-  var gridColumns = topicCount === 1 ? 1 : (topicCount === 2 ? 2 : 3);
-
-  // Фон
-  var bgStyle = bgDataUrl
-    ? 'background-image: url(' + bgDataUrl + '); background-size: cover; background-position: center;'
-    : 'background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);';
-
-  var html = '';
-  html += '<div style="' + bgStyle + ' width: 595px; min-height: 842px; font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif; color: #ffffff; position: relative;">';
-  html += '<div style="padding: 20px 25px;">';
-
-  // Логотип
-  if (logoDataUrl) {
-    html += '<div style="margin-bottom: 15px;">';
-    html += '<img src="' + logoDataUrl + '" style="height: 32px;" />';
-    html += '</div>';
-  }
-
-  // Главный заголовок (нейтральный)
-  html += '<div style="font-size: 42px; font-weight: 900; margin-bottom: 4px; line-height: 1; color: #ffffff;">Результаты теста</div>';
-  html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 15px;">Адаптивное тестирование</div>';
-
-  // Карточка с названием теста
-  html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
-  html += '<div style="font-size: 22px; font-weight: 500;">' + escapeHtml(testName || 'Тест') + '</div>';
-  html += '</div>';
-
-  // Результаты по темам
-  if (topicCount > 0) {
-    html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
-    html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 15px;">Результаты по темам</div>';
-
-    html += '<div style="display: grid; grid-template-columns: repeat(' + gridColumns + ', 1fr); gap: 10px;">';
-
-    results.topicResults.forEach(function (topic) {
-      var achieved = topic.achievedLevelIndex !== null;
-      var levelName = achieved ? topic.achievedLevelName : 'Не достигнут';
-      var levelColor = achieved ? '#3b82f6' : '#6b7280';
-      var levelBg = achieved ? 'rgba(59, 130, 246, 0.2)' : 'rgba(107, 114, 128, 0.2)';
-
-      html += '<div style="background: linear-gradient(135deg, #2a2a3d 0%, #1f1f2e 100%); border-radius: 10px; padding: 12px; position: relative; overflow: hidden;">';
-
-      // Верхняя полоса (нейтральный синий)
-      html += '<div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: ' + levelColor + ';"></div>';
-
-      // Заголовок темы
-      html += '<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; gap: 5px;">';
-      html += '<div style="font-size: 13px; font-weight: 700; line-height: 1.2; flex: 1;">' + escapeHtml(topic.topicName || 'Тема') + '</div>';
-      html += '<div style="font-size: 9px; font-weight: 500; padding: 3px 8px; border-radius: 4px; white-space: nowrap; background: ' + levelBg + '; color: ' + levelColor + ';">' + escapeHtml(levelName) + '</div>';
-      html += '</div>';
-
-      // Статистика
-      html += '<div style="font-size: 11px; color: #aca9a9; margin-bottom: 6px;">';
-      html += 'Вопросов: ' + topic.totalQuestionsAnswered + ' | Правильных: ' + topic.totalCorrect;
-      html += '</div>';
-
-      // Обратная связь к теме
-      if (topic.feedback && topic.feedback.trim()) {
-        html += '<div style="font-size: 10px; font-weight: 300; color: rgba(255, 255, 255, 0.8); line-height: 1.4; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">' + escapeHtml(topic.feedback) + '</div>';
-      }
-
-      html += '</div>'; // topic-card
-    });
-
-    html += '</div>'; // topics-grid
-    html += '</div>'; // section-card
-  }
-
-  // Рекомендации по курсам
-  var recommendations = [];
-  if (results.topicResults) {
-    results.topicResults.forEach(function (topic) {
-      if (topic.recommendedLinks && topic.recommendedLinks.length > 0) {
-        topic.recommendedLinks.forEach(function (link) {
-          recommendations.push({
-            topicName: topic.topicName,
-            linkTitle: link.title,
-            linkUrl: link.url
-          });
-        });
-      }
-    });
-  }
-
-  if (recommendations.length > 0) {
-    html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
-    html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">Рекомендуемые материалы</div>';
-    html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">Изучите эти материалы для улучшения знаний.</div>';
-    
-    recommendations.forEach(function(rec, index) {
-      html += '<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
-      html += '<div style="font-size: 14px; font-weight: 700;">' + escapeHtml(rec.topicName) + '</div>';
-      html += '<div class="pdf-link-btn" data-url="' + escapeHtml(rec.linkUrl) + '" data-index="' + index + '" style="background: #1e40af; border-radius: 8px; padding: 10px 25px; font-size: 12px; font-weight: 300; color: #fafafa;">' + escapeHtml(rec.linkTitle) + '</div>';
-      html += '</div>';
-    });
-    
-    html += '</div>'; // recommendations
-  }
-
-  // Футер
-  html += '<div style="text-align: center; padding-top: 15px; font-size: 9px; color: rgba(255, 255, 255, 0.3);">';
-  html += 'Документ сформирован: ' + new Date().toLocaleString('ru-RU');
-  html += '</div>';
-
-  html += '</div>'; // padding
-  html += '</div>'; // page
-
-  return html;
-}
-
-function createMetric(value, label) {
-  return '<div style="text-align: center;">' +
-    '<div style="font-size: 28px; font-weight: 900;">' + value + '</div>' +
-    '<div style="font-size: 12px; font-weight: 300; color: #aca9a9;">' + label + '</div>' +
-    '</div>';
-}
-
-function pluralize(n, one, few, many) {
-  var mod10 = n % 10;
-  var mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 19) return many;
-  if (mod10 === 1) return one;
-  if (mod10 >= 2 && mod10 <= 4) return few;
-  return many;
-}
-
-function sanitizeFileName(name) {
-  if (!name) return 'test';
-  return name.replace(/[^a-zA-Zа-яА-Я0-9_\-\s]/g, '').replace(/\s+/g, '_').substring(0, 50);
-}
-
-function formatDate(date) {
-  var d = date.getDate().toString().padStart(2, '0');
-  var m = (date.getMonth() + 1).toString().padStart(2, '0');
-  var y = date.getFullYear();
-  return d + '_' + m + '_' + y;
-}
-
-// Главная функция экспорта
-async function exportResultsToPDF(results, testName) {
-  // Создаём оверлей загрузки
+/**
+ * Show the blocking «Генерация PDF…» overlay.
+ * @returns {Element} The overlay, to be removed by {@link hidePdfOverlay}.
+ */
+function showPdfOverlay() {
   var overlay = document.createElement('div');
   overlay.id = 'pdf-loading-overlay';
   overlay.innerHTML = '<div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">' +
@@ -365,138 +26,276 @@ async function exportResultsToPDF(results, testName) {
     '<div style="font-size: 14px; opacity: 0.7;">Это может занять некоторое время</div>' +
     '</div>';
   overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 99999; color: #fff; font-family: Inter, sans-serif;';
-
-  // Добавляем анимацию
   var style = document.createElement('style');
   style.textContent = '@keyframes pdf-spin { to { transform: rotate(360deg); } }';
   document.head.appendChild(style);
   document.body.appendChild(overlay);
+  return overlay;
+}
 
+/** Remove the generation overlay, whatever the outcome was. */
+function hidePdfOverlay() {
+  var overlay = document.getElementById('pdf-loading-overlay');
+  if (overlay) overlay.remove();
+}
+
+/**
+ * Per-topic recommendations for the report: the TEST's section settings win over the
+ * topic's own defaults — the same precedence the results screen uses (vrRecommended).
+ *
+ * @param {Object} topicResult One runtime topicResults[] row.
+ * @returns {{courses: Array, events: Array}}
+ */
+function pdfTopicRecommendations(topicResult) {
+  var section = (TEST_DATA && TEST_DATA.sections)
+    ? TEST_DATA.sections.find(function (s) { return s.topicId === topicResult.topicId; })
+    : null;
+  var courses = (section && section.recommendedCourses && section.recommendedCourses.length > 0)
+    ? section.recommendedCourses
+    : (topicResult.recommendedCourses || topicResult.recommendedLinks || []);
+  var events = (section && section.recommendedEvents)
+    ? section.recommendedEvents
+    : (topicResult.recommendedEvents || []);
+  return { courses: courses, events: events };
+}
+
+/**
+ * The sources of the CONSOLIDATED feedback block one topic carries: the texts written on
+ * the topic and on this test's section over it, and the PDFs hung on either.
+ *
+ * Read through the very readers the results SCREEN uses (`viewResults.js` — the whole
+ * runtime is concatenated into one script, so they are in scope), not through a copy of
+ * them: the report prints the block the learner has just read, and a second reader would
+ * drift the moment the bake changes shape. A package built before those readers existed
+ * degrades to empty lists instead of failing.
+ *
+ * @param {Object} topicResult One runtime topicResults[] row.
+ * @returns {{feedbackTexts: string[], recommendedAssets: Array}}
+ */
+function pdfTopicFeedback(topicResult) {
+  return {
+    feedbackTexts: (typeof vrTopicFeedbackTexts === 'function') ? vrTopicFeedbackTexts(topicResult) : [],
+    recommendedAssets: (typeof vrTopicAssets === 'function') ? vrTopicAssets(topicResult) : []
+  };
+}
+
+/**
+ * The test-level part of the same block: the test's OWN feedback and whether the test
+ * declares a pass threshold at all — the fact that tells an explicit «Пройден» from the
+ * default verdict of a test that judges nothing (a measurement method keeps its feedback).
+ *
+ * Both come from the same readers the results screen goes through, for the same reason
+ * {@link pdfTopicFeedback} does.
+ *
+ * @returns {{feedback?: Object, hasPassThreshold?: boolean}} Report-input fields.
+ */
+function pdfReportMeta() {
+  var meta = {};
+  if (typeof vrTestFeedback === 'function') {
+    var feedback = vrTestFeedback();
+    if (feedback) meta.feedback = feedback;
+  }
+  if (typeof vrHasPassThreshold === 'function') meta.hasPassThreshold = vrHasPassThreshold();
+  // Вводный блок ОТЧЁТА — своя ветвь `intro_json`: у документа вводное слово не то же,
+  // что на экране, и подмена одного другим была бы молчаливой ошибкой (PRD-27 §7.1).
+  var intro = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.introJson : null;
+  // Общий модуль берётся ТЕМ ЖЕ образцом, что во всех прочих функциях пакета: своей
+  // локальной ссылкой. `TB` из `exportResultsToPDF` сюда не видна — это переменная её
+  // области видимости, и обращение к необъявленному имени бросает ReferenceError, от
+  // которого проверка `TB && …` не спасает.
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  // Переключатель «как на экране итогов»: правило то же, что на вебе, и живёт оно в
+  // общем модуле — своя копия здесь разошлась бы при первой же правке.
+  var reportIntro = (TB && typeof TB.resolveReportIntro === 'function')
+    ? TB.resolveReportIntro(intro)
+    : (intro && intro.report ? intro.report : null);
+  if (reportIntro) meta.intro = reportIntro;
+  return meta;
+}
+
+/** Map the runtime's standard result onto the shared report input. */
+function pdfStandardInput(results) {
+  return {
+    passed: !!results.passed,
+    percent: results.percent,
+    totalQuestions: results.totalQuestions,
+    correct: (results.totalCorrect != null ? results.totalCorrect : results.correct),
+    earnedPoints: results.earnedPoints,
+    possiblePoints: results.possiblePoints,
+    topicResults: (results.topicResults || []).map(function (tr) {
+      var rec = pdfTopicRecommendations(tr);
+      var fb = pdfTopicFeedback(tr);
+      return {
+        topicId: tr.topicId,
+        topicName: tr.topicName,
+        correct: tr.correct,
+        total: tr.total,
+        percent: tr.percent,
+        earnedPoints: tr.earnedPoints,
+        possiblePoints: tr.possiblePoints,
+        passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
+        recommendedCourses: rec.courses,
+        recommendedEvents: rec.events,
+        feedbackTexts: fb.feedbackTexts,
+        recommendedAssets: fb.recommendedAssets
+      };
+    })
+  };
+}
+
+/** Map the runtime's adaptive result onto the shared report input. */
+function pdfAdaptiveInput(results) {
+  return {
+    topicResults: (results.topicResults || []).map(function (tr) {
+      var rec = pdfTopicRecommendations(tr);
+      var fb = pdfTopicFeedback(tr);
+      return {
+        topicName: tr.topicName,
+        achievedLevelIndex: (tr.achievedLevelIndex === undefined ? null : tr.achievedLevelIndex),
+        achievedLevelName: tr.achievedLevelName,
+        totalQuestionsAnswered: tr.totalQuestionsAnswered,
+        totalCorrect: tr.totalCorrect,
+        feedback: tr.feedback,
+        recommendedCourses: rec.courses,
+        recommendedEvents: rec.events,
+        feedbackTexts: fb.feedbackTexts,
+        recommendedAssets: fb.recommendedAssets
+      };
+    })
+  };
+}
+
+/**
+ * Измерения (PRD-29) для отчёта — шкалы и показатели той попытки, которую печатаем.
+ *
+ * Собираются ТЕМИ ЖЕ функциями, что питают экран итогов (`viewResults.js`), по тому же
+ * правилу, каким экран выбирает источник значений:
+ * - у СОХРАНЁННОЙ попытки (есть `completedAt`) берутся значения, записанные ВМЕСТЕ с ней:
+ *   пересчёт по сегодняшнему толкованию изменил бы то, что ученик уже получил;
+ * - у текущей попытки значения считаются детерминированно (`currentAttemptMeasures`);
+ * - АДАПТИВНАЯ попытка всегда текущая (её `downloadPDF` берёт из `state`), а сборщику
+ *   нужен результат в стандартной форме — её даёт `getAdaptiveResultForScorm`.
+ *
+ * @param {Object} results Результат, который печатается (стандартной или адаптивной формы).
+ * @param {boolean} isAdaptive Режим теста.
+ * @returns {Object|null} MeasuresInput либо null, если тест не объявил ни шкал, ни показателей.
+ */
+function pdfReportMeasures(results, isAdaptive) {
+  if (typeof buildResultsMeasures !== 'function' || typeof currentAttemptMeasures !== 'function') return null;
+  if (isAdaptive) {
+    var flat = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+    return flat ? currentAttemptMeasures(flat) : null;
+  }
+  if (results && results.completedAt) {
+    return buildResultsMeasures({ values: results.scaleValues || {} }, { values: results.resultValues || {} });
+  }
+  return currentAttemptMeasures(results);
+}
+
+/**
+ * Запечённый сборщиком выбор варианта отчёта (PRD-27 FR-22): макет, значения полей и
+ * ключи полей-картинок (FR-05). Отсутствует у пакетов, собранных до этого PRD, — тогда
+ * работает деградация по виду, а картинок у отчёта нет.
+ *
+ * @returns {{layoutKey: string, values: Object, imageKeys: string[]}|null}
+ */
+function pdfReportBake() {
+  var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA) ? TEST_DATA.designSettings : null;
+  return (ds && ds.report) ? ds.report : null;
+}
+
+/**
+ * Макет отчёта АКТИВНОГО шаблона, либо вложенного `default`, когда активный вида не
+ * объявил (PRD-27 FR-10). `systemLayout` реализует ровно эту деградацию для системных
+ * экранов, поэтому отчёт идёт через неё же.
+ *
+ * @param {string} key Ключ макета: путь файла варианта либо канонический вид.
+ * @returns {string} Макет; пустая строка — отчёт не собрать.
+ */
+function pdfReportLayout(key) {
+  if (typeof systemLayout === 'function') {
+    var viaFallback = systemLayout(key);
+    if (viaFallback) return viaFallback;
+  }
+  return (typeof state !== 'undefined' && state && state.templateLayouts && state.templateLayouts[key]) || '';
+}
+
+/**
+ * Build and download the attempt report.
+ *
+ * Страницу рисует МАКЕТ шаблона через общий рендерер (PRD-27 Фаза 2); CSS отчёта уже в
+ * документе — пакет вкладывает `styles/report.css` в собранный `styles.css`, потому что
+ * читать файл из рантайма к моменту растеризации поздно.
+ *
+ * @param {Object} results Runtime result (standard or adaptive shape).
+ * @param {string} testName Test title.
+ * @param {string} learnerName Learner's full name from the LMS (may be empty).
+ * @param {string} timestamp ISO timestamp of the reported attempt.
+ * @returns {Promise<boolean>} Whether a file was produced.
+ */
+async function exportResultsToPDF(results, testName, learnerName, timestamp) {
+  showPdfOverlay();
   try {
-    console.log('📄 Начинаем генерацию PDF...');
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TB || !TB.exportReportPdf) throw new Error('Общий модуль отчёта недоступен в пакете');
 
-    // Загружаем ассеты
-    await loadPdfAssets();
-
-    // Проверяем библиотеки
-    var jsPDF = window.jspdf && window.jspdf.jsPDF;
-    var html2canvas = window.html2canvas;
-
-    if (!jsPDF || !html2canvas) {
-      throw new Error('Библиотеки jsPDF или html2canvas не загружены');
-    }
-
-    // Выбираем случайную подложку
-    var bgDataUrl = null;
-    if (pdfAssets.backgrounds.length > 0) {
-      var randomIndex = Math.floor(Math.random() * pdfAssets.backgrounds.length);
-      bgDataUrl = pdfAssets.backgrounds[randomIndex].dataUrl;
-      console.log('🎨 Выбрана подложка:', randomIndex + 1);
-    }
-
-    var logoDataUrl = pdfAssets.logo ? pdfAssets.logo.dataUrl : null;
-
-    // Генерируем HTML (выбираем функцию в зависимости от режима)
     var isAdaptive = TEST_DATA.mode === 'adaptive';
-    var htmlContent = isAdaptive 
-      ? generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl)
-      : generatePdfHtml(results, testName, bgDataUrl, logoDataUrl);
-    // Создаём временный контейнер
-    var container = document.createElement('div');
-    container.innerHTML = htmlContent;
-    container.style.position = 'absolute';
-    container.style.left = '-9999px';
-    container.style.top = '0';
-    document.body.appendChild(container);
+    var kind = isAdaptive ? 'report.adaptive' : 'report';
+    // Макет ВЫБРАННОГО автором варианта; когда выбора в пакете нет (сборка до PRD-27)
+    // либо файл варианта не загрузился — канонический вид, то есть прежнее поведение.
+    var bake = pdfReportBake();
+    var layout = (bake && bake.layoutKey) ? pdfReportLayout(bake.layoutKey) : '';
+    if (!layout) layout = pdfReportLayout(kind);
+    if (!layout) throw new Error('Шаблон не предоставил макет отчёта');
 
-    // Ждём рендеринга
-    await new Promise(function (resolve) { setTimeout(resolve, 100); });
+    // Картинки варианта — в data-URL, ОДИН раз за сессию: растеризатор снимает то, что
+    // уже лежит в документе, и не станет ничего догружать (FR-05). Пути сюда приходят
+    // от сборщика, уже разрешёнными в каталог шаблона внутри пакета.
+    if (!pdfImageValues) {
+      pdfImageValues = await TB.inlineReportImageValues(
+        bake && bake.values ? bake.values : null,
+        bake && bake.imageKeys ? bake.imageKeys : []
+      );
+    }
 
-    // Рендерим в canvas
-    var canvas = await html2canvas(container.firstChild, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: null,
-      logging: false
+    var meta = Object.assign({
+      testName: testName,
+      learnerName: learnerName,
+      timestamp: timestamp,
+      attemptsCount: (typeof getAllAttempts === 'function') ? getAllAttempts().length : 1
+    }, pdfReportMeta());
+    var opts = {
+      design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
+      // Значения полей варианта — те, что автор задал в блоке обратной связи (FR-16).
+      values: pdfImageValues
+    };
+    // PRD-47 §4.1: без этого отчёт в LMS печатался без блока измерений ЦЕЛИКОМ — не без
+    // одной фигуры: карточек шкал, показателей и профиля в контексте просто не было.
+    // Вход экрана рантайм уже собирает; в отчётный его превращает ТОТ ЖЕ сборщик, что на
+    // вебе, поэтому вид берётся из полей отчёта, а облик шкал — с экрана итогов.
+    //
+    // Источник значений выбирает `pdfReportMeasures` (issue #33): у сохранённой попытки
+    // берутся записанные с ней значения, у адаптивной — её результат в стандартной форме.
+    // Без этого выбора в обоих случаях печатался пустой блок.
+    var screenMeasures = pdfReportMeasures(results, isAdaptive);
+    if (screenMeasures && typeof TB.buildReportMeasures === 'function') {
+      opts.measures = TB.buildReportMeasures(screenMeasures, pdfImageValues || {});
+    }
+    var context = isAdaptive
+      ? TB.buildAdaptiveReportContext(Object.assign({}, meta, { result: pdfAdaptiveInput(results) }), opts)
+      : TB.buildReportContext(Object.assign({}, meta, { result: pdfStandardInput(results) }), opts);
+
+    var fileName = await TB.exportReportPdf({ layout: layout, context: context }, testName, {
+      jsPDF: window.jspdf && window.jspdf.jsPDF,
+      html2canvas: window.html2canvas
     });
-
-    // Удаляем контейнер
-    // document.body.removeChild(container);
-
-    // Вычисляем размеры
-    var imgWidth = 210; // A4 ширина в мм
-    var imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    // Собираем позиции ссылок до удаления контейнера
-    var linkButtons = container.querySelectorAll('.pdf-link-btn');
-    var links = [];
-    var containerRect = container.firstChild.getBoundingClientRect();
-    
-    linkButtons.forEach(function(btn) {
-      var rect = btn.getBoundingClientRect();
-      links.push({
-        url: btn.getAttribute('data-url'),
-        x: rect.left - containerRect.left,
-        y: rect.top - containerRect.top,
-        width: rect.width,
-        height: rect.height
-      });
-    });
-    
-    // Удаляем контейнер
-    document.body.removeChild(container);
-    
-    // Вычисляем размеры
-    var imgWidth = 210; // A4 ширина в мм
-    var imgHeight = (canvas.height * imgWidth) / canvas.width;
-    
-    // Коэффициент масштабирования (пиксели → мм)
-    var scale = imgWidth / 595; // 595px - ширина контейнера
-    
-    // Создаём PDF
-    var pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: [imgWidth, Math.max(imgHeight, 297)]
-    });
-    
-    var imgData = canvas.toDataURL('image/jpeg', 0.92);
-    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
-    
-    // Добавляем кликабельные ссылки
-    links.forEach(function(link) {
-      if (link.url) {
-        pdf.link(
-          link.x * scale,
-          link.y * scale,
-          link.width * scale,
-          link.height * scale,
-          { url: link.url }
-        );
-      }
-    });
-    
-    // Сохраняем
-    var fileName = 'Результаты_' + sanitizeFileName(testName) + '_' + formatDate(new Date()) + '.pdf';
-    pdf.save(fileName);
-
-    console.log('✅ PDF сгенерирован:', fileName);
-    
-    // Убираем оверлей
-    var overlayToRemove = document.getElementById('pdf-loading-overlay');
-    if (overlayToRemove) overlayToRemove.remove();
-    
+    console.log('PDF сгенерирован:', fileName);
     return true;
-    
   } catch (error) {
-    console.error('❌ Ошибка генерации PDF:', error);
-    
-    // Убираем оверлей при ошибке
-    var overlayToRemove = document.getElementById('pdf-loading-overlay');
-    if (overlayToRemove) overlayToRemove.remove();
-    
-    alert('Ошибка при экспорте PDF: ' + error.message);
+    console.error('Ошибка генерации PDF:', error);
+    alert('Ошибка при экспорте PDF: ' + (error && error.message ? error.message : error));
     return false;
+  } finally {
+    hidePdfOverlay();
   }
 }

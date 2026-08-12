@@ -1,0 +1,1 @@
+ALTER TABLE "attempts" ADD COLUMN "section_timer_json" jsonb;

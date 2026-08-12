@@ -6,34 +6,27 @@ import {
   Trash2,
   Loader2,
   Calendar,
+  Link,
+  RefreshCw,
+  Ban,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
+  Box,
+  Button,
+  Cluster,
+  IconButton,
+  Input,
+  ModalDialog,
+  ScrollArea,
+  Stack,
   Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  Tabs,
+  Tag,
+  Text,
+  type TableColumn,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 
@@ -41,7 +34,7 @@ interface User {
   id: string;
   email: string;
   name: string | null;
-  role: "author" | "learner";
+  roles?: string[];
   status: string;
 }
 
@@ -58,9 +51,129 @@ interface Assignment {
   userId: string | null;
   groupId: string | null;
   dueDate: string | null;
+  linkExpiresAt: string | null;
   assignedAt: string;
   user?: User | null;
   group?: Group | null;
+  groupMemberIds?: string[];
+  tokenStatus?: "active" | "expired" | "revoked" | "none";
+  tokenId?: string | null;
+}
+
+interface GroupUser {
+  id: string;
+  email: string;
+  name: string | null;
+  status: string;
+  tokenStatus: "active" | "revoked" | "none";
+}
+
+type AssignTab = "current" | "users" | "groups";
+
+/** Status badge for an access-link token (DS Tag tones). */
+function tokenStatusTag(status?: string) {
+  switch (status) {
+    case "active":
+      return <Tag tone="success">Активна</Tag>;
+    case "expired":
+      return <Tag tone="warning">Истекла</Tag>;
+    case "revoked":
+      return <Tag tone="error">Отозвана</Tag>;
+    default:
+      return <Tag variant="outline">Нет</Tag>;
+  }
+}
+
+/** One member row inside an expanded group assignment (resend / revoke link). */
+function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const resendUser = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/assignments/${assignmentId}/resend-user/${user.id}`, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
+      toast({ title: "Ссылка обновлена", description: `Письмо отправлено ${user.email}` });
+    },
+    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось обновить ссылку" }),
+  });
+
+  const revokeUser = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/assignments/${assignmentId}/revoke-user/${user.id}`, { method: "PATCH", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
+      toast({ title: "Ссылка отозвана" });
+    },
+    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось отозвать ссылку" }),
+  });
+
+  return (
+    <Cluster justify="between" gap={0} wrap={false} padY={1} className="tb-row-sep">
+      <Cluster gap={3} wrap={false}>
+        <Users size={12} color="var(--ou-fg-muted)" />
+        <Text weight="medium">{user.email}</Text>
+        {user.name && <Text tone="muted">{user.name}</Text>}
+      </Cluster>
+      <Cluster gap={2} wrap={false}>
+        <Tag size="s" tone={user.tokenStatus === "active" ? "success" : "neutral"}>
+          {user.tokenStatus === "active" ? "Активна" : user.tokenStatus === "revoked" ? "Отозвана" : "Нет ссылки"}
+        </Tag>
+        <IconButton
+          variant="ghost"
+          size="s"
+          title="Обновить ссылку и отправить письмо"
+          aria-label="Обновить ссылку"
+          icon={<RefreshCw size={12} color="var(--ou-info-600)" />}
+          onClick={() => resendUser.mutate()}
+          disabled={resendUser.isPending}
+        />
+        {user.tokenStatus === "active" && (
+          <IconButton
+            variant="ghost"
+            size="s"
+            title="Отозвать ссылку"
+            aria-label="Отозвать ссылку"
+            icon={<Ban size={12} color="var(--ou-warning-600)" />}
+            onClick={() => revokeUser.mutate()}
+            disabled={revokeUser.isPending}
+          />
+        )}
+      </Cluster>
+    </Cluster>
+  );
+}
+
+/** Expanded panel under a group assignment row: its members with link controls. */
+function GroupUsersPanel({ assignmentId }: { assignmentId: string }) {
+  const { data: groupUsers = [], isLoading } = useQuery<GroupUser[]>({
+    queryKey: [`/api/assignments/${assignmentId}/group-users`],
+  });
+
+  if (isLoading) {
+    return (
+      <Cluster gap={2} wrap={false} padX={7} padY={3} surface="subtle" style={{ color: "var(--ou-fg-muted)" }}>
+        <Loader2 size={16} className="ou-spin" /> Загрузка участников...
+      </Cluster>
+    );
+  }
+  if (groupUsers.length === 0) {
+    return <Box padX={7} padY={3} surface="subtle" style={{ color: "var(--ou-fg-muted)" }}>Группа пуста</Box>;
+  }
+  return (
+    <Stack gap={1} padX={7} padY={2} surface="subtle">
+      {groupUsers.map((u) => (
+        <GroupUserRow key={u.id} user={u} assignmentId={assignmentId} />
+      ))}
+    </Stack>
+  );
 }
 
 interface AssignTestDialogProps {
@@ -79,10 +192,21 @@ export function AssignTestDialog({
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"current" | "users" | "groups">("current");
+  const [activeTab, setActiveTab] = useState<AssignTab>("current");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState<string>("");
+  const [linkExpiresAt, setLinkExpiresAt] = useState<string>("");
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
+
+  // Sync linkExpiresAt with dueDate unless manually overridden
+  const handleDueDateChange = (value: string) => {
+    setDueDate(value);
+    // Auto-fill link expiry from due date if not manually set yet
+    if (!linkExpiresAt || linkExpiresAt === dueDate) {
+      setLinkExpiresAt(value);
+    }
+  };
 
   // Fetch current assignments
   const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<Assignment[]>({
@@ -104,7 +228,7 @@ export function AssignTestDialog({
 
   // Assign mutation
   const assignMutation = useMutation({
-    mutationFn: async (data: { userIds?: string[]; groupIds?: string[]; dueDate?: string }) => {
+    mutationFn: async (data: { userIds?: string[]; groupIds?: string[]; dueDate?: string; linkExpiresAt?: string }) => {
       const res = await fetch(`/api/tests/${testId}/assignments/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +243,7 @@ export function AssignTestDialog({
       setSelectedUserIds([]);
       setSelectedGroupIds([]);
       setDueDate("");
+      setLinkExpiresAt("");
       setActiveTab("current");
       toast({ title: t.assignments.assigned, description: t.assignments.assignedDescription });
     },
@@ -146,11 +271,69 @@ export function AssignTestDialog({
     },
   });
 
+  // Revoke token mutation
+  const revokeTokenMutation = useMutation({
+    mutationFn: async (tokenId: string) => {
+      const res = await fetch(`/api/assignment-tokens/${tokenId}/revoke`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to revoke");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      toast({ title: "Ссылка отозвана", description: "Токен доступа деактивирован." });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отозвать ссылку." });
+    },
+  });
+
+  // Resend group mutation
+  const resendGroupMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const res = await fetch(`/api/assignments/${assignmentId}/resend-group`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to resend group");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      toast({ title: "Ссылки обновлены", description: `Отправлено ${data.sent} писем.` });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось обновить ссылки." });
+    },
+  });
+
+  // Resend email mutation
+  const resendMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const res = await fetch(`/api/assignments/${assignmentId}/resend`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to resend");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      toast({ title: "Письмо отправлено", description: "Новая ссылка отправлена пользователю." });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отправить письмо." });
+    },
+  });
+
   const handleAssignUsers = () => {
     if (selectedUserIds.length === 0) return;
     assignMutation.mutate({
       userIds: selectedUserIds,
       dueDate: dueDate || undefined,
+      linkExpiresAt: linkExpiresAt || undefined,
     });
   };
 
@@ -159,15 +342,15 @@ export function AssignTestDialog({
     assignMutation.mutate({
       groupIds: selectedGroupIds,
       dueDate: dueDate || undefined,
+      linkExpiresAt: linkExpiresAt || undefined,
     });
   };
 
-  // Filter out already assigned users
-  const assignedUserIds = assignments
-    .filter((a) => a.userId)
-    .map((a) => a.userId!);
+  // Filter out already assigned users (directly or via group membership)
+  const assignedUserIds = new Set(assignments.filter((a) => a.userId).map((a) => a.userId!));
+  const groupMemberIds = new Set(assignments.flatMap((a) => a.groupMemberIds ?? []));
   const availableUsers = allUsers.filter(
-    (u) => !assignedUserIds.includes(u.id) && u.role === "learner"
+    (u) => !assignedUserIds.has(u.id) && !groupMemberIds.has(u.id) && (u.roles ?? []).includes("learner")
   );
 
   // Filter out already assigned groups
@@ -187,282 +370,294 @@ export function AssignTestDialog({
     });
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{t.assignments.manageAssignments}</DialogTitle>
-          <DialogDescription>{testTitle}</DialogDescription>
-        </DialogHeader>
+  const toggleExpand = (id: string) =>
+    setExpandedGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="current">
-              {t.assignments.assignedTo} ({assignments.length})
-            </TabsTrigger>
-            <TabsTrigger value="users">
-              <Users className="h-4 w-4 mr-2" />
-              {t.assignments.users}
-            </TabsTrigger>
-            <TabsTrigger value="groups">
-              <UsersRound className="h-4 w-4 mr-2" />
-              {t.assignments.groups}
-            </TabsTrigger>
-          </TabsList>
+  const dateFields = (
+    <Stack direction="row" gap={4}>
+      <Box grow>
+        <Input
+          label={t.assignments.dueDate}
+          type="date"
+          fullWidth
+          value={dueDate}
+          onChange={(e) => handleDueDateChange(e.target.value)}
+        />
+      </Box>
+      <Box grow>
+        <Input
+          label="Ссылка активна до"
+          type="date"
+          fullWidth
+          value={linkExpiresAt}
+          onChange={(e) => setLinkExpiresAt(e.target.value)}
+          placeholder="По умолчанию: +30 дней"
+        />
+      </Box>
+    </Stack>
+  );
 
-          {/* Current Assignments Tab */}
-          <TabsContent value="current" className="flex-1 overflow-auto mt-4">
-            {assignmentsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : assignments.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>{t.assignments.noAssignments}</p>
-                <p className="text-sm">{t.assignments.noAssignmentsDescription}</p>
-              </div>
+  // ── Table columns ──
+  const assignmentColumns: TableColumn<Assignment>[] = [
+    {
+      key: "assignedTo",
+      header: t.assignments.assignedTo,
+      render: (a) =>
+        a.user ? (
+          <div>
+            <Text as="p" weight="medium">{a.user.email}</Text>
+            {a.user.name && <Text as="p" tone="muted">{a.user.name}</Text>}
+          </div>
+        ) : a.group ? (
+          <Cluster gap={2} wrap={false}>
+            {expandedGroupIds.has(a.id) ? (
+              <ChevronDown size={16} color="var(--ou-fg-muted)" />
             ) : (
-              <div className="border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t.assignments.assignedTo}</TableHead>
-                      <TableHead>Тип</TableHead>
-                      <TableHead>{t.assignments.dueDate}</TableHead>
-                      <TableHead>{t.assignments.assignedAt}</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assignments.map((assignment) => (
-                      <TableRow key={assignment.id}>
-                        <TableCell>
-                          {assignment.user ? (
-                            <div>
-                              <p className="font-medium">{assignment.user.email}</p>
-                              {assignment.user.name && (
-                                <p className="text-sm text-muted-foreground">{assignment.user.name}</p>
-                              )}
-                            </div>
-                          ) : assignment.group ? (
-                            <div>
-                              <p className="font-medium">{assignment.group.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {assignment.group.userCount} чел.
-                              </p>
-                            </div>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {assignment.user ? (
-                              <><Users className="h-3 w-3 mr-1" /> Пользователь</>
-                            ) : (
-                              <><UsersRound className="h-3 w-3 mr-1" /> Группа</>
-                            )}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {assignment.dueDate ? (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(assignment.dueDate)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">{t.assignments.noDueDate}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {formatDate(assignment.assignedAt)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeMutation.mutate(assignment.id)}
-                            disabled={removeMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ChevronRight size={16} color="var(--ou-fg-muted)" />
             )}
-          </TabsContent>
-
-          {/* Assign to Users Tab */}
-          <TabsContent value="users" className="flex-1 overflow-auto mt-4 space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <Label htmlFor="due-date-users">{t.assignments.dueDate}</Label>
-                <Input
-                  id="due-date-users"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div className="pt-6">
-                <Button
-                  onClick={handleAssignUsers}
-                  disabled={selectedUserIds.length === 0 || assignMutation.isPending}
-                >
-                  {assignMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {t.assignments.assign} ({selectedUserIds.length})
-                </Button>
-              </div>
+            <div>
+              <Text as="p" weight="medium">{a.group.name}</Text>
+              <Text as="p" tone="muted">{a.group.userCount} чел.</Text>
             </div>
+          </Cluster>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      key: "type",
+      header: "Тип",
+      render: (a) =>
+        a.user ? (
+          <Tag variant="outline" icon={<Users size={12} />}>Пользователь</Tag>
+        ) : (
+          <Tag variant="outline" icon={<UsersRound size={12} />}>Группа</Tag>
+        ),
+    },
+    {
+      key: "dueDate",
+      header: t.assignments.dueDate,
+      render: (a) =>
+        a.dueDate ? (
+          <Cluster as="span" gap={1} wrap={false}><Calendar size={12} />{formatDate(a.dueDate)}</Cluster>
+        ) : (
+          <Text tone="muted">{t.assignments.noDueDate}</Text>
+        ),
+    },
+    {
+      key: "linkExpires",
+      header: "Ссылка до",
+      render: (a) =>
+        a.linkExpiresAt ? (
+          <Cluster as="span" gap={1} wrap={false}><Link size={12} />{formatDate(a.linkExpiresAt)}</Cluster>
+        ) : (
+          <Text tone="muted">—</Text>
+        ),
+    },
+    {
+      key: "linkStatus",
+      header: "Статус ссылки",
+      render: (a) =>
+        a.groupId ? (
+          <Tag variant="outline" icon={<UsersRound size={12} />}>{a.group?.userCount ?? 0} ссылок</Tag>
+        ) : (
+          tokenStatusTag(a.tokenStatus)
+        ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "120px",
+      render: (a) => (
+        <Cluster gap={1} wrap={false} onClick={(e) => e.stopPropagation()}>
+          {a.userId && (
+            <IconButton
+              variant="ghost"
+              size="s"
+              title="Отправить письмо повторно"
+              aria-label="Отправить письмо повторно"
+              icon={<RefreshCw size={16} color="var(--ou-info-600)" />}
+              onClick={() => resendMutation.mutate(a.id)}
+              disabled={resendMutation.isPending}
+            />
+          )}
+          {a.groupId && (
+            <IconButton
+              variant="ghost"
+              size="s"
+              title="Обновить ссылки для всей группы"
+              aria-label="Обновить ссылки для всей группы"
+              icon={<RefreshCw size={16} color="var(--ou-info-600)" />}
+              onClick={() => resendGroupMutation.mutate(a.id)}
+              disabled={resendGroupMutation.isPending}
+            />
+          )}
+          {a.tokenId && a.tokenStatus === "active" && (
+            <IconButton
+              variant="ghost"
+              size="s"
+              title="Отозвать ссылку"
+              aria-label="Отозвать ссылку"
+              icon={<Ban size={16} color="var(--ou-warning-600)" />}
+              onClick={() => revokeTokenMutation.mutate(a.tokenId!)}
+              disabled={revokeTokenMutation.isPending}
+            />
+          )}
+          <IconButton
+            variant="ghost"
+            size="s"
+            title="Удалить назначение"
+            aria-label="Удалить назначение"
+            icon={<Trash2 size={16} color="var(--ou-error-600)" />}
+            onClick={() => removeMutation.mutate(a.id)}
+            disabled={removeMutation.isPending}
+          />
+        </Cluster>
+      ),
+    },
+  ];
 
-            {availableUsers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Все пользователи уже назначены</p>
-              </div>
-            ) : (
-              <div className="border rounded-lg max-h-[300px] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">
-                        <Checkbox
-                          checked={selectedUserIds.length === availableUsers.length && availableUsers.length > 0}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedUserIds(availableUsers.map((u) => u.id));
-                            } else {
-                              setSelectedUserIds([]);
-                            }
-                          }}
-                        />
-                      </TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>{t.users.name}</TableHead>
-                      <TableHead>{t.users.status}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {availableUsers.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedUserIds.includes(user.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedUserIds([...selectedUserIds, user.id]);
-                              } else {
-                                setSelectedUserIds(selectedUserIds.filter((id) => id !== user.id));
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.name || "—"}</TableCell>
-                        <TableCell>
-                          <Badge variant={user.status === "active" ? "default" : "secondary"}>
-                            {user.status === "active" ? t.users.active : t.users.pending}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
+  const userColumns: TableColumn<User>[] = [
+    { key: "email", header: "Email", render: (u) => u.email },
+    { key: "name", header: t.users.name, render: (u) => u.name || "—" },
+    {
+      key: "status",
+      header: t.users.status,
+      render: (u) => (
+        <Tag tone={u.status === "active" ? "success" : "neutral"}>
+          {u.status === "active" ? t.users.active : t.users.pending}
+        </Tag>
+      ),
+    },
+  ];
 
-          {/* Assign to Groups Tab */}
-          <TabsContent value="groups" className="flex-1 overflow-auto mt-4 space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <Label htmlFor="due-date-groups">{t.assignments.dueDate}</Label>
-                <Input
-                  id="due-date-groups"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div className="pt-6">
-                <Button
-                  onClick={handleAssignGroups}
-                  disabled={selectedGroupIds.length === 0 || assignMutation.isPending}
-                >
-                  {assignMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {t.assignments.assign} ({selectedGroupIds.length})
-                </Button>
-              </div>
-            </div>
+  const groupColumns: TableColumn<Group>[] = [
+    { key: "name", header: t.groups.name, render: (g) => <Text weight="medium">{g.name}</Text> },
+    {
+      key: "description",
+      header: t.groups.groupDescription,
+      render: (g) => <Text tone="muted">{g.description || "—"}</Text>,
+    },
+    { key: "members", header: t.groups.membersCount, render: (g) => <Tag>{g.userCount} чел.</Tag> },
+  ];
 
-            {availableGroups.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>Все группы уже назначены</p>
-              </div>
-            ) : (
-              <div className="border rounded-lg max-h-[300px] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">
-                        <Checkbox
-                          checked={selectedGroupIds.length === availableGroups.length && availableGroups.length > 0}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedGroupIds(availableGroups.map((g) => g.id));
-                            } else {
-                              setSelectedGroupIds([]);
-                            }
-                          }}
-                        />
-                      </TableHead>
-                      <TableHead>{t.groups.name}</TableHead>
-                      <TableHead>{t.groups.groupDescription}</TableHead>
-                      <TableHead>{t.groups.membersCount}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {availableGroups.map((group) => (
-                      <TableRow key={group.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedGroupIds.includes(group.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedGroupIds([...selectedGroupIds, group.id]);
-                              } else {
-                                setSelectedGroupIds(selectedGroupIds.filter((id) => id !== group.id));
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium">{group.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {group.description || "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{group.userCount} чел.</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+  // ── Tab panels ──
+  const currentPanel = assignmentsLoading ? (
+    <Cluster justify="center" wrap={false} padY={7}>
+      <Loader2 size={24} className="ou-spin" />
+    </Cluster>
+  ) : assignments.length === 0 ? (
+    <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
+      <Users size={48} style={{ marginInline: "auto", marginBottom: "var(--ou-space-4)", opacity: 0.5 }} />
+      <p>{t.assignments.noAssignments}</p>
+      <p>{t.assignments.noAssignmentsDescription}</p>
+    </Box>
+  ) : (
+    <Table
+      columns={assignmentColumns}
+      rows={assignments}
+      rowKey={(a) => a.id}
+      onRowClick={(a) => { if (a.groupId) toggleExpand(a.id); }}
+      expandedKeys={Array.from(expandedGroupIds)}
+      renderExpanded={(a) => (a.groupId ? <GroupUsersPanel assignmentId={a.id} /> : null)}
+    />
+  );
 
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t.common.cancel}
+  const usersPanel = (
+    <Stack gap={4}>
+      <Stack gap={3}>
+        {dateFields}
+        <Cluster justify="end" gap={0} wrap={false}>
+          <Button
+            onClick={handleAssignUsers}
+            disabled={selectedUserIds.length === 0}
+            loading={assignMutation.isPending}
+          >
+            {t.assignments.assign} ({selectedUserIds.length})
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </Cluster>
+      </Stack>
+      {availableUsers.length === 0 ? (
+        <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
+          <p>Все пользователи уже назначены</p>
+        </Box>
+      ) : (
+        <ScrollArea maxH="lg">
+          <Table
+            selectable
+            selected={selectedUserIds}
+            onSelectChange={setSelectedUserIds}
+            columns={userColumns}
+            rows={availableUsers}
+            rowKey={(u) => u.id}
+          />
+        </ScrollArea>
+      )}
+    </Stack>
+  );
+
+  const groupsPanel = (
+    <Stack gap={4}>
+      <Stack gap={3}>
+        {dateFields}
+        <Cluster justify="end" gap={0} wrap={false}>
+          <Button
+            onClick={handleAssignGroups}
+            disabled={selectedGroupIds.length === 0}
+            loading={assignMutation.isPending}
+          >
+            {t.assignments.assign} ({selectedGroupIds.length})
+          </Button>
+        </Cluster>
+      </Stack>
+      {availableGroups.length === 0 ? (
+        <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
+          <p>Все группы уже назначены</p>
+        </Box>
+      ) : (
+        <ScrollArea maxH="lg">
+          <Table
+            selectable
+            selected={selectedGroupIds}
+            onSelectChange={setSelectedGroupIds}
+            columns={groupColumns}
+            rows={availableGroups}
+            rowKey={(g) => g.id}
+          />
+        </ScrollArea>
+      )}
+    </Stack>
+  );
+
+  return (
+    <ModalDialog
+      open={open}
+      onClose={() => onOpenChange(false)}
+      size="xl"
+      title={t.assignments.manageAssignments}
+      description={testTitle}
+      footer={
+        <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          {t.common.cancel}
+        </Button>
+      }
+    >
+      <Tabs<AssignTab>
+        variant="segment"
+        align="stretch"
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { id: "current", label: `${t.assignments.assignedTo} (${assignments.length})`, content: currentPanel },
+          { id: "users", label: t.assignments.users, icon: <Users size={16} />, content: usersPanel },
+          { id: "groups", label: t.assignments.groups, icon: <UsersRound size={16} />, content: groupsPanel },
+        ]}
+      />
+    </ModalDialog>
   );
 }

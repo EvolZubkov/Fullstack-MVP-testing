@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-18 — Встроенный плеер тестирования и отладки тестов.
+    Issue: BR-13 (Этап 14). Спека: docs/specs/prd-18/debug-test-player.md.
+    Состояния — кнопки навбара; пояснения и DS-маппинг — в состоянии «Пояснения».
+    НЕ согласован — черновик к ревью.
+    -->
+    <title>PRD-18 — Плеер тестирования и отладки</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <style>
+      /* wireframe-only faux-chrome (окно/статусбар/стейдж/инспектор): размеры каркаса
+         и нейтральные цвета iframe-плейсхолдера, не продуктовый DS. */
+      /* gate-skip-start */
+      .wf-sprite { display: none; }
+
+      /* ░░ Faux-chrome ОКНА плеера (отдельное окно, как .wf-drawer в prd17) ░░ */
+      .wf-player {
+        /* Полноэкранный инструмент: на всю ширину поля (без центрирующего max-width). */
+        height: min(820px, calc(100vh - var(--wf-nav-offset) - var(--ou-space-8)));
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l); box-shadow: var(--ou-shadow-m);
+        overflow: hidden; display: flex; flex-direction: column;
+      }
+
+      /* Тулбар окна: заголовок + действия. */
+      .wf-pl-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-3) var(--ou-space-4); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
+      .wf-pl-title { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-pl-title svg { color: var(--ou-accent-default); }
+      .wf-pl-title b { font: var(--ou-text-body-m); font-weight: 600; }
+      .wf-pl-sub { font: var(--ou-text-body-s); color: var(--ou-fg-muted); padding-left: var(--ou-space-2); border-left: var(--wf-border-w) solid var(--ou-border-soft); margin-left: var(--ou-space-1); }
+      .wf-pl-toolbar .spacer { flex: 1; }
+
+      /* Статусная панель (FR-19): ряд ячеек-показателей со separator'ами. */
+      .wf-statusbar { display: flex; align-items: stretch; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); padding: var(--ou-space-3) var(--ou-space-4); background: var(--ou-bg-page); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
+      /* Весь статус-контент слева (над стейджем места хватает): Прогресс + Оценка/алярм рядом, левым флангом. */
+      .wf-stat-left, .wf-stat-right { display: flex; align-items: stretch; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+      .wf-stat-left { flex: 0 1 auto; min-width: 0; }
+      .wf-stat-right { flex: 0 0 auto; }
+      .wf-stat-cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+      /* [hidden] перебивается display:flex/inline-flex у ячеек и ou-tag — гасим явно
+         (алярм ошибки расчёта, свёрнутые/раскрытые статусы тем). Специфичность 0,2,0 > .ou-tag. */
+      .wf-statusbar [hidden] { display: none; }
+      .wf-stat-lbl { font: var(--ou-text-caption); text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+      .wf-stat-val { display: inline-flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+      .wf-stat-num { font: var(--ou-text-body-m); font-weight: 600; font-variant-numeric: tabular-nums; }
+      .wf-stat-sub { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+      .wf-pbar { display: inline-block; width: 84px; }
+      /* Кнопка раскрытия тем (DS ou-btn--secondary — явно выделена как кнопка): шрифт под размер чипов-тегов. */
+      .wf-expander { font: var(--ou-text-caption); }
+      /* Бывшие wf-chip/wf-info/wf-current заменены на DS-компоненты:
+         ou-tag (--neutral/--accent --outline --s) / ou-iconbtn / ou-btn. */
+
+      /* Тело окна: стейдж + инспектор. */
+      .wf-pl-body { flex: 1; min-height: 0; display: flex; }
+
+      /* Стейдж = левая колонка: статусбар над холстом + холст с iframe пакета. */
+      .wf-pl-stage { flex: 1; min-width: 0; background: var(--ou-bg-page); display: flex; flex-direction: column; }
+      /* Холст под iframe пакета (паддинг + оверлеи сборки/ошибки). Статусбар — над холстом, в той же колонке. */
+      .wf-stage-canvas { flex: 1; min-height: 0; position: relative; display: flex; padding: var(--ou-space-5); }
+      /* iframe пакета занимает ВСЮ площадь стейджа (это вьюпорт пакета), а не висит карточкой. */
+      .wf-frame { flex: 1; display: flex; flex-direction: column; background: #fff; border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-s); overflow: hidden; }
+      .wf-frame-screen { flex: 1; min-height: 0; overflow: auto; }
+      .wf-frame-ribbon { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-2); font: var(--ou-text-caption); color: var(--ou-fg-muted); background: var(--ou-bg-muted); padding: var(--ou-space-1) var(--ou-space-2) var(--ou-space-1) var(--ou-space-3); border-bottom: var(--wf-border-w) dashed var(--ou-border-default); }
+      /* Тоггл «Эталон» в риббоне — стандартный DS-свитч (ou-switch). По умолчанию выкл. */
+      .wf-ref-toggle { display: inline-flex; align-items: center; gap: var(--ou-space-2); cursor: pointer; }
+      .wf-ref-toggle__lbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      /* Лог сырых вызовов RTE (моноширинный, прокрутка). */
+      .wf-rawlog { font: var(--ou-text-body-xs); font-family: monospace; color: var(--ou-fg-muted); white-space: pre-wrap; margin-top: var(--ou-space-2); max-height: 180px; overflow: auto; }
+      /* Раскрытие <details> (payload suspend_data, сырой RTE-лог): нативный маркер скрыт, шеврон lucide
+         (#i-chevron = chevron-right), разворот на 90° при открытии. */
+      .wf-disclosure { list-style: none; display: inline-flex; align-items: center; gap: var(--ou-space-1); cursor: pointer; border: 0; background: transparent; padding: 0; font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      .wf-disclosure::-webkit-details-marker { display: none; }
+      .wf-disclosure svg { transition: transform var(--ou-motion-fast) ease; flex: 0 0 auto; }
+      details[open] > .wf-disclosure svg, .wf-disclosure[aria-expanded="true"] svg { transform: rotate(90deg); }
+      /* Полный payload раскрывается строкой на ВСЮ ширину таблицы (colspan), не в узкой колонке значений. */
+      .wf-payload-row[hidden] { display: none; }
+      .wf-payload-row > td { padding-top: 0; }
+      /* Недостающий в эскизе reset кнопки (DS рассчитывает на preflight): тогл дерева без рамки/фона. */
+      .ou-tree__toggle { border: 0; background: transparent; cursor: pointer; }
+      .wf-frame-screen { padding: var(--ou-space-6); color: #1f2733; }
+      .wf-frame-screen h4 { margin: 0 0 var(--ou-space-2); font: var(--ou-text-heading-s); }
+      .wf-frame-screen p { margin: 0 0 var(--ou-space-4); font: var(--ou-text-body-m); }
+      .wf-faux-foot { display: flex; justify-content: space-between; align-items: center; margin-top: var(--ou-space-4); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      /* ЭТАЛОН-демо рендерится на РЕАЛЬНОЙ разметке вариантов (как в шаблоне: .option с радио/чекбоксом,
+         .rank-item с грипом, .matching с плитками), а НЕ на абстрактных плашках — чтобы метка реально
+         ложилась на рендер. Debug-метка эталона — в левом жёлобе, СНАРУЖИ варианта (на баллы не влияет).
+         Цвета — на токенах DS (стейдж — faux-пакет, точная тема = применённый шаблон в рантайме). */
+      .wf-q-row { display: flex; align-items: flex-start; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
+      .wf-q-gutter { flex: 0 0 20px; align-self: stretch; display: inline-flex; align-items: center; justify-content: center; }
+      .wf-mark { display: inline-flex; align-items: center; justify-content: center; font: var(--ou-text-caption); font-weight: 700; font-variant-numeric: tabular-nums; }
+      .wf-mark--ok { color: var(--ou-success-default); }
+      .wf-mark--num { color: var(--ou-accent-default); }
+      /* Реальный вариант single/multiple (как шаблонный .option): радио/чекбокс + текст, рамка 2px. */
+      .q-opt { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border: 2px solid var(--ou-border-default); border-radius: 10px; background: var(--ou-bg-elevated); font: var(--ou-text-body-s); }
+      .q-opt input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--ou-accent-default); pointer-events: none; }
+      .q-opt.is-sel { border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
+      [data-stage="live"] .q-opt { margin-bottom: var(--ou-space-2); }
+      /* Реальный rank-item: грип + текст. */
+      .q-rank { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: 12px; background: var(--ou-bg-elevated); box-shadow: var(--ou-shadow-xs); font: var(--ou-text-body-s); }
+      .q-grip { flex: 0 0 auto; display: inline-flex; color: var(--ou-fg-muted); }
+      /* Реальное сопоставление: доска парных строк [левый чип-плитка] ↔ [правая плитка], как в рантайме.
+         Неслитая строка — две отдельные плитки с зазором; слитая (is-joined) — один объединённый бокс.
+         У левого чипа — грип-точки (drag), у пар — буквы подсветки корректных соответствий. */
+      .q-mboard { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+      .q-mline { display: flex; align-items: stretch; }
+      .q-mline.is-joined { border: var(--wf-border-w) solid var(--ou-border-default); border-radius: 12px; background: var(--ou-bg-elevated); box-shadow: var(--ou-shadow-xs); overflow: hidden; }
+      .q-mtile { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-3) var(--ou-space-4); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: 12px; background: var(--ou-bg-elevated); box-shadow: var(--ou-shadow-xs); font: var(--ou-text-body-s); }
+      .q-mline.is-joined .q-mtile { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+      .q-mgap { flex: 0 0 18px; }
+      .q-key { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 18px; padding: 0 var(--ou-space-1); font: var(--ou-text-caption); font-weight: 700; color: var(--ou-accent-on-soft); background: var(--ou-accent-soft); border-radius: var(--ou-radius-s); }
+      /* Эталон-демо: карточки вопросов по типам. */
+      .wf-ref-q { margin-bottom: var(--ou-space-5); }
+      .wf-ref-q:last-child { margin-bottom: 0; }
+      .wf-ref-type { font: var(--ou-text-caption); text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); margin-bottom: var(--ou-space-2); }
+      .wf-ref-q p { margin: 0 0 var(--ou-space-2); font: var(--ou-text-body-s); }
+
+      /* Loading / error поверх стейджа (faux-chrome, не DS-overlay). */
+      .wf-pl-loading, .wf-pl-errwrap { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: var(--ou-space-3); background: var(--ou-bg-page); padding: var(--ou-space-6); text-align: center; }
+      .wf-pl-loading p { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+      .wf-pl-loading .ou-progress { max-width: 280px; }
+      .wf-player.is-building .wf-pl-loading { display: flex; }
+      .wf-player.is-error .wf-pl-errwrap { display: flex; }
+      .wf-player.is-building .wf-frame, .wf-player.is-error .wf-frame { visibility: hidden; }
+
+      /* Инспектор: сворачивающийся сайдбар. */
+      /* Широкий инспектор — это полноэкранный инструмент, а не узкая колонка: вкладки помещаются
+         текстом, таблицы дышат. ~34% ширины окна, не меньше 420px. */
+      .wf-inspector { position: relative; flex: 0 0 34%; min-width: 420px; border-left: var(--wf-border-w) solid var(--ou-border-soft); display: flex; flex-direction: column; min-height: 0; background: var(--ou-bg-elevated); }
+      /* Круглый тоггл сворачивания в верхней части сайдбара, на его левом крае (DS ou-fab--neutral —
+         тон сайдбара), выступает на половину диаметра (20px = половина ou-fab--s) за границу.
+         Позиционируем через margin, НЕ через transform: иначе ховер-лифт FAB (translateY) перебивает
+         центрирование и кнопка «прыгает». Лифт на ховере гасим — тоггл закреплён, не парит. */
+      .wf-ins-toggle { position: absolute; top: var(--ou-space-2); left: 0; margin-left: -20px; z-index: 5; }
+      .wf-inspector .wf-ins-toggle.ou-fab:hover, .wf-inspector .wf-ins-toggle.ou-fab:active { transform: none; }
+      .wf-player.is-collapsed .wf-inspector { width: 48px; flex: 0 0 48px; min-width: 0; }
+      .wf-player.is-collapsed .wf-ins-main { display: none; }
+      .wf-player.is-collapsed .wf-ins-toggle svg { transform: rotate(180deg); }
+      .wf-ins-main { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+      .wf-ins-head { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3) 0; }
+      .wf-ins-head .ou-tabs { flex: 1; min-width: 0; }
+      /* Широкий сайдбар: вкладки в один ряд С ПОДПИСЯМИ (текст), без переноса.
+         Иконки в табах убраны — подписи самодостаточны. Если в текущую ширину
+         все вкладки не влезают — лента прокручивается стрелками ‹/›. */
+      .wf-inspector .ou-tabs__list { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; scroll-behavior: smooth; }
+      .wf-inspector .ou-tabs__list::-webkit-scrollbar { display: none; }
+      .wf-inspector .ou-tabs__tab { flex: 0 0 auto; }
+      .wf-inspector .ou-tabs__icon { display: none; }
+      .wf-tabscroll { flex: 0 0 auto; }
+      .wf-tabscroll[hidden] { display: none; }
+      .wf-tabscroll:disabled { opacity: .4; cursor: default; }
+      .wf-ins-body { flex: 1; min-height: 0; overflow: auto; padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-5); }
+      .wf-ins-panel { display: none; }
+      .wf-ins-panel.is-active { display: block; }
+      .wf-ins-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
+      .wf-ins-toolbar .spacer { flex: 1; }
+      .wf-ins-h { font: var(--ou-text-body-s); font-weight: 600; margin: var(--ou-space-3) 0 var(--ou-space-1); display: flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-ins-h:first-child { margin-top: 0; }
+      .wf-contrib { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      .wf-contrib.neg { color: var(--ou-error-default); }
+      /* «Цена ответа» в Протоколе: способ оценки (веса опций / тиры) + как сложился балл. */
+      .wf-price { font: var(--ou-text-caption); color: var(--ou-accent-default); }
+      .wf-kv { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+      .wf-sum { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--ou-space-2); }
+      /* wireframe-only: closed DS Select shows only its trigger (menu is JS-toggled) */
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      /* wireframe-only: wf-utils.css skins a NATIVE <select.ou-select> (border/bg/padding);
+         the DS Select is a div.ou-select with a .ou-select__trigger child, so that skin
+         doubles the trigger's own border. Neutralize the outer box on DS instances (in
+         production wf-utils is not loaded, so there is no collision). */
+      .ou-select:has(.ou-select__trigger) { padding: 0; border: 0; border-radius: 0; background: transparent; cursor: default; }
+      .wf-qico { color: var(--ou-fg-muted); vertical-align: middle; }
+      /* Длинный текст вопроса переносится; ячейки таблиц инспектора выравниваем ПО ВЕРХУ.
+         В «Протоколе» колонки «Вердикт»/«Балл» держим в одну строку. */
+      .wf-ins-body .tb-table td { vertical-align: top; }
+      .wf-ins-panel[data-panel="protocol"] .tb-table td:nth-child(n+2) { white-space: nowrap; }
+      .wf-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-3); margin-bottom: var(--ou-space-3); }
+      /* KPI-боксы заменены на DS-компонент ou-kpi (wf-stat-grid — только сетка-раскладка). */
+      /* gate-skip-end */
+    </style>
+
+    <style data-wf-template-overrides>
+      :root { --wf-nav-offset: 92px; }
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-stage { padding: var(--wf-nav-offset) var(--ou-space-6) var(--ou-space-10); }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: 0 var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960, 960px); margin: 0 auto; }
+      /* Модал внутри состояния: под навбаром, скролл только в body. */
+      .wf-state > .ou-modal-root { top: var(--wf-nav-offset); place-items: start center; }
+      .wf-state > .ou-modal-root .ou-modal { max-height: calc(100vh - var(--wf-nav-offset) - var(--ou-space-8)); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3" /></symbol>
+      <symbol id="i-bug-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.765 21.522a.5.5 0 0 1-.765-.424v-8.196a.5.5 0 0 1 .765-.424l5.878 3.674a1 1 0 0 1 0 1.696z"/><path d="M14.12 3.88 16 2"/><path d="M18 11a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v3a6.1 6.1 0 0 0 2 4.5"/><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"/><path d="M3 21c0-2.1 1.7-3.9 3.8-4"/><path d="M6 13H2"/><path d="M6.53 9C4.6 8.8 3 7.1 3 5"/><path d="m8 2 1.88 1.88"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /><path d="M3 21v-5h5" /></symbol>
+      <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></symbol>
+      <symbol id="i-bar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><rect x="7" y="11" width="3" height="6" /><rect x="12" y="7" width="3" height="10" /><rect x="17" y="13" width="3" height="4" /></symbol>
+      <symbol id="i-chevrons-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 17 5-5-5-5" /><path d="m13 17 5-5-5-5" /></symbol>
+      <symbol id="i-chevrons-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" /></symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></symbol>
+      <symbol id="i-hash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9" /><line x1="4" y1="15" x2="20" y2="15" /><line x1="10" y1="3" x2="8" y2="21" /><line x1="16" y1="3" x2="14" y2="21" /></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></symbol>
+      <symbol id="i-exchange" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 3 4 4-4 4" /><path d="M21 7H3" /><path d="m7 21-4-4 4-4" /><path d="M3 17h18" /></symbol>
+      <symbol id="i-braces" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1" /><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1" /></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-grip" viewBox="0 0 20 20" fill="currentColor"><circle cx="7" cy="5" r="1.4" /><circle cx="13" cy="5" r="1.4" /><circle cx="7" cy="10" r="1.4" /><circle cx="13" cy="10" r="1.4" /><circle cx="7" cy="15" r="1.4" /><circle cx="13" cy="15" r="1.4" /></symbol>
+      <symbol id="i-burger" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.99524H17.5" /><path d="M14.1667 9.9952H2.5" /><path d="M2.5 14.9951H10.8333" /></symbol>
+      <symbol id="i-q-single" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="1" fill="currentColor" /></symbol>
+      <symbol id="i-q-multiple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="m9 12 2 2 4-4" /></symbol>
+      <symbol id="i-q-matching" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3" /><path d="m2 22 3-3" /><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z" /><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z" /></symbol>
+      <symbol id="i-q-ranking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11" /><path d="M10 12h11" /><path d="M10 18h11" /><path d="M4 6h1v4" /><path d="M4 10h2" /><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Отладка теста:</span>
+      <button type="button" class="active" onclick="showState(this, 'run')">прогон · Протокол</button>
+      <button type="button" onclick="showState(this, 'draw')">Выдача</button>
+      <button type="button" onclick="showState(this, 'score')">Результаты</button>
+      <button type="button" onclick="showState(this, 'lms')">LMS-журнал</button>
+      <button type="button" onclick="showState(this, 'section')">по темам</button>
+      <button type="button" onclick="showState(this, 'adaptive')">адаптив</button>
+      <button type="button" onclick="showState(this, 'manytopics')">много тем</button>
+      <button type="button" onclick="showState(this, 'reference')">эталон</button>
+      <button type="button" onclick="showState(this, 'collapsed')">сайдбар свёрнут</button>
+      <button type="button" onclick="showState(this, 'building')">сборка</button>
+      <button type="button" onclick="showState(this, 'error')">ошибка сборки</button>
+      <button type="button" onclick="showState(this, 'formula')">ошибка формулы</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="approved/prd7-tests-list.html">&harr; Список тестов</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ ОКНО ПЛЕЕРА ░░░ -->
+      <div class="wf-player" id="wf-player">
+        <!-- ── Тулбар действий ── -->
+        <header class="wf-pl-toolbar">
+          <span class="wf-pl-title">
+            <svg width="18" height="18"><use href="#i-bug-play" /></svg>
+            <b>Отладка теста</b>
+            <span class="wf-pl-sub">Сертификационный тест для руководителей · живой черновик</span>
+            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="О прогоне отладки" title="Отладочный прогон: НЕ записывается (нет попыток/телеметрии) и НЕ заменяет приёмку в WebTutor (нет SN-секвенсирования, cross-attempt-стора, реального retake-gate). Версия — живой черновик. Шаблон оформления: rtk-storyline."><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-info" /></svg></span></button>
+          </span>
+          <span class="spacer"></span>
+          <button class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-refresh" /></svg></span><span>Пересобрать</span></button>
+          <button class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-reset" /></svg></span><span>Сброс</span></button>
+          <span class="wf-nav-sep"></span>
+          <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть окно плеера" title="Закрыть окно плеера"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+        </header>
+
+        <div class="wf-pl-body">
+          <div class="wf-pl-stage">
+        <div class="wf-statusbar" id="wf-statusbar">
+          <div class="wf-stat-left">
+          <div class="wf-stat-cell" data-progress="flat">
+            <span class="wf-stat-lbl">Прогресс</span>
+            <span class="wf-stat-val">
+              <span class="wf-stat-num">16 / 16</span>
+              <span class="wf-pbar"><span class="ou-progress ou-progress--xs ou-progress--success"><span class="ou-progress__track"><span class="ou-progress__fill" style="width:100%"></span></span></span></span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Тема: Финансы</span>
+            </span>
+          </div>
+          <div class="wf-stat-cell" data-progress="section" hidden>
+            <span class="wf-stat-lbl">Прогресс · разделы</span>
+            <span class="wf-stat-val">
+              <span class="ou-tag ou-tag--error">О компании — 38% ✗</span>
+              <span class="ou-tag ou-tag--success">Финансы — 72% ✓</span>
+              <span class="ou-tag ou-tag--accent ou-tag--outline">Управление — идёт</span>
+            </span>
+          </div>
+          <div class="wf-stat-cell" data-progress="adaptive" hidden>
+            <span class="wf-stat-lbl">Прогресс · адаптив — уровни по темам</span>
+            <span class="wf-stat-val">
+              <span class="ou-tag ou-tag--success">Стратегия — высокий ✓</span>
+              <span class="ou-tag ou-tag--success">Продукты — средний ✓</span>
+              <span class="ou-tag ou-tag--accent ou-tag--outline">Финансовые риски — средний ↑ · идёт</span>
+            </span>
+          </div>
+          <div class="wf-stat-cell" data-progress="manytopics" hidden>
+            <span class="wf-stat-lbl">Прогресс · адаптив — уровни по темам (тема 7 из 12 · подтверждено 6 · осталось 5)</span>
+            <span class="wf-stat-val">
+              <span class="ou-tag ou-tag--success">Стратегия — высокий ✓</span>
+              <span class="ou-tag ou-tag--success">Продукты — средний ✓</span>
+              <span class="ou-tag ou-tag--success wf-extra" hidden>Корп. культура — высокий ✓</span>
+              <span class="ou-tag ou-tag--success wf-extra" hidden>Процессы — низкий ✓</span>
+              <span class="ou-tag ou-tag--success wf-extra" hidden>Клиенты — средний ✓</span>
+              <span class="ou-tag ou-tag--success wf-extra" hidden>Аналитика — высокий ✓</span>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--xs wf-expander" onclick="toggleTopics(this)"><span>+4 подтверждено ▾</span></button>
+              <span class="ou-tag ou-tag--accent ou-tag--outline">Финансовые риски — средний ↑ · идёт</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline wf-extra" hidden>Право — не начато</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline wf-extra" hidden>Безопасность — не начато</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline wf-extra" hidden>Закупки — не начато</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline wf-extra" hidden>Логистика — не начато</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline wf-extra" hidden>Персонал — не начато</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--s wf-collapsed-only">осталось 5</span>
+            </span>
+          </div>
+          </div>
+          <div class="wf-stat-right">
+          <div class="wf-stat-cell">
+            <span class="wf-stat-lbl">Оценка</span>
+            <span class="wf-stat-val">
+              <span class="wf-stat-num">9 из 16</span>
+              <span class="wf-stat-sub">56%</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--s">порог 70%</span>
+              <span class="ou-tag ou-tag--error">Не пройден</span>
+            </span>
+          </div>
+          <span class="wf-nav-sep" data-alarm hidden></span>
+          <div class="wf-stat-cell" data-alarm hidden>
+            <span class="wf-stat-lbl">Ошибка расчёта</span>
+            <span class="wf-stat-val">
+              <span class="ou-tag ou-tag--error">Формула шкалы «Риск» не вычислена</span>
+            </span>
+          </div>
+          </div>
+        </div>
+            <div class="wf-stage-canvas">
+            <div class="wf-frame">
+              <div class="wf-frame-ribbon">
+                <span>SCORM-пакет · шаблон «rtk-storyline»</span>
+                <label class="wf-ref-toggle" title="Подсветить правильные ответы (debug; на баллы не влияет)"><span class="wf-ref-toggle__lbl">Эталон</span><span class="ou-switch ou-switch--s"><input type="checkbox" class="ou-switch__input" aria-label="Показать эталон" onclick="toggleReference()"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span></label>
+              </div>
+              <div class="wf-frame-screen">
+                <div data-stage="live">
+                  <h4>Финансы · вопрос 16 из 16</h4>
+                  <p>Какой показатель отражает рентабельность инвестированного капитала?</p>
+                  <label class="q-opt is-sel"><input type="radio" checked><span>ROIC</span></label>
+                  <label class="q-opt"><input type="radio"><span>EBITDA margin</span></label>
+                  <label class="q-opt"><input type="radio"><span>Net Debt / EBITDA</span></label>
+                  <div class="wf-faux-foot"><span>Прогресс 16/16</span><span>Завершить тест &rsaquo;</span></div>
+                </div>
+                <div data-stage="reference" hidden>
+                  <div class="wf-ref-q">
+                    <div class="wf-ref-type">Одиночный выбор</div>
+                    <p>Какой показатель отражает рентабельность инвестированного капитала?</p>
+                    <div class="wf-q-row"><span class="wf-q-gutter"><span class="wf-mark wf-mark--ok"><svg width="14" height="14"><use href="#i-check" /></svg></span></span><label class="q-opt is-sel"><input type="radio" checked><span>ROIC</span></label></div>
+                    <div class="wf-q-row"><span class="wf-q-gutter"></span><label class="q-opt"><input type="radio"><span>EBITDA margin</span></label></div>
+                    <div class="wf-q-row"><span class="wf-q-gutter"></span><label class="q-opt"><input type="radio"><span>Net Debt / EBITDA</span></label></div>
+                  </div>
+                  <div class="wf-ref-q">
+                    <div class="wf-ref-type">Множественный выбор</div>
+                    <p>Какие домены относятся к кластеру «Кибербезопасность»?</p>
+                    <div class="wf-q-row"><span class="wf-q-gutter"><span class="wf-mark wf-mark--ok"><svg width="14" height="14"><use href="#i-check" /></svg></span></span><label class="q-opt is-sel"><input type="checkbox" checked><span>SOC-мониторинг</span></label></div>
+                    <div class="wf-q-row"><span class="wf-q-gutter"><span class="wf-mark wf-mark--ok"><svg width="14" height="14"><use href="#i-check" /></svg></span></span><label class="q-opt is-sel"><input type="checkbox" checked><span>Защита периметра</span></label></div>
+                    <div class="wf-q-row"><span class="wf-q-gutter"></span><label class="q-opt"><input type="checkbox"><span>VPN для физлиц</span></label></div>
+                  </div>
+                  <div class="wf-ref-q">
+                    <div class="wf-ref-type">Ранжирование</div>
+                    <p>Расставьте этапы запуска продукта по порядку.</p>
+                    <div class="wf-q-row"><span class="wf-q-gutter"><span class="wf-mark wf-mark--num">2</span></span><div class="q-rank"><span class="q-grip"><svg width="16" height="16"><use href="#i-burger" /></svg></span><span>Определить целевые метрики</span></div></div>
+                    <div class="wf-q-row"><span class="wf-q-gutter"><span class="wf-mark wf-mark--num">1</span></span><div class="q-rank"><span class="q-grip"><svg width="16" height="16"><use href="#i-burger" /></svg></span><span>Собрать данные рынка</span></div></div>
+                    <div class="wf-q-row"><span class="wf-q-gutter"><span class="wf-mark wf-mark--num">3</span></span><div class="q-rank"><span class="q-grip"><svg width="16" height="16"><use href="#i-burger" /></svg></span><span>Запустить пилот</span></div></div>
+                  </div>
+                  <div class="wf-ref-q">
+                    <div class="wf-ref-type">Сопоставление</div>
+                    <p>Сопоставьте показатель с его определением.</p>
+                    <div class="q-mboard">
+                      <div class="q-mline is-joined"><div class="q-mtile q-mleft"><span class="q-grip"><svg width="16" height="16"><use href="#i-grip" /></svg></span><span>Рентабельность капитала</span><span class="q-key">A</span></div><div class="q-mgap"></div><div class="q-mtile q-mright"><span>ROIC</span><span class="q-key">A</span></div></div>
+                      <div class="q-mline"><div class="q-mtile q-mleft"><span class="q-grip"><svg width="16" height="16"><use href="#i-grip" /></svg></span><span>Операционная маржа</span><span class="q-key">B</span></div><div class="q-mgap"></div><div class="q-mtile q-mright"><span>EBITDA / Выручка</span><span class="q-key">B</span></div></div>
+                      <div class="q-mline"><div class="q-mtile q-mleft"><span class="q-grip"><svg width="16" height="16"><use href="#i-grip" /></svg></span><span>Долговая нагрузка</span><span class="q-key">C</span></div><div class="q-mgap"></div><div class="q-mtile q-mright"><span>Net Debt / EBITDA</span><span class="q-key">C</span></div></div>
+                      <div class="q-mline"><div class="q-mtile q-mleft"><span class="q-grip"><svg width="16" height="16"><use href="#i-grip" /></svg></span><span>Ликвидность</span><span class="q-key">D</span></div><div class="q-mgap"></div><div class="q-mtile q-mright"><span>Current Ratio</span><span class="q-key">D</span></div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="wf-pl-loading">
+              <div class="ou-progress ou-progress--m ou-progress--indeterminate"><div class="ou-progress__track"><div class="ou-progress__fill"></div></div></div>
+              <p>Собираем пакет из живого состояния теста…</p>
+            </div>
+            <div class="wf-pl-errwrap">
+              <div class="ou-banner ou-banner--error" role="alert" style="max-width:480px">
+                <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle" /></svg></div>
+                <div class="ou-banner__body">
+                  <div class="ou-banner__title">Не удалось собрать пакет</div>
+                  <div class="ou-banner__desc">Тема «Финансы»: «Вариант 2» пуст (нужно ≥ 1 вопроса). Исправьте состав вариантов в редакторе и пересоберите.</div>
+                  <div style="margin-top:8px"><button class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть тему в редакторе</span></button></div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+
+          <aside class="wf-inspector" id="wf-inspector">
+            <button class="wf-ins-toggle ou-fab ou-fab--s ou-fab--neutral" aria-label="Свернуть или развернуть инспектор" title="Свернуть или развернуть инспектор" onclick="toggleInspector()"><svg width="16" height="16"><use href="#i-chevron" /></svg></button>
+            <div class="wf-ins-main">
+              <div class="wf-ins-head">
+                <button type="button" class="wf-tabscroll ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Прокрутить вкладки влево" title="Прокрутить вкладки влево" onclick="scrollTabs(-1)" hidden><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-chevron-left" /></svg></span></button>
+                <div class="ou-tabs ou-tabs--underline ou-tabs--s">
+                  <div class="ou-tabs__list" role="tablist" aria-label="Инспектор" id="wf-tablist">
+                    <button type="button" class="ou-tabs__tab is-active" data-tab="score" role="tab" aria-selected="true" title="Результаты" aria-label="Результаты" onclick="selectTab('score')"><span class="ou-tabs__icon"><svg width="16" height="16"><use href="#i-target" /></svg></span><span class="ou-tabs__label">Результаты</span></button>
+                    <button type="button" class="ou-tabs__tab" data-tab="protocol" role="tab" aria-selected="false" title="Протокол" aria-label="Протокол" onclick="selectTab('protocol')"><span class="ou-tabs__icon"><svg width="16" height="16"><use href="#i-list" /></svg></span><span class="ou-tabs__label">Протокол</span></button>
+                    <button type="button" class="ou-tabs__tab" data-tab="draw" role="tab" aria-selected="false" title="Выдача" aria-label="Выдача" onclick="selectTab('draw')"><span class="ou-tabs__icon"><svg width="16" height="16"><use href="#i-layers" /></svg></span><span class="ou-tabs__label">Выдача</span></button>
+                    <button type="button" class="ou-tabs__tab" data-tab="scales" role="tab" aria-selected="false" title="Шкалы" aria-label="Шкалы" onclick="selectTab('scales')"><span class="ou-tabs__icon"><svg width="16" height="16"><use href="#i-activity" /></svg></span><span class="ou-tabs__label">Шкалы</span></button>
+                    <button type="button" class="ou-tabs__tab" data-tab="results" role="tab" aria-selected="false" title="Показатели" aria-label="Показатели" onclick="selectTab('results')"><span class="ou-tabs__icon"><svg width="16" height="16"><use href="#i-hash" /></svg></span><span class="ou-tabs__label">Показатели</span></button>
+                    <button type="button" class="ou-tabs__tab" data-tab="state" role="tab" aria-selected="false" title="Состояние" aria-label="Состояние" onclick="selectTab('state')"><span class="ou-tabs__icon"><svg width="16" height="16"><use href="#i-braces" /></svg></span><span class="ou-tabs__label">Состояние</span></button>
+                    <button type="button" class="ou-tabs__tab" data-tab="lms" role="tab" aria-selected="false" title="LMS-журнал" aria-label="LMS-журнал" onclick="selectTab('lms')"><span class="ou-tabs__icon"><svg width="16" height="16"><use href="#i-exchange" /></svg></span><span class="ou-tabs__label">LMS</span></button>
+                  </div>
+                </div>
+                <button type="button" class="wf-tabscroll ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Прокрутить вкладки вправо" title="Прокрутить вкладки вправо" onclick="scrollTabs(1)"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-chevron" /></svg></span></button>
+              </div>
+
+              <div class="wf-ins-body">
+                <!-- ════ Протокол ════ -->
+                <div class="wf-ins-panel" data-panel="protocol">
+                  <div class="wf-ins-toolbar">
+                    <span class="spacer"></span>
+                    <button class="ou-btn ou-btn--ghost ou-btn--xs"><span class="ou-btn__ico"><svg width="13" height="13"><use href="#i-download" /></svg></span><span>Протокол в CSV</span></button>
+                  </div>
+                  <table class="tb-table">
+                    <thead><tr><th>Вопрос</th><th>Вердикт</th><th>Балл</th></tr></thead>
+                    <tbody>
+                      <tr><td><svg class="wf-qico" width="14" height="14"><use href="#i-q-single" /></svg> Согласно «Стратегии-2030», какова целевая доля «Ростелекома» на мобильном рынке B2C к 2030 году и за счёт каких драйверов её планируется достичь?<br><span class="wf-contrib">шкала Стратегия +1</span><br><span class="wf-price">цена: веса опций · вес выбранного = 1.0</span></td><td><span class="ou-tag ou-tag--success">верно</span></td><td>1 / 1</td></tr>
+                      <tr><td><svg class="wf-qico" width="14" height="14"><use href="#i-q-multiple" /></svg> Кластер «Кибербезопасность»<br><span class="wf-contrib">шкала Продукты +0.7</span><br><span class="wf-price">цена: тиры · c=2, x=1 → 0.67</span></td><td><span class="ou-tag ou-tag--warning">частично 67%</span></td><td>0.67 / 1</td></tr>
+                      <tr><td><svg class="wf-qico" width="14" height="14"><use href="#i-q-matching" /></svg> Направления ↔ показатели<br><span class="wf-contrib">шкала Стратегия +0</span><br><span class="wf-price">цена: тиры · 0 пар верно → 0</span></td><td><span class="ou-tag ou-tag--error">неверно</span></td><td>0 / 1</td></tr>
+                      <tr><td><svg class="wf-qico" width="14" height="14"><use href="#i-q-ranking" /></svg> Приоритеты внедрения<br><span class="wf-contrib">шкала Культура +1</span><br><span class="wf-price">цена: тиры · порядок верный → 1.0</span></td><td><span class="ou-tag ou-tag--success">верно</span></td><td>1 / 1</td></tr>
+                      <tr><td><svg class="wf-qico" width="14" height="14"><use href="#i-q-single" /></svg> Показатель ROIC<br><span class="wf-price">цена: веса опций · нет ответа → 0</span></td><td><span class="ou-tag ou-tag--neutral">нет ответа</span></td><td>0 / 1</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-sum"><span>Показаны 5 из 16 · итог: <strong>9 из 16</strong> · 56%</span><span class="ou-tag ou-tag--error">Не пройден</span></div>
+                </div>
+
+                <!-- ════ Выдача ════ -->
+                <div class="wf-ins-panel" data-panel="draw">
+                  <div data-draw="standard">
+                  <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-list" /></svg> Тема «О компании» — режим вариантов</div>
+                  <div class="wf-sum" style="margin-top:0;justify-content:flex-start;gap:var(--ou-space-2)">
+                    <span>Выдать вариант</span>
+                    <div class="ou-select ou-field--s" data-ou-options="Случайно (по умолчанию)|Вариант 1|Вариант 2|Вариант 3"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Вариант 2</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  </div>
+                  <div class="wf-sum" style="margin-top:0"><span>Доступно ДО старта прогона (варианты фиксируются в момент старта); после «Начать» селекты недоступны — вернуть выбор можно «Сбросом». «Случайно» — обычная случайная выдача.</span></div>
+                  <div class="wf-sum" style="margin-top:0"><span>Выпал <strong>Вариант 2</strong> из 3 · выдан целиком · 9 вопросов из банка 41</span></div>
+                  <table class="tb-table">
+                    <thead><tr><th>Подтема (тег)</th><th>Вопросов</th></tr></thead>
+                    <tbody>
+                      <tr><td>Стратегия</td><td>3</td></tr>
+                      <tr><td>Продукты</td><td>3</td></tr>
+                      <tr><td>Культура</td><td>3</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-sum" style="margin-top:0"><span>По типам: одиночный 5 · множественный 2 · ранжирование 2</span></div>
+                  <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-list" /></svg> Тема «Продукты и сервисы» — режим вариантов</div>
+                  <div class="wf-sum" style="margin-top:0;justify-content:flex-start;gap:var(--ou-space-2)">
+                    <span>Выдать вариант</span>
+                    <div class="ou-select ou-field--s" data-ou-options="Случайно (по умолчанию)|Вариант 1|Вариант 2|Вариант 3|Вариант 4"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Случайно (по умолчанию)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                  </div>
+                  <div class="wf-sum" style="margin-top:0"><span>Выпал <strong>Вариант 4</strong> из 4 · выдан целиком · 8 вопросов из банка 30</span></div>
+                  <table class="tb-table">
+                    <thead><tr><th>Подтема (тег)</th><th>Вопросов</th></tr></thead>
+                    <tbody>
+                      <tr><td>Каталог</td><td>3</td></tr>
+                      <tr><td>Тарифы</td><td>3</td></tr>
+                      <tr><td>Кейсы</td><td>2</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-sum" style="margin-top:0"><span>По типам: одиночный 4 · множественный 3 · сопоставление 1</span></div>
+                  <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-layers" /></svg> Тема «Финансы» — тег-квоты (план vs факт)</div>
+                  <table class="tb-table">
+                    <thead><tr><th>Подтема (тег)</th><th>План</th><th>Факт</th></tr></thead>
+                    <tbody>
+                      <tr><td>Стратегия</td><td>2</td><td><span class="ou-tag ou-tag--success">2</span></td></tr>
+                      <tr><td>Продукты</td><td>3</td><td><span class="ou-tag ou-tag--success">3</span></td></tr>
+                      <tr><td>Культура</td><td>2</td><td><span class="ou-tag ou-tag--success">2</span></td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-sum" style="margin-top:0"><span>7 вопросов из банка 28 · по типам: одиночный 4 · сопоставление 2 · множественный 1</span></div>
+                  <div class="wf-sum"><span>Итого выдано <strong>24</strong> (О компании 9 · Продукты и сервисы 8 · Финансы 7)</span></div>
+                  </div>
+                  <div data-draw="adaptive" hidden>
+                    <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-layers" /></svg> Тема «Стратегия» — подтверждён уровень <strong>высокий</strong></div>
+                    <table class="tb-table">
+                      <thead><tr><th>Шаг</th><th>Уровень</th><th>Ответ</th><th>Переход</th></tr></thead>
+                      <tbody>
+                        <tr><td>1</td><td>средний</td><td>верно</td><td>↑ повышение</td></tr>
+                        <tr><td>2</td><td>высокий</td><td>верно</td><td>= закрепление</td></tr>
+                        <tr><td>3</td><td>высокий</td><td>верно</td><td><span class="ou-tag ou-tag--success">подтверждён: высокий ✓</span></td></tr>
+                      </tbody>
+                    </table>
+                    <div class="wf-ins-h"><svg width="14" height="14"><use href="#i-layers" /></svg> Тема «Финансовые риски» — идёт (текущий: средний ↑)</div>
+                    <table class="tb-table">
+                      <thead><tr><th>Шаг</th><th>Уровень</th><th>Ответ</th><th>Переход</th></tr></thead>
+                      <tbody>
+                        <tr><td>1</td><td>средний</td><td>неверно</td><td>↓ понижение</td></tr>
+                        <tr><td>2</td><td>низкий</td><td>верно</td><td>↑ повышение</td></tr>
+                        <tr><td>3</td><td>средний</td><td>—</td><td><span class="ou-tag ou-tag--neutral ou-tag--s">идёт</span></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- ════ Шкалы ════ -->
+                <div class="wf-ins-panel" data-panel="scales">
+                  <table class="tb-table">
+                    <thead><tr><th>Шкала</th><th class="tb-table__cell--nowrap">Значение</th><th>%</th><th>Уровень</th></tr></thead>
+                    <tbody>
+                      <tr><td>Стратегия</td><td>12 из 15</td><td>80%</td><td><span class="ou-tag ou-tag--success">высокий</span></td></tr>
+                      <tr><td>Продукты</td><td>7 из 12</td><td>58%</td><td><span class="ou-tag ou-tag--warning">средний</span></td></tr>
+                      <tr><td>Культура</td><td>9</td><td>—</td><td><span class="ou-tag ou-tag--success">высокий</span></td></tr>
+                      <tr><td>Риск</td><td>3 из 8</td><td>38%</td><td><span class="ou-tag ou-tag--error">низкий</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- ════ Показатели ════ -->
+                <div class="wf-ins-panel" data-panel="results">
+                  <table class="tb-table">
+                    <thead><tr><th>Имя</th><th>Значение</th></tr></thead>
+                    <tbody>
+                      <tr><td>Допуск</td><td><span class="ou-tag ou-tag--error">нет</span></td></tr>
+                      <tr><td>Индекс готовности</td><td>0.56</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <!-- ════ Результаты ════ -->
+                <div class="wf-ins-panel is-active" data-panel="score">
+                  <div data-score="standard">
+                  <div class="wf-stat-grid">
+                    <div class="ou-kpi"><div class="ou-kpi__head">Баллы</div><div class="ou-kpi__value">9 из 16</div></div>
+                    <div class="ou-kpi"><div class="ou-kpi__head">Процент</div><div class="ou-kpi__value">56%</div></div>
+                    <div class="ou-kpi"><div class="ou-kpi__head">Порог</div><div class="ou-kpi__value">70%</div></div>
+                    <div class="ou-kpi"><div class="ou-kpi__head">Результат</div><div class="ou-kpi__value"><span class="ou-tag ou-tag--error">Не пройден</span></div></div>
+                  </div>
+                  <div class="ou-progress ou-progress--m ou-progress--error" style="margin-bottom:var(--ou-space-3)"><div class="ou-progress__head"><span class="ou-progress__lbl">Итог против порога</span><span class="ou-progress__val"><strong>56%</strong> / 70%</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width:56%"></div></div></div>
+                  <div class="wf-ins-h">Результаты по разделам</div>
+                  <table class="tb-table">
+                    <thead><tr><th>Раздел</th><th>Балл</th><th>%</th><th>Итог</th></tr></thead>
+                    <tbody>
+                      <tr><td>О компании</td><td>6 / 16</td><td>38%</td><td><span class="ou-tag ou-tag--error">не пройден</span></td></tr>
+                      <tr><td>Финансы</td><td>11 / 15</td><td>72%</td><td><span class="ou-tag ou-tag--success">пройден</span></td></tr>
+                      <tr><td>Управление</td><td>—</td><td>—</td><td><span class="ou-tag ou-tag--neutral ou-tag--s">идёт</span></td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-sum"><span>прохождение: <strong>завершено</strong> · итог: <strong>не пройден</strong></span></div>
+                  </div>
+                  <div data-score="adaptive" hidden>
+                    <div class="wf-stat-grid">
+                      <div class="ou-kpi"><div class="ou-kpi__head">Подтверждено тем</div><div class="ou-kpi__value">2 из 3</div></div>
+                      <div class="ou-kpi"><div class="ou-kpi__head">Результат</div><div class="ou-kpi__value"><span class="ou-tag ou-tag--warning">идёт</span></div></div>
+                    </div>
+                    <div class="wf-ins-h">Подтверждённые уровни по темам</div>
+                    <table class="tb-table">
+                      <thead><tr><th>Тема</th><th>Уровень</th><th>Статус</th></tr></thead>
+                      <tbody>
+                        <tr><td>Стратегия</td><td>высокий</td><td><span class="ou-tag ou-tag--success">подтверждён ✓</span></td></tr>
+                        <tr><td>Продукты</td><td>средний</td><td><span class="ou-tag ou-tag--success">подтверждён ✓</span></td></tr>
+                        <tr><td>Финансовые риски</td><td>средний ↑</td><td><span class="ou-tag ou-tag--accent ou-tag--outline">идёт</span></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- ════ LMS-журнал ════ -->
+                <div class="wf-ins-panel" data-panel="lms">
+                  <table class="tb-table">
+                    <thead><tr><th>Вызов</th><th>Ключ</th><th>Значение</th></tr></thead>
+                    <tbody>
+                      <tr><td><span class="ou-tag ou-tag--neutral ou-tag--outline">Init</span></td><td colspan="2">Initialize("") → "true"</td></tr>
+                      <tr><td>Set</td><td>completion_status</td><td><code class="ou-kbd">completed</code></td></tr>
+                      <tr><td>Set</td><td>success_status</td><td><code class="ou-kbd">failed</code></td></tr>
+                      <tr><td>Set</td><td>score.scaled</td><td><code class="ou-kbd">0.56</code></td></tr>
+                      <tr><td>Set</td><td>score.raw</td><td><code class="ou-kbd">9</code></td></tr>
+                      <tr><td>Set</td><td>interactions.4 (scale_Риск)</td><td><code class="ou-kbd">0.38</code></td></tr>
+                      <tr><td>Set</td><td>suspend_data</td><td><button type="button" class="wf-disclosure" aria-expanded="false" onclick="togglePayload(this)"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron" /></svg>1.2 КБ</button></td></tr>
+                      <tr class="wf-payload-row" hidden><td colspan="3"><div class="wf-rawlog">{
+  "v": 2,
+  "idx": 16,
+  "answers": {
+    "q_strat_12": "ROIC",
+    "q_prod_07": ["A", "C"],
+    "q_cult_03": ["B"],
+    "q_proc_09": "2",
+    "q_risk_05": ["A", "D"],
+    "q_fin_16": "ROIC"
+  },
+  "scales": { "Стратегия": 7, "Продукты": 4.7, "Риск": 0.38 },
+  "sections": [
+    { "id": "about", "formId": "f-2" },
+    { "id": "finance", "quota": [4, 5, 7] }
+  ],
+  "passRule": { "threshold": 70, "passed": false },
+  "completed": true
+}</div></td></tr>
+                      <tr><td><span class="ou-tag ou-tag--neutral ou-tag--outline">Commit</span></td><td colspan="2">Commit("") → "true"</td></tr>
+                    </tbody>
+                  </table>
+                  <details style="margin-top:var(--ou-space-3)"><summary class="wf-disclosure"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron" /></svg>Сырые вызовы RTE (GetValue/SetValue)</summary><div class="wf-rawlog">Initialize("") → "true"
+GetValue("cmi.completion_status") → "incomplete"
+GetValue("cmi.entry") → "ab-initio"
+SetValue("cmi.completion_status", "completed") → "true"
+SetValue("cmi.success_status", "failed") → "true"
+SetValue("cmi.score.scaled", "0.56") → "true"
+SetValue("cmi.score.raw", "9") → "true"
+SetValue("cmi.interactions.4.id", "scale_Риск") → "true"
+SetValue("cmi.interactions.4.learner_response", "0.38") → "true"
+Commit("") → "true"</div></details>
+                </div>
+
+                <!-- ════ Состояние ════ -->
+                <div class="wf-ins-panel" data-panel="state">
+                  <div class="ou-tabs ou-tabs--segment ou-tabs--s" style="margin-bottom:var(--ou-space-3)">
+                    <div class="ou-tabs__list" role="tablist">
+                      <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">state</span></button>
+                      <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">suspend_data</span></button>
+                      <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">cmi</span></button>
+                    </div>
+                  </div>
+                  <label class="ou-field ou-field--s ou-field--full" style="margin-bottom:var(--ou-space-3)"><span class="ou-field__box"><span class="ou-field__ico"><svg width="16" height="16"><use href="#i-search" /></svg></span><input class="ou-field__input" type="text" placeholder="фильтр по дереву…" aria-label="Фильтр" /></span></label>
+                  <ul class="ou-tree ou-tree--guides ou-tree--compact" role="tree">
+                    <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle" aria-label="Развернуть"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">currentIndex</span><span class="ou-tree__meta">16</span></div></li>
+                    <li class="ou-tree__node is-open"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle" aria-expanded="true" aria-label="Свернуть"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">answers</span><span class="ou-tree__meta">15 из 16 ответов</span></div>
+                      <ul class="ou-tree__children" role="group">
+                        <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">q_strat_12</span><span class="ou-tree__meta">"ROIC"</span></div></li>
+                        <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">q_prod_07</span><span class="ou-tree__meta">["A", "C"]</span></div></li>
+                        <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">q_cult_03</span><span class="ou-tree__meta">["B"]</span></div></li>
+                        <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">q_fin_16</span><span class="ou-tree__meta">"ROIC"</span></div></li>
+                      </ul>
+                    </li>
+                    <li class="ou-tree__node is-open"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle" aria-expanded="true" aria-label="Свернуть"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">sections</span><span class="ou-tree__meta">2 темы</span></div>
+                      <ul class="ou-tree__children" role="group">
+                        <li class="ou-tree__node is-open"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle" aria-expanded="true"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">[0] О компании</span><span class="ou-tree__meta">вариант</span></div>
+                          <ul class="ou-tree__children" role="group">
+                            <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">formId</span><span class="ou-tree__meta">"f-2"</span></div></li>
+                            <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">questionIds</span><span class="ou-tree__meta">9 шт.</span></div></li>
+                          </ul>
+                        </li>
+                        <li class="ou-tree__node"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle" aria-expanded="false"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">[1] Финансы</span><span class="ou-tree__meta">квоты 4/5/7</span></div>
+                          <ul class="ou-tree__children" role="group">
+                            <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">draw</span><span class="ou-tree__meta">"quota"</span></div></li>
+                          </ul>
+                        </li>
+                      </ul>
+                    </li>
+                    <li class="ou-tree__node is-leaf"><div class="ou-tree__row"><button type="button" class="ou-tree__toggle"><svg><use href="#i-chevron" /></svg></button><span class="ou-tree__label">adaptiveState</span><span class="ou-tree__meta">null</span></div></li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <!-- ░░░ s-docs: Пояснения + DS Mapping ░░░ -->
+      <div id="wf-docs" class="wf-state">
+        <div class="wf-doc">
+          <div class="wf-notes">
+            <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+            <table>
+              <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr><td>Поверхность</td><td>отдельное окно (FR-17)</td><td>Открывается ПУНКТОМ меню действий теста (FR-01), без кнопки; не часть редактора. Доступ = edit-scope (как экспорт SCORM)</td></tr>
+                <tr><td>Сборка пакета</td><td><code>buildScormExportData</code> → <code>generateScormPackage</code></td><td>Тот же пайплайн, что production-экспорт, но ВСЕГДА из живого состояния (FR-02/03). Телеметрия выключена. Стейдж = iframe пакета с RTE-шимом</td></tr>
+                <tr><td>Применённый шаблон</td><td><code>design_settings_json.templateId</code></td><td>Прогон на реальном визуальном шаблоне теста (FR-20), не demo/default</td></tr>
+                <tr><td>Эталон (правильные ответы)</td><td>тоггл в риббоне стейджа; debug-слой; по умолчанию ВЫКЛ</td><td>Подсветка правильных ответов МЕЛКИМ маркером в левом жёлобе варианта (на подсчёт баллов НЕ влияет). Глиф по типу: ✓ — одиночный/множественный; № — правильный порядковый номер (ранжирование); буква-метка — правильный ответ (сопоставление: ответам присвоены A/B/C, у промпта — буква его ответа, без линий-связей). Цена ответа (веса опций / тиры, PRD-10) на варианте НЕ показывается — «Эталон» рисует ТОЛЬКО маркеры правильных ответов; способ оценки и как сложился балл — во вкладке «Протокол». Метка кладётся НА РЕАЛЬНЫЙ рендер варианта (шаблонные `.option` с радио/чекбоксом, `.rank-item` с грипом, `.matching`-плитки) — снаружи варианта, в жёлобе; НЕ на абстрактных плашках и НЕ через тяжёлые шаблонные `.correct-answer`/`.incorrect-answer`. «Что верно» уже есть в контексте шаблона (`correct` по варианту, настройка `showCorrectAnswers`); рисуется ЛЁГКИМ debug-слоем общего шаблона (паритет хостов)</td></tr>
+                <tr><td>Статусная панель</td><td>FR-19; методологический минимум</td><td>Только то, что методологу нужно видеть НЕПРЕРЫВНО: <strong>Прогресс</strong> (где я — иначе числа двусмысленны) · <strong>Оценка</strong> (баллы · % · порог · вердикт «Не пройден» — главный методологический итог + калибровка порога). Алярм <strong>«Ошибка расчёта»</strong> всплывает ТОЛЬКО при сбое формулы шкалы/показателя (молчаливый мусор в LMS). Видна и при свёрнутом сайдбаре. Размещение — НАД СТЕЙДЖЕМ (левая колонка, не на всю ширину): весь статус-контент левым флангом; инспектор поднят к верху окна и занимает правую колонку с самого верха</td></tr>
+                <tr><td>Что НЕ на панели (и почему)</td><td>зона ответственности vs место</td><td>Статус-LMS (completion/success/entry) — плумбинг, не зона методолога → вкладка «LMS-журнал»; вердикт прохождения уже в «Оценке». Выдача (вариант/квоты/состав) → самодостаточная вкладка «Выдача». Значения шкал/показателей → их вкладки (на панель — только алярм ошибок). Версия/дисклеймер/шаблон — не метрики → заголовок окна (подзаголовок «живой черновик» + ⓘ)</td></tr>
+                <tr><td>Инспектор</td><td>FR-18; сворачивается</td><td>7 вкладок, порядок: «Результаты» (первой, открыта по умолчанию — главный методологический итог), Протокол, Выдача, Шкалы, Показатели, Состояние, «LMS-журнал» (последней). Переиспользуются из CLI-плеера: Протокол, Шкалы, Показатели, LMS-журнал, Состояние (бывш. Watch); НОВЫЕ: «Выдача» и «Результаты». Если подписи не влезают в ширину — лента прокручивается стрелками ‹/› (присутствуют всё время переполнения, на концах гаснут — чтобы их ширина не «съедала» только что показанную вкладку; клик по полускрытой вкладке доскролливает её ЦЕЛИКОМ и приоткрывает соседнюю наполовину). Сворачивается круглым краевым тогглом (DS ou-fab) на левом крае сайдбара, центр — по линии под вкладками</td></tr>
+                <tr><td>Выдача</td><td>состав выдачи (композиция + список)</td><td>ЧТО, СКОЛЬКО и ОТКУДА выдано, по темам: механизм (выпавший вариант «Вариант N» / план-vs-факт тег-квот) + распределение по тегам-подтемам и по типам + РАСКРЫВАЮЩИЙСЯ список вопросов выдачи со статусом доставки («выдан»/«не выдан») и живым счётчиком «выдано N из M», отмечаемым ПО МЕРЕ прохождения (по `currentIndex`). Структура — по сценарию: «по темам» — иерархия (тема с резюме раскрывается в свои вопросы); flat — резюме по темам + единый раскрывающийся раздел «Вопросы» в порядке выдачи. Сырые id (`formId` — внутренний ключ ротации) не выводятся на холсте. <strong>Фиксация варианта (отладка):</strong> у КАЖДОЙ темы в режиме вариантов — свой независимый селект «Выдать вариант» («Случайно» + «Вариант 1..N», где N — число вариантов ИМЕННО этой темы), позволяющий методологу закрепить, какой вариант выдать (иначе рантайм выбирает случайно). Тем в тесте может быть сколько угодно, у каждой — своё число вариантов; темы НЕ в режиме вариантов (тег-квоты / случайная выборка / все вопросы) селекта не имеют. Селекты активны ТОЛЬКО до старта прогона (все варианты фиксируются в момент старта): после «Начать» они disabled; «Сброс» возвращает старт-экран и снова делает выбор доступным. Применяется НА СТАРТЕ прогона; смена значения перезапускает стейдж (перевыдача из уже отгруженного банка форм — без пересборки пакета). Только debug: в проде (WebTutor) хук не срабатывает, выдача остаётся случайной</td></tr>
+                <tr><td>Шкалы</td><td>computeTestScales()</td><td>Колонки: Шкала · Значение (raw) · % · Уровень. «%» показывается только для шкал с процентной нормализацией (иначе «—»); уровень — по диапазонам-бэндам на raw. Что уходит в LMS (`scale_&lt;ключ&gt; = raw` + уровень-строкой, по настройке `scormTarget`; raw, НЕ %) — НЕ здесь, а во вкладке «LMS-журнал» (без дублирования). Ошибки формул шкал — алярм статусной панели</td></tr>
+                <tr><td>Показатели</td><td>computeTestResultVariables() (result.*, PRD-2)</td><td>Колонки: Имя · Значение. Пользовательские показатели (формулы PRD-2). Публикация в LMS (`var_&lt;имя&gt;`) — НЕ здесь, а во вкладке «LMS-журнал». Ошибки формул — алярм статусной панели</td></tr>
+                <tr><td>Прогресс — режимо-зависим</td><td>состояния «по темам» / «адаптив» в навбаре</td><td>Плоский поток (linear_flat) — «вопрос i из N» + тема (разделов-результатов нет). Секционный (linear_by_topics/router) — статус пройденных РАЗДЕЛОВ: подтверждённые (% + ✓/✗) + текущий как активный хвост «идёт»; деталь — во вкладке «Результаты» (результаты по разделам). Так панель не теряет статус пройденных тем при секционной выдаче. МАСШТАБ (состояние «много тем»): свёрнуто — первые чипы + «+N подтверждено» + текущий + «осталось K». Клик по «+N» РАСКРЫВАЕТ статусы всех тем ПРЯМО В СТАТУСНОЙ СТРОКЕ (строка переносится на ряды), «свернуть» — обратно. Не во вкладку</td></tr>
+                <tr><td>Адаптивный режим</td><td>состояние «адаптив» в навбаре</td><td>Статусы подтверждения уровней: в панели «Прогресс · адаптив» — ЕДИНАЯ лента «уровни по темам» (подтверждённые темы с ✓ + текущая тема как активный хвост с уровнем/стрелкой/«идёт»; текущая тема не дублируется). Во вкладке «Выдача» — путь по уровням каждой темы (шаг/уровень/ответ/переход) с пер-уровневым статусом (повышение/понижение/закрепление) и итоговым подтверждённым уровнем. Во вкладке «Результаты» (адаптив) — подтверждённые уровни по темам (тема · уровень · статус) вместо балльного агрегата. Стейдж-плейсхолдер режим не отражает (это iframe пакета)</td></tr>
+                <tr><td>Одноразовость</td><td>BR-13-04 / NFR-19</td><td>Без записи в <code>attempts</code> и телеметрию; состояние — в <code>localStorage</code>; «Сброс» очищает, «Пересобрать» берёт свежие правки</td></tr>
+                <tr><td>Граница точности</td><td>FR-14 / NFR-18</td><td>Пометка «не учитывается; не заменяет WebTutor»: нет SN-секвенсирования, cross-attempt-стора, реального retake-gate. Приёмка в WebTutor обязательна для таких механик</td></tr>
+                <tr><td>Состояние «сборка»</td><td>loading</td><td>Индетерминированный прогресс над стейджем, действия недоступны</td></tr>
+                <tr><td>Состояние «ошибка сборки»</td><td>невалидный шаблон / неполный вариант</td><td>Понятный баннер вместо «500» + ссылка в редактор (FR-16)</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-mapping">
+            <h2 class="wf-mapping-title">DS Mapping</h2>
+            <p class="wf-mapping-sub">UI собран из DS-компонентов (ou-* / tb-*). Классы <code>wf-*</code> — строительные леса ТОЛЬКО этого эскиза (faux-chrome каркаса окна/статусбара/инспектора, как <code>.wf-drawer</code> в prd17): в ПРОДАКШН-КОДЕ они недопустимы — там каркас собирается из DS-примитивов раскладки (<code>Stack</code>/<code>Cluster</code>/<code>Box</code>/<code>Grid</code>) и модульного CSS фичи. Локальные render-классы DS-компонентов не вводятся.</p>
+            <table>
+              <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+              <tbody>
+                <tr><td>Окно / статусбар / стейдж / инспектор (каркас)</td><td>Прод: DS-примитивы раскладки (<code>Stack</code>/<code>Cluster</code>/<code>Box</code>/<code>Grid</code>) + модульный CSS фичи. <code>wf-player</code>/<code>wf-statusbar</code>/<code>wf-inspector</code> — каркас ТОЛЬКО эскиза, в прод-код не переносятся</td><td>faux-chrome (как <code>wf-drawer</code> в prd17)</td></tr>
+                <tr><td>Действия тулбара</td><td><code>Button</code> (<code>ou-btn</code>), <code>IconButton</code> (<code>ou-iconbtn</code>)</td><td>существующие компоненты</td></tr>
+                <tr><td>Бейджи статусов</td><td><code>Tag</code> (<code>ou-tag</code>), <code>ou-kbd</code></td><td>существующие компоненты</td></tr>
+                <tr><td>Прогресс / порог / распределение</td><td><code>Progress</code> (<code>ou-progress</code>, варианты/сегменты)</td><td>существующий компонент</td></tr>
+                <tr><td>Вкладки инспектора (ТЕКСТОВЫЕ; «Результаты» первой и активной, «LMS» последней)</td><td><code>Tabs</code> (<code>ou-tabs--underline ou-tabs--s</code>); при нехватке ширины лента прокручивается стрелками <code>ou-iconbtn</code> ‹/›; источник состояния — <code>ou-tabs--segment</code></td><td>скролл-стрелки ленты — пробел DS (предложить scrollable-вариант <code>ou-tabs</code> в ui-kit)</td></tr>
+                <tr><td>Сворачивание инспектора (круглый тоггл на левом крае, центр по линии вкладок)</td><td><code>FAB</code> (<code>ou-fab--s ou-fab--neutral</code> — тон сайдбара); позиционирование/выступ/выравнивание — модульный CSS</td><td>существующий компонент</td></tr>
+                <tr><td>Эталон: маркеры правильных ответов в жёлобе варианта + тоггл «Эталон»</td><td>✓ — lucide <code>check</code>; номер/буква-метка — текст в accent-жёлобе; тоггл — <code>Button</code> (<code>aria-pressed</code>)</td><td>debug-флаг общего рендера; маркеры на токенах DS (success/accent)</td></tr>
+                <tr><td>Таблицы протокола/выдачи/шкал/показателей/журнала</td><td><code>Table</code> (<code>tb-table</code>)</td><td>существующий компонент</td></tr>
+                <tr><td>Фиксация варианта (вкладка «Выдача», debug)</td><td><code>Select</code> (<code>ou-select</code>); после старта — <code>disabled</code>-состояние</td><td>существующий компонент; хук выдачи — hash launch-URL стейджа, читается рантаймом под guard (инертен в проде); доступность селекта — по фазе прогона (<code>phase === 'start'</code>)</td></tr>
+                <tr><td>KPI вкладки «Результаты»</td><td><code>ou-kpi</code> (head + value)</td><td>существующий компонент</td></tr>
+                <tr><td>Сообщения сборки / границы точности</td><td><code>Banner</code> (<code>ou-banner</code>)</td><td>существующий компонент</td></tr>
+                <tr><td>Фильтр пути (вкладка «Состояние»)</td><td><code>Input</code> (<code>ou-field</code>)</td><td>существующий компонент</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function navBtn(id) {
+        return document.querySelector('.wf-nav button[onclick*="\'' + id + '\'"]');
+      }
+      var TAB_STATES = { run: 'score', draw: 'draw', score: 'score', lms: 'lms' };
+      window.selectTab = function selectTab(name) {
+        document.querySelectorAll('.wf-inspector .ou-tabs__tab[data-tab]').forEach(function (t) {
+          var on = t.getAttribute('data-tab') === name;
+          t.classList.toggle('is-active', on);
+          t.setAttribute('aria-selected', on ? 'true' : 'false');
+          if (on) scrollTabIntoView(t);
+        });
+        document.querySelectorAll('.wf-ins-panel').forEach(function (p) {
+          p.classList.toggle('is-active', p.getAttribute('data-panel') === name);
+        });
+        updateTabScroll();
+      };
+      // Лента вкладок инспектора: прокрутка стрелками, когда подписи не влезают в ширину.
+      function updateTabScroll() {
+        var list = document.getElementById('wf-tablist');
+        if (!list) return;
+        var head = list.closest('.wf-ins-head');
+        var prev = head.querySelector('.wf-tabscroll[onclick*="-1"]');
+        var next = head.querySelector('.wf-tabscroll[onclick*="(1)"]');
+        var max = list.scrollWidth - list.clientWidth;
+        var overflow = max > 1;
+        // Обе стрелки ПРИСУТСТВУЮТ всё время переполнения (на концах — disabled, а не скрыты), чтобы их
+        // ширина не менялась по ходу скролла и не «съедала» только что показанную вкладку (feedback-loop).
+        if (prev) { prev.hidden = !overflow; prev.disabled = list.scrollLeft <= 1; }
+        if (next) { next.hidden = !overflow; next.disabled = list.scrollLeft >= max - 1; }
+      }
+      window.scrollTabs = function scrollTabs(dir) {
+        var list = document.getElementById('wf-tablist');
+        if (!list) return;
+        list.scrollBy({ left: dir * Math.max(120, list.clientWidth * 0.6), behavior: 'smooth' });
+        setTimeout(updateTabScroll, 250);
+      };
+      // Клик по полускрытой вкладке: доскроллить её ЦЕЛИКОМ в видимую зону и приоткрыть
+      // на половину соседнюю вкладку (которая прячется следом) — подсказка, что лента длиннее.
+      function scrollTabIntoView(tab) {
+        var list = document.getElementById('wf-tablist');
+        if (!list || !tab) return;
+        var lr = list.getBoundingClientRect();
+        var tr = tab.getBoundingClientRect();
+        var tabs = Array.prototype.slice.call(list.querySelectorAll('.ou-tabs__tab'));
+        var idx = tabs.indexOf(tab);
+        var max = list.scrollWidth - list.clientWidth;
+        var leftInContent = list.scrollLeft + (tr.left - lr.left);   // позиция в контенте, не на экране
+        var rightInContent = leftInContent + tr.width;
+        var target = null;
+        if (tr.right > lr.right - 1) {            // обрезана справа → доскролл + peek следующей
+          var next = tabs[idx + 1];
+          var peek = next ? next.getBoundingClientRect().width / 2 : 24;
+          target = rightInContent + peek - list.clientWidth;
+        } else if (tr.left < lr.left + 1) {       // обрезана слева → доскролл + peek предыдущей
+          var prev = tabs[idx - 1];
+          var peekL = prev ? prev.getBoundingClientRect().width / 2 : 24;
+          target = leftInContent - peekL;
+        }
+        if (target === null) return;             // вкладка уже целиком видна
+        target = Math.max(0, Math.min(target, max));
+        list.scrollTo({ left: target, behavior: 'smooth' });
+        setTimeout(updateTabScroll, 350);
+      }
+      // Раскрытие полного payload (suspend_data) строкой на всю ширину таблицы.
+      window.togglePayload = function togglePayload(btn) {
+        var open = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+        var row = btn.closest('tr').nextElementSibling;
+        if (row && row.classList.contains('wf-payload-row')) row.hidden = open;
+      };
+      // Тоггл «Эталон» в риббоне: показать/скрыть подсветку правильных ответов.
+      window.toggleReference = function toggleReference() {
+        var ref = document.querySelector('[data-stage="reference"]');
+        var goRef = ref && ref.hidden;
+        showState(navBtn(goRef ? 'reference' : 'run'), goRef ? 'reference' : 'run');
+      };
+      // Краевой тоггл сайдбара: один и тот же на сворачивание/разворачивание.
+      window.toggleInspector = function toggleInspector() {
+        var player = document.getElementById('wf-player');
+        var collapsing = !player.classList.contains('is-collapsed');
+        showState(navBtn(collapsing ? 'collapsed' : 'run'), collapsing ? 'collapsed' : 'run');
+      };
+      // Выровнять вертикальный центр круглого тоггла по линии-подчёркиванию под вкладками
+      // (держим даже при смене плотности/темы — высота вкладок там другая).
+      function alignToggle() {
+        var insp = document.getElementById('wf-inspector');
+        if (!insp) return;
+        var tabs = insp.querySelector('.ou-tabs');
+        var toggle = insp.querySelector('.wf-ins-toggle');
+        if (!tabs || !toggle) return;
+        var tr = tabs.getBoundingClientRect();
+        if (tr.height === 0) return; // свёрнуто — вкладок нет, позицию не трогаем
+        var ir = insp.getBoundingClientRect();
+        toggle.style.top = Math.round((tr.bottom - ir.top) - toggle.offsetHeight / 2) + 'px';
+      }
+      // Раскрыть/свернуть статусы всех тем ПРЯМО В СТАТУСНОЙ СТРОКЕ (строка переносится).
+      window.toggleTopics = function toggleTopics(btn) {
+        var row = btn.parentNode;
+        var expanded = !btn.classList.contains('is-expanded');
+        btn.classList.toggle('is-expanded', expanded);
+        row.querySelectorAll('.wf-extra').forEach(function (el) { el.hidden = !expanded; });
+        row.querySelectorAll('.wf-collapsed-only').forEach(function (el) { el.hidden = expanded; });
+        var labelEl = btn.querySelector('span') || btn;
+        labelEl.textContent = expanded ? 'свернуть ▴' : '+4 подтверждено ▾';
+      };
+      window.showState = function showState(btn, id) {
+        var player = document.getElementById('wf-player');
+        var docs = document.getElementById('wf-docs');
+        // reset overlays/modifiers
+        player.classList.remove('is-building', 'is-error', 'is-collapsed');
+        docs.classList.remove('active');
+        player.style.display = '';
+        // formula-error alarm cells appear only in the 'formula' state
+        document.querySelectorAll('#wf-statusbar [data-alarm]').forEach(function (el) { el.hidden = (id !== 'formula'); });
+        // mode-aware variants: progress group (flat/section/adaptive) + draw tab (standard/adaptive)
+        var pmode = (id === 'adaptive') ? 'adaptive' : (id === 'manytopics') ? 'manytopics' : (id === 'section') ? 'section' : 'flat';
+        document.querySelectorAll('#wf-statusbar [data-progress]').forEach(function (el) { el.hidden = (el.getAttribute('data-progress') !== pmode); });
+        var dmode = (id === 'adaptive' || id === 'manytopics') ? 'adaptive' : 'standard';
+        document.querySelectorAll('[data-draw]').forEach(function (el) { el.hidden = (el.getAttribute('data-draw') !== dmode); });
+        document.querySelectorAll('[data-score]').forEach(function (el) { el.hidden = (el.getAttribute('data-score') !== dmode); });
+        // Эталон: переключение контента стейджа (live ↔ демо типов) + состояние тоггла в риббоне.
+        var refOn = (id === 'reference');
+        document.querySelectorAll('[data-stage]').forEach(function (el) { el.hidden = (el.getAttribute('data-stage') !== (refOn ? 'reference' : 'live')); });
+        var sw = document.querySelector('.wf-ref-toggle .ou-switch'); if (sw) sw.classList.toggle('is-on', refOn);
+        var swIn = document.querySelector('.wf-ref-toggle .ou-switch__input'); if (swIn) swIn.checked = refOn;
+        if (id === 'adaptive' || id === 'manytopics') selectTab('draw');
+        if (id === 'section') selectTab('score');
+        if (id === 'docs') {
+          player.style.display = 'none'; docs.classList.add('active');
+        } else if (id === 'collapsed') {
+          player.classList.add('is-collapsed');
+        } else if (id === 'building') {
+          player.classList.add('is-building');
+        } else if (id === 'error') {
+          player.classList.add('is-error');
+        } else if (TAB_STATES[id]) {
+          selectTab(TAB_STATES[id]);
+        }
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+        if (!player.classList.contains('is-collapsed')) alignToggle();
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+        alignToggle();
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+        alignToggle();
+      };
+      // Дерево «Состояние»: разворачивание/сворачивание узлов.
+      document.querySelectorAll('.ou-tree__toggle').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var node = btn.closest('.ou-tree__node');
+          if (node && !node.classList.contains('is-leaf')) node.classList.toggle('is-open');
+        });
+      });
+      // Стрелки прокрутки вкладок: следим за переполнением ленты.
+      (function initTabScroll() {
+        var list = document.getElementById('wf-tablist');
+        if (!list) return;
+        list.addEventListener('scroll', updateTabScroll, { passive: true });
+        window.addEventListener('resize', function () { updateTabScroll(); alignToggle(); });
+        updateTabScroll();
+        alignToggle();
+      })();
+    </script>
+  </body>
+</html>

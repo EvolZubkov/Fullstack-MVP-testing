@@ -1,0 +1,80 @@
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    <!-- The question map is NOT repeated in the review header — the body carries its
+         own (larger) map and the answered/skipped counts, so a header copy would
+         duplicate it. -->
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col">
+      <!-- PRD-34 (FR-16): место водяного знака, объявленное макетом. -->
+      <div data-slot="protection-mark"></div>
+      <div class="tb-scene__q">
+        <h2 class="tb-scene__hero tb-scene__hero--s">{{ review.scopeLabel }}</h2>
+        <span class="tb-scene__qhint">{{ review.hint }}</span>
+      </div>
+
+      {{#if state.questionsProgress}}
+      <div class="ou-quiz ou-quiz--circle ou-quiz--l tb-review-map" role="group" aria-label="Карта вопросов">
+        <div class="ou-quiz__dots">
+          {{#each state.questionsProgress.states}}
+          <button type="button" class="ou-quiz__dot {{statusClass}}" {{#unless clickable}}disabled{{/unless}} data-action="goto:{{index}}" aria-label="{{ariaLabel}}">{{number}}</button>
+          {{/each}}
+        </div>
+        <div class="ou-quiz__legend">
+          {{#if review.canReturn}}<span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-current"></span>текущий</span>{{/if}}
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+          <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+        </div>
+        <span class="tb-review-map__count">отвечено <strong>{{state.questionsProgress.answeredCount}}</strong> из {{state.questionsProgress.total}} · пропущено {{state.questionsProgress.skippedCount}}</span>
+      </div>
+      {{/if}}
+
+      {{#if review.unansweredCount}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-card">
+        <span class="tb-card__head">Без ответа: {{review.unansweredCount}}</span>
+        <div class="tb-unanswered">
+          {{#each review.unanswered}}
+          <div class="ou-stat-row">
+            <div class="ou-stat-row__body">
+              <div class="ou-stat-row__title">Вопрос {{number}} · {{prompt}}</div>
+            </div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" data-action="goto:{{index}}">Перейти</button>
+          </div>
+          {{/each}}
+        </div>
+      </div>
+      {{/if}}
+    </div>
+  </main>
+
+  <footer class="tb-scene__foot">
+    {{#if review.canReturn}}
+    <!-- Opened via «К обзору» mid-flow: «Назад» (to the origin question) is the accented
+         primary; «Завершить …» is demoted to a quiet ghost so it is not fired by accident. -->
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-action="finish-review">{{ review.finishLabel }}</button>
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="review-back">{{ review.backLabel }}</button>
+    {{/if}}
+    {{#unless review.canReturn}}
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="finish-review">{{ review.finishLabel }}</button>
+    {{/unless}}
+  </footer>
+</div>

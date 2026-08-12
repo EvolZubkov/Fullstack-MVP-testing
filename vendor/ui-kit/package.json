@@ -1,0 +1,72 @@
+{
+  "name": "@universityrt/ui-kit",
+  "version": "0.1.0",
+  "description": "React UI-kit на базе UniversityRT Design System",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "css"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "scripts": {
+    "build": "npm run build:css && npm run build:lib",
+    "build:lib": "vite build",
+    "build:css": "node scripts/build-css.mjs",
+    "dev": "vite",
+    "lint": "eslint src --ext .ts,.tsx",
+    "type-check": "tsc --noEmit",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build -o storybook-static",
+    "chromatic": "chromatic --exit-zero-on-changes",
+    "qa:report": "node scripts/qa-status-report.mjs",
+    "qa:report:strict": "node scripts/qa-status-report.mjs --strict",
+    "qa:set": "node scripts/qa-set.mjs",
+    "test-storybook": "vitest --project=storybook",
+    "test-storybook:ci": "vitest --project=storybook --run"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@chromatic-com/storybook": "^5.2.1",
+    "@storybook/addon-a11y": "^10.5.6",
+    "@storybook/addon-docs": "^10.5.6",
+    "@storybook/addon-themes": "^10.5.6",
+    "@storybook/addon-vitest": "^10.5.6",
+    "@storybook/react-vite": "^10.5.6",
+    "@types/node": "^25.9.5",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@typescript-eslint/eslint-plugin": "^8.66.0",
+    "@typescript-eslint/parser": "^8.66.0",
+    "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/browser-playwright": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.10",
+    "autoprefixer": "^10.5.4",
+    "chromatic": "^17.8.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "playwright": "^1.62.1",
+    "storybook": "^10.5.6",
+    "typescript": "^6.0.3",
+    "vite": "^8.2.0",
+    "vite-plugin-dts": "^5.0.3",
+    "vitest": "^4.1.10"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./css": "./css/university-rt.css"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,62 +1,59 @@
 /**
  * @module server/db
  * @description PostgreSQL database connection module using Drizzle ORM.
- * Provides connection pool with error handling, automatic reconnection,
- * health checks, and graceful shutdown support.
+ * Provides a lazily-created connection pool with error handling, automatic
+ * reconnection, health checks, and graceful shutdown support.
+ *
+ * The pool and the Drizzle instance are created on first use (not at import),
+ * reading `config.database.url` after `initConfig()` has populated it — the
+ * dependency-injection model, so nothing connects while modules are importing.
  */
 
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
+import { logger } from "./logger";
+import { config } from "./config";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
-
-/**
- * Database connection state tracking.
- */
+/** Database connection state tracking. */
 let isConnected = false;
 let connectionAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_DELAY_MS = 3000;
 
-/**
- * PostgreSQL connection pool with resilience settings.
- * Handles connection errors gracefully without crashing the application.
- */
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
+// ─── Lazy pool ────────────────────────────────────────────────────────────────
+let poolInstance: pg.Pool | undefined;
 
-/**
- * Handle pool-level errors to prevent unhandled exceptions.
- * These errors occur when a client becomes disconnected while idle.
- */
-pool.on("error", (err) => {
-  console.error("Unexpected error on idle database client:", err.message);
-  isConnected = false;
-});
-
-/**
- * Handle pool connection events for logging and state tracking.
- */
-pool.on("connect", () => {
-  console.log("New database client connected");
-  isConnected = true;
-  connectionAttempts = 0;
-});
-
-pool.on("remove", () => {
-  console.log("Database client removed from pool");
-});
+/** Get (creating on first call) the resilient connection pool. */
+function getPool(): pg.Pool {
+  if (poolInstance) return poolInstance;
+  if (!config.database.url) {
+    throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
+  }
+  const pool = new Pool({
+    connectionString: config.database.url,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  });
+  // Prevent unhandled exceptions when an idle client disconnects.
+  pool.on("error", (err) => {
+    logger.error("Unexpected error on idle client: " + err.message, "db");
+    isConnected = false;
+  });
+  pool.on("connect", () => {
+    logger.info("New database client connected", "db");
+    isConnected = true;
+    connectionAttempts = 0;
+  });
+  pool.on("remove", () => {
+    logger.debug("Database client removed from pool", "db");
+  });
+  poolInstance = pool;
+  return pool;
+}
 
 /**
  * Checks if the database connection is healthy.
@@ -64,7 +61,7 @@ pool.on("remove", () => {
  */
 export async function checkDatabaseHealth(): Promise<boolean> {
   try {
-    const client = await pool.connect();
+    const client = await getPool().connect();
     try {
       await client.query("SELECT 1");
       isConnected = true;
@@ -74,7 +71,7 @@ export async function checkDatabaseHealth(): Promise<boolean> {
     }
   } catch (error) {
     isConnected = false;
-    console.error("Database health check failed:", (error as Error).message);
+    logger.error("Health check failed: " + (error as Error).message, "db");
     return false;
   }
 }
@@ -91,9 +88,9 @@ export function getDatabaseStatus(): {
 } {
   return {
     isConnected,
-    poolSize: pool.totalCount,
-    idleCount: pool.idleCount,
-    waitingCount: pool.waitingCount,
+    poolSize: poolInstance?.totalCount ?? 0,
+    idleCount: poolInstance?.idleCount ?? 0,
+    waitingCount: poolInstance?.waitingCount ?? 0,
   };
 }
 
@@ -127,9 +124,7 @@ export async function withRetry<T>(
         throw lastError;
       }
 
-      console.warn(
-        `Database operation failed (attempt ${attempt}/${maxRetries}): ${lastError.message}. Retrying in ${delayMs}ms...`
-      );
+      logger.warn(`DB retry attempt ${attempt}/${maxRetries}: ${lastError.message}`, "db");
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
@@ -138,17 +133,18 @@ export async function withRetry<T>(
 }
 
 /**
- * Gracefully closes all database connections.
- * Should be called during application shutdown.
+ * Gracefully closes all database connections. No-op if the pool was never opened.
  */
 export async function closeDatabaseConnection(): Promise<void> {
-  console.log("Closing database connections...");
+  if (!poolInstance) return;
+  logger.info("Closing database connections...", "db");
   try {
-    await pool.end();
+    await poolInstance.end();
     isConnected = false;
-    console.log("Database connections closed successfully");
+    poolInstance = undefined;
+    logger.info("Database connections closed", "db");
   } catch (error) {
-    console.error("Error closing database connections:", (error as Error).message);
+    logger.error("Error closing database connections: " + (error as Error).message, "db");
     throw error;
   }
 }
@@ -160,7 +156,7 @@ export async function closeDatabaseConnection(): Promise<void> {
  * @throws Error if max attempts exceeded
  */
 export async function waitForDatabase(): Promise<boolean> {
-  console.log("Waiting for database connection...");
+  logger.info("Waiting for database connection...", "db");
 
   while (connectionAttempts < MAX_RECONNECT_ATTEMPTS) {
     connectionAttempts++;
@@ -169,17 +165,15 @@ export async function waitForDatabase(): Promise<boolean> {
     try {
       const healthy = await checkDatabaseHealth();
       if (healthy) {
-        console.log("Database connection established");
+        logger.info("Database connection established", "db");
         return true;
       }
     } catch (error) {
-      console.warn(
-        `Database connection attempt ${connectionAttempts}/${MAX_RECONNECT_ATTEMPTS} failed: ${(error as Error).message}`
-      );
+      logger.warn(`Database connection attempt ${connectionAttempts}/${MAX_RECONNECT_ATTEMPTS} failed: ${(error as Error).message}`, "db");
     }
 
     if (connectionAttempts < MAX_RECONNECT_ATTEMPTS) {
-      console.log(`Retrying in ${delay}ms...`);
+      logger.info(`Retrying in ${delay}ms...`, "db");
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -189,4 +183,39 @@ export async function waitForDatabase(): Promise<boolean> {
   );
 }
 
-export const db = drizzle(pool, { schema });
+// ─── Lazy Drizzle instance ──────────────────────────────────────────────────────
+let dbInstance: NodePgDatabase<typeof schema> | undefined;
+
+function getDb(): NodePgDatabase<typeof schema> {
+  if (dbInstance) return dbInstance;
+  dbInstance = drizzle(getPool(), {
+    schema,
+    logger: {
+      logQuery(query: string, params: unknown[]) {
+        // SQL query tracing is the `db` subsystem at `trace`. Gate on pino's own
+        // isLevelEnabled so the strings are built only when trace is enabled for
+        // db (config.log.level.objects: { "db": "trace" }).
+        if (logger.isLevelEnabled("trace", "db")) {
+          logger.trace(`SQL: ${query.slice(0, 200)} params=${JSON.stringify(params).slice(0, 100)}`, "db");
+        }
+      },
+    },
+  });
+  return dbInstance;
+}
+
+/**
+ * The Drizzle database. Backed by a lazily-created pool/instance so importing
+ * this module does not open a connection; the first property access initializes
+ * it from `config.database.url`.
+ */
+export const db: NodePgDatabase<typeof schema> = new Proxy(
+  {} as NodePgDatabase<typeof schema>,
+  {
+    get(_target, prop, receiver) {
+      const instance = getDb();
+      const value = Reflect.get(instance as object, prop, receiver);
+      return typeof value === "function" ? value.bind(instance) : value;
+    },
+  }
+);

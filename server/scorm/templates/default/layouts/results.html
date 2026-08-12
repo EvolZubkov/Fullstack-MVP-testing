@@ -1,0 +1,236 @@
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      <div class="tb-scene__headtag">{{#if result.statusLabel}}<span class="ou-tag {{ result.passClass }}" data-path="result.statusLabel"></span>{{/if}}</div>
+    </div>
+    <div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width: {{result.scorePercent}}%"></div></div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col tb-scene__col--wide">
+      <!-- PRD-34 (FR-16): место водяного знака, объявленное макетом. -->
+      <div data-slot="protection-mark"></div>
+      <!-- ВВОДНЫЙ БЛОК автора — первым, до всего остального: он объясняет слушателю, что
+           он сейчас читает. Разметку строит ядро из текста и его формата, поэтому печать
+           идёт контролируемым каналом; пусто = блока нет. -->
+      {{#if result.introHtml}}<div class="tb-intro">{{& result.introHtml }}</div>{{/if}}
+
+      {{#unless result.hideScoreSummary}}
+      <div class="tb-score-strip">
+        <div class="ou-ring tb-ring">
+          <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+            <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+            <circle class="ou-ring__fill {{ result.passClass }}" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round" stroke-dasharray="395.84" stroke-dashoffset="{{ result.ringDashoffset }}"></circle>
+          </svg>
+          <div class="ou-ring__center">
+            <div class="ou-ring__value"><span data-path="result.scorePercent"></span>%</div>
+            <div class="ou-ring__label">баллы</div>
+          </div>
+        </div>
+        <div class="tb-facts">
+          <div class="tb-facts__item"><div class="tb-facts__num" data-path="result.totalQuestions"></div><div class="tb-facts__lbl">вопросов</div></div>
+          <div class="tb-facts__item"><div class="tb-facts__num"><span data-path="result.correct"></span>/<span data-path="result.totalQuestions"></span></div><div class="tb-facts__lbl">верно</div></div>
+          <div class="tb-facts__item"><div class="tb-facts__num" data-path="result.earnedPoints"></div><div class="tb-facts__lbl">баллов</div></div>
+        </div>
+      </div>
+      {{/unless}}
+
+      {{#if result.indicators}}
+      {{#unless result.hideScoreSummary}}<hr class="ou-separator ou-separator--horizontal">{{/unless}}
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Ваш результат</h3></div>
+      <div class="tb-measures">
+        {{#each result.indicators}}
+        <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
+          <div class="ou-formsection__intro">
+            <h4 class="ou-formsection__title">{{name}}</h4>
+          </div>
+          <div class="ou-formsection__body">
+            {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
+            {{#if levelLabel}}
+            <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
+              <div class="ou-banner__body">
+                <div class="ou-banner__title">{{levelLabel}}</div>
+                {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
+              </div>
+            </div>
+            {{/if}}
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      {{#if result.scales}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">По шкалам</h3></div>
+      <div class="{{result.scalesBlockClass}}">
+        {{#if result.scalesChart}}
+        <!-- PRD-46: ОДИН блок на радар и розу. Ядро отдаёт обе диаграммы одной формой, и
+            неподходящие списки приходят ПУСТЫМИ — пустой цикл не рисует ничего, поэтому
+            ветвиться по виду разметке не требуется (в DSL и нечем). Порядок слоёв важен:
+            заливки розы непрозрачны, поэтому сетка идёт ПОВЕРХ них. -->
+        <div class="tb-chart">
+          <svg class="tb-chart__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+            {{#each result.scalesChart.sectors}}
+            <path class="tb-rose__sector {{overflowClass}}" d="{{d}}" style="--tb-hue:{{color}}"></path>
+            {{/each}}
+            {{#each result.scalesChart.rings}}
+            <circle class="tb-chart__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+            {{/each}}
+            {{#each result.scalesChart.spokes}}
+            <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{x}}" y2="{{y}}"></line>
+            {{/each}}
+            {{#each result.scalesChart.axes}}
+            <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+            {{/each}}
+            {{#if result.scalesChart.isRadar}}
+            <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
+            {{/if}}
+            {{#each result.scalesChart.axes}}
+            <circle class="tb-radar__dot {{quantizedClass}} {{overflowClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+            {{/each}}
+            {{#each result.scalesChart.icons}}
+            <g class="tb-rose__icon" transform="{{transform}}">{{#each paths}}<path d="{{.}}"></path>{{/each}}</g>
+            {{/each}}
+            {{#each result.scalesChart.labels}}
+            <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>
+            {{/each}}
+          </svg>
+          {{#if result.scalesChart.limitCaption}}
+          <p class="tb-chart__limit">{{result.scalesChart.limitCaption}}</p>
+          {{/if}}
+        </div>
+        {{/if}}
+        <div class="tb-measures__list">
+        {{#each result.scales}}
+        <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
+          <div class="ou-formsection__intro">
+            <div class="tb-measure__head">
+              <h4 class="ou-formsection__title">{{name}}</h4>
+              {{#unless isRing}}{{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong>{{#if maxText}} из {{maxText}}{{/if}}</span>{{/if}}{{/unless}}
+            </div>
+            {{#if levelLabel}}<span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>{{/if}}
+          </div>
+          <div class="ou-formsection__body">
+            {{#if zones}}
+            <div class="ou-slider ou-slider--h tb-measure__slider">
+              <div class="ou-slider__rail" role="img" aria-label="{{ariaLabel}}">
+                {{#each zones}}
+                <span class="ou-slider__fill tb-zone{{#if current}} is-current{{/if}}"
+                      style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>
+                {{/each}}
+                <span class="ou-slider__thumb tb-measure__marker" style="left:{{markerPercent}}%"></span>
+                <div class="ou-slider__marks">
+                  {{#each marks}}
+                  <span class="ou-slider__mark" style="left:{{percent}}%"></span>
+                  <span class="ou-slider__mark-lbl" style="left:{{percent}}%">{{label}}</span>
+                  {{/each}}
+                </div>
+              </div>
+            </div>
+            {{/if}}
+            {{#if isRing}}
+            <div class="ou-ring tb-ring" role="img" aria-label="{{ariaLabel}}">
+              <svg class="ou-ring__svg" width="140" height="140" viewBox="0 0 140 140">
+                <circle class="ou-ring__track" cx="70" cy="70" r="63" stroke-width="12"></circle>
+                <circle class="ou-ring__fill {{toneClass}}" cx="70" cy="70" r="63" stroke-width="12" stroke-linecap="round"
+                        stroke-dasharray="395.84" stroke-dashoffset="{{ringDashoffset}}"></circle>
+              </svg>
+              <div class="ou-ring__center">
+                <div class="ou-ring__value">{{valueText}}</div>
+                <div class="ou-ring__label">{{levelLabel}}</div>
+              </div>
+            </div>
+            {{/if}}
+            {{#if text}}<p class="ou-formsection__sub">{{& textHtml }}</p>{{/if}}
+          </div>
+        </div>
+        {{/each}}
+        </div>
+      </div>
+      {{/if}}
+
+      {{#if result.topicResults}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Результаты по темам</h3></div>
+      <div class="tb-topics-grid">
+        {{#each result.topicResults}}
+        <div class="ou-card tb-topic-card">
+          <div class="ou-card__body">
+            <span class="tb-topic-card__name">{{topicName}}</span>
+            <span class="ou-tag ou-tag--s {{passClass}}">{{statusLabel}}</span>
+            {{#if total}}<div class="ou-progress ou-progress--s tb-topic-card__bar {{passClass}}"><div class="ou-progress__track"><div class="ou-progress__fill" style="width: {{percent}}%"></div></div></div>{{/if}}
+            <div class="tb-stat-rows">
+              {{#if total}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">Правильно</div></div><span class="tb-stat-val">{{correct}} / {{total}}</span></div>{{/if}}
+              {{#if pointsLabel}}<div class="ou-stat-row ou-stat-row--compact"><div class="ou-stat-row__body"><div class="ou-stat-row__title">Баллов</div></div><span class="tb-stat-val">{{pointsLabel}}</span></div>{{/if}}
+            </div>
+            {{#if requiredLabel}}<span class="tb-topic-card__req">{{requiredLabel}}</span>{{/if}}
+            {{#if hasRecommendations}}
+            <div class="tb-topic-card__fb">
+              <div class="tb-recs">{{#each recommendedCourses}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}{{#each recommendedEvents}}<span class="tb-rec"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span>{{title}}</span>{{/each}}</div>
+            </div>
+            {{/if}}
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      {{#if result.recommendations.hasAny}}
+      <hr class="ou-separator ou-separator--horizontal">
+      <div class="tb-scene__q"><h3 class="tb-scene__subhead">Рекомендации</h3></div>
+      <div class="tb-recs-block">
+        {{#if result.recommendations.texts}}
+        <div class="tb-recs-group">
+          {{#each result.recommendations.textsHtml}}<p class="tb-recs-group__text">{{& this }}</p>{{/each}}
+        </div>
+        {{/if}}
+        {{#if result.recommendations.links}}
+        <div class="tb-recs-group">
+          <span class="tb-eyebrow">Пройти обучение</span>
+          <div class="tb-recs">
+            {{#each result.recommendations.links}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}
+          </div>
+        </div>
+        {{/if}}
+        {{#if result.recommendations.events}}
+        <div class="tb-recs-group">
+          <span class="tb-eyebrow">Мероприятия</span>
+          <div class="tb-recs">
+            {{#each result.recommendations.events}}<span class="tb-rec"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span>{{title}}</span>{{/each}}
+          </div>
+        </div>
+        {{/if}}
+        {{#if result.recommendations.assets}}
+        <div class="tb-recs-group">
+          <span class="tb-eyebrow">Материалы</span>
+          <div class="tb-recs">
+            {{#each result.recommendations.assets}}<a class="tb-rec" href="{{url}}" target="_blank" rel="noopener noreferrer"><span class="tb-rec__ico" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>{{title}}</a>{{/each}}
+          </div>
+        </div>
+        {{/if}}
+      </div>
+      {{/if}}
+    </div>
+  </main>
+
+  <!-- Footer of the results screen. Composition is the TEMPLATE's decision; hosts
+       only fill `result.nav` (see shared/template/results-nav) and bind the actions.
+       `result.backAction` is the legacy single-button form kept for contexts that
+       do not build `nav` (host previews). -->
+  <footer class="tb-scene__foot">
+    {{#if result.nav.showReport}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-action="download-report">Скачать отчёт</button>{{/if}}
+    <div class="tb-scene__foot-spacer"></div>
+    {{#if result.nav.canRetry}}<button type="button" class="ou-btn ou-btn--secondary ou-btn--l" data-action="restart">Пройти заново</button>{{/if}}
+    {{#if result.nav}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{result.nav.primaryAction}}">{{result.nav.primaryLabel}}</button>{{/if}}
+    {{#unless result.nav}}
+      {{#if result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="{{result.backAction}}">{{result.backLabel}}</button>{{/if}}
+      {{#unless result.backAction}}<button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="restart">Пройти снова</button>{{/unless}}
+    {{/unless}}
+  </footer>
+</div>

@@ -1,0 +1,37 @@
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      {{#if page.pageLabel}}<div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral" data-path="page.pageLabel"></span></div>{{/if}}
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    {{#if page.pageLabel}}<div class="tb-scene__progress"><div class="tb-scene__progress-fill" style="width:{{page.progressPercent}}%"></div></div>{{/if}}
+  </header>
+
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content tb-content--image tb-content--image-right">
+      <div class="tb-content__text">
+        <h2 class="tb-content__title" data-placeholder="title"></h2>
+        <p class="tb-content__lead" data-placeholder="lead"></p>
+        <div class="tb-content__body" data-placeholder="body"></div>
+      </div>
+      <div class="tb-content__media" data-placeholder="image"></div>
+    </div>
+  </main>
+  <footer class="tb-scene__foot">
+    {{#if page.canGoBack}}<button type="button" class="ou-btn ou-btn--ghost ou-btn--m" data-nav="prev">Назад</button>{{/if}}
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next">{{page.nextLabel}}</button>
+  </footer>
+</div>

@@ -1,19 +1,27 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { readableTestScope } from "../../services/test-access";
 import type { AttemptResult } from "@shared/schema";
 
 const router = Router();
 
 // GET /api/analytics - Общая аналитика
-router.get("/", requireAuthor, async (_req: Request, res: Response) => {
+router.get("/", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
-    const tests = await storage.getTests();
+    const allTests = await storage.getTests();
+    // PRD-13: limit analytics to the tests this user may read.
+    const scope = await readableTestScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const tests = scope.all ? allTests : allTests.filter((t) => scope.ids.has(t.id));
+    const scopedTestIds = new Set(tests.map((t) => t.id));
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
     const allAttempts = await storage.getAllAttempts();
 
-    const completedAttempts = allAttempts.filter((a) => a.resultJson !== null);
+    const completedAttempts = allAttempts.filter(
+      (a) => a.resultJson !== null && scopedTestIds.has(a.testId),
+    );
 
     // Aggregate stats per test
     const testStats = tests.map((test) => {
@@ -158,7 +166,7 @@ router.get("/", requireAuthor, async (_req: Request, res: Response) => {
 
     res.json({ summary, testStats, topicStats, trends });
   } catch (error) {
-    console.error("Analytics error:", error);
+    logger.error("Analytics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch analytics" });
   }
 });

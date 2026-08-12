@@ -1,9 +1,64 @@
-node_modules/
-dist/
-.git/
+# =============================================================================
+# Docker build context exclusions for test-builder.
+#
+# .env, config/ and uploads/ are intentionally excluded from the image.
+# They are deployed separately and mounted as volumes from the host:
+#   /srv/data/<project>/uploads -> /app/uploads (rw)
+#   /srv/logs/<project>         -> /app/logs     (rw)
+#   /srv/app/<project>/env/.env -> /app/.env     (ro)
+#   /srv/app/<project>/config   -> /app/config   (ro)
+# =============================================================================
+
+# ---- Application environment (deployed via scripts\deploy\deploy.bat) ------
 .env
-*.zip
+.env.*
+
+# ---- Non-secret application config (deployed to the host, mounted ro) ------
+# Kept out of the build context so it can never be baked in by accident: the
+# running config is the host copy under /srv/app/<project>/config, seeded from
+# the deploy package by deploy.sh.
+config/
+
+# ---- Node dependencies (rebuilt inside Docker via npm ci) ------------------
+node_modules/
+
+# ---- Frontend + backend source (dist/ is what gets copied) -----------------
+client/
+# Exclude all of server/ EXCEPT server/scorm/templates — the built-in design
+# template manifests/previews are read from disk at runtime by
+# server/template-registry.ts (process.cwd()/server/scorm/templates).
+# Docker forbids re-including a path whose parent dir is excluded, so we descend
+# level by level instead of a blanket `server/`.
+server/*
+# Shared config loader is needed at runtime by run-sql.cjs / set-password.
+!server/config-loader.mjs
+!server/scorm
+server/scorm/*
+!server/scorm/templates
+
+# ---- Runtime data (mounted as volumes at container start) ------------------
 uploads/
+logs/
+tmp/
+
+# ---- Build and test artifacts -----------------------------------------------
+docker/build/
+coverage/
+*.tar
+*.tar.gz
+*.zip
+
+# ---- IDE and version control ------------------------------------------------
+.git/
+.gitignore
 .vscode/
-docs/
+
+# ---- Documentation and local tooling ----------------------------------------
+# The markdown sources are not needed in the image, but the generated authoring
+# PDFs (docs/dist, built by `npm run docs:pdf` and committed) ARE: the
+# doc-download routes read them from disk at runtime. Docker forbids re-including
+# a path whose parent dir is excluded, so descend level by level — same pattern as
+# server/scorm/templates above.
+docs/*
+!docs/dist
 *.md

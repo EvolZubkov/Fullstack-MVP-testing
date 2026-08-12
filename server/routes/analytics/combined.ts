@@ -1,15 +1,20 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
+import { analyticsScope } from "./helpers";
 
 const router = Router();
 
 // GET /api/analytics/combined - Комбинированная аналитика (Web + LMS)
-router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
+router.get("/combined", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const source = req.query.source as string || "all";
     const testId = req.query.testId as string || null;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webAttempts: any[] = [];
     let lmsAttempts: any[] = [];
@@ -27,6 +32,7 @@ router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
 
       webAttempts = attempts
         .filter(a => !testId || a.testId === testId)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt)
         .map(a => {
           const user = userMap.get(a.userId);
@@ -38,12 +44,16 @@ router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
             testTitle: test?.title || "Удалённый тест",
             userId: a.userId,
             username: user?.name || user?.email || "Unknown",
+            userEmail: user?.email || null,
             startedAt: a.startedAt,
             finishedAt: a.finishedAt,
-            resultPercent: result?.overallPercent || 0,
+            resultPercent: result?.mode === "adaptive"
+              ? (result?.overallPassed ? 100 : 0)
+              : result?.overallPercent || 0,
             resultPassed: result?.overallPassed || false,
             totalPoints: result?.totalEarnedPoints || 0,
             maxPoints: result?.totalPossiblePoints || 0,
+            isAdaptive: result?.mode === "adaptive",
             source: "web" as const,
           };
         });
@@ -61,6 +71,7 @@ router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testId;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt)
         .map(a => {
           const pkg = packageMap.get(a.packageId);
@@ -86,11 +97,22 @@ router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
       new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
     );
 
+    // SUMMARY
     const totalAttempts = combined.length;
     const passedAttempts = combined.filter(a => a.resultPassed).length;
-    const avgPercent = totalAttempts > 0
-      ? combined.reduce((sum, a) => sum + (a.resultPercent || 0), 0) / totalAttempts
+
+    // Средний балл считаем только по стандартным тестам — у адаптивных нет процента
+    const standardAttempts = combined.filter(a => !a.isAdaptive);
+    const avgPercent = standardAttempts.length > 0
+      ? standardAttempts.reduce((sum, a) => sum + (a.resultPercent || 0), 0) / standardAttempts.length
       : 0;
+
+    // Для адаптивных — отдельная метрика
+    const adaptiveAttempts = combined.filter(a => a.isAdaptive);
+    const adaptivePassed = adaptiveAttempts.filter(a => a.resultPassed).length;
+
+    const uniqueWebUsers = new Set(webAttempts.map(a => a.userId)).size;
+    const uniqueLmsUsers = new Set(lmsAttempts.map(a => a.lmsUserId).filter(Boolean)).size;
 
     res.json({
       summary: {
@@ -100,20 +122,108 @@ router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
         avgPercent,
         webAttempts: webAttempts.length,
         lmsAttempts: lmsAttempts.length,
+        uniqueWebUsers,
+        uniqueLmsUsers,
+        adaptiveAttempts: adaptiveAttempts.length,
+        adaptivePassed,
       },
       attempts: combined,
     });
   } catch (error) {
-    console.error("Get combined analytics error:", error);
+    logger.error("Get combined analytics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get combined analytics" });
   }
 });
 
-// GET /api/analytics/combined-full - Полная комбинированная аналитика
-router.get("/combined-full", requireAuthor, async (req: Request, res: Response) => {
+// GET /api/analytics/summary - Только сводка (быстрый запрос)
+router.get("/summary", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const source = (req.query.source as string) || "all";
     const testIdFilter = req.query.testId as string | undefined;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
+
+    let webCount = 0, webPassed = 0, webPercent = 0, webAdaptive = 0, webAdaptivePassed = 0;
+    let lmsCount = 0, lmsPassed = 0, lmsPercent = 0;
+    const webUserIds = new Set<string>();
+    const lmsUserIds = new Set<string>();
+
+    if (source === "all" || source === "web") {
+      const attempts = await storage.getAllAttempts();
+      const filtered = attempts
+        .filter(a => !testIdFilter || a.testId === testIdFilter)
+        .filter(a => scope.has(a.testId))
+        .filter(a => a.finishedAt);
+
+      for (const a of filtered) {
+        const result = a.resultJson as any;
+        const isAdaptive = result?.mode === "adaptive";
+        webCount++;
+        webUserIds.add(a.userId);
+        if (result?.overallPassed) webPassed++;
+        if (isAdaptive) {
+          webAdaptive++;
+          if (result?.overallPassed) webAdaptivePassed++;
+        } else {
+          webPercent += result?.overallPercent || 0;
+        }
+      }
+    }
+
+    if (source === "all" || source === "lms") {
+      const attempts = await storage.getAllScormAttempts();
+      const packages = await storage.getScormPackages();
+      const packageMap = new Map(packages.map(p => [p.id, p]));
+
+      const filtered = attempts
+        .filter(a => {
+          if (!testIdFilter) return true;
+          const pkg = packageMap.get(a.packageId);
+          return pkg?.testId === testIdFilter;
+        })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
+        .filter(a => a.finishedAt);
+
+      for (const a of filtered) {
+        lmsCount++;
+        if (a.lmsUserId) lmsUserIds.add(a.lmsUserId);
+        if (a.resultPassed) lmsPassed++;
+        lmsPercent += a.resultPercent || 0;
+      }
+    }
+
+    const totalAttempts = webCount + lmsCount;
+    const passedAttempts = webPassed + lmsPassed;
+    const standardCount = webCount - webAdaptive + lmsCount;
+    const avgPercent = standardCount > 0
+      ? (webPercent + lmsPercent) / standardCount
+      : 0;
+
+    res.json({
+      totalAttempts,
+      passedAttempts,
+      passRate: totalAttempts > 0 ? (passedAttempts / totalAttempts) * 100 : 0,
+      avgPercent,
+      webAttempts: webCount,
+      lmsAttempts: lmsCount,
+      uniqueWebUsers: webUserIds.size,
+      uniqueLmsUsers: lmsUserIds.size,
+      adaptiveAttempts: webAdaptive,
+      adaptivePassed: webAdaptivePassed,
+    });
+  } catch (error) {
+    logger.error("Summary analytics error: " + (error as Error).message, "analytics");
+    res.status(500).json({ error: "Failed to get summary" });
+  }
+});
+
+// GET /api/analytics/combined-full - Полная комбинированная аналитика
+router.get("/combined-full", requirePermission("analytics.read"), async (req: Request, res: Response) => {
+  try {
+    const source = (req.query.source as string) || "all";
+    const testIdFilter = req.query.testId as string | undefined;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webAttempts: any[] = [];
     let lmsAttempts: any[] = [];
@@ -132,6 +242,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
 
       webAttempts = attempts
         .filter(a => !testIdFilter || a.testId === testIdFilter)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt)
         .map(a => {
           const user = userMap.get(a.userId);
@@ -147,13 +258,23 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
             testMode: test?.mode || "standard",
             userId: a.userId,
             username: user?.name || user?.email || "Unknown",
+            userEmail: user?.email || null,
             startedAt: a.startedAt,
             finishedAt: a.finishedAt,
             duration,
-            resultPercent: result?.overallPercent || 0,
+            resultPercent: result?.mode === "adaptive"
+              ? (result?.overallPassed ? 100 : 0)
+              : result?.overallPercent || 0,
             resultPassed: result?.overallPassed || false,
             totalPoints: result?.earnedPoints || result?.totalEarnedPoints || 0,
             maxPoints: result?.possiblePoints || result?.totalPossiblePoints || 0,
+            isAdaptive: result?.mode === "adaptive",
+            achievedTopics: result?.mode === "adaptive"
+              ? result?.topicResults?.filter((tr: any) => tr.achievedLevelIndex !== null).length ?? 0
+              : null,
+            totalTopics: result?.mode === "adaptive"
+              ? result?.topicResults?.length ?? 0
+              : null,
             source: "web" as const,
           };
         });
@@ -171,6 +292,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testIdFilter;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt)
         .map(a => {
           const pkg = packageMap.get(a.packageId);
@@ -251,7 +373,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       avgPercent: ts.totalAttempts > 0 ? ts.totalPercent / ts.totalAttempts : 0,
     }));
 
-    // TOPIC STATS
+   // TOPIC STATS
     const topicStatsMap = new Map<string, {
       topicId: string;
       topicName: string;
@@ -261,8 +383,15 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       failureCount: number;
     }>();
 
-    for (const attempt of lmsAttempts) {
-      const answers = await storage.getScormAnswersByAttempt(attempt.id);
+    // Загружаем все ответы параллельно — один Promise.all вместо N запросов
+    const [lmsAnswersAll, webAttemptsFullAll] = await Promise.all([
+      Promise.all(lmsAttempts.map(a => storage.getScormAnswersByAttempt(a.id))),
+      Promise.all(webAttempts.map(a => storage.getAttempt(a.id))),
+    ]);
+
+    // LMS ответы
+    for (let i = 0; i < lmsAttempts.length; i++) {
+      const answers = lmsAnswersAll[i];
       for (const ans of answers) {
         if (!ans.topicId) continue;
         const existing = topicStatsMap.get(ans.topicId) || {
@@ -280,15 +409,59 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       }
     }
 
-    for (const attempt of webAttempts) {
-      const fullAttempt = await storage.getAttempt(attempt.id);
-      if (!fullAttempt?.answersJson) continue;
-      const answers = fullAttempt.answersJson as Record<string, any>;
+    // Web попытки — один проход по уже загруженным данным
+    const questionIdsAll = new Set<string>();
+    const webAnswersMaps: Record<string, any>[] = [];
 
-      const questionIds = Object.keys(answers);
-      const questions = await storage.getQuestionsByIds(questionIds);
+    for (let i = 0; i < webAttempts.length; i++) {
+      const fullAttempt = webAttemptsFullAll[i];
+      const answers = (fullAttempt?.answersJson || {}) as Record<string, any>;
+      webAnswersMaps.push(answers);
+      Object.keys(answers).forEach(qId => questionIdsAll.add(qId));
 
-      for (const q of questions) {
+      // Адаптивные — берём из resultJson
+      if (webAttempts[i].isAdaptive && fullAttempt?.resultJson) {
+        const result = fullAttempt.resultJson as any;
+        if (result?.mode === "adaptive") {
+          for (const tr of result.topicResults || []) {
+            const existing = topicStatsMap.get(tr.topicId) || {
+              topicId: tr.topicId,
+              topicName: tr.topicName || topicMap.get(tr.topicId) || "Unknown",
+              totalAnswers: 0,
+              correctAnswers: 0,
+              totalPercent: 0,
+              failureCount: 0,
+            };
+            existing.totalAnswers += tr.totalQuestionsAnswered || 0;
+            existing.correctAnswers += tr.totalCorrect || 0;
+            existing.failureCount += (tr.totalQuestionsAnswered || 0) - (tr.totalCorrect || 0);
+            topicStatsMap.set(tr.topicId, existing);
+          }
+        }
+      }
+    }
+
+    // Загружаем все вопросы одним запросом
+    const allQuestions = await storage.getQuestionsByIds(Array.from(questionIdsAll));
+    const questionMap = new Map(allQuestions.map(q => [q.id, q]));
+
+    // PRD-15 block D (FR-32): correctness uses the test-effective graded config
+    // — one resolution context per involved test.
+    const scoringByTest = new Map<string, TestScoringContext>();
+    for (const testId of new Set(
+      webAttemptsFullAll.filter((a): a is NonNullable<typeof a> => !!a).map((a) => a.testId),
+    )) {
+      scoringByTest.set(testId, await loadTestScoringContext(testId, storage));
+    }
+
+    // Стандартные web попытки — считаем по ответам
+    for (let i = 0; i < webAttempts.length; i++) {
+      if (webAttempts[i].isAdaptive) continue;
+      const answers = webAnswersMaps[i];
+      const scoring = scoringByTest.get(webAttemptsFullAll[i]?.testId ?? "");
+      for (const [qId, userAnswer] of Object.entries(answers)) {
+        const q = questionMap.get(qId);
+        if (!q) continue;
         const existing = topicStatsMap.get(q.topicId) || {
           topicId: q.topicId,
           topicName: topicMap.get(q.topicId) || "Unknown",
@@ -298,7 +471,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
           failureCount: 0,
         };
         existing.totalAnswers++;
-        const isCorrect = checkAnswer(q, answers[q.id]) === 1;
+        const isCorrect = checkAnswer(q, userAnswer, scoring?.resolve(q).scoring) === 1;
         if (isCorrect) existing.correctAnswers++;
         else existing.failureCount++;
         topicStatsMap.set(q.topicId, existing);
@@ -337,6 +510,20 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       });
     }
 
+    // Собираем топ-5 тестов по количеству попыток для трендов
+    const top5TestIds = Array.from(testStatsMap.values())
+      .sort((a, b) => b.totalAttempts - a.totalAttempts)
+      .slice(0, 5)
+      .map(t => t.testId);
+
+    // Добавляем счётчики по тестам в каждый день
+    for (const [dateStr, entry] of trendsMap.entries()) {
+      (entry as any).byTest = {};
+      for (const testId of top5TestIds) {
+        (entry as any).byTest[testId] = 0;
+      }
+    }
+
     combined
       .filter(a => a.finishedAt && new Date(a.finishedAt) >= thirtyDaysAgo)
       .forEach(a => {
@@ -348,6 +535,9 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
           else existing.lmsAttempts++;
           if (a.resultPassed) existing.passedCount++;
           existing.totalPercent += a.resultPercent || 0;
+          if (a.testId && top5TestIds.includes(a.testId)) {
+            (existing as any).byTest[a.testId] = ((existing as any).byTest[a.testId] || 0) + 1;
+          }
         }
       });
 
@@ -359,8 +549,44 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
         lmsAttempts: t.lmsAttempts,
         avgPercent: t.attempts > 0 ? t.totalPercent / t.attempts : 0,
         passRate: t.attempts > 0 ? (t.passedCount / t.attempts) * 100 : 0,
+        ...(t as any).byTest,
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
+
+    const top5Tests = Array.from(testStatsMap.values())
+      .sort((a, b) => b.totalAttempts - a.totalAttempts)
+      .slice(0, 5)
+      .map(t => ({ testId: t.testId, testTitle: t.testTitle }));
+
+    // ALERTS — тесты с резким падением pass rate
+    const now = new Date();
+    const day7ago = new Date(now); day7ago.setDate(now.getDate() - 7);
+    const day14ago = new Date(now); day14ago.setDate(now.getDate() - 14);
+
+    const alertMap = new Map<string, { testTitle: string; recent: number[]; prev: number[] }>();
+
+    for (const a of combined) {
+      if (!a.finishedAt || !a.testId) continue;
+      const dt = new Date(a.finishedAt);
+      const entry = alertMap.get(a.testId) || { testTitle: a.testTitle, recent: [] as number[], prev: [] as number[] };
+      if (dt >= day7ago) entry.recent.push(a.resultPassed ? 1 : 0);
+      else if (dt >= day14ago) entry.prev.push(a.resultPassed ? 1 : 0);
+      alertMap.set(a.testId, entry);
+    }
+
+    const alerts: { testId: string; testTitle: string; recentPassRate: number; prevPassRate: number; drop: number }[] = [];
+
+    for (const [testId, entry] of alertMap.entries()) {
+      if (entry.recent.length < 3 || entry.prev.length < 3) continue;
+      const recentRate = (entry.recent.reduce((s, v) => s + v, 0) / entry.recent.length) * 100;
+      const prevRate = (entry.prev.reduce((s, v) => s + v, 0) / entry.prev.length) * 100;
+      const drop = prevRate - recentRate;
+      if (drop >= 20) {
+        alerts.push({ testId, testTitle: entry.testTitle, recentPassRate: recentRate, prevPassRate: prevRate, drop });
+      }
+    }
+
+    alerts.sort((a, b) => b.drop - a.drop);
 
     res.json({
       summary: {
@@ -377,9 +603,11 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       testStats,
       topicStats,
       trends,
+      top5Tests, 
+      alerts,
     });
   } catch (error) {
-    console.error("Combined analytics error:", error);
+    logger.error("Combined analytics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get analytics" });
   }
 });

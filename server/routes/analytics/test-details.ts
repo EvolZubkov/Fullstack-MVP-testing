@@ -1,13 +1,17 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext } from "../../services/effective-scoring";
 import type { AttemptResult } from "@shared/schema";
+import { stripMarkdown } from "@shared/text";
 
 const router = Router();
 
 // GET /api/analytics/tests/:testId - Детальная аналитика теста
-router.get("/:testId", requireAuthor, async (req: Request, res: Response) => {
+router.get("/:testId", requirePermission("analytics.read"), requireTestScope("analytics", "testId"), async (req: Request, res: Response) => {
   try {
     const testId = req.params.testId;
     const test = await storage.getTest(testId);
@@ -141,6 +145,9 @@ router.get("/:testId", requireAuthor, async (req: Request, res: Response) => {
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map(t => [t.id, t.name]));
 
+    // PRD-15 block D (FR-32): correctness/difficulty use the test-effective chain.
+    const scoring = await loadTestScoringContext(testId, storage);
+
     interface QuestionStatsEntry {
       questionId: string;
       questionPrompt: string;
@@ -163,17 +170,17 @@ router.get("/:testId", requireAuthor, async (req: Request, res: Response) => {
 
         const existing = questionStatsMap.get(qId) || {
           questionId: qId,
-          questionPrompt: question.prompt,
+          questionPrompt: stripMarkdown(question.prompt),
           questionType: question.type,
           topicId: question.topicId,
           topicName: topicMap.get(question.topicId) || "Unknown",
-          difficulty: question.difficulty || 50,
+          difficulty: scoring.difficultyOf(question) || 50,
           totalAnswers: 0,
           correctAnswers: 0,
         };
 
         existing.totalAnswers++;
-        if (checkAnswer(question, answer) === 1) {
+        if (checkAnswer(question, answer, scoring.resolve(question).scoring) === 1) {
           existing.correctAnswers++;
         }
 
@@ -334,7 +341,7 @@ router.get("/:testId", requireAuthor, async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error("Test analytics error:", error);
+    logger.error("Test analytics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch test analytics" });
   }
 });

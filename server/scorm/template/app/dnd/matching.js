@@ -1,10 +1,28 @@
+/**
+ * @module dnd/matching
+ * @description Matching drag-and-drop for the SCORM runtime.
+ *
+ * Thin adapter over the SHARED engine (PRD-12 DnD unification): the pointer
+ * controller (`TBTemplate.attachPointerDnd`) and the rich pool model
+ * (`TBTemplate.normalizePool` / `dropOnRight` / `dropOnPoolSlot` / `returnToPool`,
+ * see shared/template/dnd). This replaces the previous native HTML5 DnD; the
+ * web host mounts the exact same engine, so both hosts compute drops identically.
+ *
+ * This module owns only the host wiring: resolving the current matching question,
+ * reading/writing `state.answers` + `state.matchingPools`, the feedback lock, and
+ * re-rendering. The drag gesture and the pool semantics live in shared/.
+ *
+ * Depends on globals: state, TEST_DATA, window.TBTemplate, rerenderCurrentQuestionInput,
+ * getCurrentAdaptiveQuestion.
+ */
+
 var __matchHeightRAF = 0;
 function syncMatchingHeights() {
   try {
     if (__matchHeightRAF) cancelAnimationFrame(__matchHeightRAF);
   } catch (e) {}
 
-  __matchHeightRAF = requestAnimationFrame(function() {
+  __matchHeightRAF = requestAnimationFrame(function () {
     var roots = document.querySelectorAll('.matching-board');
     for (var i = 0; i < roots.length; i++) {
       var root = roots[i];
@@ -14,8 +32,8 @@ function syncMatchingHeights() {
       root.style.setProperty('--matchRowH', 'auto');
 
       // measure after next frame so layout is updated
-      (function(r) {
-        requestAnimationFrame(function() {
+      (function (r) {
+        requestAnimationFrame(function () {
           var nodes = r.querySelectorAll('.match-tile, .match-empty');
           var maxH = 0;
           for (var j = 0; j < nodes.length; j++) {
@@ -35,347 +53,105 @@ var __matchDndBound = false;
 function bindMatchingDnDOnce() {
   if (__matchDndBound) return;
   __matchDndBound = true;
+  if (typeof document === 'undefined') return;
 
-  function closestByClass(node, cls) {
-    var el = node;
-    while (el && el !== document) {
-      if (el.classList && el.classList.contains(cls)) return el;
-      el = el.parentNode;
-    }
-    return null;
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+
+  function isLocked() {
+    return !!(TEST_DATA.showCorrectAnswers && state.feedbackShown);
   }
 
-  var __matchOverEl = null;
-
-  function clearMatchOver() {
-    if (__matchOverEl) __matchOverEl.classList.remove('is-over');
-    __matchOverEl = null;
-  }
-
-  function setMatchOver(el) {
-    if (__matchOverEl && __matchOverEl !== el) __matchOverEl.classList.remove('is-over');
-    __matchOverEl = el;
-    if (__matchOverEl) __matchOverEl.classList.add('is-over');
-  }
-
-  function parsePayloadFromEvent(e) {
-    var raw = '';
-    try { raw = e.dataTransfer.getData('application/json'); } catch (err) {}
-    if (!raw) {
-      try { raw = e.dataTransfer.getData('text/plain'); } catch (err2) {}
-    }
-    if (!raw) return null;
-
-    // JSON first
-    try {
-      var obj = JSON.parse(raw);
-      if (obj && obj.qid) return obj;
-    } catch (e1) {}
-
-    // fallback: qid|leftIdx|from|poolIndex|rightIdx
-    var parts = String(raw).split('|');
-    if (parts.length < 2) return null;
-
-    var qid = parts[0];
-    var leftIdx = parseInt(parts[1], 10);
-    if (!qid || Number.isNaN(leftIdx)) return null;
-
-    var payload = { qid: qid, leftIdx: leftIdx, from: parts[2] || 'pool' };
-    if (parts[3]) {
-      var pi = parseInt(parts[3], 10);
-      if (!Number.isNaN(pi)) payload.poolIndex = pi;
-    }
-    if (parts[4]) {
-      var ri = parseInt(parts[4], 10);
-      if (!Number.isNaN(ri)) payload.rightIdx = ri;
-    }
-    return payload;
-  }
-
-  function getCurrentQuestionById(qid) {
-    // Standard mode - check flatQuestions
-    if (state.flatQuestions && state.flatQuestions.length > 0) {
-      var current = state.flatQuestions[state.currentIndex] && state.flatQuestions[state.currentIndex].question;
-      if (current && String(current.id) === String(qid)) return current;
-
-      for (var i = 0; i < state.flatQuestions.length; i++) {
-        var q = state.flatQuestions[i].question;
-        if (q && String(q.id) === String(qid)) return q;
-      }
-    }
-    
-    // Adaptive mode - check adaptiveState and TEST_DATA.adaptiveTopics
+  // The matching question currently on screen (standard or adaptive).
+  function currentQuestion() {
     if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
-      // First check current question
-      if (state.adaptiveState.currentQuestionId === qid) {
-        var qData = getCurrentAdaptiveQuestion();
-        if (qData && qData.question) return qData.question;
-      }
-      
-      // Search in all adaptive topics
-      if (TEST_DATA.adaptiveTopics) {
-        for (var t = 0; t < TEST_DATA.adaptiveTopics.length; t++) {
-          var topic = TEST_DATA.adaptiveTopics[t];
-          if (topic.questions) {
-            for (var j = 0; j < topic.questions.length; j++) {
-              var aq = topic.questions[j];
-              if (aq && String(aq.id) === String(qid)) return aq;
-            }
-          }
-        }
-      }
+      var qd = (typeof getCurrentAdaptiveQuestion === 'function') ? getCurrentAdaptiveQuestion() : null;
+      return qd ? qd.question : null;
     }
-    
-    return null;
+    var fq = state.flatQuestions && state.flatQuestions[state.currentIndex];
+    return fq ? fq.question : null;
   }
 
-  function normalizePool(qid, leftMapping, ans) {
+  function leftMappingFor(q) {
+    var sm = state.shuffleMappings && state.shuffleMappings[q.id];
+    return (sm && sm.left) ? sm.left : q.data.left.map(function (_, i) { return i; });
+  }
+
+  // Resolves the live matching state {pairs, pool} for the current question,
+  // reconciling the pool through the shared model.
+  function readState(q) {
+    var pairs = (state.answers[q.id] && typeof state.answers[q.id] === 'object') ? state.answers[q.id] : {};
+    var prevPool = (state.matchingPools && Array.isArray(state.matchingPools[q.id])) ? state.matchingPools[q.id] : [];
+    var pool = TB.normalizePool(prevPool, pairs, leftMappingFor(q));
+    return { pairs: pairs, pool: pool };
+  }
+
+  function commit(q, next) {
     if (!state.matchingPools) state.matchingPools = {};
-    if (!Array.isArray(state.matchingPools[qid])) state.matchingPools[qid] = leftMapping.slice();
-
-    var pool = state.matchingPools[qid];
-
-    // used left
-    var used = {};
-    Object.keys(ans || {}).forEach(function(k) {
-      var li = parseInt(k, 10);
-      if (!Number.isNaN(li)) used[li] = true;
-    });
-
-    // remove used from pool
-    var next = [];
-    for (var i = 0; i < pool.length; i++) {
-      var li2 = pool[i];
-      if (!used[li2]) next.push(li2);
-    }
-
-    // add missing unused in leftMapping order
-    for (var j = 0; j < leftMapping.length; j++) {
-      var li3 = leftMapping[j];
-      if (used[li3]) continue;
-      if (next.indexOf(li3) === -1) next.push(li3);
-    }
-
-    state.matchingPools[qid] = next;
-    return next;
+    state.answers[q.id] = next.pairs;
+    state.matchingPools[q.id] = next.pool;
+    if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
+    // The nav row is not re-rendered here — sync «Отправить ответ» explicitly so it
+    // enables once every pair is matched (matching's hasAnswer needs all pairs).
+    if (typeof refreshSubmitEnabled === 'function') refreshSubmitEnabled();
   }
 
-  function removeFromPool(pool, leftIdx, poolIndex) {
-    if (!Array.isArray(pool)) return -1;
-
-    if (typeof poolIndex === 'number' && poolIndex >= 0 && poolIndex < pool.length && pool[poolIndex] === leftIdx) {
-      pool.splice(poolIndex, 1);
-      return poolIndex;
-    }
-
-    var idx = pool.indexOf(leftIdx);
-    if (idx >= 0) {
-      pool.splice(idx, 1);
-      return idx;
-    }
-
-    return -1;
-  }
-
-  function insertIntoPool(pool, leftIdx, index) {
-    if (!Array.isArray(pool)) return;
-    var i = (typeof index === 'number') ? index : pool.length;
-    if (i < 0) i = 0;
-    if (i > pool.length) i = pool.length;
-    pool.splice(i, 0, leftIdx);
-  }
-
-  function leftForRight(ans, rightIdx) {
-    var keys = Object.keys(ans || {});
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      if (ans[k] === rightIdx) return parseInt(k, 10);
-    }
-    return null;
-  }
-
-  function removeLeftFromAnswers(ans, leftIdx) {
-    if (!ans || typeof ans !== 'object') return;
-    if (ans.hasOwnProperty(leftIdx)) delete ans[leftIdx];
-    if (ans.hasOwnProperty(String(leftIdx))) delete ans[String(leftIdx)];
-  }
-
-  // dragstart
-  document.addEventListener('dragstart', function(e) {
-    var card = closestByClass(e.target, 'match-chip');
-    if (!card) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) {
-      e.preventDefault();
-      return;
-    }
-
-    var qid = card.getAttribute('data-qid');
-    var left = parseInt(card.getAttribute('data-left'), 10);
-    if (!qid || Number.isNaN(left)) return;
-
-    var from = card.getAttribute('data-from') || 'pool';
-    var payload = { qid: qid, leftIdx: left, from: from };
-
-    var piStr = card.getAttribute('data-pool-index');
-    if (piStr !== null && piStr !== '') {
-      var pi = parseInt(piStr, 10);
-      if (!Number.isNaN(pi)) payload.poolIndex = pi;
-    }
-
-    var riStr = card.getAttribute('data-right');
-    if (riStr !== null && riStr !== '') {
-      var ri = parseInt(riStr, 10);
-      if (!Number.isNaN(ri)) payload.rightIdx = ri;
-    }
-
-    try {
-      e.dataTransfer.setData('application/json', JSON.stringify(payload));
-      e.dataTransfer.setData(
-        'text/plain',
-        payload.qid + '|' + payload.leftIdx + '|' + payload.from + '|' +
-        (payload.poolIndex !== undefined ? payload.poolIndex : '') + '|' +
-        (payload.rightIdx !== undefined ? payload.rightIdx : '')
-      );
-      e.dataTransfer.effectAllowed = 'move';
-    } catch (err) {}
-  });
-
-  // dragover
-  document.addEventListener('dragover', function(e) {
-    var rightDrop = closestByClass(e.target, 'match-drop-right');
-    var leftDrop = closestByClass(e.target, 'match-drop-left');
-    var dropEl = rightDrop || leftDrop;
-    if (!dropEl) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    setMatchOver(dropEl);
-    try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
-  });
-
-  document.addEventListener('dragleave', function(e) {
-    var rightDrop = closestByClass(e.target, 'match-drop-right');
-    var leftDrop = closestByClass(e.target, 'match-drop-left');
-    var dropEl = rightDrop || leftDrop;
-    if (!dropEl) return;
-
-    // снимаем подсветку только если реально вышли из текущего drop
-    if (__matchOverEl === dropEl && (!e.relatedTarget || !dropEl.contains(e.relatedTarget))) {
-      clearMatchOver();
-    }
-  });
-
-  // drop
-  document.addEventListener('drop', function(e) {
-    clearMatchOver();
-    var rightDrop = closestByClass(e.target, 'match-drop-right');
-    var leftDrop = closestByClass(e.target, 'match-drop-left');
-    var dropEl = rightDrop || leftDrop;
-    if (!dropEl) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    dropEl.classList.remove('is-over');
-
-    var payload = parsePayloadFromEvent(e);
-    if (!payload || !payload.qid || Number.isNaN(payload.leftIdx)) return;
-
-    var q = getCurrentQuestionById(payload.qid);
+  // Maps a completed drag to a model transition. `dropId` is the zone's
+  // `data-drop` value, or '' when the chip was released away from every zone.
+  function applyDrop(dropId, dragId) {
+    if (isLocked() || !TB) return;
+    var q = currentQuestion();
     if (!q || q.type !== 'matching') return;
 
-    var ans = (state.answers[payload.qid] && typeof state.answers[payload.qid] === 'object') ? state.answers[payload.qid] : {};
+    var leftIdx = parseInt(dragId, 10);
+    if (Number.isNaN(leftIdx)) return;
 
-    var shuffleMapping = state.shuffleMappings[q.id] || {};
-    var leftMapping = shuffleMapping.left ? shuffleMapping.left : q.data.left.map(function(_, i){ return i; });
+    var st = readState(q);
+    var from = st.pairs.hasOwnProperty(leftIdx) ? 'match' : 'pool';
+    var payload = { leftIdx: leftIdx, from: from, poolIndex: from === 'pool' ? st.pool.indexOf(leftIdx) : undefined };
 
-    var pool = normalizePool(payload.qid, leftMapping, ans);
-
-    var poolSlotStr = dropEl.getAttribute('data-pool-slot');
-    var targetRightStr = dropEl.getAttribute('data-right');
-    var isPoolDrop = (poolSlotStr !== null && poolSlotStr !== '');
-
-    if (isPoolDrop) {
-      var targetSlot = parseInt(poolSlotStr, 10);
-      if (Number.isNaN(targetSlot)) return;
-
-      if (payload.from === 'pool') {
-        var removedAt = removeFromPool(pool, payload.leftIdx, payload.poolIndex);
-        if (removedAt >= 0 && removedAt < targetSlot) targetSlot = targetSlot - 1;
-      } else {
-        removeLeftFromAnswers(ans, payload.leftIdx);
-      }
-
-      insertIntoPool(pool, payload.leftIdx, targetSlot);
-
-      state.answers[payload.qid] = ans;
-      state.matchingPools[payload.qid] = pool;
-      rerenderCurrentQuestionInput();
-      return;
-    }
-
-    var targetRight = parseInt(targetRightStr, 10);
-    if (Number.isNaN(targetRight)) return;
-
-    if (payload.from === 'pool') {
-      removeFromPool(pool, payload.leftIdx, payload.poolIndex);
+    var next;
+    if (dropId === '') {
+      // Released into the void: a matched chip detaches; a pooled chip stays put.
+      if (from !== 'match') return;
+      next = TB.returnToPool(st, leftIdx);
+    } else if (dropId.charAt(0) === 'r') {
+      var rightIdx = parseInt(dropId.slice(1), 10);
+      if (Number.isNaN(rightIdx)) return;
+      next = TB.dropOnRight(st, payload, rightIdx);
+    } else if (dropId.indexOf('pool') === 0) {
+      var ci = dropId.indexOf(':');
+      var slot = ci >= 0 ? parseInt(dropId.slice(ci + 1), 10) : st.pool.length;
+      next = TB.dropOnPoolSlot(st, payload, Number.isNaN(slot) ? st.pool.length : slot);
     } else {
-      removeLeftFromAnswers(ans, payload.leftIdx);
+      return;
     }
 
-    var oldLeft = leftForRight(ans, targetRight);
-    if (oldLeft !== null && !Number.isNaN(oldLeft)) {
-      removeLeftFromAnswers(ans, oldLeft);
+    commit(q, next);
+  }
 
-      if (payload.from === 'pool' && typeof payload.poolIndex === 'number') {
-        insertIntoPool(pool, oldLeft, payload.poolIndex);
-      } else {
-        insertIntoPool(pool, oldLeft, pool.length);
+  // Single mount of the shared pointer engine for the whole runtime. The drop is
+  // routed to both the matching and ranking handlers; each ignores drags that are
+  // not for its own question type, so only one acts.
+  if (TB && TB.attachPointerDnd) {
+    TB.attachPointerDnd(document, {
+      onDrop: function (d) {
+        applyDrop(d.dropId, d.dragId);
+        if (typeof applyRankingDrop === 'function') applyRankingDrop(d.dropId, d.dragId);
       }
-    }
-
-    ans[payload.leftIdx] = targetRight;
-
-    Object.keys(ans).forEach(function(k) {
-      var li = parseInt(k, 10);
-      if (li !== payload.leftIdx && ans[k] === targetRight) delete ans[k];
     });
+  }
 
-    state.answers[payload.qid] = ans;
-    state.matchingPools[payload.qid] = pool;
-    rerenderCurrentQuestionInput();
-  });
-
-  // dblclick matched -> return to pool
-  document.addEventListener('dblclick', function(e) {
-    var card = closestByClass(e.target, 'match-chip');
-    if (!card) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    var from = card.getAttribute('data-from');
-    if (from !== 'match') return;
-
-    var qid = card.getAttribute('data-qid');
-    var leftIdx = parseInt(card.getAttribute('data-left'), 10);
-    if (!qid || Number.isNaN(leftIdx)) return;
-
-    var q = getCurrentQuestionById(qid);
+  // dblclick a matched chip → return it to the pool (kept for parity / a11y).
+  document.addEventListener('dblclick', function (e) {
+    if (isLocked() || !TB) return;
+    var chip = (e.target && e.target.closest) ? e.target.closest('.ou-match__card--drag[data-drag]') : null;
+    if (!chip) return;
+    var q = currentQuestion();
     if (!q || q.type !== 'matching') return;
-
-    var ans = (state.answers[qid] && typeof state.answers[qid] === 'object') ? state.answers[qid] : {};
-    var shuffleMapping = state.shuffleMappings[q.id] || {};
-    var leftMapping = shuffleMapping.left ? shuffleMapping.left : q.data.left.map(function(_, i){ return i; });
-
-    var pool = normalizePool(qid, leftMapping, ans);
-
-    removeLeftFromAnswers(ans, leftIdx);
-    insertIntoPool(pool, leftIdx, pool.length);
-
-    state.answers[qid] = ans;
-    state.matchingPools[qid] = pool;
-    rerenderCurrentQuestionInput();
+    var leftIdx = parseInt(chip.getAttribute('data-drag'), 10);
+    if (Number.isNaN(leftIdx)) return;
+    var st = readState(q);
+    if (!st.pairs.hasOwnProperty(leftIdx)) return; // only matched chips return
+    commit(q, TB.returnToPool(st, leftIdx));
   });
 }

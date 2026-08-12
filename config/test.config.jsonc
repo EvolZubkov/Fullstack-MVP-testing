@@ -1,0 +1,42 @@
+{
+  // =========================================================================
+  // Test-instance environment (NODE_ENV=test). Selected by the loader over
+  // config/config.jsonc. Non-secret settings only; secrets are defined in
+  // .env.test (or the mounted .env) and referenced via { "env": "VAR" }.
+  // See config/config.jsonc for the fully-documented base.
+  // =========================================================================
+  "log": {
+    "fileName": "",
+    "level": { "common": "info", "console": "info", "file": "info", "objects": {} }
+  },
+  "server": {
+    "port": 5000,
+    // Public URL of the deployed test instance, as seen by the learner (the
+    // reverse proxy in front terminates TLS and forwards to the container port
+    // from docker/config/deploy.env: TEST_PORT). Used to build email links.
+    // No trailing slash (the loader strips one anyway).
+    "appUrl": "https://test-dev.edtech-rtk.ru",
+    "appName": "Skill'Ум (test)",
+    // Same reverse-proxy setup as production: TLS terminates in nginx, which
+    // forwards X-Forwarded-Proto: https (trust proxy is on, see server/index.ts).
+    "cookieSecure": true
+  },
+  "database": { "url": { "env": "DATABASE_URL" } },
+  "session": { "secret": { "env": "SESSION_SECRET" } },
+  "encryption": {
+    "password": { "env": "ENCRYPTION_PASSWORD" },
+    "salt": { "env": "ENCRYPTION_SALT" }
+  },
+  "email": {
+    "host": "smtp.yandex.ru",
+    "port": 465,
+    "secure": true,
+    // Envelope "from" address. Empty -> falls back to the SMTP user.
+    "from": "skillum@yandex.com",
+    "auth": {
+      "user": { "env": "SMTP_USER" },
+      "pass": { "env": "SMTP_PASS" }
+    }
+  },
+  "access": { "superadminEmails": ["admin@test.com", "vvlad1973@gmail.com"] }
+}

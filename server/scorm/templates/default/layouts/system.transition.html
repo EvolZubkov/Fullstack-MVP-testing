@@ -1,0 +1,32 @@
+<div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      {{#if design.logoUrl}}<span class="tb-scene__logo"><img src="{{ design.logoUrl }}" alt=""></span>{{/if}}
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title"></h1>
+        {{#if course.subtitle}}<span class="tb-scene__subtitle" data-path="course.subtitle"></span>{{/if}}
+      </div>
+      <div class="tb-scene__headtag"><span class="ou-tag ou-tag--neutral">Адаптивный тест</span></div>
+    </div>
+  </header>
+
+  <main class="tb-scene__body">
+    <div class="tb-scene__col tb-scene__col--center tb-scene__col--narrow">
+      <span class="tb-transition-icon {{ transition.level.class }}" aria-hidden="true">
+        {{#if transition.level.isUp}}<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{{/if}}
+        {{#if transition.level.isDown}}<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>{{/if}}
+        {{#if transition.level.isComplete}}<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>{{/if}}
+      </span>
+      {{#if transition.topicName}}<span class="tb-eyebrow">Тема «<span data-path="transition.topicName"></span>»</span>{{/if}}
+      <h2 class="tb-scene__hero tb-scene__hero--s">{{ transition.title }}</h2>
+      <span class="tb-scene__lead" data-path="transition.level.message"></span>
+    </div>
+  </main>
+
+  {{#if transition.showContinue}}
+  <footer class="tb-scene__foot">
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-action="continue">Продолжить</button>
+  </footer>
+  {{/if}}
+</div>

@@ -1,0 +1,2031 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-2 + PRD-5 — Test Editor: Scoring authoring surfaces
+    Issue: #11 (scoring track). Концепт: docs/specs/scoring-model.md §9.
+    Состояния:
+      s-scales         — вкладка «Шкалы», под-вид «Список шкал»
+      s-contributions  — вкладка «Шкалы», под-вид «Вклады вопросов» (матрица)
+      s-indicators     — вкладка «Показатели»
+    DRAFT — не перенесён в approved/ до согласования.
+  -->
+    <title>PRD-2/5 — Редактор: Шкалы / Вклады / Показатели</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      /* WIREFRAME-каркас: только эскизные утилиты и DS-override на токенах. */
+      .wf-sprite {
+        display: none;
+      }
+      /* DS sets ou-drawer__head align-items: flex-start; центрируем заголовок. */
+      .ou-drawer__head {
+        align-items: center;
+      }
+      /* Override legacy .ou-select fallback из wf-utils.css (двойная рамка). */
+      .ou-select {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        line-height: inherit;
+        cursor: default;
+        border-radius: 0;
+      }
+      /* Меню селекта закрыто по умолчанию (открывается классом is-open из prd7-shared.js). */
+      .ou-select:not(.is-open) .ou-select__menu {
+        display: none;
+      }
+      .wf-sep {
+        border: none;
+        border-top: var(--wf-border-w) solid var(--ou-border-soft);
+        margin: var(--ou-space-5) 0;
+      }
+      .wf-skel-textarea {
+        height: var(--wf-size-72);
+      }
+      /* Контейнер сопроводительных таблиц (Пояснения + DS Mapping) под состояниями. */
+      .wf-doc {
+        padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10);
+      }
+      /* Заголовок списка с действием справа (кнопка «Добавить …» — наверх). */
+      .wf-list-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ou-space-3);
+        margin-bottom: var(--ou-space-3);
+      }
+      .wf-list-head .tb-section-label {
+        margin-bottom: 0;
+      }
+      /* Muted scale chip: a scale this question does NOT contribute to. */
+      .wf-chip-muted {
+        opacity: 0.45;
+      }
+      /* Narrow number inputs in the «вариант × шкала» grid. */
+      .wf-num-grid td .ou-field {
+        width: var(--ou-space-12);
+      }
+      /* Bands editor grid: keep min/max/level inputs compact, let «Метка» fill. */
+      .wf-bands-grid td .ou-field {
+        width: 100%;
+      }
+      .wf-bands-grid td:nth-child(1) .ou-field,
+      .wf-bands-grid td:nth-child(2) .ou-field {
+        width: var(--wf-size-72);
+      }
+      .wf-bands-grid td:nth-child(4) .ou-field {
+        width: var(--wf-size-110);
+      }
+      /* Read-only highlight of the correct variant row (edited in «Вопросы»). */
+      .wf-row-correct td {
+        background: var(--ou-bg-hover);
+      }
+      .wf-correct-mark {
+        color: var(--ou-accent-default);
+        font-weight: 600;
+        margin-left: var(--ou-space-2);
+      }
+    </style>
+
+    <style data-wf-template-overrides>
+      /* WIREFRAME.html contract: meta-навигация и state-контейнеры. */
+      .wf-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs);
+        color: var(--ou-fg-default);
+        flex-wrap: wrap;
+      }
+      .wf-nav-title {
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        margin-right: var(--ou-space-2);
+        white-space: nowrap;
+      }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s);
+        background: transparent;
+        color: var(--ou-fg-default);
+        font: var(--ou-text-body-s);
+        cursor: pointer;
+      }
+      .wf-nav button:hover {
+        background: var(--ou-bg-hover);
+      }
+      .wf-nav button.active {
+        background: var(--ou-accent-default);
+        color: var(--ou-fg-on-accent);
+        border-color: var(--ou-accent-default);
+      }
+      .wf-nav-sep {
+        width: var(--wf-border-w);
+        height: var(--ou-space-5);
+        background: var(--ou-border-soft);
+        margin: 0 var(--ou-space-2);
+      }
+      .wf-state {
+        display: none;
+        padding-top: var(--wf-nav-offset, var(--wf-size-52));
+      }
+      .wf-state.active {
+        display: block;
+      }
+      .wf-state > .ou-drawer-root {
+        top: var(--wf-nav-offset, var(--wf-size-52));
+        bottom: 0;
+        height: auto;
+      }
+      .wf-state > .ou-drawer-root > .ou-drawer {
+        height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+        max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      }
+      /* Локальные эскизные помощники (на токенах) */
+      .wf-scope-toggle {
+        margin-bottom: var(--ou-space-4);
+      }
+      .wf-row-actions {
+        display: flex;
+        gap: var(--ou-space-2);
+        margin-top: var(--ou-space-4);
+      }
+      .wf-grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--ou-space-3) var(--ou-space-4);
+      }
+      .wf-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--ou-space-3);
+      }
+      .wf-cond-row {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--ou-space-2);
+      }
+      .wf-cond-row > .wf-grow {
+        flex: 1 1 auto;
+      }
+      .wf-cond-sep {
+        font: var(--ou-text-body-s);
+        color: var(--ou-fg-muted);
+        white-space: nowrap;
+        padding-bottom: var(--ou-space-2);
+      }
+      .wf-fn-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: var(--ou-space-2);
+      }
+      .wf-fn-group {
+        margin-bottom: var(--ou-space-5);
+      }
+      .wf-fn-group__title {
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        margin: 0 0 var(--ou-space-2);
+      }
+      .wf-fn-row {
+        display: grid;
+        grid-template-columns: max-content 1fr auto;
+        align-items: center;
+        gap: var(--ou-space-3);
+        padding: var(--ou-space-2) 0;
+        border-top: var(--wf-border-w) solid var(--ou-border-soft);
+      }
+      .wf-fn-desc {
+        color: var(--ou-fg-muted);
+        font: var(--ou-text-body-s);
+      }
+      .wf-opt-group {
+        padding: var(--ou-space-2) var(--ou-space-3) var(--ou-space-1);
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+      </symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9" />
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="20 6 9 17 4 12" />
+      </symbol>
+      <symbol id="i-rotate-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+      </symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <circle cx="9" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" />
+        <circle cx="15" cy="6" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+      </symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Шкалы:</span>
+      <button type="button" class="active" onclick="showState(this, 'scales')">список</button>
+      <button type="button" onclick="showState(this, 'contributions')">вклады</button>
+      <button type="button" onclick="showState(this, 'scale-advanced')">композит/пересчёт</button>
+      <button type="button" onclick="showState(this, 'scale-error')">ошибка</button>
+      <button type="button" onclick="showState(this, 'scales-empty')">пусто</button>
+      <button type="button" onclick="showState(this, 'preview-calc')">предпросмотр</button>
+      <span class="wf-nav-sep"></span>
+      <span class="wf-nav-title">Показатели:</span>
+      <button type="button" onclick="showState(this, 'indicators-list')">список + DnD</button>
+      <button type="button" onclick="showState(this, 'indicators')">карточка</button>
+      <button type="button" onclick="showState(this, 'indicator-builder')">конструктор · порог</button>
+      <button type="button" onclick="showState(this, 'indicator-builder-cat')">· категория</button>
+      <button type="button" onclick="showState(this, 'indicator-builder-weighted')">· взвеш. сумма</button>
+      <button type="button" onclick="showState(this, 'indicator-builder-verdict')">· вердикт</button>
+      <button type="button" onclick="showState(this, 'indicator-dsl')">· DSL + функции</button>
+      <button type="button" onclick="showState(this, 'fn-reference')">· справочник</button>
+      <button type="button" onclick="showState(this, 'indicator-error')">ошибка</button>
+      <button type="button" onclick="showState(this, 'indicators-empty')">пусто</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'loading')">loading</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd7-editor-drawer.html">&larr; Drawer</a>
+    </nav>
+
+    <!-- ════════════════ s-scales: Шкалы → Список шкал ════════════════ -->
+    <div id="wf-scales" class="wf-state active">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус: Черновик">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Шкалы</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы шкал">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Список шкал</button>
+                <button type="button" class="ou-drawer__rail-item" onclick="showState(null, 'contributions')">Вклады вопросов</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="wf-list-head">
+                <div class="tb-section-label">Шкалы теста</div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить шкалу</button>
+              </div>
+
+              <!-- Шкала EE (свёрнута) -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">EE — Эмоциональное истощение</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">сумма · проценты · 9 вопросов · high &ge; 25</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть шкалу" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+
+              <!-- Шкала D (свёрнута) -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--warn" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">D — Отстранённость</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">сумма · проценты · 5 вопросов · 1 без вклада</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть шкалу" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+
+              <!-- Шкала AD (раскрыта — инверсная) -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">AD — Обесценивание достижений</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">8 вопросов · обратная шкала</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть шкалу" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="s-key">Ключ <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="s-key" type="text" value="ad" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="s-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="s-label" type="text" value="Обесценивание достижений" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="s-agg">Агрегация</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Сумма|Среднее|Взвешенное среднее|Максимум|Минимум">
+                        <button type="button" class="ou-select__trigger" id="s-agg"><span class="ou-select__value">Сумма</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Источник</label>
+                      <div class="ou-seg" role="group" aria-label="Источник">
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true">Вопросы</button>
+                        <button type="button" class="ou-seg__item" aria-pressed="false">Другие шкалы</button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="s-norm">Пересчёт итога</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Нет|Проценты|Инверсия">
+                        <button type="button" class="ou-select__trigger" id="s-norm"><span class="ou-select__value">Инверсия</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="s-target">Передавать в LMS</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                        <button type="button" class="ou-select__trigger" id="s-target"><span class="ou-select__value">Столбцом в отчёте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Диапазоны (пороги) &rarr; уровень</div>
+                  <table class="tb-table tb-table--mb wf-bands-grid">
+                    <thead>
+                      <tr><th>min</th><th>max</th><th>Метка (опц.)</th><th>Уровень</th><th aria-label="Действия"></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="min диапазона «Высокий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="27" aria-label="max диапазона «Высокий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Высокий" aria-label="Метка диапазона" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="high" aria-label="Уровень (код) диапазона" /></div></div></td>
+                        <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить диапазон"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="28" aria-label="min диапазона «Средний»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="32" aria-label="max диапазона «Средний»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Средний" aria-label="Метка диапазона" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="mid" aria-label="Уровень (код) диапазона" /></div></div></td>
+                        <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить диапазон"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="33" aria-label="min диапазона «Низкий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="40" aria-label="max диапазона «Низкий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Низкий" aria-label="Метка диапазона" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="low" aria-label="Уровень (код) диапазона" /></div></div></td>
+                        <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить диапазон"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="41" aria-label="min новой строки" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="—" aria-label="max новой строки" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="(опционально)" aria-label="Метка новой строки" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="напр. high / passed" aria-label="Уровень (код) новой строки" /></div></div></td>
+                        <td>
+                          <div class="tb-rule-cell">
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline">новая</span>
+                            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить диапазон"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить диапазон</button>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">«Уровень» — произвольный код (напр. high / passed), публикуется в scale.{key}.level для формул показателей. «Метка» необязательна: пусто &rarr; обучающемуся показывается код. Диапазоны вводятся по возрастанию raw, не пересекаются.</div></div>
+                  </div>
+
+                </div>
+              </section>
+
+            </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-contributions: Шкалы → Вклады вопросов ════════════════ -->
+    <div id="wf-contributions" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">Сертификация руководителей</h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус: Черновик">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Шкалы</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы шкал">
+                <button type="button" class="ou-drawer__rail-item" onclick="showState(null, 'scales')">Список шкал</button>
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Вклады вопросов</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                <div class="ou-banner__body"><div class="ou-banner__desc">Вопрос 7 пока не привязан ни к одной шкале — проверьте покрытие.</div></div>
+              </div>
+
+              <!-- Вопрос 1 — свёрнут -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">1. Клиент недоволен сроком — ваши действия?</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">один выбор · <span class="ou-tag ou-tag--neutral ou-tag--outline">КО</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">ОР</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">КМ</span></p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть вопрос" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+
+              <!-- Вопрос 12 — раскрыт: сетка «вариант × шкала» -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">12. Делегирование полномочий</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">один выбор · <span class="ou-tag ou-tag--neutral ou-tag--outline">КО</span> <span class="ou-tag ou-tag--neutral ou-tag--outline">ОР</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">КМ</span></p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Редактировать вопрос</button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть вопрос" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <table class="tb-table wf-num-grid">
+                    <thead>
+                      <tr><th>Вариант ответа</th><th>КО</th><th>ОР</th><th>КМ</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>A. В пользу клиента</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Вклад варианта A в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад варианта A в ОР" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад варианта A в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr class="wf-row-correct">
+                        <td>B. В пользу плана и срока <span class="wf-correct-mark">✓ верный</span></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад варианта B в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Вклад варианта B в ОР" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад варианта B в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr>
+                        <td>C. Совместный баланс</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Вклад варианта C в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Вклад варианта C в ОР" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад варианта C в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <!-- Вопрос 15 (matching) — раскрыт: единица = направленная пара -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">15. Сопоставьте ситуацию и верную реакцию</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">сопоставление · <span class="ou-tag ou-tag--neutral ou-tag--outline">КО</span> <span class="ou-tag ou-tag--neutral ou-tag--outline">ОР</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">КМ</span></p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Редактировать вопрос</button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть вопрос" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <table class="tb-table wf-num-grid">
+                    <thead>
+                      <tr><th>Пара ответа (левый &rarr; правый)</th><th>КО</th><th>ОР</th><th>КМ</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr class="wf-row-correct">
+                        <td>Конфликт в команде &rarr; Медиация <span class="wf-correct-mark">✓ верная</span></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Вклад пары «Конфликт → Медиация» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад пары «Конфликт → Медиация» в ОР" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Конфликт → Медиация» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr>
+                        <td>Конфликт в команде &rarr; Игнорирование</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="-1" aria-label="Вклад пары «Конфликт → Игнорирование» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Конфликт → Игнорирование» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Конфликт → Игнорирование» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr class="wf-row-correct">
+                        <td>Срыв срока &rarr; Эскалация <span class="wf-correct-mark">✓ верная</span></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Вклад пары «Срыв срока → Эскалация» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Срыв срока → Эскалация» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Срыв срока → Эскалация» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Для сопоставления строка = направленная пара «левый &rarr; правый». Активна каждая фактически составленная пара, независимо от корректности: можно оценить и верное сопоставление, и диагностично неверное (scoring-model §10.11).</div></div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Вопрос 18 (ranking) — раскрыт: единица = размещение (элемент @ позиция) -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">18. Расставьте шаги по приоритету</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">ранжирование · <span class="ou-tag ou-tag--neutral ou-tag--outline">КО</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">ОР</span> <span class="ou-tag ou-tag--neutral ou-tag--outline">КМ</span></p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Редактировать вопрос</button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть вопрос" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <table class="tb-table wf-num-grid">
+                    <thead>
+                      <tr><th>Размещение (элемент @ позиция)</th><th>КО</th><th>ОР</th><th>КМ</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Анализ рисков @ 1</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Вклад «Анализ рисков на позиции 1» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Анализ рисков на позиции 1» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад «Анализ рисков на позиции 1» в КМ" /></div></div></td>
+                      </tr>
+                      <tr>
+                        <td>Анализ рисков @ 3</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад «Анализ рисков на позиции 3» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Анализ рисков на позиции 3» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Анализ рисков на позиции 3» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr>
+                        <td>Согласование @ 2</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Согласование на позиции 2» в КО (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Вклад «Согласование на позиции 2» в ОР" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Согласование на позиции 2» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Для ранжирования строка = размещение «элемент @ позиция»: один элемент на разных позициях может вкладывать разное. Активно фактическое размещение (scoring-model §10.11).</div></div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Вопрос 7 — свёрнут, без вкладов -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--warn" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">7. Подготовка отчёта для руководства</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">один выбор · <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">КО</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">ОР</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">КМ</span> · не привязан</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть вопрос" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+            </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicators: Показатели ════════════════ -->
+    <div id="wf-indicators" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус: Черновик">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <div class="wf-list-head">
+                <div class="tb-section-label">Показатели результата</div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить показатель</button>
+              </div>
+
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">burnout_category — Категория выгорания</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · формула по шкалам · в отчёте и в пакете</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="v-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="v-name" type="text" value="burnout_category" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="v-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="v-label" type="text" value="Категория выгорания" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item" aria-pressed="false">Конструктор</button>
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">DSL</button>
+                    </div>
+                    <div class="wf-fn-toolbar">
+                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'fn-reference')"><svg width="16" height="16"><use href="#i-info" /></svg> Функции</button>
+                    </div>
+                    <div class="ou-textarea ou-textarea--m">
+                      <div class="ou-textarea__box">
+                        <textarea class="ou-textarea__input" rows="6" aria-label="Формула DSL">IF(countScales(["ee","d","ad"], "high") = 3, "Выгорание",
+IF(countScales(["ee","d","ad"], "high") = 2, "Возрастающее истощение",
+IF(countScales(["ee","d","ad"], "high") = 0
+   AND countScales(["ee","d","ad"], "mid") = 0, "Вовлечённость",
+"Снижающаяся вовлечённость")))</textarea>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-check" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Синтаксис корректен. Тип возврата — строка.</div></div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="v-target">Передавать в LMS</label>
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                      <button type="button" class="ou-select__trigger" id="v-target"><span class="ou-select__value">И то, и другое</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-scale-advanced: композит + линейный пересчёт ════════════════ -->
+    <div id="wf-scale-advanced" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Сертификация руководителей</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Шкалы</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы шкал">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Список шкал</button>
+                <button type="button" class="ou-drawer__rail-item" onclick="showState(null, 'contributions')">Вклады вопросов</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="wf-list-head">
+                <div class="tb-section-label">Шкалы теста</div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить шкалу</button>
+              </div>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">Компетенции руководителя 1 (композит)</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">сумма дочерних шкал · 2 дочерние шкалы · диапазоны &rarr; уровень</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть шкалу" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="adv-key">Ключ <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="adv-key" type="text" value="leader_comp" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="adv-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="adv-label" type="text" value="Компетенции руководителя" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="adv-agg">Агрегация</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Сумма|Среднее">
+                        <button type="button" class="ou-select__trigger" id="adv-agg"><span class="ou-select__value">Сумма</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Источник</label>
+                      <div class="ou-seg" role="group" aria-label="Источник">
+                        <button type="button" class="ou-seg__item" aria-pressed="false">Вопросы</button>
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true">Другие шкалы</button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="adv-norm">Пересчёт итога</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Нет|Проценты|Инверсия">
+                        <button type="button" class="ou-select__trigger" id="adv-norm"><span class="ou-select__value">Нет</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="adv-target">Передавать в LMS</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                        <button type="button" class="ou-select__trigger" id="adv-target"><span class="ou-select__value">Столбцом в отчёте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Дочерние шкалы</label>
+                    <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Критическое мышление</span></span></label>
+                    <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Управление командой</span></span></label>
+                    <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Клиентоцентричность</span></span></label>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Диапазоны (пороги) &rarr; уровень</div>
+                  <table class="tb-table tb-table--mb wf-bands-grid">
+                    <thead>
+                      <tr><th>min</th><th>max</th><th>Метка (опц.)</th><th>Уровень</th><th aria-label="Действия"></th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="min диапазона «Низкий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="4" aria-label="max диапазона «Низкий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Низкий" aria-label="Метка диапазона" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="low" aria-label="Уровень (код) диапазона" /></div></div></td>
+                        <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить диапазон"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="5" aria-label="min диапазона «Средний»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="7" aria-label="max диапазона «Средний»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Средний" aria-label="Метка диапазона" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="mid" aria-label="Уровень (код) диапазона" /></div></div></td>
+                        <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить диапазон"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                      </tr>
+                      <tr>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="8" aria-label="min диапазона «Высокий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="10" aria-label="max диапазона «Высокий»" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Высокий" aria-label="Метка диапазона" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="high" aria-label="Уровень (код) диапазона" /></div></div></td>
+                        <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить диапазон"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить диапазон</button>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">«Уровень» — произвольный код (напр. high / passed), публикуется в scale.{key}.level для формул показателей. «Метка» необязательна: пусто &rarr; обучающемуся показывается код. Диапазоны вводятся по возрастанию raw, не пересекаются.</div></div>
+                  </div>
+
+                </div>
+              </section>
+            </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-scale-error: валидация шкалы ════════════════ -->
+    <div id="wf-scale-error" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1></div>
+            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Шкалы</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы шкал">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Список шкал</button>
+                <button type="button" class="ou-drawer__rail-item" onclick="showState(null, 'contributions')">Вклады вопросов</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+                <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                <div class="ou-banner__body"><div class="ou-banner__desc">Есть ошибки в шкалах. Сохранение заблокировано до их исправления.</div></div>
+              </div>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--err" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">AD — Обесценивание достижений</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">8 вопросов · обратная шкала</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть шкалу" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="err-key">Ключ <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" id="err-key" type="text" value="ee" aria-invalid="true" aria-describedby="err-key-msg" /></div></div>
+                    <div class="ou-formfield__msg ou-formfield__msg--error" id="err-key-msg" role="alert">Ключ «ee» уже используется другой шкалой. Ключ должен быть уникальным.</div>
+                  </div>
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">В шкалу не ведёт ни один вклад: ни одна ячейка её столбца не заполнена. Укажите числа-вклады в столбце шкалы в разделе «Вклады вопросов».</div></div>
+                  </div>
+                </div>
+              </section>
+              <!-- Композит с циклической зависимостью — блокирующая ошибка валидации -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--err" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">Компетенции руководителя 1 (композит)</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">источник: другие шкалы · циклическая зависимость</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть шкалу" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Циклическая зависимость составных шкал: «leader_comp» &rarr; «leader_comp_2» &rarr; «leader_comp». Граф композиции должен быть ацикличным — уберите шкалу из цепочки дочерних (scoring-model §10.9, PRD-5 §11).</div></div>
+                  </div>
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Дочерние шкалы</label>
+                    <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Критическое мышление</span></span></label>
+                    <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" checked aria-invalid="true" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Компетенции руководителя 2 — создаёт цикл</span></span></label>
+                  </div>
+                </div>
+              </section>
+            </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-scales-empty: пустое состояние ════════════════ -->
+    <div id="wf-scales-empty" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Новый тест</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Шкалы</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы шкал">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Список шкал</button>
+                <button type="button" class="ou-drawer__rail-item" onclick="showState(null, 'contributions')">Вклады вопросов</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-empty ou-empty--page" role="status">
+                <div class="ou-empty__art"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info" /></svg></div>
+                <div class="ou-empty__content">
+                  <div class="ou-empty__title">Пока нет шкал</div>
+                  <div class="ou-empty__desc">Шкала измеряет компетенцию или признак: суммирует вклады вопросов, нормализует и даёт уровень. Добавьте первую шкалу теста.</div>
+                  <div class="ou-empty__actions">
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить шкалу</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-preview-calc: предпросмотр расчёта на демо-ответе ════════════════ -->
+    <div id="wf-preview-calc" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Шкалы</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы шкал">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Список шкал</button>
+                <button type="button" class="ou-drawer__rail-item" onclick="showState(null, 'contributions')">Вклады вопросов</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="wf-list-head">
+                <div class="tb-section-label">Шкалы теста</div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить шкалу</button>
+              </div>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">EE — Эмоциональное истощение</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">сумма · проценты · 9 вопросов · high &ge; 25</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть шкалу" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">D — Отстранённость</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">сумма · проценты · 5 вопросов</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть шкалу" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">AD — Обесценивание достижений</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">8 вопросов · обратная шкала</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть шкалу" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+            </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="pv-modal-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l">
+          <div class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 id="pv-modal-title" class="ou-modal__title">Предпросмотр расчёта</h2>
+              <p class="ou-modal__desc">Проверка на демо-ответе — авторский расчёт (raw / percent / уровень), не вид обучающегося</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'scales')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </div>
+          <div class="ou-modal__body">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" for="pv-demo">Демо-ответ</label>
+              <div class="ou-select ou-field--m ou-field--full" data-ou-options="Набор 1 (high/mid/high)|Набор 2 (low/low/low)|Свой набор…">
+                <button type="button" class="ou-select__trigger" id="pv-demo"><span class="ou-select__value">Набор 1 (high/mid/high)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+              </div>
+            </div>
+            <table class="tb-table tb-table--mb">
+              <thead><tr><th>Шкала</th><th>raw</th><th>percent</th><th>уровень</th><th>scale.* (доступно в показателях)</th></tr></thead>
+              <tbody>
+                <tr><td>EE</td><td>32</td><td>71</td><td><span class="ou-tag ou-tag--neutral ou-tag--outline">high</span></td><td class="tb-table__cell--nowrap">scale.ee.level</td></tr>
+                <tr><td>D</td><td>7</td><td>28</td><td><span class="ou-tag ou-tag--neutral ou-tag--outline">mid</span></td><td class="tb-table__cell--nowrap">scale.d.level</td></tr>
+                <tr><td>AD (инверсная)</td><td>22</td><td>45</td><td><span class="ou-tag ou-tag--neutral ou-tag--outline">high</span></td><td class="tb-table__cell--nowrap">scale.ad.level</td></tr>
+              </tbody>
+            </table>
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-check" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">result.burnout_category = «Возрастающее истощение». Конфликтов и недостижимых правил не найдено.</div></div>
+            </div>
+          </div>
+          <div class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'scales')">Закрыть</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicators-list: список + DnD-порядок ════════════════ -->
+    <div id="wf-indicators-list" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <div class="wf-list-head">
+                <div class="tb-section-label">Показатели результата · порядок вычисления</div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить показатель</button>
+              </div>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <button type="button" class="tb-level-card__chev" aria-label="Перетащить"><svg width="16" height="16"><use href="#i-grip" /></svg></button>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">ee_high — EE на уровне high</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">булево · sort_order 1</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                <header class="ou-card__header tb-level-card__head">
+                  <button type="button" class="tb-level-card__chev" aria-label="Перетащить"><svg width="16" height="16"><use href="#i-grip" /></svg></button>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">burnout_category — Категория выгорания</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · sort_order 2 · формула по шкалам</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Развернуть" aria-expanded="false"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicator-builder: визуальный конструктор формул ════════════════ -->
+    <div id="wf-indicator-builder" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Тест компетенций</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">fin_passed — Финансы: зачёт</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">булево · конструктор · управляет успехом курса</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="b-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="b-name" type="text" value="fin_passed" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="b-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="b-label" type="text" value="Финансы: зачёт" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">Конструктор</button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false">DSL</button>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шаблон</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Порог|Категория по уровням шкалы|Взвешенная сумма|Сертификация / вердикт">
+                        <button type="button" class="ou-select__trigger"><span class="ou-select__value">Порог</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Условие</label>
+                      <div class="wf-cond-row">
+                        <div class="ou-select ou-field--s wf-grow" data-ou-options="Общий результат|## Темы|Этика|## Шкалы|Финансы|Право"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Финансы</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                        <div class="ou-select ou-field--s" data-ou-options="сырой балл|процент|уровень"><button type="button" class="ou-select__trigger"><span class="ou-select__value">сырой балл</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                        <div class="ou-select ou-field--s" data-ou-options="&ge;|&gt;|=|&le;|&lt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                        <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="7" /></div></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="b-status">Управление статусом курса</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Нет|Успех (success_status)|Завершение (completion_status)">
+                        <button type="button" class="ou-select__trigger" id="b-status"><span class="ou-select__value">Успех (success_status)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="b-target">Передавать в LMS</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                        <button type="button" class="ou-select__trigger" id="b-target"><span class="ou-select__value">Столбцом в отчёте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicator-builder-cat: конструктор — категория по уровням шкалы ════════════════ -->
+    <div id="wf-indicator-builder-cat" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Тест компетенций</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">competency_level — Уровень компетенции</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · конструктор</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bc-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bc-name" type="text" value="competency_level" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bc-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bc-label" type="text" value="Уровень компетенции" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">Конструктор</button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false">DSL</button>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шаблон</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Порог|Категория по уровням шкалы|Взвешенная сумма|Сертификация / вердикт">
+                        <button type="button" class="ou-select__trigger"><span class="ou-select__value">Категория по уровням шкалы</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шкала</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Финансы|Право|Этика">
+                        <button type="button" class="ou-select__trigger"><span class="ou-select__value">Финансы</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Уровень шкалы → значение показателя</label>
+                      <div class="wf-rows">
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="высокий|средний|низкий"><button type="button" class="ou-select__trigger"><span class="ou-select__value">высокий</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <span class="wf-cond-sep">&rarr;</span>
+                          <div class="ou-field ou-field--s wf-grow"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Эксперт" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="высокий|средний|низкий"><button type="button" class="ou-select__trigger"><span class="ou-select__value">средний</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <span class="wf-cond-sep">&rarr;</span>
+                          <div class="ou-field ou-field--s wf-grow"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Базовый" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                        <div class="wf-cond-row">
+                          <span class="wf-cond-sep">иначе &rarr;</span>
+                          <div class="ou-field ou-field--s wf-grow"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Недостаточно" /></div></div>
+                        </div>
+                      </div>
+                      <div class="wf-row-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить уровень</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="bc-target">Передавать в LMS</label>
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                      <button type="button" class="ou-select__trigger" id="bc-target"><span class="ou-select__value">Столбцом в отчёте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicator-builder-weighted: конструктор — взвешенная сумма ════════════════ -->
+    <div id="wf-indicator-builder-weighted" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Тест компетенций</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">weighted_total — Взвешенный итог</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">число · конструктор</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bw-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bw-name" type="text" value="weighted_total" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bw-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bw-label" type="text" value="Взвешенный итог" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">Конструктор</button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false">DSL</button>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шаблон</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Порог|Категория по уровням шкалы|Взвешенная сумма|Сертификация / вердикт">
+                        <button type="button" class="ou-select__trigger"><span class="ou-select__value">Взвешенная сумма</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Слагаемые: шкала × вес</label>
+                      <div class="wf-rows">
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="Финансы · сырой балл|Право · сырой балл|Этика · сырой балл"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Финансы · сырой балл</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <span class="wf-cond-sep">&times; вес</span>
+                          <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0.5" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить слагаемое"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="Финансы · сырой балл|Право · сырой балл|Этика · сырой балл"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Право · сырой балл</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <span class="wf-cond-sep">&times; вес</span>
+                          <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0.3" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить слагаемое"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="Финансы · сырой балл|Право · сырой балл|Этика · сырой балл"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Этика · сырой балл</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <span class="wf-cond-sep">&times; вес</span>
+                          <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0.2" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить слагаемое"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                      </div>
+                      <div class="wf-row-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить слагаемое</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="bw-target">Передавать в LMS</label>
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                      <button type="button" class="ou-select__trigger" id="bw-target"><span class="ou-select__value">Столбцом в отчёте</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicator-builder-verdict: конструктор — сертификация / вердикт ════════════════ -->
+    <div id="wf-indicator-builder-verdict" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Тест компетенций</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">certified — Сертификация</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">булево · конструктор · управляет успехом курса</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bv-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bv-name" type="text" value="certified" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bv-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="bv-label" type="text" value="Сертификация" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">Конструктор</button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false">DSL</button>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Шаблон</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Порог|Категория по уровням шкалы|Взвешенная сумма|Сертификация / вердикт">
+                        <button type="button" class="ou-select__trigger"><span class="ou-select__value">Сертификация / вердикт</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl">Все условия должны выполняться (И)</label>
+                      <div class="wf-rows">
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="Общий результат|## Темы|Этика|## Шкалы|Финансы|Право"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Финансы</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-select ou-field--s" data-ou-options="сырой балл|процент|уровень"><button type="button" class="ou-select__trigger"><span class="ou-select__value">процент</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-select ou-field--s" data-ou-options="&ge;|&gt;|=|&le;|&lt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="70" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="Общий результат|## Темы|Этика|## Шкалы|Финансы|Право"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Право</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-select ou-field--s" data-ou-options="сырой балл|процент|уровень"><button type="button" class="ou-select__trigger"><span class="ou-select__value">процент</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-select ou-field--s" data-ou-options="&ge;|&gt;|=|&le;|&lt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="70" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                        <div class="wf-cond-row">
+                          <div class="ou-select ou-field--s wf-grow" data-ou-options="Общий результат|## Темы|Этика|## Шкалы|Финансы|Право"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Этика</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-select ou-field--s" data-ou-options="процент|балл|пройдена"><button type="button" class="ou-select__trigger"><span class="ou-select__value">процент</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-select ou-field--s" data-ou-options="&ge;|&gt;|=|&le;|&lt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                          <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="60" /></div></div>
+                          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                        </div>
+                      </div>
+                      <div class="wf-row-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="16" height="16"><use href="#i-plus" /></svg> Добавить условие</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bv-status">Управление статусом курса</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Нет|Успех (success_status)|Завершение (completion_status)">
+                        <button type="button" class="ou-select__trigger" id="bv-status"><span class="ou-select__value">Успех (success_status)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="bv-target">Передавать в LMS</label>
+                      <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                        <button type="button" class="ou-select__trigger" id="bv-target"><span class="ou-select__value">И то, и другое</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicator-dsl: DSL-редактор + справочник функций ════════════════ -->
+    <div id="wf-indicator-dsl" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Тест компетенций</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">certified — Сертификация</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">булево · DSL · управляет успехом курса</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item" aria-pressed="false">Конструктор</button>
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">DSL</button>
+                    </div>
+                    <div class="wf-fn-toolbar">
+                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'fn-reference')"><svg width="16" height="16"><use href="#i-info" /></svg> Функции</button>
+                    </div>
+                    <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="4" aria-label="Формула DSL">AND(scaleById("fin").percent &gt;= 70, scaleById("law").percent &gt;= 70, topicById("ethics").percent &gt;= 60)</textarea></div></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-fn-reference: справочник функций (модальное окно) ════════════════ -->
+    <div id="wf-fn-reference" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="fn-modal-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l">
+          <div class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 id="fn-modal-title" class="ou-modal__title">Функции</h2>
+              <p class="ou-modal__desc">Источники и функции DSL. «Вставить» добавляет шаблон записи в редактор по позиции курсора</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'indicator-dsl')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </div>
+          <div class="ou-modal__body">
+            <div class="wf-fn-group">
+              <div class="wf-fn-group__title">Объекты результата</div>
+              <div class="wf-fn-row"><code>percent</code><span class="wf-fn-desc">общий процент за тест</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>topicById("…").percent</code><span class="wf-fn-desc">процент по теме</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>topicById("…").score</code><span class="wf-fn-desc">набранные баллы по теме</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>topicById("…").passed</code><span class="wf-fn-desc">тема пройдена (да/нет)</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>scaleById("…").raw</code><span class="wf-fn-desc">сырой балл шкалы</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>scaleById("…").percent</code><span class="wf-fn-desc">шкала в процентах</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>scaleById("…").level</code><span class="wf-fn-desc">уровень шкалы (строка)</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>var("…")</code><span class="wf-fn-desc">значение показателя выше по порядку</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+            </div>
+            <div class="wf-fn-group">
+              <div class="wf-fn-group__title">Агрегаты</div>
+              <div class="wf-fn-row"><code>countPassed()</code><span class="wf-fn-desc">сколько тем пройдено</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>countTopics()</code><span class="wf-fn-desc">сколько тем всего</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>avgPercent()</code><span class="wf-fn-desc">средний процент по темам</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>countScales(["…"], "high")</code><span class="wf-fn-desc">сколько перечисленных шкал на уровне</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+            </div>
+            <div class="wf-fn-group">
+              <div class="wf-fn-group__title">Условия и логика</div>
+              <div class="wf-fn-row"><code>IF(условие, то, иначе)</code><span class="wf-fn-desc">ветвление</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>AND / OR / NOT</code><span class="wf-fn-desc">логические связки</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>&gt;= &gt; = &lt;= &lt; !=</code><span class="wf-fn-desc">сравнения</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+              <div class="wf-fn-row"><code>+ - * /</code><span class="wf-fn-desc">арифметика</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Вставить</button></div>
+            </div>
+          </div>
+          <div class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'indicator-dsl')">Закрыть</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicator-error: ошибка формулы + controls_status ════════════════ -->
+    <div id="wf-indicator-error" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1></div>
+            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+                <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                <div class="ou-banner__body"><div class="ou-banner__desc">Есть ошибки в показателе. Сохранение заблокировано до их исправления.</div></div>
+              </div>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--err" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">burnout_category — Категория выгорания</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">строка · формула по шкалам · есть ошибки</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить показатель"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть показатель" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="wf-grid-2">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="ie-name">Имя <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="ie-name" type="text" value="burnout_category" /></div></div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="ie-label">Метка</label>
+                      <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="ie-label" type="text" value="Категория выгорания" /></div></div>
+                    </div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Формула</label>
+                    <div class="ou-seg wf-scope-toggle" role="group" aria-label="Режим редактора формулы">
+                      <button type="button" class="ou-seg__item" aria-pressed="false">Конструктор</button>
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true">DSL</button>
+                    </div>
+                    <div class="wf-fn-toolbar">
+                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'fn-reference')"><svg width="16" height="16"><use href="#i-info" /></svg> Функции</button>
+                    </div>
+                    <div class="ou-textarea ou-textarea--m ou-textarea--error"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="3" aria-invalid="true" aria-describedby="f-err">countScale(["ee","d","ad"], "high")</textarea></div></div>
+                    <div class="ou-formfield__msg ou-formfield__msg--error" id="f-err" role="alert">Неизвестная функция countScale (позиция 1). Возможно, имелось в виду countScales. Сохранение заблокировано.</div>
+                  </div>
+
+                  <hr class="wf-sep" />
+                  <div class="tb-section-label">Вывод</div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="ie-target">Передавать в LMS</label>
+                    <div class="ou-select ou-field--m ou-field--full" data-ou-options="Не передавать|Только в пакете|Столбцом в отчёте|И то, и другое">
+                      <button type="button" class="ou-select__trigger" id="ie-target"><span class="ou-select__value">И то, и другое</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-indicators-empty: пусто ════════════════ -->
+    <div id="wf-indicators-empty" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Новый тест</h1></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <div class="ou-empty ou-empty--page" role="status">
+                <div class="ou-empty__art"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info" /></svg></div>
+                <div class="ou-empty__content">
+                  <div class="ou-empty__title">Пока нет показателей</div>
+                  <div class="ou-empty__desc">Показатель — это формула над шкалами (категория, флаг, итоговый вердикт). Добавьте первый показатель или воспользуйтесь конструктором.</div>
+                  <div class="ou-empty__actions">
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить показатель</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-loading: загрузка (skeleton) ════════════════ -->
+    <div id="wf-loading" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Опросник выгорания (MBI)</h1></div>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Шкалы</button>
+            <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+          </div></nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content" aria-busy="true">
+              <div class="ou-formfield">
+                <div class="ou-skel ou-skel--line is-caption ou-skel--w-1/4"></div>
+                <div class="ou-skel ou-skel--button ou-skel--w-full"></div>
+              </div>
+              <div class="ou-formfield">
+                <div class="ou-skel ou-skel--line is-caption ou-skel--w-1/4"></div>
+                <div class="ou-skel ou-skel--line ou-skel--w-full wf-skel-textarea"></div>
+              </div>
+              <div class="ou-formfield">
+                <div class="ou-skel ou-skel--line is-caption ou-skel--w-1/4"></div>
+                <div class="ou-skel ou-skel--button ou-skel--w-full"></div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview-calc')">Предпросмотр расчёта</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead>
+            <tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности/аннотаций</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Под-уровень вкладки «Шкалы» (рейл)</td><td><code>ou-drawer__split</code> + <code>ou-drawer__rail</code>: Список шкал / Вклады вопросов</td><td>Тот же паттерн, что в «Настройках»; заменил сегментированный тоггл. Рейл-пункт назван «Список шкал» (не «Шкалы»), чтобы не дублировать верхний таб</td></tr>
+            <tr><td>Группировка «Вкладов» по секциям</td><td>карточки вопросов сгруппированы по темам теста (в порядке секций), каждая секция сворачивается; «Свернуть все / Развернуть все» сверху</td><td>Аналогично вкладке «Оценка» (общий примитив сворачивания, паттерн как у папок на «Темах»). Нумерация вопросов сквозная по порядку отображения. Состояние эфемерное — по умолчанию всё развёрнуто</td></tr>
+            <tr><td>Доступность «Вкладов» без шкал</td><td>пункт рейла «Вклады вопросов» <code>disabled</code>, пока в тесте нет ни одной шкалы (подсказка «сначала добавьте шкалу»)</td><td>Матрица вкладов без шкал бессмысленна — привязывать не к чему. Пункт виден (находимость), но некликабелен; если удалить последнюю шкалу, будучи на нём, — возврат на «Список шкал»</td></tr>
+            <tr><td>Маркер покрытия вопроса</td><td>точка слева у карточки: жёлтая «warn» (вопрос ни в одну шкалу не вносит вклад) / зелёная (вносит ≥1)</td><td>Внутрь «Вкладов» попадаешь только при наличии шкал (пункт иначе disabled), поэтому непривязанность всегда действенна: жёлтая точка + «не привязан» + бейдж «X не привязано» в заголовке секции + агрегат-баннер «проверьте покрытие». Item &rarr; секция &rarr; вкладка согласованы</td></tr>
+            <tr><td>Шкала · ключ</td><td><code>scales.key</code>, <code>^[a-z][a-z0-9_]{0,63}$</code></td><td>Уникален в пределах теста (PRD-5 §4.1)</td></tr>
+            <tr><td>Шкала · метка</td><td><code>scales.label</code> — НЕобязательна (без звёздочки)</td><td>Пустая метка не ошибка; где метка нужна для отображения (выгрузка SCORM), подставляется ключ. Не путать с «Метка (опц.)» у диапазона</td></tr>
+            <tr><td>Шкала · агрегация</td><td><code>sum/avg/weighted_avg/max/min</code></td><td>По умолчанию <code>sum</code>; в UI доступны все пять операций. <code>avg</code>/<code>weighted_avg</code> — делитель число вкладывающих вопросов / <code>Σ weight</code>; <code>weighted_avg</code> берёт вес с ребра «вопрос × шкала». Каждая операция = ветка движка + golden. <code>threshold/formula</code> убраны: порог = bands, формула = слой «Показатели» (PRD-5 §5.1)</td></tr>
+            <tr><td>Шкала · пересчёт итога</td><td><code>none/percent/inverse</code></td><td><code>none/percent</code> на первом этапе; <code>inverse</code> — обратная шкала: percent=(max−raw)/(max−min)·100 (вся шкала). <code>linear/custom</code> — точки расширения, в селекте этапа-1 скрыты; пол (clamp) внутри <code>linear</code>; <code>z_score</code> исключён (PRD-5 §5.2)</td></tr>
+            <tr><td>Шкала · источник</td><td>«Вопросы» | «Другие шкалы»</td><td>«Другие шкалы» = композит: агрегация <code>sum</code>/<code>avg</code> дочерних шкал; <code>weighted_avg</code>/<code>max</code>/<code>min</code> — слой «Показатели»</td></tr>
+            <tr><td>Композит · ацикличность</td><td>граф «шкала &rarr; дочерние» — DAG; цикл блокирует сохранение</td><td>Самоссылка и цикл A&rarr;B&rarr;A — блокирующая ошибка валидации (состояние <code>s-scale-error</code>); расчёт композитов в топологическом порядке; runtime-guard от рекурсии (scoring-model §10.9, PRD-5 §11)</td></tr>
+            <tr><td>Корректность и базовый балл (где задаётся)</td><td><code>correctJson</code>/<code>answer_score</code> — свойство ВОПРОСА (раздел «Вопросы»)</td><td>Правильность варианта и стандартный балл задаются в самом вопросе (раздел «Вопросы»), НЕ на шкале и НЕ во «Вкладах». Вклады в шкалы — отдельные явные числа (см. сетку), они НЕ наследуют <code>answer_score</code></td></tr>
+            <tr><td>Диапазоны → уровень</td><td><code>bands</code> на <code>raw</code></td><td>min/max/label/level; уровень публикуется в <code>scale.{key}.level</code>; диапазоны и <code>percent</code> поддерживают отрицательный <code>raw</code> (вклады могут быть отрицательными) (PRD-5 §5.3)</td></tr>
+            <tr><td>Сетка «вариант × шкала» (главный объект «Вкладов»)</td><td>строки = варианты ответа (для <code>matching</code> — пары «левый &rarr; правый»; для <code>ranking</code> — размещения «элемент @ позиция», scoring-model §10.11); столбцы = ВСЕ шкалы теста; ячейка = <code>question_measurements.value_json</code></td><td>Пусто = вариант НЕ влияет на шкалу (ребра нет); число = вклад; допустимы 0 (влияет, вклад 0) и отрицательные (вычитает). Членство вопроса в шкале — производное (есть непустая ячейка в столбце). Один вариант может вкладывать в несколько шкал с разными числами (мультишкальность)</td></tr>
+            <tr><td>Чипы шкал в шапке вопроса</td><td>производные от непустых столбцов</td><td>Сначала тип вопроса, затем все шкалы теста чипами: яркий = вопрос вкладывает; блеклый (<code>wf-chip-muted</code>) = не вкладывает. Вопрос-сирота = все чипы блеклые</td></tr>
+            <tr><td>Верный вариант</td><td>read-only подсветка строки (<code>wf-row-correct</code>) + «Редактировать вопрос»</td><td>Правильность здесь НЕ редактируется — только показывается; правка — в разделе «Вопросы» по ссылке «Редактировать вопрос». У опросника верного нет → подсветки нет (ортогонально вкладам, scoring-model §10.2)</td></tr>
+            <tr><td>Правило вклада в шкалу</td><td>сумма вкладов фактически выбранных единиц</td><td>Одиночный — вклад выбранного варианта; множественный — сумма выбранных; сопоставление/ранжирование — по парам/позициям. Корректность — отдельный слой: неверный ответ не обнуляет вклад (scoring-model §10.1–10.2)</td></tr>
+            <tr><td>Итоги по вопросу</td><td>по-вопросной строки итогов НЕТ</td><td>Best practice (Qualtrics/QTI/Storyline…): сумма по столбцу для одиночного выбора вводит в заблуждение. Итоги по шкалам показываются на уровне ШКАЛЫ в состоянии «Предпросмотр»</td></tr>
+            <tr><td>Реверс пункта (убран)</td><td>—</td><td>Per-ребро «перевернуть вклад» УБРАН: явные значения + отрицательные числа его заменяют. Инверсия ВСЕЙ шкалы — это «Пересчёт итога → Инверсия» на карточке шкалы (отдельная вещь, осталась)</td></tr>
+            <tr><td>Покрытие / «без вкладов»</td><td>предупреждение, если шкала без вкладов</td><td>Реальная валидация автора (PRD-5 §6.1)</td></tr>
+            <tr><td>Предпросмотр расчёта</td><td>демо-ответ → raw/percent/уровень/<code>scale.*</code></td><td>Плюс итог показателя и предупреждения о конфликтах (PRD-5 §6.3)</td></tr>
+            <tr><td>Показатель · имя</td><td><code>^[a-z][a-z0-9_]{0,63}$</code>, уникально</td><td>(PRD-2 §3.4)</td></tr>
+            <tr><td>Показатель · формула</td><td>конструктор / DSL, inline-валидация</td><td>Debounce 400 мс; ошибка блокирует сохранение (PRD-2 §4.3, §12)</td></tr>
+            <tr><td>Конструктор · шаблоны</td><td>«Порог» / «Категория по уровням шкалы» / «Взвешенная сумма» / «Сертификация / вердикт»</td><td>Покрывают классы §6.1–6.5 scoring-model. Шкалы — первичный вход показателя (§2.3). Тип показателя выставляется под шаблон (порог/вердикт → булево; категория → строка; взвеш. сумма → число), чтобы не было рассинхрона тип↔формула</td></tr>
+            <tr><td>Условие-примитив (Порог / вердикт)</td><td>ЭЛЕМЕНТ (тема / шкала / общий результат) + СВОЙСТВО (контекстно элементу) + оператор + значение</td><td>Один примитив на оба шаблона: «Порог» = ОДНО условие → булево; «Вердикт» = СПИСОК условий через И → булево. Свойство контекстно: тема → процент / балл / пройдена; шкала → сырой балл / процент / уровень / есть значение; «Общий результат» → процент / балл (балл — новый accessor). Для свойства «уровень» оператор «=» и значение-уровень; для «пройдена» — булево без порога. Везде показывается ИМЯ темы / метка шкалы; в модель тема пишется идентификатором, шкала — ключом (<code>topicById("id")</code> / <code>scaleById("key")</code>), сырой id/ключ автору не виден. Унификация устранила прежний «Порог по…»-дубль и противоречие «шаблон по теме, а в источнике шкалы»; восстанавливает <code>scaleById</code>, утраченный в первой реализации</td></tr>
+            <tr><td>Конструктор · два «типа»</td><td>тип ПОКАЗАТЕЛЯ (число/строка/булево) выводится из шаблона (не редактируется, виден в подзаголовке карточки); тип ОБЪЕКТА в «Элементе» разведён группировкой списка: разделы «Общий результат» / «Темы» / «Шкалы»</td><td>Не путать два «типа». Тип показателя ручным полем не задаётся — иначе рассинхрон с формулой (прежний баг). Объекты в «Элементе» не мешаются «всё подряд» — сгруппированы, плоского списка тем+шкал нет. Группа = нерасклик­иваемый заголовок (<code>## </code>-метка в эскизе)</td></tr>
+            <tr><td>Карточка показателя · три блока</td><td>1) Имя · Метка; 2) Формула (Конструктор/DSL · Шаблон · расчёт); 3) Вывод (Управление статусом — только для булевых — + Передавать в LMS)</td><td>Поле «Тип» и тогл «Показывать обучающемуся» убраны. Условие «Порога» — одной строкой как в вердикте (один примитив, один вид)</td></tr>
+            <tr><td>Шаблон «Категория по уровням шкалы»</td><td>шкала + строки «уровень шкалы → метка» + «иначе → метка»; тип строка</td><td>Метки задаёт автор (данные), по-русски; англолитералы Expert/Advanced/Beginner и фикс-пороги 90/70 убраны (§6.1/§6.4/§6.5, scoring-model §9 «коэффициенты — данные»). Уровни предлагаются из диапазонов выбранной шкалы (<code>bands.level</code>)</td></tr>
+            <tr><td>Шаблон «Взвешенная сумма»</td><td>строки «шкала × вес»; тип число</td><td>Взвешенная/экстремум-комбинация шкал живёт в показателе, а не в агрегации композита (scoring-model §9.3); генерирует <code>scaleById(k1).raw*w1 + …</code></td></tr>
+            <tr><td>Шаблон «Сертификация / вердикт»</td><td>список условий, соединённых И; обычно + «Управление статусом = Успех». Условие = ЭЛЕМЕНТ + СВОЙСТВО + оператор + значение</td><td>Конъюнкция условий → булево; типовой кейс §6.2/§11.7 (за каждый пройденный раздел/шкалу — зачёт). Свойство КОНТЕКСТНО элементу: тема → процент / балл / пройдена; шкала → сырой балл / процент / уровень / есть значение. Для свойства «уровень» оператор «=» и значение-уровень («высокий»); для «пройдена» — булево без порога. Генерирует <code>AND(cond1, cond2, …)</code>. Тот же условие-примитив, что и шаблон «Порог» (строка выше): порог = одно условие, вердикт = список</td></tr>
+            <tr><td>Конструктор → модель</td><td>в режиме «Конструктор» текстовую формулу НЕ показываем; точный DSL — на вкладке «DSL»</td><td>Структурные поля (шаблон + источники + строки) и есть формула; дублировать её строкой-эхо вредно — гибрид «русские слова + точечная нотация» нечитаем, а сырой DSL с id/функциями — «шлак» для автора. Каноничный DSL (<code>scaleById("fin").raw &gt;= 7</code> и т.п.) — единый формат хранения/расчёта, виден на вкладке «DSL». Правка в конструкторе перезаписывает формулу в модель немедленно (не только при ручном изменении поля)</td></tr>
+            <tr><td>Справочник функций (DSL)</td><td>модальное окно «Функции» из DSL-редактора; сгруппировано: объекты результата / агрегаты / условия и логика; «Вставить» подставляет шаблон записи по позиции курсора</td><td>Содержимое — PRD-2 §4.2 (источник истины — парсер DSL). Теги и секции в справочник НЕ включены, пока рантайм их не наполняет (PRD-2 §4.2.4). Общий балл теста (<code>score</code>) помечен как планируемый</td></tr>
+            <tr><td>Показатель · управление статусом</td><td><code>controls_status: none/success/completion</code></td><td>Доступно только для <code>type=boolean</code>; не более одной <code>success</code> на тест (PRD-2 §7.3, §12)</td></tr>
+            <tr><td>Показатели · порядок</td><td>DnD меняет <code>sort_order</code></td><td><code>var("name")</code> доступен только в показателях ниже по списку (PRD-2 §3.3)</td></tr>
+            <tr><td>Сертификация</td><td>boolean-показатель + <code>controls_status=success</code></td><td>→ <code>cmi.success_status</code></td></tr>
+            <tr><td>Loading / Error / Dirty</td><td><code>isLoading</code> / ошибка загрузки / несохранённые изменения</td><td>Стандартные состояния редактора</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент — блокер.</p>
+        <table>
+          <thead>
+            <tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Редактор теста</td><td><code>Drawer</code> + <code>Tabs</code> (underline)</td><td><code>--ou-*</code></td><td>Вкладки «Шкалы»/«Показатели» — новые</td></tr>
+            <tr><td>Карточка шкалы/показателя</td><td><code>Card</code> (outlined, sm) + disclosure</td><td><code>--ou-border-soft</code>, <code>--ou-radius-m</code></td><td>Раскрываемая (<code>is-collapsed</code>)</td></tr>
+            <tr><td>Поля</td><td><code>Field</code> / <code>Textarea</code></td><td><code>--ou-border-default</code>, <code>--ou-border-focus</code></td><td>Ошибка: <code>--error</code></td></tr>
+            <tr><td>Выбор / Источник-режим</td><td><code>Select</code> / <code>SegmentedControl</code></td><td><code>--ou-radius-s</code></td><td></td></tr>
+            <tr><td>Уровни / коды</td><td><code>Tag</code></td><td><code>--ou-bg-hover</code>, <code>--ou-fg-muted</code></td><td></td></tr>
+            <tr><td>Предупреждения / ошибки / превью</td><td><code>Banner</code> (info/warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
+            <tr><td>Матрица вкладов / диапазоны</td><td><code>Table</code></td><td><code>--ou-border-soft</code></td><td></td></tr>
+            <tr><td>Пустые состояния</td><td><code>EmptyState</code></td><td><code>--ou-fg-muted</code></td><td></td></tr>
+            <tr><td>Загрузка</td><td><code>Skeleton</code></td><td><code>--ou-bg-hover</code></td><td></td></tr>
+            <tr><td>Визуальный конструктор формул</td><td><code>Textarea</code> + <code>Combobox</code>/<code>Select</code> + <code>Tag</code> + <code>Button</code> + <code>Banner</code></td><td><code>--ou-*</code></td><td>DSL-режим = <code>Textarea</code>; режим-конструктор — композиция DS-примитивов (без собственного рендера); как единый виджет — кандидат в DS, escalation на этапе 3.5</td></tr>
+            <tr><td>Перетаскивание (DnD порядка)</td><td><code>Ranking</code></td><td><code>--ou-*</code></td><td>DS-примитив drag-to-reorder (grip + ↑/↓, нумерация); список показателей переиспользует его (строка = имя + сводка). Блокер снят</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+
+    <script>
+      // Wireframe state switcher (как в approved/prd7-*). prd7-shared.js затем
+      // дооборачивает window.showState, чтобы пере-инициализировать ou-select.
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el === target);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) {
+          button.classList.toggle('active', button === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>

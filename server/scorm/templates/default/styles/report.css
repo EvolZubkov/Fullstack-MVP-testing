@@ -1,0 +1,365 @@
+/* Страница отчёта о результатах шаблона «Стандартный» (PRD-27).
+ *
+ * Всё скоуплено в `.tb-report`: отчёт рендерится в служебном контейнере ГЛАВНОГО
+ * документа, вне сцены, и не вправе ни зависеть от `theme.css`, ни протечь в приложение
+ * (§6.3). Селекторов `:root`/`html`/`body` здесь нет и быть не может — проверяется
+ * валидацией манифеста.
+ *
+ * Оформление воспроизводит страницу отчёта, которая до PRD-27 собиралась кодом
+ * инлайн-стилями: перенос, а не редизайн (§6.2). Поэтому цвета заданы значениями, а не
+ * токенами: те же значения, что печатались раньше.
+ */
+
+.tb-report {
+  width: 595px;
+  min-height: 842px;
+  padding: 20px 25px;
+  box-sizing: border-box;
+  position: relative;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #ffffff;
+  /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
+  background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
+  /*
+   * Фон повторяется КАЖДЫЙ ЛИСТ, а не растягивается на весь документ. Многостраничный
+   * отчёт печатается листами: каждый лист — свой снимок корня, и растянутый на всю высоту
+   * градиент давал бы на них РАЗНЫЕ куски — верхний лист тёмный, нижний фиолетовый, а
+   * обрезок карточки почти одноцветный. Высота плитки равна листу A4 (842 px), поэтому
+   * страница выглядит одинаково, какой бы по счёту она ни была.
+   */
+  background-size: 100% 842px;
+  background-repeat: repeat-y;
+  background-position: top center;
+}
+
+.tb-report__brand { margin-bottom: 15px; }
+.tb-report__brand img { height: 32px; }
+
+.tb-report__headline {
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 4px;
+  color: #ffffff;
+}
+.tb-report.is-pass .tb-report__headline { color: #22c55e; }
+
+.tb-report__attempts { font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px; }
+.tb-report__learner { font-size: 13px; color: #ffffff; margin-bottom: 4px; }
+.tb-report__date { font-size: 12px; color: #aca9a9; margin-bottom: 15px; }
+
+.tb-report__card {
+  background: rgba(31, 33, 41, 0.68);
+  border-radius: 18px;
+  padding: 18px 20px;
+  margin-bottom: 15px;
+}
+
+/* Вводный блок автора — обычная карточка отчёта, но без заголовка: его пишет сам автор,
+   если считает нужным. Переводы строк держатся, как и в остальных авторских текстах. */
+.tb-report__intro { font-size: 14px; font-weight: 300; line-height: 1.55; white-space: pre-wrap; }
+.tb-report__intro > :first-child { margin-top: 0; }
+.tb-report__intro > :last-child { margin-bottom: 0; }
+/* Разметка автора внутри блока: `pre-wrap` держит переводы строк простого текста, а у
+   готовой разметки переносы делают сами теги — иначе абзацы разъезжались бы вдвое. */
+.tb-report__intro p, .tb-report__intro ul, .tb-report__intro ol { white-space: normal; margin: 0 0 8px; }
+.tb-report__intro ul, .tb-report__intro ol { padding-left: 20px; }
+
+.tb-report__title { font-size: 22px; font-weight: 400; margin-bottom: 4px; }
+.tb-report__title--tight { margin-bottom: 15px; }
+/* Название теста в ШАПКЕ документа: над вердиктом и крупнее подзаголовков карточек, но
+   мельче самого вердикта — сначала читатель понимает, что за бумага, потом каков итог. */
+.tb-report__title--head { font-size: 26px; font-weight: 500; margin-bottom: 10px; }
+.tb-report__title--solid { font-weight: 500; margin-bottom: 0; }
+.tb-report__subtitle { font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 20px; }
+.tb-report__lead { font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5; }
+
+/* Счёт: метрики, кольцо процента, бейдж вердикта — одной строкой. */
+.tb-report__score { display: flex; align-items: center; gap: 20px; }
+.tb-report__metrics { display: flex; gap: 30px; }
+.tb-report__metric { text-align: center; }
+.tb-report__metric-num { font-size: 28px; font-weight: 900; }
+.tb-report__metric-lbl { font-size: 12px; font-weight: 300; color: #aca9a9; }
+
+.tb-report__ring {
+  width: 100px;
+  height: 100px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tb-report__ring svg {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.tb-report__ring-track { stroke: #2f2f2f; }
+.tb-report__ring-fill { stroke: #ef4444; }
+.tb-report.is-pass .tb-report__ring-fill { stroke: #22c55e; }
+.tb-report__ring-value { font-size: 28px; font-weight: 900; z-index: 1; }
+
+.tb-report__badge {
+  margin-left: auto;
+  padding: 10px 20px;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #432027;
+  border: 2px solid #eb1e1e;
+  color: #ff3131;
+}
+.tb-report.is-pass .tb-report__badge {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+  color: #22c55e;
+}
+
+/* Темы: сетка, число колонок ставит хост инлайном по `report.gridColumns`. */
+.tb-report__topics { display: grid; gap: 10px; }
+
+.tb-report__topic {
+  background: linear-gradient(135deg, #2a2a3d 0%, #1f1f2e 100%);
+  border-radius: 10px;
+  padding: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.tb-report__topic--level { padding: 12px; }
+
+/* База НЕЙТРАЛЬНАЯ: карточка без класса — это тема без вердикта (нет порога или
+   нечего оценивать), и красная полоса утверждала бы о ней провал, которого экран
+   не утверждает. Провал красит `is-fail`, он приходит тем же `passClass`, что и
+   `is-pass`. */
+.tb-report__topic-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: #6b7280;
+}
+.tb-report__topic.is-fail .tb-report__topic-stripe { background: #ef4444; }
+.tb-report__topic.is-pass .tb-report__topic-stripe { background: #22c55e; }
+.tb-report__topic.is-achieved .tb-report__topic-stripe { background: #3b82f6; }
+.tb-report__topic.is-below .tb-report__topic-stripe { background: #6b7280; }
+
+.tb-report__topic-head { margin-bottom: 6px; }
+.tb-report__topic--level .tb-report__topic-head { margin-bottom: 8px; }
+.tb-report__topic-name { font-size: 12px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.tb-report__topic--level .tb-report__topic-name { font-size: 13px; }
+
+/* Вердикт темы стоит ПОД названием: рядом плашка не влезала в трёхколоночную
+   карточку и обрезалась по `overflow: hidden`. */
+.tb-report__topic-verdict {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+.tb-report__topic.is-pass .tb-report__topic-verdict {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+/* Подпись уровня переносится: это либо авторское название уровня, либо полный
+   вердикт «минимально требуемый уровень не подтверждён» — и то, и другое длиннее
+   карточки. */
+.tb-report__topic-level {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.35;
+  background: rgba(107, 114, 128, 0.2);
+  color: #6b7280;
+}
+.tb-report__topic.is-achieved .tb-report__topic-level {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.tb-report__topic-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 7px;
+  color: #aca9a9;
+  margin-bottom: 5px;
+}
+.tb-report__topic-counts { font-size: 11px; color: #aca9a9; margin-bottom: 6px; }
+
+.tb-report__topic-bar {
+  height: 3px;
+  background: #2f2f2f;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+/* Заливка — по тому же трёхпозиционному правилу, что полоса карточки: без вердикта
+   нейтральная, провал красит `is-fail`. */
+.tb-report__topic-bar-fill { height: 100%; border-radius: 2px; background: #6b7280; }
+.tb-report__topic.is-fail .tb-report__topic-bar-fill { background: #ef4444; }
+.tb-report__topic.is-pass .tb-report__topic-bar-fill { background: #22c55e; }
+
+.tb-report__topic-fb {
+  font-size: 10px;
+  font-weight: 300;
+  line-height: 1.3;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.tb-report__topic-fb--sep {
+  line-height: 1.4;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Рекомендации. Чип несёт `pdf-link-btn` + `data-url`: конвейер экспорта делает из
+   него настоящую ссылку PDF, иначе курс останется картинкой. */
+.tb-report__rec {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.tb-report__rec--plain { justify-content: flex-start; }
+.tb-report__rec-topic { font-size: 14px; font-weight: 700; }
+.tb-report__rec-chip {
+  padding: 10px 25px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 300;
+  color: #fafafa;
+  background: #59209b;
+}
+.tb-report__rec-chip--level { background: #1e40af; }
+/* Текст рекомендации печатается этим же узлом, поэтому переводы строк автора держатся
+   и здесь — см. `.tb-report__scale-text`. */
+.tb-report__event { font-size: 14px; font-weight: 300; color: #fafafa; white-space: pre-wrap; }
+
+/* ── PRD-35: шкалы и радар компетенций в отчёте ──────────────────────────────
+   Отчёт печатается и растеризуется, поэтому здесь нет ни контейнерных запросов,
+   ни интерактива: ширина страницы A4 известна заранее. Диаграмма стоит слева от
+   списка — та же композиция, что на экране итогов, чтобы документ и экран
+   читались одинаково. Цвет вершины приходит тройкой HSL из ядра. */
+/* Две колонки — только у блока, который РИСУЕТ диаграмму: модификатор ставит макет по
+   тому же признаку, каким гейтит саму фигуру. Пока колонки объявлял сам блок, список
+   толкований без диаграммы падал в первую колонку — 240 px из 545 доступных на A4 — и
+   печатался узкой лентой во всю высоту страницы. У блока показателей диаграммы нет
+   вовсе, поэтому колонок у него не бывает никогда. */
+.tb-report__scales { display: block; }
+.tb-report__scales--chart {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.tb-report__scale-list { display: flex; flex-direction: column; gap: 10px; }
+.tb-report__scale { border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 8px; }
+.tb-report__scale-name { font-size: 14px; font-weight: 700; }
+.tb-report__scale-meta { display: flex; align-items: baseline; gap: 10px; margin-top: 2px; }
+.tb-report__scale-val { font-size: 14px; font-weight: 300; }
+.tb-report__scale-lvl { font-size: 12px; font-weight: 700; }
+/* Абзацы автора сохраняются: толкование уровня и текст рекомендации пишутся в поле
+   переводами строк, а HTML их схлопывает — методичка на полторы страницы приходила
+   слушателю одним сплошным полотном. `pre-wrap` держит переносы автора и переносит
+   длинные строки по ширине страницы. */
+.tb-report__scale-text { font-size: 12px; font-weight: 300; margin-top: 4px; white-space: pre-wrap; }
+
+/* Линейка шкалы. Ту же фигуру рисует экран итогов, но повторить её стилями оттуда
+   нельзя: отчёт печатается ВНЕ сцены, токенов дизайн-системы не видит и правила
+   `theme.css` до него не доходят (§6.3) — поэтому геометрия и цвета объявлены здесь
+   заново, литералами, как всё в этом файле.
+
+   Размеры уменьшены против экрана: полоса живёт в колонке рядом с диаграммой, а на A4
+   это около 285 px, где экранные 12 px рельса и 22 px маркера читались бы грубо. */
+.tb-report__scale-rail {
+  position: relative;
+  height: 8px;
+  /* Подписи границ позиционированы абсолютно и своей высоты не занимают — зазор под них
+     обязан дать сам рельс, иначе числа лягут на толкование уровня (та же причина, что у
+     `.tb-measure__slider .ou-slider__rail` на экране). */
+  margin: 8px 0 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+/* Зоны красятся ДИСКРЕТНО: вывод интервальной методики категориален, и градиент скрыл бы
+   переход через границу. Цвет приходит тройкой HSL из ядра — CSS не считает ничего. */
+.tb-report__scale-zone { position: absolute; top: 0; bottom: 0; background: hsl(var(--tb-zone)); }
+/* Скруглены только концы ДОМЕНА. Проверка соседа, а не `:last-child`: последним ребёнком
+   рельса идёт маркер, а за ним подписи границ — по позиции последнюю зону не поймать. */
+.tb-report__scale-zone:first-child {
+  border-start-start-radius: 999px;
+  border-end-start-radius: 999px;
+}
+.tb-report__scale-zone:not(:has(~ .tb-report__scale-zone)) {
+  border-start-end-radius: 999px;
+  border-end-end-radius: 999px;
+}
+/* Маркер — метка значения, а не орган управления: ни тени наведения, ни курсора. Тёмная
+   обводка отделяет его от светлой зоны, на которую он чаще всего попадает. */
+.tb-report__scale-marker {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(28, 28, 43, 0.55);
+}
+/* Под рельсом стоят ЧИСЛА границ; имя уровня печатает метка рядом со значением — так же,
+   как на экране, где три подписи в одну дорожку не помещаются. */
+.tb-report__scale-mark {
+  position: absolute;
+  top: 12px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 300;
+  color: rgba(250, 250, 250, 0.7);
+  white-space: nowrap;
+}
+.tb-report .tb-chart__svg { width: 100%; height: auto; display: block; }
+.tb-report .tb-chart__ring,
+.tb-report .tb-chart__axis { fill: none; stroke: rgba(255, 255, 255, 0.18); stroke-width: 1; }
+.tb-report .tb-radar__shape { fill: #8b5cf6; fill-opacity: 0.18; stroke: #8b5cf6; stroke-width: 2; }
+.tb-report .tb-radar__dot { fill: hsl(var(--tb-zone)); stroke: #11151e; stroke-width: 2; }
+.tb-report .tb-radar__dot--quantized { fill: #11151e; stroke: hsl(var(--tb-zone)); }
+/* PRD-46: балл выше предела оси — луч упёрся в кольцо. Обводка светлая: в отчёте
+   фон тёмный, и обводка фоном была бы невидима. */
+.tb-report .tb-radar__dot--over { stroke: #fafafa; stroke-width: 2; }
+/* Подпись предела: масштаб рисунка, а не балл ученика. */
+.tb-report .tb-chart__limit { margin: 6px 0 0; font-size: 10px; color: rgba(250, 250, 250, 0.7); text-align: center; }
+.tb-report .tb-radar__label { fill: #fafafa; font-size: 11px; }
+.tb-report .tb-radar__level { fill: rgba(250, 250, 250, 0.7); font-size: 10px; }
+
+/* Тон уровня в списке шкал. На экране его несут семантические токены ДС, но отчёт
+   печатается со своей палитрой и без ДС, поэтому оттенки заданы здесь — теми же,
+   что даёт светофорная рампа ядра. Без этого метка «Высокий» ушла бы в документ
+   обычным текстом, и цвет вершины на диаграмме остался бы без пары в списке. */
+.tb-report .tb-report__scale-lvl.tb-tone--favorable { color: hsl(142 76% 45%); }
+.tb-report .tb-report__scale-lvl.tb-tone--neutral   { color: hsl(217 91% 65%); }
+.tb-report .tb-report__scale-lvl.tb-tone--attention { color: hsl(38 92% 55%); }
+.tb-report .tb-report__scale-lvl.tb-tone--critical  { color: hsl(0 84% 65%); }
+/* PRD-46: роза в печати. Цвета секторов приходят из ядра, поэтому здесь только
+   контрастная обводка под тёмный фон отчёта и типографика подписей. */
+.tb-report .tb-rose__sector { fill: hsl(var(--tb-hue)); stroke: #11151e; stroke-width: 2; }
+.tb-report .tb-rose__sector--overflow { stroke: #fafafa; stroke-dasharray: 3 3; }
+.tb-report .tb-rose__icon {
+  fill: none; stroke: rgba(250, 250, 250, 0.7); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.tb-report .tb-rose__label { fill: #fafafa; font-size: 11px; }
+.tb-report .tb-rose__level { fill: rgba(250, 250, 250, 0.7); font-size: 10px; }

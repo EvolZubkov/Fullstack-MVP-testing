@@ -1,0 +1,238 @@
+<div class="tb-report {{ report.verdictClass }}" style="{{#if report.values.backgroundImage}}background-image: url({{ report.values.backgroundImage }});{{/if}}">
+  {{#if report.values.logoImage}}<div class="tb-report__brand"><img src="{{ report.values.logoImage }}" alt=""></div>{{/if}}
+
+  <!-- НАЗВАНИЕ ТЕСТА — первой строкой документа. Оно отвечает на вопрос «что это за
+       бумага», и до него не должно стоять ни вердикта, ни вводного слова автора. Раньше
+       оно лежало в карточке счёта, то есть после вводного блока и посреди страницы, а у
+       методики без баллов эта карточка вырождалась в плашку с одним названием. -->
+  <div class="tb-report__title tb-report__title--head" data-path="course.title"></div>
+  <div class="tb-report__headline" data-path="report.verdictHeadline"></div>
+  <div class="tb-report__attempts" data-path="report.attemptsCountLabel"></div>
+  {{#if report.hasLearnerName}}<div class="tb-report__learner">Слушатель: <span data-path="report.learnerName"></span></div>{{/if}}
+  <div class="tb-report__date">Дата прохождения: <span data-path="report.attemptDateLabel"></span></div>
+
+  <!-- ВВОДНЫЙ БЛОК автора — первым, до карточки счёта и всего остального. Текст отчёта
+       задаётся отдельно от текста экрана: документ уносят с собой и показывают
+       специалисту. Пусто = блока нет. -->
+  {{#if result.introHtml}}<section class="tb-report__card tb-report__intro">{{& result.introHtml }}</section>{{/if}}
+
+  <!-- Сводка баллов гейтится ТЕМ ЖЕ признаком, что на экране итогов (PRD-29 §6.7):
+       измерительная методика не приносит баллов, и «0 вопросов / 0.0 баллов / 0 %» —
+       утверждение, которого экран не делает. Гейт стоит на ВСЕЙ карточке: с переездом
+       названия в шапку внутри неё не осталось ничего, что печаталось бы без сводки. -->
+  {{#unless result.hideScoreSummary}}
+  <section class="tb-report__card">
+    <div class="tb-report__subtitle">Результат теста</div>
+
+    <div class="tb-report__score">
+      <div class="tb-report__metrics">
+        <div class="tb-report__metric">
+          <div class="tb-report__metric-num" data-path="result.totalQuestions"></div>
+          <div class="tb-report__metric-lbl">вопросов</div>
+        </div>
+        <div class="tb-report__metric">
+          <div class="tb-report__metric-num" data-path="report.correctLabel"></div>
+          <div class="tb-report__metric-lbl">верно</div>
+        </div>
+        <div class="tb-report__metric">
+          <div class="tb-report__metric-num" data-path="report.earnedPointsLabel"></div>
+          <div class="tb-report__metric-lbl">баллов</div>
+        </div>
+      </div>
+
+      <div class="tb-report__ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="tb-report__ring-track" cx="50" cy="50" r="44" fill="none" stroke-width="12"/>
+          <circle class="tb-report__ring-fill" cx="50" cy="50" r="44" fill="none" stroke-width="12" stroke-linecap="round" stroke-dasharray="{{ report.ringDasharray }}" stroke-dashoffset="{{ report.ringDashoffset }}"/>
+        </svg>
+        <div class="tb-report__ring-value"><span data-path="result.scorePercent"></span>%</div>
+      </div>
+
+      <!-- Плашка вердикта — на пустой подписи её нет вовсе: она несёт фон и цвет исхода,
+           поэтому пустой строки мало. Гейт отдельный от сводки: автор вправе показать
+           сводку принудительно, но вердикта у неоцениваемого теста всё равно нет. -->
+      {{#if report.verdictBadge}}<div class="tb-report__badge" data-path="report.verdictBadge"></div>{{/if}}
+    </div>
+  </section>
+  {{/unless}}
+
+  {{#if report.hasTopics}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Результаты по темам</div>
+    <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
+      {{#each result.topicResults}}
+      <div class="tb-report__topic {{ passClass }}">
+        <div class="tb-report__topic-stripe"></div>
+        <div class="tb-report__topic-head">
+          <div class="tb-report__topic-name">{{ topicName }}</div>
+          {{#if verdictLabel}}<div class="tb-report__topic-verdict">{{ verdictLabel }}</div>{{/if}}
+        </div>
+        <div class="tb-report__topic-stats">
+          <span>{{ countsLabel }}</span>
+          <span>{{ pointsFixedLabel }}</span>
+        </div>
+        <div class="tb-report__topic-bar"><div class="tb-report__topic-bar-fill" style="width: {{ barPercent }}%;"></div></div>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
+  <!-- ПОКАЗАТЕЛЬ — СВОЯ карточка, а не строка внутри общей. Раскладка режет документ
+       между блоками верхнего уровня, и одна карточка на все показатели становилась
+       «переростком» в полтора листа: её приходилось резать растром, а хвост в полторы
+       сотни пикселей открывал почти пустую страницу. Отдельными карточками они ложатся
+       плотно. Заголовок несёт первая — иначе он остался бы карточкой из одной строки. -->
+  {{#each result.indicators}}
+  <section class="tb-report__card">
+    {{#if @first}}<div class="tb-report__title tb-report__title--tight">Ваш результат</div>{{/if}}
+    <div class="tb-report__scales">
+      <div class="tb-report__scale-list">
+        <div class="tb-report__scale">
+          <div class="tb-report__scale-name">{{name}}</div>
+          <div class="tb-report__scale-meta">
+            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+            {{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}
+          </div>
+          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
+        </div>
+      </div>
+    </div>
+  </section>
+  {{/each}}
+
+  {{#if result.scales}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">По шкалам</div>
+    <!-- Колонки «диаграмма слева, список справа» включает МОДИФИКАТОР, и ставится он по
+         тому же признаку, каким гейтится сама фигура. Без него единственный ребёнок —
+         список толкований — занимал колонку под диаграмму, 240 px из 545 доступных, и
+         текст уходил вниз лентой. Блок показателей диаграммы не имеет вовсе. -->
+    <div class="tb-report__scales{{#if result.scalesChart}} tb-report__scales--chart{{/if}}">
+      {{#if result.scalesChart}}
+      <!-- PRD-46: ОДИН блок на радар и розу. Ядро отдаёт обе диаграммы одной формой, и
+          неподходящие списки приходят ПУСТЫМИ — пустой цикл не рисует ничего. Порядок
+          слоёв важен: заливки розы непрозрачны, поэтому сетка идёт ПОВЕРХ них. -->
+      <div class="tb-chart">
+        <svg class="tb-chart__svg" viewBox="0 0 {{result.scalesChart.width}} {{result.scalesChart.height}}" role="img" aria-label="{{result.scalesChart.ariaLabel}}">
+          {{#each result.scalesChart.sectors}}
+          <path class="tb-rose__sector {{overflowClass}}" d="{{d}}" style="--tb-hue:{{color}}"></path>
+          {{/each}}
+          {{#each result.scalesChart.rings}}
+          <circle class="tb-chart__ring" cx="{{cx}}" cy="{{cy}}" r="{{radius}}"></circle>
+          {{/each}}
+          {{#each result.scalesChart.spokes}}
+          <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{x}}" y2="{{y}}"></line>
+          {{/each}}
+          {{#each result.scalesChart.axes}}
+          <line class="tb-chart__axis" x1="{{cx}}" y1="{{cy}}" x2="{{axisX}}" y2="{{axisY}}"></line>
+          {{/each}}
+          {{#if result.scalesChart.isRadar}}
+          <polygon class="tb-radar__shape" points="{{result.scalesChart.polygonPoints}}"></polygon>
+          {{/if}}
+          {{#each result.scalesChart.axes}}
+          <circle class="tb-radar__dot {{quantizedClass}} {{overflowClass}}" cx="{{x}}" cy="{{y}}" r="6" style="--tb-zone:{{color}}"></circle>
+          {{/each}}
+          {{#each result.scalesChart.icons}}
+          <g class="tb-rose__icon" transform="{{transform}}">{{#each paths}}<path d="{{.}}"></path>{{/each}}</g>
+          {{/each}}
+          {{#each result.scalesChart.labels}}
+          <text class="{{className}}" x="{{x}}" y="{{y}}" text-anchor="{{anchor}}">{{text}}</text>
+          {{/each}}
+        </svg>
+        {{#if result.scalesChart.limitCaption}}
+        <p class="tb-chart__limit">{{result.scalesChart.limitCaption}}</p>
+        {{/if}}
+      </div>
+      {{/if}}
+      <div class="tb-report__scale-list">
+        {{#each result.scales}}
+        <div class="tb-report__scale">
+          <div class="tb-report__scale-name">{{name}}</div>
+          <div class="tb-report__scale-meta">
+            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+            <span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>
+          </div>
+          <!-- Линейка — та же фигура, что на экране итогов: вид измерения задаёт ОДНА
+               настройка «Вид шкал», и документ обязан показать ученику то же, что показал
+               экран. Гейт тот же, что на экране, — наличие зон: шкала без домена рисуется
+               числом, и рисовать ей пустую полосу не из чего. Зоны, положение маркера и
+               границы приходят ПОСЧИТАННЫМИ из ядра (`buildMeasureView`) — отчёт
+               растеризуется, и вычислений на его стороне быть не должно. -->
+          {{#if zones}}
+          <div class="tb-report__scale-rail">
+            {{#each zones}}<span class="tb-report__scale-zone" style="left:{{leftPercent}}%;width:{{widthPercent}}%;--tb-zone:{{color}}"></span>{{/each}}
+            <span class="tb-report__scale-marker" style="left:{{markerPercent}}%"></span>
+            {{#each marks}}<span class="tb-report__scale-mark" style="left:{{percent}}%">{{label}}</span>{{/each}}
+          </div>
+          {{/if}}
+          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+    </div>
+  </section>
+  {{/if}}
+  {{#if result.recommendations.hasAny}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Рекомендации</div>
+    <!-- Текст рекомендации печатается РАЗМЕТКОЙ: автор выбирает формат («Обычный»,
+         «Форматированный», «HTML») в редакторе обратной связи, и его выбор доезжает сюда
+         полем `textsHtml`. Обычный текст ядро экранирует само, а переводы строк отдаёт
+         переносами — абзацы автора сохраняются. -->
+    {{#each result.recommendations.textsHtml}}
+    <div class="tb-report__rec tb-report__rec--plain">
+      <div class="tb-report__event">{{& this }}</div>
+    </div>
+    {{/each}}
+    {{#if result.recommendations.links}}
+    <div class="tb-report__lead">Пройти обучение</div>
+    {{#each result.recommendations.links}}
+    <div class="tb-report__rec">
+      <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+    {{#if result.recommendations.events}}
+    <div class="tb-report__lead">Мероприятия</div>
+    {{#each result.recommendations.events}}
+    <div class="tb-report__rec tb-report__rec--plain">
+      <div class="tb-report__event">{{ title }}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+    {{#if result.recommendations.assets}}
+    <div class="tb-report__lead">Материалы</div>
+    {{#each result.recommendations.assets}}
+    <div class="tb-report__rec">
+      <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+    </div>
+    {{/each}}
+    {{/if}}
+  </section>
+  {{/if}}
+
+  {{#if report.hasCourses}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Рекомендации по курсам</div>
+    <div class="tb-report__lead">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>
+    {{#each report.courses}}
+    <div class="tb-report__rec">
+      <div class="pdf-link-btn tb-report__rec-chip" data-url="{{ url }}">{{ title }}</div>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+
+  {{#if report.hasEvents}}
+  <section class="tb-report__card">
+    <div class="tb-report__title tb-report__title--tight">Рекомендуемые мероприятия</div>
+    <div class="tb-report__lead">Посетите очные мероприятия для углублённого изучения материала.</div>
+    {{#each report.events}}
+    <div class="tb-report__rec tb-report__rec--plain">
+      <div class="tb-report__event">{{ title }}</div>
+    </div>
+    {{/each}}
+  </section>
+  {{/if}}
+</div>

@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-17 — Варианты теста. Слой в строке темы вкладки «СОСТАВ»
+    редактора теста (drawer). Issue: BR-12 (Этап 13).
+    Спека: docs/specs/prd-17/question-set-variants.md; BRD: BR-12, NFR-17.
+    ОСНОВА — РЕАЛЬНАЯ РАЗМЕТКА компонента
+    client/src/features/tests/editor/sections/topics-structure-section.tsx
+    (захвачена из работающего приложения): tb-topic-row / tb-draw-all-row /
+    tb-draw-count-row (степпер ou-number--split) / tb-quota-toggle /
+    tb-feedback-preview; Switch=ou-switch-field, IconButton=ou-iconbtn,
+    табы ou-tabs__label, хром ou-drawer__head/__foot. Новое здесь — только
+    «Варианты теста». Тег-квоты — фича PRD-11, тут показаны лишь как
+    существующий контрол карточки (выключенный), НЕ разбираются.
+    Интеграция: «Варианты теста» — режим. ВЫКЛ = карточка как сейчас. ВКЛ =
+    источник = выпавший вариант (выдаётся целиком), контролы выдачи из всей
+    темы НЕ применяются; показывается редактор вариантов + ПОКРЫТИЕ банка.
+    Ротация на повторе — поведение по умолчанию, без переключателя.
+    UX-уточнение 1.2 (2026-06-26): взаимоисключающие контролы выдачи больше НЕ
+    скрываются, а показываются НЕАКТИВНЫМИ (disabled) с пояснением — карточка не
+    должна визуально «терять» настройки. Семантика выдачи (FR-03: контролы не
+    применяются) не изменилась. Состояния s-on/s-warning/s-error обновлены:
+    контролы выдачи присутствуют, но disabled.
+    Состояния:
+      s-on       — Варианты ВКЛ (дефолт): контролы выдачи disabled + наборы + покрытие
+      s-off      — Варианты ВЫКЛ: карточка как сейчас (реальные контролы)
+      s-modal    — Редактор вариантов (модал: вкладки + transfer банк<->вариант)
+      s-warning  — Неполный вариант (вопрос ушёл из банка) — НЕблокирующе
+      s-error    — < 2 вариантов / пустой вариант — ошибка
+      s-docs     — Пояснения + DS Mapping
+    СОГЛАСОВАН 2026-06-25; UX-уточнение 1.2 — 2026-06-26.
+    -->
+    <title>PRD-17 — Варианты теста (вкладка «Состав»)</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <!-- РЕАЛЬНЫЙ компонентный CSS приложения (а не устаревшая копия в docs/wireframes). -->
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <style>
+      .wf-sprite { display: none; }
+      /* Faux-drawer панель: показываем drawer редактора в потоке страницы. */
+      .wf-drawer {
+        max-width: var(--wf-size-860, 860px); margin: 0 auto;
+        background: var(--ou-bg-elevated);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-l); box-shadow: var(--ou-shadow-m);
+        overflow: hidden; display: flex; flex-direction: column;
+      }
+      .wf-drawer[hidden] { display: none; }
+      .wf-drawer__tabs { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); padding: 0 var(--ou-space-5); }
+      .wf-drawer-body { padding: var(--ou-space-5) var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      /* Индентированный блок вариантов под переключателем (как tb-quota-block). */
+      .wf-variants-block { margin-top: var(--ou-space-2); padding-left: var(--ou-space-5); border-left: var(--wf-border-w) solid var(--ou-border-soft); display: flex; flex-direction: column; gap: var(--ou-space-3); }
+      .wf-row-actions { display: flex; gap: var(--ou-space-2); }
+      .wf-sum { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      .wf-sum--error { color: var(--ou-error-default); font-weight: 600; }
+      /* Зазор между кнопками в подвале модала. */
+      .ou-modal__foot--between > span { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-tab-add { display: inline-flex; align-items: center; gap: var(--ou-space-1); }
+      /* Аннотации (каркас канона; в этом эскизе не используются). */
+      .wf-annot { display: none; }
+    </style>
+
+    <style data-wf-template-overrides>
+      :root { --wf-nav-offset: 92px; }
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-stage { padding: var(--wf-nav-offset) var(--ou-space-6) var(--ou-space-10); }
+      .wf-card { display: none; }
+      .wf-card.is-active { display: block; }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: 0 var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960, 960px); }
+      /* Модал внутри состояния: под навбаром, скролл только в body. */
+      .wf-state > .ou-modal-root { top: var(--wf-nav-offset); place-items: start center; }
+      .wf-state > .ou-modal-root .ou-modal { max-height: calc(100vh - var(--wf-nav-offset) - var(--ou-space-8)); }
+      .wf-state > .ou-modal-root .ou-modal--xl { height: min(640px, calc(100vh - var(--wf-nav-offset) - var(--ou-space-8))); }
+      .wf-state > .ou-modal-root .ou-modal--xl .ou-modal__body { flex: 1 1 auto; min-height: 0; }
+
+      /* ── Редактор вариантов: панели на всю высоту формы (п.5) ── */
+      #wf-modal .ou-modal__body { display: flex; flex-direction: column; gap: var(--ou-space-4); overflow: hidden; }
+      #wf-modal .ou-tabs--underline { flex: 0 0 auto; }
+      #wf-modal .ou-tabs__panel { flex: 1 1 auto; min-height: 0; display: flex; }
+      #wf-modal .ou-transfer { flex: 1 1 auto; min-height: 0; }
+      #wf-modal .ou-transfer__pane { min-height: 0; }
+      #wf-modal .ou-transfer__list { flex: 1 1 auto; min-height: 0; overflow: auto; }
+      /* Полный текст вопроса с переносом (п.2) + многострочные строки + мельче шрифт */
+      #wf-modal .ou-transfer__row { align-items: start; padding-top: var(--ou-space-2); padding-bottom: var(--ou-space-2); }
+      #wf-modal .ou-transfer__row-name { white-space: normal; overflow: visible; font: var(--ou-text-body-s); }
+      #wf-modal .ou-transfer__row-meta { white-space: normal; overflow: visible; }
+      /* Иконка типа вопроса вместо круга-аватара (п.1/3) — как ct-qtype в приложении */
+      #wf-modal .wf-qtype { background: transparent; color: var(--ou-fg-muted); width: auto; height: auto; }
+      /* Метки вариантов, в которые включён вопрос (п.6) */
+      .wf-vmarks { display: inline-flex; gap: var(--ou-space-1); flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+      .wf-vmark { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 var(--ou-space-1); border-radius: var(--ou-radius-xs); border: var(--wf-border-w) solid var(--ou-border-default); font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      .wf-vmark.is-current { background: var(--ou-accent-soft); color: var(--ou-accent-default); border-color: transparent; font-weight: 600; }
+      .wf-vmark--none { border-style: dashed; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-chevrons-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 17 5-5-5-5" /><path d="m13 17 5-5-5-5" /></symbol>
+      <symbol id="i-chevrons-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m11 17-5-5 5-5" /><path d="m18 17-5-5 5-5" /></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></symbol>
+      <!-- Иконки типов вопроса — как в приложении (content-tree TYPE_ICON). -->
+      <symbol id="i-q-single" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="1" fill="currentColor" /></symbol>
+      <symbol id="i-q-multiple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="m9 12 2 2 4-4" /></symbol>
+      <symbol id="i-q-matching" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3" /><path d="m2 22 3-3" /><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z" /><path d="M7.5 13.5 10 11" /><path d="M10.5 16.5 13 14" /><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z" /></symbol>
+      <symbol id="i-q-ranking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11" /><path d="M10 12h11" /><path d="M10 18h11" /><path d="M4 6h1v4" /><path d="M4 10h2" /><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Варианты теста:</span>
+      <button type="button" class="active" onclick="showState(this, 'on')">включены (дефолт)</button>
+      <button type="button" onclick="showState(this, 'off')">выключены</button>
+      <button type="button" onclick="showState(this, 'modal')">редактор вариантов</button>
+      <button type="button" onclick="showState(this, 'warning')">неполный вариант</button>
+      <button type="button" onclick="showState(this, 'error')">ошибка</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd7-editor-drawer.html">&harr; Редактор</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ FAUX-DRAWER: реальный хром редактора (head + tabs + body + foot) ░░░ -->
+      <div class="wf-drawer" id="wf-drawer">
+        <header class="ou-drawer__head">
+          <div class="ou-drawer__head-text"><h1 class="ou-drawer__title">Сертификационный тест для руководителей</h1></div>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Статус: черновик">Черновик</span>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">v5</span>
+          <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-drawer__close" aria-label="Закрыть редактор"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+        </header>
+
+        <div class="ou-tabs ou-tabs--underline ou-tabs--m wf-drawer__tabs">
+          <div class="ou-tabs__list" role="tablist">
+            <button type="button" role="tab" aria-selected="true" class="ou-tabs__tab is-active"><span class="ou-tabs__label">Состав</span></button>
+            <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Настройки</span></button>
+            <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оформление</span></button>
+            <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Структура</span></button>
+            <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Оценка</span></button>
+            <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Шкалы</span></button>
+            <button type="button" role="tab" aria-selected="false" class="ou-tabs__tab"><span class="ou-tabs__label">Показатели</span></button>
+          </div>
+        </div>
+
+        <div class="wf-drawer-body">
+          <div class="tb-section-label">Темы и выборка вопросов</div>
+
+          <!-- ════ card-on: «Варианты теста» ВКЛ (дефолт) ════ -->
+          <div class="wf-card is-active" id="card-on">
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">О компании</span>
+                <span class="tb-topic-row__count">41 вопрос</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <!-- Режим вариантов ВКЛ: контролы выдачи из всей темы НЕ применяются —
+                     показаны НЕАКТИВНЫМИ (disabled), а не скрыты (UX-уточнение 1.2). -->
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                  <span class="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 41</span>
+                </div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком.</div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="wf-variants-block">
+                  <table class="tb-table">
+                    <thead><tr><th>Вариант</th><th>Вопросов в варианте</th></tr></thead>
+                    <tbody>
+                      <tr><td>Вариант 1</td><td>16</td></tr>
+                      <tr><td>Вариант 2</td><td>16</td></tr>
+                      <tr><td>Вариант 3</td><td>16</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-row-actions">
+                    <button class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(navBtn('modal'), 'modal')"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-list" /></svg></span><span>Настроить варианты…</span></button>
+                  </div>
+                  <div class="wf-sum"><span>В вариантах задействовано <strong>38</strong> из 41 вопросов темы · 3 не попали ни в один вариант</span><span class="ou-tag ou-tag--warning">3 не используются</span></div>
+                  <div class="wf-sum"><span>3 варианта по 16 · при старте темы выпадает один, выдаётся целиком; на повторе — другой</span><span class="ou-tag ou-tag--success">сбалансировано</span></div>
+                </div>
+
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ card-off: «Варианты теста» ВЫКЛ — карточка как сейчас (реальные контролы) ════ -->
+          <div class="wf-card" id="card-off">
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">О компании</span>
+                <span class="tb-topic-row__count">41 вопрос</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split"><div class="ou-number__box"><button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 41</span>
+                </div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="tb-card-desc">Выключено — выдача из всего банка темы. Включите, чтобы раздавать заранее скурированные варианты и менять вариант на повторе.</div>
+
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ card-warning: неполный вариант ════ -->
+          <div class="wf-card" id="card-warning">
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">О компании</span>
+                <span class="tb-topic-row__count">40 вопросов</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <!-- Контролы выдачи disabled (режим вариантов, UX-уточнение 1.2). -->
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                  <span class="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 40</span>
+                </div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком.</div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="wf-variants-block">
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">«Вариант 2»: один вопрос удалён из банка темы. Выдастся 15 вместо 16 — это не блокирует сохранение, но проверьте состав. Варианты стали неравными.</div></div>
+                  </div>
+                  <table class="tb-table">
+                    <thead><tr><th>Вариант</th><th>Вопросов в варианте</th><th>Статус</th></tr></thead>
+                    <tbody>
+                      <tr><td>Вариант 1</td><td>16</td><td></td></tr>
+                      <tr><td>Вариант 2</td><td>15</td><td><span class="ou-tag ou-tag--warning">неполный</span></td></tr>
+                      <tr><td>Вариант 3</td><td>16</td><td></td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-row-actions">
+                    <button class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(navBtn('modal'), 'modal')"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-list" /></svg></span><span>Настроить варианты…</span></button>
+                  </div>
+                  <div class="wf-sum"><span>Варианты 16 / 15 / 16 — неравные</span><span class="ou-tag ou-tag--warning">неравные варианты</span></div>
+                </div>
+
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ card-error: < 2 вариантов / пустой вариант ════ -->
+          <div class="wf-card" id="card-error">
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">О компании</span>
+                <span class="tb-topic-row__count">41 вопрос</span>
+                <label class="tb-topic-row__required">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-topic-row__required-lbl">Обязательная</span>
+                </label>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
+              </div>
+              <div class="tb-topic-row__body">
+                <!-- Контролы выдачи disabled (режим вариантов, UX-уточнение 1.2). -->
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                  <span class="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 41</span>
+                </div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком.</div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
+                </label>
+                <div class="wf-variants-block">
+                  <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Нужно минимум 2 варианта, и каждый вариант не должен быть пустым. «Вариант 2» пуст. Исправьте — сохранение заблокировано.</div></div>
+                  </div>
+                  <table class="tb-table">
+                    <thead><tr><th>Вариант</th><th>Вопросов в варианте</th><th>Статус</th><th aria-label="Действия"></th></tr></thead>
+                    <tbody>
+                      <tr><td>Вариант 1</td><td>16</td><td><span class="ou-tag ou-tag--neutral">ок</span></td><td><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить вариант"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-trash" /></svg></span></button></td></tr>
+                      <tr><td>Вариант 2</td><td><span class="ou-tag ou-tag--error">0</span></td><td><span class="ou-tag ou-tag--error">пустой вариант</span></td><td><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить вариант"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-trash" /></svg></span></button></td></tr>
+                    </tbody>
+                  </table>
+                  <div class="wf-row-actions">
+                    <button class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(navBtn('modal'), 'modal')"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-list" /></svg></span><span>Настроить варианты…</span></button>
+                  </div>
+                  <div class="wf-sum wf-sum--error"><span>«Вариант 2» пуст</span><span class="ou-tag ou-tag--error">ошибка</span></div>
+                </div>
+
+                <div class="tb-card-desc">Обратная связь по теме</div>
+                <div role="button" tabindex="0" class="tb-feedback-preview is-empty" aria-label="Редактировать обратную связь по теме">Не задано — нажмите для редактирования</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="ou-btn ou-btn--secondary ou-btn--m ou-btn--full"><span class="ou-btn__ico"><svg width="16" height="16"><use href="#i-plus" /></svg></span><span>Добавить тему</span></button>
+        </div>
+
+        <footer class="ou-drawer__foot">
+          <button class="ou-btn ou-btn--ghost ou-btn--m"><span>Закрыть</span></button>
+          <button class="ou-btn ou-btn--primary ou-btn--m"><span>Сохранить</span></button>
+        </footer>
+      </div>
+
+      <!-- ░░░ s-modal: редактор вариантов (вкладки + transfer банк<->вариант) ░░░ -->
+      <div id="wf-modal" class="wf-state">
+        <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="wf-modal-title">
+          <div class="ou-modal__backdrop"></div>
+          <div class="ou-modal ou-modal--xl">
+            <header class="ou-modal__head">
+              <div class="ou-modal__head-text">
+                <h1 class="ou-modal__title" id="wf-modal-title">Варианты теста — тема «О компании»</h1>
+                <p class="ou-modal__desc">Тест «Сертификационный тест для руководителей» · банк темы: 41 вопрос</p>
+              </div>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s ou-modal__close" aria-label="Закрыть" onclick="showState(navBtn('on'), 'on')"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-x" /></svg></span></button>
+            </header>
+            <div class="ou-modal__body">
+              <div class="tb-card-desc">Соберите каждый вариант из вопросов банка темы. Выпавший вариант выдаётся целиком, в случайном порядке. Один вопрос может входить в несколько вариантов.</div>
+
+              <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+                <div class="ou-tabs__list" role="tablist" aria-label="Варианты темы">
+                  <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Вариант 1</span> <span class="ou-tabs__badge">16</span></button>
+                  <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Вариант 2</span> <span class="ou-tabs__badge">16</span></button>
+                  <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Вариант 3</span> <span class="ou-tabs__badge">16</span></button>
+                  <button type="button" class="ou-tabs__tab wf-tab-add" role="tab" aria-selected="false"><svg width="14" height="14"><use href="#i-plus" /></svg> Вариант</button>
+                </div>
+              </nav>
+
+              <div class="ou-tabs__panel" role="tabpanel" aria-label="Вариант 1">
+                <div class="ou-transfer">
+                  <div class="ou-transfer__pane">
+                    <div class="ou-transfer__header">
+                      <h3 class="ou-transfer__title">Банк темы</h3>
+                      <span class="ou-transfer__count"><strong>25</strong> не в этом варианте</span>
+                    </div>
+                    <div class="ou-transfer__search"><svg width="14" height="14"><use href="#i-search" /></svg><input type="text" placeholder="Поиск по тексту/коду" aria-label="Поиск в банке темы" /></div>
+                    <div class="ou-transfer__list">
+                      <label class="ou-transfer__row"><input type="checkbox" /><span class="ou-transfer__row-avatar wf-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single" /></svg></span><span class="ou-transfer__row-text"><span class="ou-transfer__row-name">KT_Company_Strat_18 — Амбиция B2C-сегмента согласно «Стратегии-2030»: целевой рост доли «Ростелекома» на мобильном рынке к 2030 году</span><span class="ou-transfer__row-meta">Стратегия</span></span><span class="wf-vmarks"><span class="wf-vmark" title="Входит в Вариант 2">2</span></span></label>
+                      <label class="ou-transfer__row is-selected"><input type="checkbox" checked /><span class="ou-transfer__row-avatar wf-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple" /></svg></span><span class="ou-transfer__row-text"><span class="ou-transfer__row-name">KT_Company_Prod_07 — Какие продукты относятся к кластеру «Кибербезопасность»? Выберите все верные варианты</span><span class="ou-transfer__row-meta">Ключевые продукты</span></span><span class="wf-vmarks"><span class="wf-vmark" title="Входит в Вариант 2">2</span><span class="wf-vmark" title="Входит в Вариант 3">3</span></span></label>
+                      <label class="ou-transfer__row"><input type="checkbox" /><span class="ou-transfer__row-avatar wf-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single" /></svg></span><span class="ou-transfer__row-text"><span class="ou-transfer__row-name">KT_Company_Cult_03 — Что из перечисленного относится к ценностям корпоративной культуры компании?</span><span class="ou-transfer__row-meta">Корпоративная культура</span></span><span class="wf-vmarks"><span class="wf-vmark" title="Входит в Вариант 3">3</span></span></label>
+                      <label class="ou-transfer__row"><input type="checkbox" /><span class="ou-transfer__row-avatar wf-qtype" title="Сопоставление"><svg width="16" height="16"><use href="#i-q-matching" /></svg></span><span class="ou-transfer__row-text"><span class="ou-transfer__row-name">KT_Company_Strat_22 — Сопоставьте стратегические направления компании с их целевыми показателями</span><span class="ou-transfer__row-meta">Стратегия</span></span><span class="wf-vmarks"><span class="wf-vmark wf-vmark--none" title="Не входит ни в один вариант">—</span></span></label>
+                    </div>
+                  </div>
+                  <div class="ou-transfer__controls">
+                    <button type="button" class="ou-transfer__btn" aria-label="Перенести все в вариант" title="Все в вариант"><svg width="16" height="16"><use href="#i-chevrons-right" /></svg></button>
+                    <button type="button" class="ou-transfer__btn" aria-label="Перенести выбранные в вариант" title="Выбранные в вариант"><svg width="16" height="16"><use href="#i-chevron-right" /></svg></button>
+                    <button type="button" class="ou-transfer__btn" aria-label="Убрать выбранные из варианта" title="Выбранные из варианта"><svg width="16" height="16"><use href="#i-chevron-left" /></svg></button>
+                    <button type="button" class="ou-transfer__btn" aria-label="Убрать все из варианта" title="Все из варианта"><svg width="16" height="16"><use href="#i-chevrons-left" /></svg></button>
+                  </div>
+                  <div class="ou-transfer__pane">
+                    <div class="ou-transfer__header">
+                      <h3 class="ou-transfer__title">Вариант 1</h3>
+                      <span class="ou-transfer__count"><strong>16</strong> в варианте</span>
+                    </div>
+                    <div class="ou-transfer__search"><svg width="14" height="14"><use href="#i-search" /></svg><input type="text" placeholder="Поиск в варианте" aria-label="Поиск в варианте" /></div>
+                    <div class="ou-transfer__list">
+                      <label class="ou-transfer__row"><input type="checkbox" /><span class="ou-transfer__row-avatar wf-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single" /></svg></span><span class="ou-transfer__row-text"><span class="ou-transfer__row-name">KT_Company_Strat_12 — Амбиции B2C-сегмента согласно «Стратегии-2030»: какова целевая доля рынка?</span><span class="ou-transfer__row-meta">Стратегия</span></span><span class="wf-vmarks"><span class="wf-vmark is-current" title="Текущий вариант">1</span></span></label>
+                      <label class="ou-transfer__row"><input type="checkbox" /><span class="ou-transfer__row-avatar wf-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple" /></svg></span><span class="ou-transfer__row-text"><span class="ou-transfer__row-name">KT_Company_Strat_14 — «Ростелеком» работает не только для своих клиентов. Выберите верные утверждения о роли компании</span><span class="ou-transfer__row-meta">Стратегия</span></span><span class="wf-vmarks"><span class="wf-vmark is-current" title="Текущий вариант">1</span><span class="wf-vmark" title="Входит в Вариант 3">3</span></span></label>
+                      <label class="ou-transfer__row"><input type="checkbox" /><span class="ou-transfer__row-avatar wf-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single" /></svg></span><span class="ou-transfer__row-text"><span class="ou-transfer__row-name">KT_Company_Prod_01 — Какая линейка продуктов «Ростелекома» ориентирована на сегмент B2G?</span><span class="ou-transfer__row-meta">Ключевые продукты</span></span><span class="wf-vmarks"><span class="wf-vmark is-current" title="Текущий вариант">1</span><span class="wf-vmark" title="Входит в Вариант 2">2</span></span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <footer class="ou-modal__foot ou-modal__foot--between">
+              <span class="wf-sum"><svg width="14" height="14"><use href="#i-check" /></svg> 3 варианта по 16 · в вариантах задействовано <strong>38</strong> из 41 вопросов темы · 3 не используются</span>
+              <span>
+                <button class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(navBtn('on'), 'on')"><span>Отмена</span></button>
+                <button class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(navBtn('on'), 'on')"><span>Готово</span></button>
+              </span>
+            </footer>
+          </div>
+        </div>
+      </div>
+
+      <!-- ░░░ s-docs: Пояснения + DS Mapping ░░░ -->
+      <div id="wf-docs" class="wf-state">
+        <div class="wf-doc">
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>ОСНОВА</td><td>реальная разметка <code>topics-structure-section.tsx</code></td><td>Карточка темы, степпер, свитчи, ОС — РЕАЛЬНЫЕ классы/компоненты, захвачены из приложения. Новое — только «Варианты теста»</td></tr>
+              <tr><td>Поверхность</td><td>вкладка «СОСТАВ» редактора теста (drawer)</td><td>Не «Структура». «Структура» — другая вкладка (поток/роутер)</td></tr>
+              <tr><td>Свич «Варианты теста»</td><td>наличие <code>form_set_json</code></td><td>РЕЖИМ: ВЫКЛ = выдача из всего банка (Все вопросы темы / Вопросов в тест / Квоты — как сейчас). ВКЛ = источник = выпавший вариант, эти контролы становятся НЕАКТИВНЫМИ (disabled) с пояснением, а не скрываются (UX-уточнение 1.2)</td></tr>
+              <tr><td>Disabled вместо скрытия (UX-уточнение 1.2)</td><td>FR-03; 2026-06-26</td><td>Взаимоисключающие контролы не прячутся, а гасятся видимыми: режим вариантов гасит контролы выдачи всей темы; «Все вопросы темы» гасит квоты («…только к частичной выборке»); адаптивный режим гасит сам свич «Варианты теста» («Недоступно в адаптивном режиме…»). Семантика выдачи не изменилась — карточка не должна визуально «терять» настройки</td></tr>
+              <tr><td>Вариант = набор</td><td><code>form_set_json.forms[].questionIds</code></td><td>Подмножество банка темы; выпадает один при старте темы, выдаётся целиком (FR-04). Привязан к ТЕМЕ, не к тесту</td></tr>
+              <tr><td>Покрытие банка (FR-18)</td><td>уникальные вопросы во всех вариантах vs банк</td><td>«задействовано N из M · K не используются»: K — осиротевшие вопросы (ни в одном варианте, никогда не выдаются). НЕблокирующее предупреждение</td></tr>
+              <tr><td>Редактор вариантов</td><td>модал</td><td>Наборы крупные → модал (как «Обратная связь»): вкладки вариантов + Transfer «банк ↔ вариант»</td></tr>
+              <tr><td>Ротация на повторе</td><td>по умолчанию, без переключателя</td><td>На повторе — другой вариант (по <code>formId</code>, FR-07). Отключать бессмысленно; в SCORM не гарантируется (NFR-17) — только веб-хост</td></tr>
+              <tr><td>Случайный порядок</td><td>FR-15</td><td>Вопросы выпавшего варианта — в случайном порядке, пиннятся в попытке</td></tr>
+              <tr><td>Неполный / пустой вариант</td><td>вопрос ушёл из банка / 0 вопросов</td><td>Неполный — НЕблокирующий warning; пустой / &lt;2 вариантов — ошибка, блок сохранения (§6)</td></tr>
+              <tr><td>Тег-квоты</td><td>фича PRD-11</td><td>Свич «Квоты по подтемам» — существующий контрол карточки; в режиме вариантов и при «Все вопросы темы» показан disabled с пояснением (UX-уточнение 1.2), сама фича PRD-11 здесь не разбирается</td></tr>
+              <tr><td>Excel-обмен</td><td>колонка «Варианты» на листе «Вопросы»</td><td>Массив вариантов вопроса через разделитель, как «Теги» (FR-13)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-mapping">
+          <h2 class="wf-mapping-title">DS Mapping</h2>
+          <p class="wf-mapping-sub">Существующие элементы — реальные компоненты (зеркало кода). Новое — композиция реальных DS-компонентов.</p>
+          <table>
+            <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+            <tbody>
+              <tr><td>Строка темы / шапка / тело</td><td><code>tb-topic-row*</code> (tb-components)</td><td>существующее (реальная разметка)</td></tr>
+              <tr><td>Свич «Все вопросы темы» / «Квоты» / «Варианты»</td><td><code>Switch</code> (<code>ou-switch-field</code> &gt; <code>ou-switch</code>)</td><td>существующий компонент</td></tr>
+              <tr><td>Неактивный контрол (disabled, UX-уточнение 1.2)</td><td><code>is-disabled</code> на <code>ou-switch</code>/<code>ou-switch-field</code>/<code>ou-number</code> + атрибут <code>disabled</code>; пояснение — <code>tb-card-desc</code> / <code>tb-draw-all-row__hint</code></td><td>DS-состояние (штатные классы), без локальных шимов</td></tr>
+              <tr><td>«Вопросов в тест»</td><td><code>NumberInput</code> (<code>ou-number--split</code>, степпер −/+)</td><td>существующий компонент</td></tr>
+              <tr><td>Кнопка-иконка (X / удалить)</td><td><code>IconButton</code> (<code>ou-iconbtn</code>)</td><td>существующий компонент</td></tr>
+              <tr><td>Обратная связь по теме</td><td><code>tb-feedback-preview</code></td><td>существующее</td></tr>
+              <tr><td>Сводка вариантов + покрытие</td><td><code>Table</code> (<code>tb-table</code>) + строки итога</td><td>новое (DS-композиция)</td></tr>
+              <tr><td>«Настроить варианты…» / «Добавить тему»</td><td><code>Button</code> (<code>ou-btn</code>)</td><td>существующий компонент</td></tr>
+              <tr><td>Редактор: модал / вкладки / перенос</td><td><code>Modal</code> (<code>ou-modal--xl</code>) / <code>Tabs</code> / <code>Transfer</code> (<code>ou-transfer</code>)</td><td>новое (DS-композиция)</td></tr>
+              <tr><td>Статусы / предупреждения</td><td><code>Tag</code> (<code>ou-tag</code>) / <code>Banner</code></td><td>существующие компоненты</td></tr>
+            </tbody>
+          </table>
+        </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function navBtn(id) {
+        return document.querySelector('.wf-nav button[onclick*="\'' + id + '\'"]');
+      }
+      var CARD_IDS = ['on', 'off', 'warning', 'error'];
+      window.showState = function showState(btn, id) {
+        var drawer = document.getElementById('wf-drawer');
+        var modal = document.getElementById('wf-modal');
+        var docs = document.getElementById('wf-docs');
+        if (id === 'docs') {
+          drawer.hidden = true; modal.classList.remove('active'); docs.classList.add('active');
+        } else if (id === 'modal') {
+          drawer.hidden = false; docs.classList.remove('active'); modal.classList.add('active');
+        } else {
+          drawer.hidden = false; modal.classList.remove('active'); docs.classList.remove('active');
+          CARD_IDS.forEach(function (c) {
+            document.getElementById('card-' + c).classList.toggle('is-active', c === id);
+          });
+        }
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

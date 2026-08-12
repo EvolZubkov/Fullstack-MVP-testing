@@ -3,25 +3,20 @@ import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Mail, ArrowLeft, CheckCircle, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
 import {
+  Box,
+  Button,
   Card,
-  CardContent,
-  CardDescription,
+  CardBody,
   CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+  Center,
+  Cluster,
+  IconBadge,
+  Input,
+  Stack,
+  Text,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 
@@ -59,7 +54,7 @@ export default function ForgotPasswordPage() {
 
   const checkEmail = async (email: string) => {
     if (!email || !email.includes("@")) return;
-    
+
     setIsChecking(true);
     try {
       const res = await fetch("/api/auth/check-email", {
@@ -68,7 +63,7 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      
+
       if (data.exists && data.maskedEmail) {
         setMaskedEmail(data.maskedEmail);
       } else {
@@ -124,90 +119,108 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-md">
-        {isSuccess ? (
-          <>
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <CardTitle>{t.auth.resetLinkSent}</CardTitle>
-              <CardDescription className="mt-2">
-                {maskedEmail ? (
-                  <>Ссылка для сброса пароля отправлена на <strong>{maskedEmail}</strong></>
-                ) : (
-                  t.auth.resetLinkSentDescription
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardFooter>
-              <Link href="/login" className="w-full">
-                <Button variant="outline" className="w-full">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  {t.auth.backToLogin}
-                </Button>
-              </Link>
-            </CardFooter>
-          </>
-        ) : (
-          <>
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Mail className="h-6 w-6 text-primary" />
-              </div>
-              <CardTitle>{t.auth.resetPassword}</CardTitle>
-              <CardDescription>
-                {maskedEmail ? (
-                  <>Отправить ссылку для сброса пароля на <strong>{maskedEmail}</strong>?</>
-                ) : (
-                  t.auth.resetPasswordDescription
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t.auth.email}</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder={t.auth.emailPlaceholder}
-                            autoComplete="email"
-                            {...field}
-                            onBlur={(e) => {
-                              field.onBlur();
-                              handleEmailBlur();
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit" className="w-full" disabled={isSubmitting || isChecking}>
-                    {(isSubmitting || isChecking) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    {maskedEmail ? "Отправить ссылку" : t.auth.sendResetLink}
+    <Center minH="screen" pad={4}>
+      <Box full maxW="md">
+        <Card>
+          {isSuccess ? (
+            <>
+              <CardBody>
+                <Stack gap={6}>
+                  <Stack gap={3} align="center">
+                    <IconBadge tone="success" icon={<CheckCircle />} />
+                    <Text as="h1" variant="heading-m" weight="semibold">
+                      {t.auth.resetLinkSent}
+                    </Text>
+                    <Text variant="body-s" tone="muted" align="center">
+                      {maskedEmail ? (
+                        <>
+                          Ссылка для сброса пароля отправлена на{" "}
+                          <Text as="strong" variant="body-s" weight="semibold">
+                            {maskedEmail}
+                          </Text>
+                        </>
+                      ) : (
+                        t.auth.resetLinkSentDescription
+                      )}
+                    </Text>
+                  </Stack>
+                </Stack>
+              </CardBody>
+              <CardFooter>
+                <Link href="/login">
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    leadingIcon={<ArrowLeft size={16} />}
+                  >
+                    {t.auth.backToLogin}
                   </Button>
-                </form>
-              </Form>
-            </CardContent>
-            <CardFooter>
-              <Link href="/login" className="w-full">
-                <Button variant="ghost" className="w-full">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  {t.auth.backToLogin}
-                </Button>
-              </Link>
-            </CardFooter>
-          </>
-        )}
-      </Card>
-    </div>
+                </Link>
+              </CardFooter>
+            </>
+          ) : (
+            <>
+              <CardBody>
+                <Stack gap={6}>
+                  <Stack gap={3} align="center">
+                    <IconBadge tone="accent" icon={<Mail />} />
+                    <Text as="h1" variant="heading-m" weight="semibold">
+                      {t.auth.resetPassword}
+                    </Text>
+                    <Text variant="body-s" tone="muted" align="center">
+                      {maskedEmail ? (
+                        <>
+                          Отправить ссылку для сброса пароля на{" "}
+                          <Text as="strong" variant="body-s" weight="semibold">
+                            {maskedEmail}
+                          </Text>
+                          ?
+                        </>
+                      ) : (
+                        t.auth.resetPasswordDescription
+                      )}
+                    </Text>
+                  </Stack>
+
+                  <form onSubmit={form.handleSubmit(onSubmit)}>
+                    <Stack gap={4}>
+                      <Input
+                        label={t.auth.email}
+                        type="email"
+                        placeholder={t.auth.emailPlaceholder}
+                        autoComplete="email"
+                        fullWidth
+                        error={form.formState.errors.email?.message}
+                        {...form.register("email", {
+                          onBlur: handleEmailBlur,
+                        })}
+                      />
+                      <Button
+                        type="submit"
+                        fullWidth
+                        loading={isSubmitting || isChecking}
+                      >
+                        {maskedEmail ? "Отправить ссылку" : t.auth.sendResetLink}
+                      </Button>
+                    </Stack>
+                  </form>
+                </Stack>
+              </CardBody>
+              <CardFooter>
+                <Link href="/login">
+                  <Button
+                    variant="ghost"
+                    fullWidth
+                    leadingIcon={<ArrowLeft size={16} />}
+                  >
+                    {t.auth.backToLogin}
+                  </Button>
+                </Link>
+              </CardFooter>
+            </>
+          )}
+        </Card>
+      </Box>
+    </Center>
   );
 }

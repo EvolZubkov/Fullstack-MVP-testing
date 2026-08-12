@@ -2,10 +2,31 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
+import { getEffectiveRoles, getUserCapabilities } from "../services/access";
 import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
+import { logger, audit, requestContext } from "../logger";
+import { appBaseUrl } from "../config";
+import "../middleware/magic-scope";
 
 const router = Router();
+
+// Simple in-memory rate limiter for login: max 10 attempts per IP per 15 min
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_LIMIT = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+function checkLoginRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= LOGIN_LIMIT) return false;
+  entry.count++;
+  return true;
+}
 
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
@@ -15,37 +36,76 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Email and password required" });
     }
 
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (!checkLoginRateLimit(ip)) {
+      logger.warn(`Login rate limit exceeded for IP: ${ip}`, "auth");
+      return res.status(429).json({ error: "Too many login attempts. Try again in 15 minutes." });
+    }
+
     const user = await storage.validatePassword(email, password);
     if (!user) {
+      logger.warn(`Failed login attempt: ${email} from ${ip}`, "auth");
+      audit.login(email, false, ip);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     if (user.status === "inactive") {
+      logger.warn(`Login blocked - account inactive: ${email} from ${ip}`, "auth");
       return res.status(403).json({ error: "Account is deactivated. Please contact administrator." });
     }
 
     await storage.updateUserLastLogin(user.id);
+    logger.info(`User logged in: ${email} from ${ip}`, "auth");
+    audit.login(email, true, ip);
+
+    // Подтягиваем userId в контекст запроса сразу после логина
+    const ctx = requestContext.getStore();
+    if (ctx) ctx.userId = user.id;
 
     req.session.userId = user.id;
+    // A full authentication supersedes a magic-link session: dropping the mark is
+    // what "log in with a password to leave the test" actually means.
+    delete req.session.magic;
+
+    // Явно сохраняем сессию перед ответом — гарантирует что сессия в store
+    // до того как браузер отправит следующий запрос с cookie
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          logger.error("Session save error: " + err.message, "auth");
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+
     res.json({
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        roles: await getEffectiveRoles(user),
+        permissions: [...(await getUserCapabilities(user))],
         status: user.status,
         mustChangePassword: user.mustChangePassword,
         gdprConsent: user.gdprConsent,
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    logger.error("Login error: " + (error as Error).message, "auth")
     res.status(500).json({ error: "Login failed" });
   }
 });
 
 // POST /api/auth/logout
-router.post("/logout", (req, res) => {
+router.post("/logout", async (req, res) => {
+  const userId = req.session.userId;
+  if (userId) {
+    const user = await storage.getUser(userId).catch(() => null);
+    logger.info(`User logged out: ${user?.email ?? userId}`, "auth");
+  }
+  audit.logout();
   req.session.destroy(() => {
     res.json({ success: true });
   });
@@ -57,6 +117,9 @@ router.post("/change-password", requireAuth, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: "Current password and new password required" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
 
     const user = await storage.getUser(req.session.userId!);
@@ -70,9 +133,10 @@ router.post("/change-password", requireAuth, async (req, res) => {
     }
 
     await storage.updateUserPassword(user.id, newPassword);
+    audit.passwordChange(user.id);
     res.json({ success: true });
   } catch (error) {
-    console.error("Change password error:", error);
+    logger.error("Change password error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to change password" });
   }
 });
@@ -100,14 +164,18 @@ router.get("/me", async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        roles: await getEffectiveRoles(user),
+        permissions: [...(await getUserCapabilities(user))],
         status: user.status,
         mustChangePassword: user.mustChangePassword,
         gdprConsent: user.gdprConsent,
+        // Present only for a session opened by an assignment link; the client uses
+        // it to keep the interface inside that one test.
+        magicScope: req.session.magic ? { testId: req.session.magic.testId } : null,
       },
     });
   } catch (error) {
-    console.error("Get me error:", error);
+    logger.error("Get me error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to get user" });
   }
 });
@@ -123,7 +191,7 @@ router.post("/check-email", async (req, res) => {
     const user = await storage.getUserByEmail(email);
     res.json({ exists: !!user });
   } catch (error) {
-    console.error("Check email error:", error);
+    logger.error("Check email error: " + (error as Error).message, "auth")
     res.status(500).json({ error: "Failed to check email" });
   }
 });
@@ -163,11 +231,12 @@ router.post("/forgot-password", async (req, res) => {
     await storage.createPasswordResetToken(user.id, tokenHash, requestIp);
 
     // Формируем ссылку
-    const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`;
+    const baseUrl = appBaseUrl();
     const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
     // Отправляем email
     const emailSent = await sendPasswordResetEmail(user.email, resetLink);
+    logger.info(`Password reset requested: ${maskEmail(user.email)} from ${requestIp}`, "auth");
 
     res.json({
       success: true,
@@ -176,7 +245,7 @@ router.post("/forgot-password", async (req, res) => {
       ...(process.env.NODE_ENV === "development" && !emailSent && { devLink: resetLink }),
     });
   } catch (error) {
-    console.error("Forgot password error:", error);
+    logger.error("Forgot password error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to process request" });
   }
 });
@@ -210,7 +279,7 @@ router.get("/verify-reset-token", async (req, res) => {
       emailHint: user ? maskEmail(user.email) : null,
     });
   } catch (error) {
-    console.error("Verify reset token error:", error);
+    logger.error("Verify reset token error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to verify token" });
   }
 });
@@ -254,9 +323,10 @@ router.post("/reset-password", async (req, res) => {
       await storage.updateUser(resetToken.userId, { status: "active" });
     }
 
+    logger.info(`Password reset completed for user: ${resetToken.userId}`, "auth");
     res.json({ success: true, message: "Password has been reset successfully" });
   } catch (error) {
-    console.error("Reset password error:", error);
+    logger.error("Reset password error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to reset password" });
   }
 });
@@ -309,14 +379,13 @@ router.post("/complete-first-login", requireAuth, async (req, res) => {
         id: updatedUser!.id,
         email: updatedUser!.email,
         name: updatedUser!.name,
-        role: updatedUser!.role,
         status: updatedUser!.status,
         mustChangePassword: updatedUser!.mustChangePassword,
         gdprConsent: updatedUser!.gdprConsent,
       },
     });
   } catch (error) {
-    console.error("Complete first login error:", error);
+    logger.error("Complete first login error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to complete first login" });
   }
 });

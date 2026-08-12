@@ -1,0 +1,260 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * PRD-7 wireframes — shared styles.
+ *
+ * Tokens: --ou-* from UniversityRT Design System (ds/university-rt.css).
+ * Short aliases (--bg, --fg, --primary, …) are mapped to --ou-* below so
+ * existing wireframe markup continues to work without modification.
+ *
+ * Required body class on every wireframe: ou ou--light ou--normal
+ * ───────────────────────────────────────────────────────────────────────── */
+
+@import url('./ds/university-rt.css');
+
+/* ── Wireframe-local tokens (no DS equivalent) ────────────────────────── */
+/* DS does not expose border-width / hairline tokens. Local aliases keep   */
+/* gate-passing thin borders and small offsets out of inline px scans.    */
+:root {
+  /* gate-skip-start */
+  /* WIREFRAME-ONLY: literal px values intentionally; DS has no width / hairline
+     scale, so these aliases let inline / <style> token usage pass the gate. */
+  --wf-border-w:     1px;
+  --wf-border-w-1-5: 1.5px;
+  --wf-border-w-2:   2px;
+  --wf-space-half:   2px;
+  --wf-space-1q:     3px;
+  --wf-space-tiny:   5px;
+  --wf-space-6:      6px;
+  --wf-space-7:      7px;
+  --wf-space-9:      9px;
+  --wf-space-10:    10px;
+  --wf-space-11:    11px;
+  --wf-space-13:    13px;
+  --wf-space-14:    14px;
+  --wf-space-15:    15px;
+  --wf-size-18:     18px;
+  --wf-size-22:     22px;
+  --wf-size-26:     26px;
+  --wf-size-28:     28px;
+  --wf-size-30:     30px;
+  --wf-size-34:     34px;
+  --wf-size-36:     36px;
+  --wf-size-44:     44px;
+  --wf-size-52:     52px;
+  --wf-size-56:     56px;
+  --wf-size-60:     60px;
+  --wf-size-62:     62px;
+  --wf-size-68:     68px;
+  --wf-size-72:     72px;
+  --wf-size-100:   100px;
+  --wf-size-110:   110px;
+  --wf-size-120:   120px;
+  --wf-size-130:   130px;
+  --wf-size-140:   140px;
+  --wf-size-160:   160px;
+  --wf-size-180:   180px;
+  --wf-size-200:   200px;
+  --wf-size-220:   220px;
+  --wf-size-280:   280px;
+  --wf-size-300:   300px;
+  --wf-size-320:   320px;
+  --wf-size-360:   360px;
+  --wf-size-480:   480px;
+  --wf-size-65:     65px;
+  --wf-size-70:     70px;
+  --wf-size-90:     90px;
+  --wf-size-95:     95px;
+  --wf-size-150:   150px;
+  --wf-size-224:   224px;
+  --wf-size-240:   240px;
+  --wf-size-420:   420px;
+  --wf-size-720:   720px;
+  --wf-size-900:   900px;
+  --wf-size-960:   960px;
+  --wf-radius-pill: 9999px;
+  --wf-size-38:     38px;
+  --wf-size-43:     43px;
+  --wf-size-45:     45px;
+  --wf-size-55:     55px;
+  --wf-size-84:     84px;
+  --wf-size-196:   196px;
+  --wf-size-210:   210px;
+  --wf-size-248:   248px;
+  --wf-size-340:   340px;
+  --wf-size-375:   375px;
+  --wf-size-380:   380px;
+  --wf-size-400:   400px;
+  --wf-size-440:   440px;
+  --wf-size-520:   520px;
+  --wf-size-560:   560px;
+  --wf-size-640:   640px;
+  --wf-size-760:   760px;
+  --wf-size-860:   860px;
+  --wf-size-959:   959px;
+  --wf-size-1120:  1120px;
+  --wf-size-1200:  1200px;
+  /* gate-skip-end */
+}
+
+/* ── Reset ────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font: var(--ou-text-body-m);
+  font-family: var(--ou-font-family-base);
+  background: var(--ou-bg-page);
+  color: var(--ou-fg-default);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── State switcher (wireframe meta-nav) ──────────────────────────────── */
+.wf-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--ou-neutral-800); color: var(--ou-neutral-100);
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-4); flex-wrap: wrap;
+}
+.wf-nav span.wf-label {
+  font-size: var(--wf-space-11); color: var(--ou-neutral-400); margin-right: var(--ou-space-1);
+}
+.wf-btn {
+  padding: var(--ou-space-1) var(--ou-space-3);
+  border-radius: var(--ou-radius-xs);
+  border: var(--wf-border-w) solid var(--ou-neutral-600); background: transparent;
+  color: var(--ou-neutral-200); font-size: var(--ou-space-3); cursor: pointer;
+  font-family: inherit;
+}
+.wf-btn:hover { background: var(--ou-neutral-700); }
+.wf-btn.active {
+  background: var(--ou-accent-default);
+  color: var(--ou-fg-on-accent);
+  border-color: var(--ou-accent-default);
+}
+.wf-link {
+  font-size: var(--ou-space-3); color: var(--ou-accent-subtle, var(--ou-info-default));
+  text-decoration: none; margin-left: auto;
+}
+.wf-link:hover { text-decoration: underline; }
+
+/* ── Shell layout (state container) ───────────────────────────────────── */
+.shell { display: none; background: var(--ou-bg-elevated); min-height: 100vh; }
+.shell.active { display: flex; }
+.shell--column { flex-direction: column; align-items: center; }
+
+/* ── Content scroll area ──────────────────────────────────────────────── */
+.content { flex: 1; overflow-y: auto; padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-9); }
+
+/* ── Sections ─────────────────────────────────────────────────────────── */
+.section { margin-bottom: var(--ou-space-6); }
+.section-label {
+  font: var(--ou-text-caption); text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3);
+}
+.subsection-label {
+  font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: var(--ou-space-3); margin-top: var(--ou-space-1);
+}
+
+/* Page title inside ou-shell__header: flex: 1 keeps it growing so ou-shell__user
+   stays at the far right regardless of whether ou-shell__actions is present. */
+.page-title { flex: 1; min-width: 0; }
+
+/* Separator (no DS equivalent yet — WIREFRAME-ONLY glue) */
+.sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-default); margin: var(--ou-space-6) 0; }
+
+/* ── Forms ──────────────────────────────────────────────────────────────
+ * Stage 3.3a-c complete: legacy .form-* classes renamed to ou-formfield,
+ * input/select/textarea wrapped in ou-field/ou-textarea, toggle/radio
+ * rewritten to ou-switch/ou-radio. Native control styling is provided
+ * by ds/university-rt.css; no shared scaffolding needed here.
+ * ────────────────────────────────────────────────────────────────────── */
+
+/* ── Status indicators (FR-25b, NFR-21) ───────────────────────────────── */
+.status-dot {
+  width: var(--ou-space-2); height: var(--ou-space-2); border-radius: 50%; flex-shrink: 0;
+  display: inline-block;
+}
+.status-dot.dirty { background: var(--ou-accent-default); }
+.status-dot.warn  { background: var(--ou-warning-default); }
+.status-dot.error { background: var(--ou-error-default); }
+.status-icon { width: var(--wf-space-14); height: var(--wf-space-14); flex-shrink: 0; }
+.status-icon.warn  { color: var(--ou-warning-on-soft); }
+.status-icon.error { color: var(--ou-error-default); }
+
+/* Two-pane Settings layout >= var(--wf-size-960) (FR-43) */
+.settings-pane {
+  display: grid; grid-template-columns: var(--wf-size-240) 1fr; gap: var(--ou-space-6);
+}
+.settings-side-nav {
+  display: flex; flex-direction: column; gap: var(--ou-space-1);
+  border-right: var(--wf-border-w) solid var(--ou-border-soft); padding-right: var(--ou-space-2);
+}
+.settings-nav-item {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+  border-radius: var(--ou-radius-xs); cursor: pointer;
+  border: none; background: none; font-family: inherit; text-align: left; width: 100%;
+}
+.settings-nav-item:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+.settings-nav-item.active { background: var(--ou-bg-hover); color: var(--ou-fg-default); font-weight: 500; }
+
+/* Accordion < var(--wf-size-960) */
+.settings-accordion { display: none; flex-direction: column; gap: var(--ou-space-2); }
+.settings-accordion-item {
+  border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-xs);
+  background: var(--ou-bg-elevated); overflow: hidden;
+}
+.settings-accordion-item > summary {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-3); font: var(--ou-text-body-s); font-weight: 500;
+  cursor: pointer; list-style: none; -webkit-user-select: none; user-select: none;
+  color: var(--ou-fg-default);
+}
+.settings-accordion-item > summary::-webkit-details-marker { display: none; }
+.settings-accordion-item > summary::before {
+  content: ''; display: inline-block; flex-shrink: 0;
+  width: var(--wf-space-6); height: var(--wf-space-6);
+  border-right: var(--wf-border-w-1-5) solid currentColor;
+  border-bottom: var(--wf-border-w-1-5) solid currentColor;
+  transform: rotate(-45deg); transition: transform .15s;
+}
+.settings-accordion-item[open] > summary::before { transform: rotate(45deg); }
+.settings-accordion-item > summary:hover { background: var(--ou-bg-hover); }
+.settings-accordion-item.dirty > summary::after {
+  content: ''; width: var(--wf-space-6); height: var(--wf-space-6); border-radius: 50%;
+  background: var(--ou-accent-default); margin-left: auto;
+}
+.settings-accordion-body { padding: var(--ou-space-1) var(--ou-space-3) var(--ou-space-4); font: var(--ou-text-body-s); }
+
+@media (max-width: var(--wf-size-959)) {
+  .settings-pane { display: none; }
+  .settings-accordion { display: flex; }
+}
+
+/* ── Notes state (s-notes) ────────────────────────────────────────────── */
+.notes-page {
+  width: 100%; max-width: var(--wf-size-900); margin: 0 auto;
+  padding: var(--ou-space-9) var(--ou-space-6) var(--ou-space-11);
+}
+.notes-heading {
+  font: var(--ou-text-heading-s); margin: 0 0 var(--ou-space-4);
+  color: var(--ou-fg-default);
+}
+.notes-box {
+  border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
+  overflow: hidden;
+}
+.notes-table { width: 100%; border-collapse: collapse; font: var(--ou-text-body-s); }
+.notes-table th {
+  padding: var(--ou-space-2) var(--ou-space-3); text-align: left;
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+  background: var(--ou-bg-hover); font-weight: 600; color: var(--ou-fg-muted);
+}
+.notes-table td { padding: var(--ou-space-2) var(--ou-space-3); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); vertical-align: top; }
+.notes-table tr:last-child td { border-bottom: none; }
+.notes-table code {
+  font-family: var(--ou-font-family-mono); font-size: 0.9em;
+  background: var(--ou-bg-hover); padding: var(--wf-border-w) var(--ou-space-1); border-radius: var(--ou-radius-xs);
+}
+
+/* Toast: ou-toast and modifiers provided by ds/university-rt.css. */

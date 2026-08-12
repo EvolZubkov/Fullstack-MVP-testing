@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Status Indicators Showcase
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-editor-status-indicators.html
+    Состояния: s-showcase
+    Покрывает: FR-25b, NFR-21
+  -->
+  <title>prd7 — Status Indicators</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <style>
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
+
+    /* ── Page background ──────────────────────────────────────────────────── */
+    .wf-showcase-page {
+      background: var(--ou-bg-muted);
+      min-height: calc(100vh - var(--wf-size-52));
+    }
+
+    /* ── Showcase layout ──────────────────────────────────────────────────── */
+    .wf-showcase {
+      padding: var(--ou-space-6);
+      max-width: var(--wf-size-900);
+      margin: 0 auto;
+    }
+    .wf-showcase-title {
+      font: var(--ou-text-body-l);
+      font-weight: 700;
+      margin-bottom: var(--ou-space-1);
+    }
+    .wf-showcase-sub {
+      font: var(--ou-text-body-s);
+      color: var(--ou-fg-muted);
+      margin-bottom: var(--ou-space-6);
+    }
+    .wf-showcase-section { margin-bottom: var(--ou-space-8); }
+    .wf-showcase-section-title {
+      font: var(--ou-text-caption);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ou-fg-muted);
+      margin-bottom: var(--ou-space-3);
+      padding-bottom: var(--ou-space-2);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-showcase-note {
+      font: var(--ou-text-caption);
+      color: var(--ou-fg-muted);
+      margin-top: var(--ou-space-2);
+    }
+    .wf-showcase-note code {
+      font-family: monospace;
+      background: var(--ou-bg-muted);
+      padding: 0 var(--ou-space-1);
+      border-radius: var(--ou-radius-s);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+
+    /* ── Status dots (used in tabs and section cards) ─────────────────────── */
+    .wf-status-dot {
+      display: inline-block;
+      width: var(--wf-space-7);
+      height: var(--wf-space-7);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .wf-status-dot--dirty { background: var(--ou-accent-default); }
+    .wf-status-dot--warn  { background: var(--ou-warning-on-soft); }
+    .wf-status-dot--error { background: var(--ou-error-on-soft); }
+
+    /* ── Status icon wrapper (var(--wf-space-14) inline SVG) ────────────────────────────── */
+    .wf-si {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .wf-si svg { width: var(--wf-space-14); height: var(--wf-space-14); }
+    .wf-si--warn { color: var(--ou-warning-on-soft); }
+    .wf-si--error { color: var(--ou-error-on-soft); }
+
+    /* ── Tab strip demo ───────────────────────────────────────────────────── */
+    .wf-tab-strip-wrap {
+      background: var(--ou-bg-elevated);
+      border-radius: var(--ou-radius-m);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      overflow: hidden;
+      margin-bottom: var(--ou-space-2);
+    }
+    .wf-tab-bar {
+      display: flex;
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-tab-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--ou-space-1);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      font: var(--ou-text-body-s);
+      color: var(--ou-fg-muted);
+      border: none;
+      border-bottom: var(--wf-space-half) solid transparent;
+      margin-bottom: -var(--wf-border-w);
+      background: transparent;
+      cursor: pointer;
+    }
+    .wf-tab-demo--active {
+      color: var(--ou-accent-default);
+      border-bottom-color: var(--ou-accent-default);
+      font-weight: 500;
+    }
+    .wf-tab-content-ph {
+      padding: var(--ou-space-3) var(--ou-space-4);
+      font: var(--ou-text-caption);
+      color: var(--ou-fg-muted);
+    }
+
+    /* ── Section cards ────────────────────────────────────────────────────── */
+    .wf-sc {
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+      overflow: hidden;
+      margin-bottom: var(--ou-space-3);
+    }
+    .wf-sc-header {
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      background: var(--ou-bg-muted);
+    }
+    .wf-sc-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      flex: 1;
+    }
+    .wf-sc-body { padding: var(--ou-space-4); }
+
+    /* dirty (accent/blue) */
+    .wf-sc--dirty { border-color: var(--ou-accent-default); }
+    .wf-sc--dirty .wf-sc-header {
+      background: var(--ou-accent-bg, var(--ou-bg-muted));
+      border-bottom-color: var(--ou-accent-default);
+    }
+
+    /* warning (yellow) */
+    .wf-sc--warn { border-color: var(--ou-warning-default); }
+    .wf-sc--warn .wf-sc-header {
+      background: var(--ou-warning-soft);
+      border-bottom-color: var(--ou-warning-default);
+    }
+
+    /* error (red) */
+    .wf-sc--error { border-color: var(--ou-border-error); }
+    .wf-sc--error .wf-sc-header {
+      background: var(--ou-error-soft);
+      border-bottom-color: var(--ou-border-error);
+    }
+
+    /* ── Field and input demos ────────────────────────────────────────────── */
+    .wf-field-demo { margin-bottom: var(--ou-space-3); }
+    .wf-field-label {
+      font: var(--ou-text-body-s);
+      font-weight: 500;
+      margin-bottom: var(--ou-space-1);
+    }
+    .wf-field-required { color: var(--ou-error-on-soft); }
+    .wf-inline-error svg { width: var(--ou-space-3); height: var(--ou-space-3); flex-shrink: 0; }
+    .wf-inline-warn {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--ou-space-2);
+      margin-top: var(--ou-space-2);
+      font: var(--ou-text-body-s);
+      color: var(--ou-warning-on-soft);
+      background: var(--ou-warning-soft);
+      border: var(--wf-border-w) solid var(--ou-warning-default);
+      border-radius: var(--ou-radius-s);
+      padding: var(--ou-space-2) var(--ou-space-2);
+    }
+    .wf-inline-warn svg { width: var(--wf-space-13); height: var(--wf-space-13); flex-shrink: 0; margin-top: var(--wf-border-w); }
+
+    /* ── Legend grid ──────────────────────────────────────────────────────── */
+    .wf-legend-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--ou-space-3);
+    }
+    .wf-legend-item {
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-3);
+      padding: var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+    }
+    .wf-legend-dot {
+      width: var(--ou-space-3);
+      height: var(--ou-space-3);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .wf-legend-dot--clean { background: var(--ou-fg-muted); }
+    .wf-legend-dot--dirty { background: var(--ou-accent-default); }
+    .wf-legend-dot--warn  { background: var(--ou-warning-on-soft); }
+    .wf-legend-dot--error { background: var(--ou-error-on-soft); }
+    .wf-legend-dot--saved { background: var(--ou-success-fg); }
+    .wf-legend-text {
+      font: var(--ou-text-body-s);
+      font-weight: 500;
+    }
+    .wf-legend-desc {
+      font: var(--ou-text-caption);
+      color: var(--ou-fg-muted);
+      margin-top: var(--ou-space-1);
+    }
+
+    /* Dirty badge text color */
+    .wf-tag-dirty { color: var(--ou-accent-default); }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: var(--wf-border-w);
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/>
+    <line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="15" y1="9" x2="9" y2="15"/>
+    <line x1="9" y1="9" x2="15" y2="15"/>
+  </symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd7 — Status Indicators:</span>
+  <button type="button" class="wf-btn active" onclick="showState(this, 's-showcase')">Showcase</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="wf-btn" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="wf-btn" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- ═══ Showcase ══════════════════════════════════════════════════════════════ -->
+<section id="wf-s-showcase" class="wf-state active" aria-label="Витрина индикаторов состояния">
+  <div class="wf-showcase-page">
+    <div class="wf-showcase">
+
+      <div class="wf-showcase-title">Индикаторы состояния</div>
+      <div class="wf-showcase-sub">
+        Все индикаторы сочетают цвет + текст/иконку + <code>aria-label</code> для доступности.
+        Цвет никогда не является единственным носителем информации (NFR-21).
+      </div>
+
+      <!-- ── 1. Tab-level indicators ───────────────────────────────────────── -->
+      <div class="wf-showcase-section">
+        <div class="wf-showcase-section-title">1. Индикаторы на вкладках Drawer</div>
+
+        <div class="wf-tab-strip-wrap">
+          <div class="wf-tab-bar" role="tablist">
+
+            <!-- Clean (active) tab -->
+            <button type="button" class="wf-tab-demo wf-tab-demo--active"
+                    role="tab" aria-selected="true">
+              Состав
+            </button>
+
+            <!-- Dirty tab -->
+            <button type="button" class="wf-tab-demo"
+                    role="tab" aria-selected="false"
+                    aria-label="Настройки, есть несохранённые изменения">
+              Настройки
+              <span class="wf-status-dot wf-status-dot--dirty" aria-hidden="true"></span>
+            </button>
+
+            <!-- Warning tab -->
+            <button type="button" class="wf-tab-demo"
+                    role="tab" aria-selected="false"
+                    aria-label="Оформление, есть предупреждения">
+              Оформление
+              <span class="wf-status-dot wf-status-dot--warn" aria-hidden="true"></span>
+            </button>
+
+            <!-- Error tab -->
+            <button type="button" class="wf-tab-demo"
+                    role="tab" aria-selected="false"
+                    aria-label="Структура, есть блокирующие ошибки">
+              Структура
+              <span class="wf-status-dot wf-status-dot--error" aria-hidden="true"></span>
+            </button>
+
+          </div>
+          <div class="wf-tab-content-ph">Контент вкладки (placeholder)</div>
+        </div>
+
+        <div class="wf-showcase-note">
+          Точки: синяя = dirty (изменено), жёлтая = warning (не блокирует сохранение),
+          красная = error (блокирует). Каждая вкладка имеет <code>aria-label</code> с описанием статуса.
+        </div>
+      </div>
+
+      <!-- ── 2. Section-level indicators ──────────────────────────────────── -->
+      <div class="wf-showcase-section">
+        <div class="wf-showcase-section-title">2. Индикаторы на секциях внутри вкладки</div>
+
+        <!-- Clean section -->
+        <div class="wf-sc">
+          <div class="wf-sc-header">
+            <span class="wf-sc-title">Основные настройки</span>
+            <span class="ou-tag ou-tag--neutral" aria-label="Статус: сохранено">Сохранено</span>
+          </div>
+          <div class="wf-sc-body">
+            <div class="wf-field-demo">
+              <div class="wf-field-label">Название</div>
+              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text"
+                     value="Основы информационной безопасности"
+                     aria-label="Название теста"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dirty section -->
+        <div class="wf-sc wf-sc--dirty">
+          <div class="wf-sc-header"
+               aria-label="Секция 'Правила прохождения': есть несохранённые изменения">
+            <span class="wf-sc-title">Правила прохождения</span>
+            <span class="wf-status-dot wf-status-dot--dirty" aria-hidden="true"></span>
+            <span class="ou-tag ou-tag--neutral wf-tag-dirty"
+                  aria-label="Статус: изменено">Изменено</span>
+          </div>
+          <div class="wf-sc-body">
+            <div class="wf-field-demo">
+              <div class="wf-field-label">Порог прохождения (%)</div>
+              <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number"
+                     value="75" min="0" max="100" aria-label="Порог прохождения"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Warning section -->
+        <div class="wf-sc wf-sc--warn">
+          <div class="wf-sc-header"
+               aria-label="Секция 'Адаптивные настройки': есть предупреждение">
+            <span class="wf-sc-title">Адаптивные настройки</span>
+            <span class="wf-si wf-si--warn" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-warn"/></svg>
+            </span>
+            <span class="ou-tag ou-tag--warning" aria-label="Статус: предупреждение">Предупреждение</span>
+          </div>
+          <div class="wf-sc-body">
+            <div class="wf-inline-warn" role="status" aria-live="polite">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-warn"/></svg>
+              Переключение в режим "standard" скрывает adaptive-настройки. Данные сохранены, но не будут применены.
+            </div>
+          </div>
+        </div>
+
+        <!-- Error section -->
+        <div class="wf-sc wf-sc--error">
+          <div class="wf-sc-header"
+               aria-label="Секция 'Основные настройки': есть блокирующая ошибка">
+            <span class="wf-sc-title">Основные настройки</span>
+            <span class="wf-si wf-si--error" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x-circle"/></svg>
+            </span>
+            <span class="ou-tag ou-tag--error" aria-label="Статус: ошибка">Ошибка</span>
+          </div>
+          <div class="wf-sc-body">
+            <div class="wf-field-demo">
+              <div class="wf-field-label">
+                Название <span class="wf-field-required" aria-hidden="true">*</span>
+              </div>
+              <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="Введите название..."
+                     aria-invalid="true" aria-describedby="wf-err-title"
+                     aria-label="Название теста (обязательное поле)"></div></div>
+              <div class="wf-inline-error" id="wf-err-title" role="alert">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-x-circle"/></svg>
+                Поле обязательно для заполнения
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 4. Save-button states ────────────────────────────────────────── -->
+      <div class="wf-showcase-section">
+        <div class="wf-showcase-section-title">3. Поведение кнопки «Сохранить» (FR-25b, NFR-21)</div>
+
+        <div class="wf-tab-strip-wrap">
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-3);padding:var(--ou-space-4)">
+
+            <!-- Clean: save is enabled, nothing to save (visual: enabled but no dirty signal) -->
+            <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+              <span style="min-width:var(--wf-size-180);font:var(--ou-text-body-s);color:var(--ou-fg-muted)">
+                Чисто (нет изменений)
+              </span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">
+                Сохранить
+              </button>
+              <span class="wf-showcase-note" style="margin:0">
+                <code>disabled</code> — сохранять нечего
+              </span>
+            </div>
+
+            <!-- Dirty + warning only: save enabled -->
+            <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+              <span style="min-width:var(--wf-size-180);font:var(--ou-text-body-s);color:var(--ou-fg-muted)">
+                Есть warnings, нет errors
+              </span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+                Сохранить
+              </button>
+              <span class="wf-showcase-note" style="margin:0">
+                Активна — warning не блокирует
+              </span>
+            </div>
+
+            <!-- Has blocking errors: save disabled -->
+            <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+              <span style="min-width:var(--wf-size-180);font:var(--ou-text-body-s);color:var(--ou-fg-muted)">
+                Есть блокирующие errors
+              </span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true"
+                      aria-describedby="wf-save-disabled-hint">
+                Сохранить
+              </button>
+              <span id="wf-save-disabled-hint" class="wf-showcase-note" style="margin:0;color:var(--ou-error-on-soft)">
+                <code>disabled</code> — исправьте ошибки в выделенных секциях
+              </span>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="wf-showcase-note">
+          Правило: <code>error</code> блокирует кнопку «Сохранить» (NFR-21);
+          <code>warning</code> — нет (показывается, но не мешает сохранению).
+        </div>
+      </div>
+
+      <!-- ── 3. Legend ──────────────────────────────────────────────────────── -->
+      <div class="wf-showcase-section">
+        <div class="wf-showcase-section-title">4. Легенда состояний</div>
+        <div class="wf-legend-grid" role="list">
+
+          <div class="wf-legend-item" role="listitem">
+            <div class="wf-legend-dot wf-legend-dot--clean" aria-hidden="true"></div>
+            <div>
+              <div class="wf-legend-text">Чисто</div>
+              <div class="wf-legend-desc">Нет изменений, нет проблем</div>
+            </div>
+          </div>
+
+          <div class="wf-legend-item" role="listitem">
+            <div class="wf-legend-dot wf-legend-dot--dirty" aria-hidden="true"></div>
+            <div>
+              <div class="wf-legend-text">Изменено (dirty)</div>
+              <div class="wf-legend-desc">Есть несохранённые изменения</div>
+            </div>
+          </div>
+
+          <div class="wf-legend-item" role="listitem">
+            <div class="wf-legend-dot wf-legend-dot--warn" aria-hidden="true"></div>
+            <div>
+              <div class="wf-legend-text">Предупреждение</div>
+              <div class="wf-legend-desc">Не блокирует сохранение</div>
+            </div>
+          </div>
+
+          <div class="wf-legend-item" role="listitem">
+            <div class="wf-legend-dot wf-legend-dot--error" aria-hidden="true"></div>
+            <div>
+              <div class="wf-legend-text">Ошибка</div>
+              <div class="wf-legend-desc">Блокирует кнопку &ldquo;Сохранить&rdquo;</div>
+            </div>
+          </div>
+
+          <div class="wf-legend-item" role="listitem">
+            <div class="wf-legend-dot wf-legend-dot--saved" aria-hidden="true"></div>
+            <div>
+              <div class="wf-legend-text">Сохранено</div>
+              <div class="wf-legend-desc">Успешно записано</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══ DS Mapping ════════════════════════════════════════════════════════════ -->
+<section class="wf-mapping" aria-label="DS Component Mapping">
+  <h2>DS Component Mapping</h2>
+  <table>
+    <thead>
+      <tr><th>Wireframe element</th><th>DS component</th><th>Variant / notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>.wf-status-dot (tab indicator)</td><td>StatusDot (custom)</td><td>var(--wf-space-7) circle; --dirty (accent), --warn (warning-fg), --error (error-fg)</td></tr>
+      <tr><td>.wf-si (section icon)</td><td>Icon (inline SVG)</td><td>var(--wf-space-14); --warn (warning-fg), --error (error-fg); aria-hidden</td></tr>
+      <tr><td>.wf-sc--dirty (section card)</td><td>Card</td><td>border: accent-default; header bg: color-mix accent 10%</td></tr>
+      <tr><td>.wf-sc--warn (section card)</td><td>Card</td><td>border: ou-warning-border; header: ou-warning-bg</td></tr>
+      <tr><td>.wf-sc--error (section card)</td><td>Card</td><td>border: ou-error-border; header: ou-error-bg</td></tr>
+      <tr><td>ou-tag--neutral (Сохранено / Изменено)</td><td>ou-tag</td><td>ou-tag--neutral; dirty variant adds wf-tag-dirty color override</td></tr>
+      <tr><td>ou-tag--warning (Предупреждение)</td><td>ou-tag</td><td>ou-tag--warning</td></tr>
+      <tr><td>ou-tag--error (Ошибка)</td><td>ou-tag</td><td>ou-tag--error</td></tr>
+      <tr><td>.wf-inline-error</td><td>FieldError</td><td>caption + error-fg + x-circle icon; role="alert"</td></tr>
+      <tr><td>.wf-inline-warn</td><td>InlineBanner</td><td>warning-bg + warning-border; role="status" aria-live="polite"</td></tr>
+      <tr><td>aria-invalid + aria-describedby</td><td>Input (error state)</td><td>NFR-21: field links to error message via id</td></tr>
+      <tr><td>wf-tab-demo aria-label</td><td>Tab</td><td>NFR-21: aria-label describes tab name + status in words</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
+</body>
+</html>

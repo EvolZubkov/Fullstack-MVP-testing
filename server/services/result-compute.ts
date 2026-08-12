@@ -1,0 +1,111 @@
+/**
+ * @module server/services/result-compute
+ *
+ * Pure orchestration of the graded result namespaces — scales (PRD-5) and result
+ * variables (PRD-2) — for the web learner runtime (PRD-12 Phase 2). It reuses the
+ * authoritative `@shared` engines, the same ones the SCORM package runs, so the
+ * web and SCORM produce identical numbers (PRD-12 §3.5). The compute order mirrors
+ * the SCORM runtime (server/scorm/template/app/render/resultsPage.js): scales first
+ * (so result-variable formulas can read `scale.*`), then the variables.
+ *
+ * This module is storage-free (unit-testable without a DB). The DB->spec config
+ * loading lives in {@link module:server/services/scoring-config} (loadScoringConfig).
+ */
+
+import {
+  computeScales,
+  type ScaleSpec,
+  type MeasurementSpec,
+  type QuestionType,
+  type Answer,
+} from "@shared/scales/engine";
+import { computeResultVariables, type ResultVariableSpec } from "@shared/formula/result-variables";
+import type { AllocationSpec } from "@shared/questions/allocation";
+import type { EvalContext, FormulaValue, ScaleResult } from "@shared/formula/types";
+
+/** A test's graded-scoring configuration, mapped to the `@shared` engine specs. */
+export interface ScoringConfig {
+  scales: ScaleSpec[];
+  measurements: MeasurementSpec[];
+  resultVariables: ResultVariableSpec[];
+  /**
+   * PRD-44: allocation spec of every budget question that feeds a scale, keyed by question
+   * id. It travels WITH the scoring configuration rather than as a separate argument for a
+   * reason: the budget bounds the scale's domain, so it is as much a part of «how this test
+   * is scored» as the measurements are, and callers that never heard of the type keep
+   * working. Empty for a test without budget questions.
+   */
+  budgets: Record<string, AllocationSpec>;
+}
+
+/** The computed graded namespaces for one attempt. */
+export interface AttemptComputation {
+  scaleResults: Record<string, ScaleResult>;
+  resultVariables: Record<string, FormulaValue>;
+  status: { success?: boolean; completion?: boolean };
+}
+
+/** Per-topic inputs the result-variable context needs (`percent`, `topicById`). */
+export interface AttemptResultBase {
+  percent: number;
+  topicResults: Array<{
+    topicId: string;
+    percent: number;
+    passed: boolean | null;
+    earnedPoints: number;
+    /** Topic display name — keys `topicByName(...)`. */
+    topicName?: string;
+    /** Author-defined readable id — additional key for `topicById(...)`. */
+    code?: string | null;
+  }>;
+}
+
+/**
+ * Computes `scale.*` then `result.*` for an attempt, mirroring the SCORM runtime
+ * order: scales first so result-variable formulas can read `scaleById()` /
+ * `countScales()`, then the variables. Deterministic — the same answers always
+ * yield the same output (NFR-04). `tags`/`sections` resolve to neutral defaults,
+ * matching the current runtime (`buildResultVarContext`).
+ */
+export function computeAttemptResult(
+  config: ScoringConfig,
+  answers: Record<string, Answer>,
+  questionTypes: Record<string, QuestionType>,
+  base: AttemptResultBase,
+): AttemptComputation {
+  const scaleComputation = config.scales.length
+    ? computeScales(config.scales, config.measurements, answers, questionTypes, config.budgets ?? {})
+    : { values: {} as Record<string, ScaleResult>, errors: [] };
+
+  // Topics are keyed by UUID and (when set) the author's custom code, so
+  // `topicById(...)` accepts either; names key `topicByName(...)`.
+  const topics: EvalContext["topics"] = {};
+  const topicsByName: NonNullable<EvalContext["topicsByName"]> = {};
+  for (const tr of base.topicResults) {
+    const r = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
+    topics[tr.topicId] = r;
+    if (tr.code) topics[tr.code] = r;
+    if (tr.topicName) topicsByName[tr.topicName] = r;
+  }
+
+  const evalBase: Omit<EvalContext, "vars"> = {
+    percent: base.percent || 0,
+    // Overall earned points across the test = Σ of per-topic earned points.
+    score: base.topicResults.reduce((sum, tr) => sum + (tr.earnedPoints || 0), 0),
+    topics,
+    topicsByName,
+    tags: {},
+    scales: scaleComputation.values,
+    sections: {},
+  };
+
+  const resultComputation = config.resultVariables.length
+    ? computeResultVariables(config.resultVariables, evalBase)
+    : { values: {} as Record<string, FormulaValue>, errors: [], status: {} as AttemptComputation["status"] };
+
+  return {
+    scaleResults: scaleComputation.values,
+    resultVariables: resultComputation.values,
+    status: resultComputation.status,
+  };
+}

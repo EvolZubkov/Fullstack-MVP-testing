@@ -1,14 +1,22 @@
-import { useParams, useLocation, Link } from "wouter";
+import { useRef } from "react";
+import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, XCircle, ExternalLink, ArrowLeft, RotateCcw, Trophy, Target } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
+import { ArrowLeft } from "lucide-react";
+import { Button, Center, Stack, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
+import { TemplateScreen } from "@/components/template-screen";
+import { buildProtectionSpec } from "@shared/template/protection/spec";
+import { RESULTS_NAV_ACTIONS } from "@shared/template/results-nav";
+import {
+  downloadAttemptReport,
+  type AttemptReport,
+  type AttemptReportRender,
+} from "@/features/learner/attempt-report";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
-import type { Attempt, AttemptResult, TopicResult } from "@shared/schema";
+import type { Attempt, AttemptResult } from "@shared/schema";
+import type { MeasuresInput } from "@shared/template/result-context";
 
 interface AttemptWithResult extends Attempt {
   testTitle: string;
@@ -18,11 +26,47 @@ interface AttemptWithResult extends Attempt {
     completed: number;
     max: number | null;
   } | null;
+  /** PRD-12 web-host: template render payload for the results screen. */
+  render?: {
+    layout: string;
+    css: string;
+    context: unknown;
+    theme?: { background: string; foreground: string };
+    /** Per-test design-param CSS-var overrides (PRD-7 branding); applied on the shadow host. */
+    cssVars?: Record<string, string>;
+    /** PRD-23: per-theme colour overrides, printed as CSS. */
+    themeCss?: string;
+    /** PRD-23: palette pinned by the author; absent means «Авто». */
+    dataTheme?: "light" | "dark";
+    /** PRD-23: template declares a choice of palettes (see resolveSceneTheme). */
+    themed?: boolean;
+  } | null;
+  /**
+   * Input for the shared PDF report («Скачать отчёт»). Present whenever the attempt has
+   * a computed result; absent payloads simply leave the footer button inert-free, since
+   * the server only turns `result.nav.showReport` on together with this.
+   */
+  report?: AttemptReport | null;
+  /**
+   * PRD-27: макет выбранного варианта отчёта, его стили и токены теста. Отсутствует,
+   * только когда макета не дал ни активный шаблон, ни «Стандартный».
+   */
+  reportRender?: AttemptReportRender | null;
+  /**
+   * PRD-29/PRD-35: измерения попытки — те же, по которым сервер отрисовал экран.
+   * Отчёт собирается на клиенте, поэтому шкалы и радар печатаются из них.
+   */
+  measures?: MeasuresInput | null;
 }
 
 export default function ResultPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const [, navigate] = useLocation();
+  const { user } = useAuth();
+  // A magic-link session has no test list — offering "/learner" would just bounce
+  // it to /login (ProtectedRoute's scope guard). Its only valid "back" is its own
+  // test, and that id is only known once `attempt` has loaded.
+  const magicScoped = !!user?.magicScope;
 
   const { data: attempt, isLoading, error } = useQuery<AttemptWithResult>({
     queryKey: ["/api/attempts", attemptId, "result"],
@@ -32,256 +76,137 @@ export default function ResultPage() {
     return <LoadingState message={t.result.loading} />;
   }
 
-  if (error || !attempt) {
+  // PRD-12: the results screen renders ONLY from the shared design template (both
+  // standard and adaptive). Any state without a render payload — fetch error,
+  // missing result, or a template that could not be read — is a degraded fallback
+  // shown as a minimal message, never a parallel React results UI.
+  if (error || !attempt || !attempt.result || !attempt.render) {
+    const description =
+      error || !attempt
+        ? t.common.couldNotFindResults
+        : "Результаты этой попытки ещё не сформированы или были потеряны.";
+    // In a restricted session the test id comes from `attempt` — if the fetch
+    // itself failed (`!attempt`), the id is unknown and there is nowhere valid to
+    // send the button, so it is omitted rather than pointed at the out-of-scope list.
+    const backTarget = magicScoped
+      ? attempt
+        ? `/learner/test/${attempt.testId}`
+        : null
+      : "/learner";
     return (
-      <div className="max-w-3xl mx-auto px-6 py-12 text-center">
-        <h1 className="text-2xl font-semibold mb-4">{t.common.resultsNotFound}</h1>
-        <p className="text-muted-foreground mb-6">
-          {t.common.couldNotFindResults}
-        </p>
-        <Button onClick={() => navigate("/learner")}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          {t.result.backToTests}
-        </Button>
-      </div>
+      <Center minH="full" pad={6}>
+        <Stack gap={4} align="center">
+          <Text as="h1" variant="heading-l" weight="semibold">{t.common.resultsNotFound}</Text>
+          <Text tone="muted" align="center">{description}</Text>
+          {backTarget && (
+            <Button leadingIcon={<ArrowLeft size={16} />} onClick={() => navigate(backTarget)}>
+              {t.result.backToTests}
+            </Button>
+          )}
+        </Stack>
+      </Center>
     );
   }
 
-  const result = attempt.result;
-  const passed = result.overallPassed;
-  const failedTopics = result.topicResults.filter((topic) => topic.passed === false);
-
-  return (
-    <div className="max-w-4xl mx-auto px-6 py-12">
-      <div className="text-center mb-8">
-        <div
-          className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
-            passed
-              ? "bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300"
-              : "bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300"
-          }`}
-        >
-          {passed ? (
-            <Trophy className="h-10 w-10" />
-          ) : (
-            <Target className="h-10 w-10" />
-          )}
-        </div>
-
-        <h1 className="text-3xl font-bold mb-2">
-          {passed ? t.common.congratulations : t.common.keepLearning}
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          {passed ? t.common.passedMessage : t.common.failedMessage}
-        </p>
-      </div>
-
-      <Card className="mb-8">
-        <CardHeader className="text-center">
-          <CardTitle className="text-lg">{attempt.testTitle}</CardTitle>
-          <CardDescription>{t.result.title}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center">
-            <div className="relative w-40 h-40 mb-4">
-              <svg className="w-full h-full transform -rotate-90">
-                <circle
-                  cx="80"
-                  cy="80"
-                  r="70"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="12"
-                  className="text-muted"
-                />
-                <circle
-                  cx="80"
-                  cy="80"
-                  r="70"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="12"
-                  strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 70}
-                  strokeDashoffset={2 * Math.PI * 70 * (1 - result.overallPercent / 100)}
-                  className={passed ? "text-green-500" : "text-red-500"}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-bold">{Math.round(result.overallPercent)}%</span>
-                <span className="text-sm text-muted-foreground">{t.result.score}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4 text-center">
-              <div>
-                <p className="text-2xl font-semibold">{result.totalCorrect}/{result.totalQuestions}</p>
-                <p className="text-sm text-muted-foreground">{t.common.questionsLabel}</p>
-              </div>
-              <Separator orientation="vertical" className="h-10" />
-              <div>
-                <p className="text-2xl font-semibold">{result.totalEarnedPoints}/{result.totalPossiblePoints}</p>
-                <p className="text-sm text-muted-foreground">{t.common.pointsLabel}</p>
-              </div>
-              <Separator orientation="vertical" className="h-10" />
-              <div>
-                <Badge
-                  className={
-                    passed
-                      ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                      : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                  }
-                >
-                  {passed ? t.result.passed : t.result.failed}
-                </Badge>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <h2 className="text-xl font-semibold mb-4">{t.result.topicBreakdown}</h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        {result.topicResults.map((topic) => (
-          <TopicResultCard key={topic.topicId} topic={topic} />
-        ))}
-      </div>
-
-      {failedTopics.length > 0 && (
-        <>
-          <h2 className="text-xl font-semibold mb-4">{t.result.recommendedCourses}</h2>
-          <p className="text-muted-foreground mb-4">
-            {t.result.coursesDescription}
-          </p>
-
-          <div className="space-y-4 mb-8">
-            {failedTopics.map((topic) => {
-              if (!topic.recommendedCourses || topic.recommendedCourses.length === 0) {
-                return null;
-              }
-
-              return (
-                <Card key={topic.topicId}>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <XCircle className="h-4 w-4 text-red-500" />
-                      {topic.topicName}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {topic.recommendedCourses.map((course, i) => (
-                        <a
-                          key={i}
-                          href={course.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
-                          data-testid={`link-course-${topic.topicId}-${i}`}
-                        >
-                          <ExternalLink className="h-4 w-4 text-primary shrink-0" />
-                          <span className="font-medium">{course.title}</span>
-                        </a>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <Button variant="outline" asChild>
-          <Link href="/learner">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {t.result.backToTests}
-          </Link>
-        </Button>
-        {attempt.canRetake && (
-          <Button asChild>
-            <Link href={`/learner/test/${attempt.testId}`}>
-              <RotateCcw className="h-4 w-4 mr-2" />
-              {t.common.retakeTest}
-            </Link>
-          </Button>
-        )}
-      </div>
-
-      {attempt.attemptsInfo && (
-        <div className="text-center mt-4 text-sm text-muted-foreground">
-          Использовано попыток: {attempt.attemptsInfo.completed} / {attempt.attemptsInfo.max}
-          {!attempt.canRetake && attempt.attemptsInfo.max !== null && (
-            <span className="block text-red-500 mt-1">Попытки закончились</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  return <TemplateResultPage attempt={attempt} />;
 }
 
-function TopicResultCard({ topic }: { topic: TopicResult }) {
-  const passed = topic.passed;
-  const hasPassRule = topic.passRule !== null;
+function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { user } = useAuth();
+  // A magic-link session has no test list — its "back"/"finish" both resolve to
+  // its own test rather than "/learner", which would just bounce it to /login.
+  const magicScoped = !!user?.magicScope;
+  // Rasterizing takes a few seconds; a second click must not start a second export.
+  const reportBusy = useRef(false);
+  const render = attempt.render!;
+  // «К списку тестов» is a WEB-only action, so it is the host that turns it on —
+  // the same split as the start screen's `showBack`. It belongs to the scene's own
+  // footer: rendered as host chrome under the scene it was a SECOND footer on the
+  // screen, on a guessed background (`theme.background` is the first `--background`
+  // in theme.css, i.e. always the light palette), with a dead band below it.
+  const ctx = render.context as { result?: Record<string, unknown> } | null;
+  // …and only on the ADAPTIVE results layout, because that is the one whose footer
+  // has no closing action of its own: the standard layout ends with
+  // `result.nav.primaryAction` (the server labels it «К списку тестов»), so a second
+  // button with the same caption would just repeat it.
+  const showBack = !!ctx?.result?.adaptive;
+  const context = { ...(ctx ?? {}), result: { ...(ctx?.result ?? {}), showBack } };
+
+  /**
+   * «Скачать отчёт» — the shared PDF generator, loaded on demand. Failures are shown:
+   * a silent no-op on a button the learner pressed is worse than an honest error.
+   */
+  async function handleReport() {
+    if (reportBusy.current) return;
+    if (!attempt.report || !attempt.reportRender) {
+      toast({
+        variant: "destructive",
+        title: "Отчёт недоступен",
+        description: attempt.report
+          ? "Шаблон не предоставил макет отчёта."
+          : "Нет данных для отчёта по этой попытке.",
+      });
+      return;
+    }
+    reportBusy.current = true;
+    toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
+    try {
+      await downloadAttemptReport(attempt.report, attempt.reportRender, attempt.measures ?? undefined);
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Не удалось сформировать отчёт",
+        description: (e as Error).message,
+      });
+    } finally {
+      reportBusy.current = false;
+    }
+  }
 
   return (
-    <Card data-testid={`card-topic-result-${topic.topicId}`}>
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2">
-            {passed === true && <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />}
-            {passed === false && <XCircle className="h-5 w-5 text-red-500 shrink-0" />}
-            {passed === null && <div className="h-5 w-5 rounded-full bg-muted shrink-0" />}
-            <h3 className="font-semibold">{topic.topicName}</h3>
-          </div>
-          {hasPassRule && (
-            <Badge
-              className={
-                passed
-                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                  : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-              }
-            >
-              {passed ? t.result.passed : t.result.failed}
-            </Badge>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{t.common.questionsLabel}</span>
-            <span className="font-medium">
-              {topic.correct} / {topic.total} ({Math.round(topic.percent)}%)
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">{t.common.pointsLabel}</span>
-            <span className="font-medium">
-              {topic.earnedPoints} / {topic.possiblePoints}
-            </span>
-          </div>
-          <Progress
-            value={topic.percent}
-            className={`h-2 ${
-              passed === false
-                ? "[&>div]:bg-red-500"
-                : passed === true
-                ? "[&>div]:bg-green-500"
-                : ""
-            }`}
-          />
-          {hasPassRule && topic.passRule && (
-            <p className="text-xs text-muted-foreground">
-              {t.common.required}{" "}
-              {topic.passRule.type === "percent"
-                ? `${topic.passRule.value}%`
-                : `${topic.passRule.value} ${t.common.correct}`}
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    // Scene = the space the app shell left over (this route keeps the learner
+    // navbar), so only `.tb-scene__body` scrolls and the footer sits on the bottom
+    // edge — `100dvh` would add up to the navbar and push the footer out of view.
+    <div className="tbh-inset-screen tbh-col">
+      <TemplateScreen
+        className="tbh-fill"
+        // PRD-34 (FR-09, FR-16): экран итогов от копирования НЕ защищается — автор,
+        // включивший показ правильных ответов, уже согласился раскрыть ключи. Водяной
+        // знак он при этом несёт, и на нём знак остаётся единственной мерой.
+        protection={buildProtectionSpec({
+          screen: "results",
+          settings: {
+            copyProtection: false,
+            watermark: (attempt as { protectionWatermark?: boolean }).protectionWatermark ?? false,
+            hideOnBlur: false,
+          },
+          stamp: attempt.id ? { id: String(attempt.id).slice(0, 6), at: new Date() } : null,
+        })}
+        layout={render.layout}
+        css={render.css}
+        cssVars={render.cssVars}
+        themeCss={render.themeCss}
+        dataTheme={render.dataTheme}
+        themed={render.themed}
+        context={context}
+        onAction={(action) => {
+          // Actions come from the LAYOUT's footer (`result.nav`) — the same names the
+          // package binds; see shared/template/results-nav.
+          if (action === RESULTS_NAV_ACTIONS.report) {
+            void handleReport();
+            return;
+          }
+          if (action === RESULTS_NAV_ACTIONS.retry && attempt.canRetake) {
+            navigate(`/learner/test/${attempt.testId}`);
+            return;
+          }
+          if (action === RESULTS_NAV_ACTIONS.finish || action === RESULTS_NAV_ACTIONS.back) {
+            navigate(magicScoped ? `/learner/test/${attempt.testId}` : "/learner");
+          }
+        }}
+      />
+    </div>
   );
 }

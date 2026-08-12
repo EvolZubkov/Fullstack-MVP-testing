@@ -1,0 +1,110 @@
+{
+  // =========================================================================
+  // Application configuration — the SINGLE source of configuration.
+  //
+  // Every setting the application reads lives here. Non-secret values are given
+  // literally. Secrets are NOT stored here: a secret is defined in .env and
+  // referenced from this file via the { "env": "VAR_NAME" } indirection, which
+  // the loader resolves from process.env at startup (see server/config.ts).
+  //
+  // This file is committed; it must never contain secret values — only
+  // { "env": ... } references to them.
+  //
+  // Loading order (first existing wins), by NODE_ENV then default, under
+  // ./config then the working directory:
+  //   config/<NODE_ENV>.config.jsonc, <NODE_ENV>.config.jsonc,
+  //   config/config.jsonc, config.jsonc
+  // CONFIG_FILE overrides the search with an explicit path — and in a deployed
+  // container it is the ONLY way to select a non-production file (the built server
+  // has NODE_ENV folded to "production"). This directory is NOT part of the image:
+  // the deploy copies these files to the host (/srv/app/<project>/config) and
+  // mounts them read-only at /app/config, so a settings change is an edit plus a
+  // restart, never a rebuild. Every deploy refreshes the host copies from here.
+  // =========================================================================
+
+  // Application logging (shape mirrors the reference service). Output is via
+  // pino-pretty: a console sink plus an optional file sink. Rotation/retention
+  // are the runtime's responsibility (logrotate / container log driver) — the
+  // app writes to a fixed file and never rotates it.
+  "log": {
+    // Optional fixed file for the pino-pretty file sink. Empty -> console only.
+    // Example: "./logs/app.log". No app-side rotation.
+    "fileName": "",
+    "level": {
+      // Base level processed by the logger. One of:
+      // trace | debug | info | warn | error | fatal | silent.
+      // Empty/absent -> "info" in production, "debug" otherwise.
+      "common": "",
+      // Console (stdout) sink level. Empty -> inherits "common".
+      "console": "",
+      // File sink level (used only when fileName is set). Empty -> inherits "common".
+      "file": "",
+      // Per-object (per-subsystem) level overrides, keyed by the source tag passed
+      // to logger.* calls: e.g. db, scorm, auth, tests, scorm-telemetry,
+      // content-pages, assignments, analytics, heartbeat, audit.
+      // Example: { "db": "warn", "scorm": "debug" }. SQL query tracing is simply
+      // the db subsystem at trace: { "db": "trace" }.
+      "objects": {}
+    }
+  },
+
+  // HTTP server and application identity.
+  "server": {
+    // Port the app listens on. In containers the PORT env var (set by
+    // docker-compose / the image) takes precedence over this value.
+    "port": 5000,
+    // Public base URL used to build links in emails and invitations
+    // (password reset, group/test assignment). Empty -> http://localhost:<port>
+    // (development only). Set to the real external URL in production.
+    "appUrl": "",
+    // Product name used in email subjects and the default sender name.
+    "appName": "Skill'Ум",
+    // Emit secure session cookies (requires HTTPS end-to-end). Enable in
+    // production only when a reverse proxy forwards X-Forwarded-Proto: https.
+    "cookieSecure": false
+  },
+
+  // PostgreSQL connection. The connection string is a secret (it embeds
+  // credentials) — defined in .env, referenced here.
+  "database": {
+    "url": { "env": "DATABASE_URL" }
+  },
+
+  // Express session signing secret (defined in .env).
+  "session": {
+    "secret": { "env": "SESSION_SECRET" }
+  },
+
+  // Email-at-rest encryption keys (defined in .env). Required in production.
+  "encryption": {
+    "password": { "env": "ENCRYPTION_PASSWORD" },
+    "salt": { "env": "ENCRYPTION_SALT" }
+  },
+
+  // Outbound email. host/port/secure/from are non-secret; credentials are
+  // referenced from .env. When host/user/pass are not configured, email sending
+  // is disabled and password-reset links are logged instead.
+  "email": {
+    "host": "smtp.yandex.ru",
+    "port": 465,
+    "secure": true,
+    // Envelope "from" address. Empty -> falls back to the SMTP user.
+    "from": "skillum@yandex.com",
+    "auth": {
+      "user": { "env": "SMTP_USER" },
+      "pass": { "env": "SMTP_PASS" }
+    }
+  },
+
+  // Access control (PRD-13). Superadmin emails are a PER-DEPLOYMENT value (each
+  // instance has its own master account), so they are sourced from the
+  // SUPERADMIN_EMAILS env var (.env) — like other per-instance settings — rather
+  // than baked literally into this committed file. Accepts a comma-separated
+  // string; leave the env var empty for none. These accounts get full, exclusive
+  // rights computed at runtime; the role is never stored in the DB and cannot be
+  // granted through the UI. Missing accounts are auto-provisioned at startup;
+  // removing an address (and restarting) ends that account's privileges.
+  "access": {
+    "superadminEmails": { "env": "SUPERADMIN_EMAILS" }
+  }
+}

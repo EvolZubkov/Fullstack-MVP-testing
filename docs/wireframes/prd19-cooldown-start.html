@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-19 — старт дефолтного шаблона + cooldown/повтор. НЕ отдельные экраны.
+    Разметка 1:1 с server/scorm/templates/default/layouts/start.html (.start-page / .card /
+    .start-info / .info-row / .start-actions); реальные theme.css + base.css шаблона; обе темы.
+    Сценарии старта (одна и та же start.html, доп-логика поверх — НЕ отдельные экраны):
+      - первый раз: только «Начать тестирование» (state.canStart);
+      - повтор (eligible + была попытка): «Начать тестирование» + «Мой результат» (view-results) +
+        «Скачать отчёт» (если отчёт доступен) + сводка прошлой попытки (state.priorResult);
+      - cooldown (нельзя): то же (Мой результат / Скачать отчёт / прошлый результат) + дата следующей
+        попытки + «Начать тестирование» DISABLED (state.cooldown присутствует → старт недоступен).
+    FR-19: гейт-шелл «Доступ к прохождению открыт» (renderStartShell) УДАЛЁН — при eligible сразу
+    обычный старт (РЕАЛИЗОВАНО, gate.js). FR-20: cooldown — доп-логика НА start.html, отдельная
+    блок-стена (system.blocked) НЕ используется. «Скачать отчёт» = реальный «Скачать PDF» (results
+    view), здесь дан прямой доступ со старта. Дата — посуточная (ДД.ММ.ГГГГ, как fmtDateHuman гейта;
+    cooldown измеряется в днях, времени суток нет). Паритет PRD-12: ту же start.html рендерят ОБА
+    хоста (SCORM-пакет + веб). Финал к согласованию (2026-06-29).
+    -->
+    <title>PRD-19 — Старт дефолтного шаблона + cooldown/повтор</title>
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css" />
+    <link rel="stylesheet" href="/server/scorm/templates/default/styles/base.css" />
+    <style>
+      /* Каркас ТОЛЬКО эскиза, на токенах шаблона. */
+      body { padding: 0; }
+
+      /* Тема как ВАРИАНТ шаблона (light + dark, выбор автора). Светлый набор токенов —
+         добавить в theme.css (сейчас в шаблоне только тёмный). */
+      body.theme-light {
+        --background: 0 0% 98%;
+        --foreground: 225 15% 15%;
+        --border: 220 13% 85%;
+        --card: 0 0% 100%;
+        --card-foreground: 225 15% 15%;
+        --card-border: 220 13% 88%;
+        --primary: 217 91% 42%;
+        --primary-foreground: 0 0% 100%;
+        --muted: 220 14% 96%;
+        --muted-foreground: 220 9% 40%;
+        --accent: 220 14% 92%;
+        --destructive: 0 72% 51%;
+        --success: 142 71% 35%;
+      }
+
+      .wf-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: hsl(var(--card)); border-bottom: 1px solid hsl(var(--card-border)); flex-wrap: wrap; }
+      .wf-nav-title { font-size: 13px; font-weight: 600; color: hsl(var(--muted-foreground)); margin-right: 8px; white-space: nowrap; }
+      .wf-nav button { padding: 4px 12px; border: 1px solid hsl(var(--border)); border-radius: 6px; background: transparent; color: hsl(var(--foreground)); font-size: 13px; cursor: pointer; font-family: inherit; }
+      .wf-nav button:hover { background: hsl(var(--accent)); }
+      .wf-nav button.active { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+      .wf-nav-sep { width: 1px; height: 20px; background: hsl(var(--border)); margin: 0 8px; }
+      .wf-nav-link { font-size: 13px; color: hsl(var(--primary)); white-space: nowrap; text-decoration: none; }
+
+      .wf-stage { padding-top: 48px; }
+      .wf-state { display: none; }
+      .wf-state.active { display: block; }
+      .wf-state .tb-player { min-height: calc(100vh - 48px); }
+
+      /* Сводка прошлой попытки + действия (Мой результат / Скачать отчёт) на старте. */
+      .start-prior { text-align: left; display: flex; flex-direction: column; gap: 12px; }
+      .start-prior-row { font-size: 15px; color: hsl(var(--foreground)); }
+      .start-prior-row strong { font-weight: 700; }
+      .prior-fail { color: hsl(var(--destructive)); font-weight: 700; }
+      .prior-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+      .wf-btn-sm { padding: 9px 16px; font-size: 14px; gap: 8px; }
+      .wf-btn-sm svg { flex-shrink: 0; }
+
+      /* Cooldown-блок на старте. */
+      .start-cooldown { text-align: left; display: flex; flex-direction: column; gap: 14px; }
+      .cooldown-head { display: flex; align-items: center; gap: 14px; }
+      .cooldown-ico { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: hsl(var(--muted)); color: #f59e0b; flex-shrink: 0; }
+      .cooldown-title { font-size: 17px; font-weight: 700; color: hsl(var(--foreground)); }
+      .cooldown-sub { font-size: 14px; color: hsl(var(--muted-foreground)); margin-top: 2px; }
+      .cooldown-when { background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 12px 16px; font-size: 14px; color: hsl(var(--foreground)); }
+      .cooldown-when strong { font-weight: 700; }
+
+      /* Пояснения. */
+      .wf-doc { max-width: 900px; margin: 0 auto; padding: 24px 18px 48px; }
+      .wf-notes, .wf-mapping { margin-bottom: 32px; }
+      .wf-notes h3, .wf-mapping h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: hsl(var(--muted-foreground)); margin: 0 0 12px; }
+      .wf-mapping p { color: hsl(var(--muted-foreground)); font-size: 13px; margin: 0 0 12px; }
+      .wf-doc table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .wf-doc th, .wf-doc td { text-align: left; padding: 8px 10px; border: 1px solid hsl(var(--border)); vertical-align: top; color: hsl(var(--foreground)); }
+      .wf-doc th { background: hsl(var(--muted)); font-weight: 600; }
+      .wf-doc code { background: hsl(var(--muted)); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Старт дефолтного шаблона:</span>
+      <button type="button" class="active" onclick="showState(this, 'first')">первый раз</button>
+      <button type="button" onclick="showState(this, 'retake')">повтор: можно</button>
+      <button type="button" onclick="showState(this, 'blocked')">повтор: cooldown (нельзя)</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Светлая</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd19-navigation-flow.html">&harr; Поток прохождения</a>
+    </nav>
+
+    <div class="wf-stage">
+      <!-- ░░░ ПЕРВЫЙ РАЗ — чистый старт (нет прошлой попытки) ░░░ -->
+      <div class="wf-state active" data-state="first">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="start-page">
+              <div class="card start-header">
+                <h1 class="start-title">Основы сетей</h1>
+                <p class="start-description">Проверка знаний по основам компьютерных сетей.</p>
+              </div>
+              <div class="card start-info">
+                <h2 class="start-info-heading">Информация о тесте</h2>
+                <div class="start-info-grid">
+                  <div class="info-row">
+                    <span class="info-icon info-icon--blue" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
+                    <div class="info-row-body"><div class="info-row-label">Количество вопросов</div><div class="info-row-value">10</div></div>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-icon info-icon--green" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                    <div class="info-row-body"><div class="info-row-label">Проходной балл</div><div class="info-row-value">80%</div></div>
+                  </div>
+                </div>
+              </div>
+              <div class="start-actions">
+                <button type="button" class="btn start-btn" data-action="start-test">Начать тестирование</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ ПОВТОР: МОЖНО — eligible + была попытка (Мой результат + Скачать отчёт) ░░░ -->
+      <div class="wf-state" data-state="retake">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="start-page">
+              <div class="card start-header">
+                <h1 class="start-title">Основы сетей</h1>
+                <p class="start-description">Проверка знаний по основам компьютерных сетей.</p>
+              </div>
+              <div class="card start-info">
+                <h2 class="start-info-heading">Информация о тесте</h2>
+                <div class="start-info-grid">
+                  <div class="info-row">
+                    <span class="info-icon info-icon--blue" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
+                    <div class="info-row-body"><div class="info-row-label">Количество вопросов</div><div class="info-row-value">10</div></div>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-icon info-icon--green" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                    <div class="info-row-body"><div class="info-row-label">Проходной балл</div><div class="info-row-value">80%</div></div>
+                  </div>
+                </div>
+              </div>
+              <div class="card start-prior">
+                <div class="start-prior-row">Прошлая попытка: <strong>65%</strong> &middot; <span class="prior-fail">не пройдено</span> &middot; попытка 2 из 3</div>
+                <div class="prior-actions">
+                  <button type="button" class="btn btn--outline wf-btn-sm" data-action="view-results">Мой результат</button>
+                  <button type="button" class="btn btn--outline wf-btn-sm" data-action="download-report"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Скачать отчёт</button>
+                </div>
+              </div>
+              <div class="start-actions">
+                <button type="button" class="btn start-btn" data-action="start-test">Начать тестирование</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ ПОВТОР: COOLDOWN — нельзя; та же start.html, доп-логика + Мой результат/Скачать отчёт ░░░ -->
+      <div class="wf-state" data-state="blocked">
+        <div class="tb-player" data-template="default">
+          <main class="tb-content">
+            <div class="start-page">
+              <div class="card start-header">
+                <h1 class="start-title">Основы сетей</h1>
+                <p class="start-description">Проверка знаний по основам компьютерных сетей.</p>
+              </div>
+              <div class="card start-info">
+                <h2 class="start-info-heading">Информация о тесте</h2>
+                <div class="start-info-grid">
+                  <div class="info-row">
+                    <span class="info-icon info-icon--blue" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
+                    <div class="info-row-body"><div class="info-row-label">Количество вопросов</div><div class="info-row-value">10</div></div>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-icon info-icon--green" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                    <div class="info-row-body"><div class="info-row-label">Проходной балл</div><div class="info-row-value">80%</div></div>
+                  </div>
+                </div>
+              </div>
+              <div class="card start-cooldown">
+                <div class="cooldown-head">
+                  <span class="cooldown-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                  <div><div class="cooldown-title">Повторное прохождение пока недоступно</div><div class="cooldown-sub">Действует период ожидания между попытками.</div></div>
+                </div>
+                <div class="cooldown-when">Повторный запуск будет доступен с <strong>30.06.2026</strong> &middot; через 2 дн.</div>
+                <div class="start-prior-row">Прошлая попытка: <strong>65%</strong> &middot; <span class="prior-fail">не пройдено</span> &middot; попытка 2 из 3</div>
+                <div class="prior-actions">
+                  <button type="button" class="btn btn--outline wf-btn-sm" data-action="view-results">Мой результат</button>
+                  <button type="button" class="btn btn--outline wf-btn-sm" data-action="download-report"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Скачать отчёт</button>
+                </div>
+              </div>
+              <div class="start-actions">
+                <button type="button" class="btn start-btn" data-action="start-test" disabled aria-disabled="true">Начать тестирование</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+
+      <!-- ░░░ Пояснения ░░░ -->
+      <div class="wf-state" data-state="docs">
+        <div class="wf-doc">
+          <div class="wf-notes">
+            <h3>Пояснения — Wireframe</h3>
+            <table>
+              <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+              <tbody>
+                <tr><td>Один экран — реальный старт</td><td>FR-19; start.html</td><td>Разметка 1:1 с дефолтным шаблоном (<code>.start-page</code> / <code>.start-info</code> / <code>.info-row</code> / <code>.start-actions</code>); реальные theme.css + base.css. cooldown/повтор — доп-логика на нём, НЕ отдельный экран</td></tr>
+                <tr><td>Первый раз</td><td>нет прошлой попытки</td><td>Только «Начать тестирование» (<code>state.canStart</code>)</td></tr>
+                <tr><td>Повтор: можно</td><td>eligible + была попытка</td><td>Реальный <code>start.html</code>: <code>state.canStart</code> «Начать тестирование» + <code>state.canViewResults</code> «Мой результат». Добавлены сводка прошлой попытки (<code>state.priorResult</code>) + «Скачать отчёт» (<code>state.canDownloadReport</code>)</td></tr>
+                <tr><td>Повтор: cooldown</td><td>FR-20; нельзя</td><td>На ТОЙ ЖЕ start-page: «пока недоступно» + дата + прошлый результат + «Мой результат» + «Скачать отчёт»; кнопка старта DISABLED. Отдельная блок-стена (system.blocked) НЕ используется</td></tr>
+                <tr><td>Мой результат</td><td><code>data-action="view-results"</code></td><td>Реальное действие → экран результатов прошлой попытки (там «Скачать PDF», <code>results.adaptive.html</code> download-pdf)</td></tr>
+                <tr><td>Скачать отчёт</td><td><code>data-action="download-report"</code> (новое)</td><td>= реальный «Скачать PDF» из results view; здесь дан ПРЯМОЙ доступ со старта. Кнопка только если <code>state.canDownloadReport</code> (отчёт по прошлой попытке доступен)</td></tr>
+                <tr><td>Гейт-шелл удалён</td><td>FR-19; gate.js — РЕАЛИЗОВАНО</td><td>Экран «Доступ к прохождению открыт» (renderStartShell) при eligible НЕ показывается — гейт зовёт onAllowedStart напрямую → сразу обычный старт</td></tr>
+                <tr><td>Дата следующей попытки</td><td>ДД.ММ.ГГГГ</td><td>Формат как <code>fmtDateHuman</code> гейта (cooldown — посуточный, времени суток нет). «через N дн.» — производное (availableDate − today), опционально</td></tr>
+                <tr><td>Тема (light / dark)</td><td>вариант шаблона</td><td>Тема — вариант оформления (выбор автора): шаблон поддерживает обе. Тогл «Светлая/Тёмная». В theme.css добавить светлый набор токенов (сейчас только тёмный) — ОТДЕЛЬНАЯ задача, вне объёма F2</td></tr>
+                <tr><td>Паритет хостов</td><td>PRD-12</td><td>Ту же start.html со state.priorResult / state.cooldown рендерят ОБА хоста; всё гейтится по state.*, поэтому каждый хост отдаёт что МОЖЕТ. SCORM-источник различается с вебом (SCORM — гейт PRD-6; веб — серверный retake-gate)</td></tr>
+                <tr><td>Реализуемость прошлого результата / отчёта на SCORM cooldown</td><td>FR-20; NFR-01/02</td><td>SCORM cooldown-экран рендерится ДО Initialize; данные прошлой попытки (cmi.suspend_data) тогда НЕДОСТУПНЫ (нужен Initialize; WebTutor — нет cross-attempt стора). Поэтому на SCORM cooldown — ТОЛЬКО дата + disabled-кнопка (state.priorResult / state.canDownloadReport не задаются). Прошлый результат + «Скачать отчёт» показываются на ВЕБЕ (серверная БД попыток) и на SCORM eligible-повторе ПОСЛЕ Initialize, где LMS хранит историю (как текущий «Мой результат»). Решение пользователя: «доступен, если технически реализуемо»</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="wf-mapping">
+            <h2>Источник</h2>
+            <p>Учебный экран рендерится ШАБЛОНОМ (PRD-12), не DS. Здесь — реальная разметка start.html дефолтного шаблона + его theme.css/base.css. Действия <code>start-test</code> / <code>view-results</code> — реальные; <code>download-report</code>, блоки <code>.start-prior</code> / <code>.start-cooldown</code> и светлые токены — добавка реализации F2 (на токенах шаблона).</p>
+          </div>
+
+          <div class="wf-mapping">
+            <h2>Контракт состояния F2 (новые поля + гейтинг layout)</h2>
+            <p>Новые поля контекста (builder <code>buildStartState</code>, <code>shared/template/start-state.ts</code> + <code>context.ts</code>) и блоки <code>start.html</code>, которые их гейтят. CSS-классы — в <code>base.css</code> на токенах шаблона. Источник данных различается по хостам (см. «Паритет хостов»).</p>
+            <table>
+              <thead><tr><th>Поле <code>state.*</code></th><th>Блок layout (гейт)</th><th>Содержание / правило</th></tr></thead>
+              <tbody>
+                <tr><td><code>priorResult</code> = <code>{ percent, passed, attemptNumber?, maxAttempts? }</code> | null</td><td><code>{{#if state.priorResult}}</code> → <code>.card.start-prior</code></td><td>Сводка прошлой попытки: «Прошлая попытка: N% · пройдено/не пройдено [· попытка K из M]». Вердикт-цвет <code>.prior-fail</code> при <code>passed=false</code></td></tr>
+                <tr><td><code>canDownloadReport</code> : bool</td><td><code>{{#if state.canDownloadReport}}</code> → кнопка <code>data-action="download-report"</code></td><td>Показывать «Скачать отчёт» только когда отчёт по прошлой попытке доступен для скачивания (FR-20)</td></tr>
+                <tr><td><code>cooldown</code> = <code>{ availableDateHuman, daysUntil? }</code> | null</td><td><code>{{#if state.cooldown}}</code> → <code>.card.start-cooldown</code></td><td>Присутствует ТОЛЬКО когда повтор заблокирован (FR-20): «пока недоступно» + дата (ДД.ММ.ГГГГ) [+ «через N дн.»]. Присутствие → старт недоступен</td></tr>
+                <tr><td>кнопка старта при <code>cooldown</code></td><td><code>{{#if state.cooldown}}</code> рендерит <code>.start-btn</code> с <code>disabled aria-disabled</code>, иначе <code>{{#if state.canStart}}</code> обычная</td><td>FR-20: «Начать тестирование» видна, но DISABLED, когда cooldown активен (НЕ скрыта). NFR-01/02: cooldown-старт рендерится ДО Initialize, disabled-кнопка сессию не открывает</td></tr>
+              </tbody>
+            </table>
+            <p>Реализация (после согласования): <code>start-state.ts</code>/<code>context.ts</code> (поля) · <code>start.html</code> (гейтинг) · <code>base.css</code> (<code>.start-prior</code>/<code>.start-cooldown</code> и др.) · SCORM <code>gate.js</code>+<code>startPage.js</code> (cooldown-ветку из <code>system.blocked</code> → на start.html, до Initialize) · веб <code>take-test.tsx</code>/серверный <code>retake-gate.ts</code> (паритет). Светлые токены theme.css — вне объёма F2.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var light = document.body.classList.toggle('theme-light');
+        btn.textContent = light ? 'Тёмная' : 'Светлая';
+        btn.classList.toggle('active', light);
+      };
+    </script>
+  </body>
+</html>

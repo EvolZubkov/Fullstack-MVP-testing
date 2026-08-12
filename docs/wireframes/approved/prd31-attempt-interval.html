@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-31 — Интервал между попытками (барьер B).
+    Спека: docs/specs/prd-31/attempt-interval.md (§8 UI автора, §3 модель допуска).
+    Базовый эскиз: prd6-retake-policy.html — панель «Повторное прохождение»
+    берётся оттуда БЕЗ изменений, PRD-31 добавляет к ней вторую группу.
+    Поверхности:
+      1) Блок «Повторное прохождение» во вкладке «Настройки» редактора теста
+         (client/.../editor/sections/basic-settings-section.tsx — rail-пейн, ui-kit).
+      2) Учащийся: стартовый экран с закрытым интервалом (веб и SCORM — один макет).
+    Состояния:
+      s-off             — оба барьера выключены (легаси-поведение)
+      s-interval        — включён ТОЛЬКО интервал между попытками (новый случай)
+      s-both            — включены оба барьера
+      s-error           — интервал вне диапазона (валидация)
+      s-learner         — стартовый экран учащегося: интервал не истёк
+      s-docs            — Пояснения + DS Mapping
+    СОГЛАСОВАН 2026-08-01.
+    -->
+    <title>PRD-31 — Интервал между попытками</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      .wf-sprite { display: none; }
+      /* Neutralize the legacy .ou-select fallback in wf-utils.css (its own
+         border/padding/bg) so only the DS .ou-select__trigger border shows —
+         otherwise the trigger renders a double frame in the sketch. */
+      .ou-select { padding: 0; border: 0; background: transparent; line-height: inherit; border-radius: 0; }
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      .wf-pane { max-width: var(--wf-size-560); }
+      .wf-stack { display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      .wf-muted { color: var(--ou-fg-muted); }
+      /* Learner start screen — sketch of the shared `start` layout. */
+      .wf-wall { display: flex; align-items: center; justify-content: center; padding: var(--ou-space-8) var(--ou-space-4); }
+      .wf-wall__card { max-width: var(--wf-size-520); width: 100%; text-align: center; }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-state { display: none; padding: var(--wf-size-72) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-720); }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Интервал между попытками:</span>
+      <button type="button" class="active" onclick="showState(this, 'off')">настройки · выкл</button>
+      <button type="button" onclick="showState(this, 'interval')">только интервал</button>
+      <button type="button" onclick="showState(this, 'both')">оба барьера</button>
+      <button type="button" onclick="showState(this, 'error')">ошибка интервала</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'learner')">учащийся · ожидание</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd6-retake-policy.html">&harr; PRD-6</a>
+    </nav>
+
+    <!-- ════════════════ s-off: оба барьера выключены ════════════════ -->
+    <div id="wf-off" class="wf-state active">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
+              <span class="ou-switch-field__desc">Выключено — учащийся может перезапускать курс без ограничений (как сейчас).</span>
+            </span>
+          </label>
+
+          <div class="ou-card__divider"></div>
+
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Ограничение между попытками" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничение между попытками</span>
+              <span class="ou-switch-field__desc">Выключено — попытки внутри одного назначения идут подряд.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-interval: включён только интервал ════════════════ -->
+    <div id="wf-interval" class="wf-state">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
+              <span class="ou-switch-field__desc">Выключено — новое назначение доступно сразу.</span>
+            </span>
+          </label>
+
+          <div class="ou-card__divider"></div>
+
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничение между попытками" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничение между попытками</span>
+              <span class="ou-switch-field__desc">Следующая попытка внутри назначения открывается не сразу.</span>
+            </span>
+          </label>
+
+          <div class="ou-number ou-number--m ou-number--split">
+            <label class="ou-number__lbl" for="ai-hours">Интервал, часов</label>
+            <div class="ou-number__box">
+              <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="16" height="16"><use href="#i-minus" /></svg></button>
+              <input class="ou-number__input" id="ai-hours" type="text" inputmode="numeric" value="24" aria-label="Интервал, часов" />
+              <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="16" height="16"><use href="#i-plus" /></svg></button>
+            </div>
+            <span class="ou-number__hint">От 1 до 8760 часов (до года).</span>
+          </div>
+
+          <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+            <div class="ou-banner__body">
+              <div class="ou-banner__desc">Ограничение между попытками действует внутри одного назначения. Период охлаждения выше — между назначениями.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-both: включены оба барьера ════════════════ -->
+    <div id="wf-both" class="wf-state">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
+              <span class="ou-switch-field__desc">Допуск проверяется до старта курса.</span>
+            </span>
+          </label>
+
+          <div class="ou-number ou-number--m ou-number--split">
+            <label class="ou-number__lbl" for="rp-days">Период охлаждения, календарных дней</label>
+            <div class="ou-number__box">
+              <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="16" height="16"><use href="#i-minus" /></svg></button>
+              <input class="ou-number__input" id="rp-days" type="text" inputmode="numeric" value="30" aria-label="Период охлаждения, дней" />
+              <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="16" height="16"><use href="#i-plus" /></svg></button>
+            </div>
+            <span class="ou-number__hint">От 1 до 3650 дней.</span>
+          </div>
+
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="rp-plugin">Способ проверки (плагин)</label>
+            <div class="ou-select ou-field--m ou-field--full" id="rp-plugin" data-ou-options="WebTutor: период охлаждения|SCORM suspend_data (best-effort)">
+              <button type="button" class="ou-select__trigger"><span class="ou-select__value">WebTutor: период охлаждения</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+            </div>
+          </div>
+
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">При ошибке проверки допуска</label>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Политика ошибки">
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Разрешить старт</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Заблокировать</button>
+            </div>
+            <div class="ou-formfield__msg">Если проверку не удалось выполнить — открыть курс или показать экран блокировки.</div>
+          </div>
+
+          <div class="ou-card__divider"></div>
+
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничение между попытками" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничение между попытками</span>
+              <span class="ou-switch-field__desc">Следующая попытка внутри назначения открывается не сразу.</span>
+            </span>
+          </label>
+
+          <div class="ou-number ou-number--m ou-number--split">
+            <label class="ou-number__lbl">Интервал, часов</label>
+            <div class="ou-number__box">
+              <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="16" height="16"><use href="#i-minus" /></svg></button>
+              <input class="ou-number__input" type="text" inputmode="numeric" value="24" aria-label="Интервал, часов" />
+              <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="16" height="16"><use href="#i-plus" /></svg></button>
+            </div>
+            <span class="ou-number__hint">От 1 до 8760 часов (до года).</span>
+          </div>
+
+          <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+            <div class="ou-banner__body">
+              <div class="ou-banner__desc">Период охлаждения действует между назначениями, ограничение между попытками — внутри одного назначения.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-error: интервал вне диапазона ════════════════ -->
+    <div id="wf-error" class="wf-state">
+      <div class="ou-card ou-card--outlined wf-pane">
+        <header class="ou-card__header"><h3 class="ou-card__title">Повторное прохождение</h3></header>
+        <div class="ou-card__body wf-stack">
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничение между попытками" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text">
+              <span class="ou-switch-field__label">Ограничение между попытками</span>
+              <span class="ou-switch-field__desc">Следующая попытка внутри назначения открывается не сразу.</span>
+            </span>
+          </label>
+
+          <div class="ou-number ou-number--m ou-number--split is-invalid">
+            <label class="ou-number__lbl" for="ai-hours-bad">Интервал, часов</label>
+            <div class="ou-number__box">
+              <button type="button" class="ou-number__btn" aria-label="Уменьшить"><svg width="16" height="16"><use href="#i-minus" /></svg></button>
+              <input class="ou-number__input" id="ai-hours-bad" type="text" inputmode="numeric" value="9000" aria-invalid="true" aria-label="Интервал, часов" />
+              <button type="button" class="ou-number__btn" aria-label="Увеличить"><svg width="16" height="16"><use href="#i-plus" /></svg></button>
+            </div>
+            <span class="ou-number__hint ou-number__hint--error">Допустимо от 1 до 8760 часов.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-learner: стартовый экран, интервал не истёк ════════════════ -->
+    <div id="wf-learner" class="wf-state">
+      <div class="wf-wall">
+        <div class="ou-card ou-card--outlined wf-wall__card">
+          <div class="ou-card__body wf-stack">
+            <h1 class="ou-card__title">Основы информационной безопасности</h1>
+            <p class="wf-muted">Следующая попытка будет доступна 02.08.2026 в 09:30.</p>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Начать тестирование</button>
+            <p class="wf-muted">Попытка 1 из 3 · результат 64%</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Поверхность 1</td><td>вкладка «Настройки» → пейн «Повторное прохождение»</td><td><code>basic-settings-section.tsx</code>; панель PRD-6 не меняется, добавляется вторая группа под разделителем</td></tr>
+            <tr><td>Поверхность 2</td><td>стартовый экран учащегося</td><td>Тот же макет <code>start</code>, что у периода охлаждения (PRD-19 FR-20): отдельного экрана блокировки не вводится</td></tr>
+            <tr><td>Свич «Ограничение между попытками»</td><td><code>retakePolicy.attemptInterval.enabled</code></td><td>Независим от свича выше: допустимы все четыре сочетания (FR-03)</td></tr>
+            <tr><td>Интервал</td><td><code>attemptInterval.hours</code> (1–8760)</td><td>Часы, а не календарные дни: «раз в сутки» = 24 часа. Обязателен при включённом свиче</td></tr>
+            <tr><td>Область действия</td><td>внутри одного назначения</td><td>Считается от завершения предыдущей попытки ЭТОГО назначения. Период охлаждения выше действует между назначениями (§3)</td></tr>
+            <tr><td>Пояснение под группой</td><td>Banner info</td><td>Показывается, когда включён хотя бы один барьер: без него два похожих поля читаются как дубли</td></tr>
+            <tr><td>Ошибка диапазона</td><td><code>is-invalid</code> + сообщение</td><td>Как у периода охлаждения PRD-6; своих текстов ошибок не вводим</td></tr>
+            <tr><td>Экран ожидания</td><td><code>state.cooldown.availableDateHuman</code></td><td>Для интервала строка несёт ДАТУ И ВРЕМЯ; счётчик «через N дн.» не показывается — для часов он бессмыслен</td></tr>
+            <tr><td>Кнопка старта</td><td><code>disabled</code></td><td>Неактивна, а не скрыта — учащийся видит, что тест на месте и когда откроется</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Строка с «custom» в колонке DS-компонент — блокер. Новых примитивов PRD-31 не требует.</p>
+        <table>
+          <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead>
+          <tbody>
+            <tr><td>Пейн настроек</td><td><code>Card</code> (<code>ou-card--outlined</code>) + <code>CardHeader</code></td><td><code>--ou-bg-elevated</code>, <code>--ou-radius-l</code></td><td>Существующий пейн PRD-6, без изменений</td></tr>
+            <tr><td>Свич «Ограничение между попытками»</td><td><code>Switch</code> (<code>ou-switch-field</code>)</td><td><code>--ou-accent-*</code></td><td>label + desc, как у свича выше</td></tr>
+            <tr><td>Разделитель групп</td><td><code>ou-card__divider</code></td><td><code>--ou-border-soft</code></td><td>Отделяет барьер между назначениями от барьера внутри назначения. Отдельного примитива <code>Divider</code> в DS нет — используется разделитель карточки, как в утверждённых эскизах</td></tr>
+            <tr><td>Интервал, часов</td><td><code>NumberInput</code> (<code>ou-number--split</code>)</td><td><code>--ou-border-default</code></td><td>min 1 / max 8760, ошибка <code>is-invalid</code></td></tr>
+            <tr><td>Пояснение</td><td><code>Banner</code> (info)</td><td><code>--ou-info-*</code></td><td>Разводит смысл двух барьеров</td></tr>
+            <tr><td>Экран ожидания</td><td><code>Card</code> + <code>Button</code> (disabled)</td><td><code>--ou-fg-muted</code></td><td>Существующий макет <code>start</code>; новых блоков в разметку шаблона не добавляется</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

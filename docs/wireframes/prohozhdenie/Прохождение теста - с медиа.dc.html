@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<link rel="stylesheet" href="ui-kit/university-rt.css">
+<script src="./image-slot.js"></script>
+<style>html,body{margin:0;padding:0;height:100%}a{color:var(--ou-accent-default);text-decoration:none}a:hover{color:var(--ou-accent-hover);text-decoration:underline}</style>
+</helmet>
+<div class="ou ou--dark ou--normal" ref="{{ rootRef }}" style="height:100vh;min-height:100vh;display:flex;flex-direction:column;overflow:hidden;font-family:var(--ou-font-family-base)">
+
+  <header style="background:var(--ou-bg-elevated);border-bottom:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px 0;display:flex;flex-direction:column;gap:var(--ou-space-3);position:relative">
+    <div style="display:flex;align-items:flex-start;gap:var(--ou-space-4)">
+      <span style="width:44px;height:44px;flex:none;border-radius:var(--ou-radius-m);background:var(--ou-accent-soft);color:var(--ou-accent-default);display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;letter-spacing:.02em">РТ</span>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:2px">
+        <h1 style="margin:0;font:var(--ou-text-display-s);color:var(--ou-fg-default);letter-spacing:-.01em;text-wrap:pretty">Основы информационной безопасности</h1>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Обязательный курс · Попытка 1 из 2</span>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:flex-start;gap:var(--ou-space-6);flex:none">
+        <div class="ou-timer ou-timer--digital ou-timer--s">
+          <span class="ou-timer__lbl">тест</span>
+          <span class="ou-timer__num">{{ testTime }}</span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s is-critical">
+          <span class="ou-timer__lbl">раздел</span>
+          <span class="ou-timer__num">{{ sectionTime }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ou-quiz ou-quiz--circle ou-quiz--m" style="width:100%;flex-direction:row;align-items:center;gap:var(--ou-space-5);padding-bottom:var(--ou-space-4)">
+      <div class="ou-quiz__dots" style="flex:none">
+        <sc-for list="{{ dots }}" as="d" hint-placeholder-count="12">
+          <button type="button" class="ou-quiz__dot {{ d.mod }}" aria-label="{{ d.aria }}" onClick="{{ d.go }}">{{ d.n }}</button>
+        </sc-for>
+      </div>
+      <div class="ou-quiz__legend" style="margin-top:0;align-items:center">
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-flagged"></span>пропущен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot" style="background:transparent;box-shadow:inset 0 0 0 2px var(--ou-accent-default)"></span>текущий</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot"></span>не отвечен</span>
+        <span class="ou-quiz__legend-item"><span class="ou-quiz__legend-dot is-answered"></span>отвечен</span>
+      </div>
+      <span style="margin-left:auto;flex:none;text-align:right;font:var(--ou-text-body-m);color:var(--ou-fg-muted)">отвечено <strong style="color:var(--ou-fg-default);font-weight:600">{{ answeredCount }}</strong> из 12 · пропущено {{ skippedCount }}</span>
+    </div>
+
+    <div style="position:absolute;left:0;right:0;bottom:-1px;height:3px;background:var(--ou-bg-surface-3)">
+      <div style="height:100%;width:{{ progressWidth }};background:var(--ou-accent-default);border-radius:0 999px 999px 0;transition:width 240ms var(--ou-easing-standard)"></div>
+    </div>
+  </header>
+
+  <main style="flex:1;min-height:0;overflow:auto;padding:24px">
+    <div style="width:100%;height:100%;display:flex;flex-direction:column;gap:var(--ou-space-4)">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+        <span style="font:var(--ou-text-body-m);color:var(--ou-fg-muted)">Вопрос {{ current }} из 12</span>
+        <span class="ou-tag ou-tag--neutral">{{ section }}</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:var(--ou-space-2);max-width:71%">
+        <h2 style="margin:0;font-weight:600;font-size:{{ questionFont }};line-height:1.25;color:var(--ou-fg-default);letter-spacing:-.015em;text-wrap:pretty">{{ questionText }}</h2>
+        <span style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">Выберите один вариант ответа</span>
+      </div>
+
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:calc((100% - 24px) * 5 / 12) 1fr;gap:24px;align-items:stretch">
+        <div style="height:100%;min-height:0;box-sizing:border-box;position:relative;border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-l);overflow:hidden;background:var(--ou-bg-surface-2);cursor:zoom-in" onClick="{{ zoom }}" title="Открыть в полном размере">
+          <image-slot id="q-media" shape="rect" placeholder="Материал к вопросу — перетащите изображение"></image-slot>
+        </div>
+
+        <div class="ou-radio-group ou-radio-group--vertical" style="min-width:0;height:100%;min-height:0">
+          <div class="ou-radio-group__items" style="gap:8px;height:100%;min-height:0">
+          <sc-for list="{{ options }}" as="o" hint-placeholder-count="4">
+            <label class="ou-radio-card {{ o.mod }}" style="flex:1;align-items:center;gap:var(--ou-space-4);padding:var(--ou-space-3) var(--ou-space-4);min-height:52px;box-sizing:border-box">
+              <span class="ou-radio ou-radio--m {{ o.mod }}">
+                <input type="radio" class="ou-radio__input" name="answer" checked="{{ o.checked }}" onChange="{{ o.pick }}">
+                <span class="ou-radio__ring"><span class="ou-radio__dot"></span></span>
+              </span>
+              <span class="ou-radio-card__text">
+                <span class="ou-radio-card__title" style="font-weight:400;font-size:{{ o.font }};line-height:1.35;text-wrap:pretty">{{ o.text }}</span>
+              </span>
+            </label>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div></main>
+
+  <footer style="background:var(--ou-bg-elevated);border-top:1px solid var(--ou-border-soft);padding:var(--ou-space-4) 24px;display:flex;align-items:center;gap:var(--ou-space-3)">
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onClick="{{ prev }}">
+      <span class="ou-btn__ico" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path></svg>
+      </span>
+      Назад
+    </button>
+    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onClick="{{ review }}">К обзору ответов</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:var(--ou-space-3)">
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onClick="{{ skip }}">Пропустить</button>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--l" onClick="{{ submit }}">{{ submitLabel }}</button>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark' | 'light'&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;normal&quot;,&quot;compact&quot;,&quot;spacious&quot;],&quot;default&quot;:&quot;normal&quot;,&quot;tsType&quot;:&quot;'normal' | 'compact' | 'spacious'&quot;}}">
+const QUESTIONS = [
+  ['Базовые угрозы', 'Что относится к фишинговой атаке?', ['Письмо со ссылкой на поддельный портал входа', 'Плановое обновление антивируса', 'Резервное копирование на файловый сервер', 'Смена пароля по расписанию']],
+  ['Базовые угрозы', 'Какой признак указывает на скомпрометированную учётную запись?', ['Входы из двух стран за пять минут', 'Обновление профиля в HR-системе', 'Подключение к корпоративному Wi-Fi', 'Печать документа на сетевом принтере']],
+  ['Базовые угрозы', 'Что делать при получении подозрительного вложения?', ['Передать письмо в службу ИБ, не открывая вложение', 'Открыть вложение в режиме чтения', 'Переслать коллеге для проверки', 'Удалить письмо и никому не сообщать']],
+  ['Данные и доступы', 'Какой принцип лежит в основе выдачи прав доступа?', ['Минимально необходимые права', 'Права как у руководителя подразделения', 'Единый доступ для всей команды', 'Полный доступ на период адаптации']],
+  ['Данные и доступы', 'Где допустимо хранить рабочие документы с персональными данными?', ['В корпоративном хранилище с разграничением доступа', 'В личном облаке', 'В переписке мессенджера', 'На личной флешке']],
+  ['Данные и доступы', 'Что нужно сделать перед передачей ноутбука коллеге?', ['Обратиться в ИТ для переоформления и очистки устройства', 'Просто передать устройство под свою учётную запись', 'Сохранить свои пароли в браузере для удобства', 'Отключить обновления безопасности']],
+  ['Рабочее место', 'Как правильно уйти с рабочего места на пять минут?', ['Заблокировать экран', 'Оставить сессию открытой', 'Свернуть все окна', 'Выключить монитор']],
+  ['Рабочее место', 'Какой носитель нельзя подключать к рабочему компьютеру?', ['Найденную USB-флешку', 'Выданный ИТ-службой токен', 'Корпоративную гарнитуру', 'Сертифицированный внешний диск']],
+  ['Рабочее место', 'Что считается инцидентом ИБ?', ['Любая утечка или попытка несанкционированного доступа', 'Ошибка в отчёте', 'Медленная работа сети', 'Просроченная задача в трекере']],
+  ['Пароли и аутентификация', 'Какой пароль является наиболее надёжным с точки зрения безопасности?', ['Длинная фраза из четырёх несвязанных слов', 'Название компании и год', 'Дата рождения и инициалы', 'Восемь символов с заменой букв на цифры']],
+  ['Пароли и аутентификация', 'Зачем нужна двухфакторная аутентификация?', ['Пароль сам по себе может быть скомпрометирован', 'Чтобы реже менять пароль', 'Чтобы ускорить вход в систему', 'Чтобы не запоминать логин']],
+  ['Пароли и аутентификация', 'Где допустимо хранить пароли?', ['В корпоративном менеджере паролей', 'В заметках телефона', 'В файле на рабочем столе', 'На стикере под клавиатурой']],
+];
+
+class Component extends DCLogic {
+  state = {
+    idx: 9,
+    answers: { 0: 0, 1: 2, 2: 0, 3: 0, 4: 1, 5: 0, 7: 3 },
+    skipped: { 6: true },
+    testLeft: 2691,
+    sectionLeft: 252,
+  };
+
+  componentDidMount() {
+    this.t = setInterval(() => this.setState(s => ({
+      testLeft: Math.max(0, s.testLeft - 1),
+      sectionLeft: Math.max(0, s.sectionLeft - 1),
+    })), 1000);
+  }
+  componentWillUnmount() { clearInterval(this.t); }
+
+  fmt(s) {
+    const m = Math.floor(s / 60), r = s % 60;
+    return m + ':' + String(r).padStart(2, '0');
+  }
+
+  go(i) { this.setState({ idx: i }); }
+
+  renderVals() {
+    const { idx, answers, skipped } = this.state;
+    const total = QUESTIONS.length;
+    const answeredCount = Object.keys(answers).length;
+    const [section, questionText, opts] = QUESTIONS[idx];
+
+    const dots = QUESTIONS.map((_, i) => {
+      const mods = [];
+      if (answers[i] !== undefined) mods.push('is-answered');
+      if (skipped[i]) mods.push('is-flagged');
+      if (i === idx) mods.push('is-current');
+      return { n: i + 1, aria: 'Вопрос ' + (i + 1), mod: mods.join(' '), go: () => this.go(i) };
+    });
+
+    const fit = (len, max, min, from, per) =>
+      Math.round(Math.max(min, Math.min(max, max - Math.max(0, len - from) * per))) + 'px';
+
+    const options = opts.map((text, i) => ({
+      text,
+      font: fit(text.length, 20, 14, 38, 0.14),
+      checked: answers[idx] === i,
+      mod: answers[idx] === i ? 'is-on' : '',
+      pick: () => this.setState(s => {
+        const next = { ...s.answers }; next[idx] = i;
+        const sk = { ...s.skipped }; delete sk[idx];
+        return { answers: next, skipped: sk };
+      }),
+    }));
+
+    return {
+      dots, options, section, questionText,
+      questionFont: fit(questionText.length, 32, 20, 58, 0.17),
+      current: idx + 1,
+      answeredCount,
+      skippedCount: Object.keys(skipped).length,
+      testTime: this.fmt(this.state.testLeft),
+      sectionTime: this.fmt(this.state.sectionLeft),
+      progressWidth: Math.round((answeredCount / total) * 100) + '%',
+      submitLabel: idx === total - 1 ? 'Завершить тест' : 'Отправить ответ',
+      prev: () => this.go(Math.max(0, idx - 1)),
+      skip: () => this.setState(s => {
+        const sk = { ...s.skipped }; sk[idx] = true;
+        return { skipped: sk, idx: Math.min(total - 1, idx + 1) };
+      }),
+      submit: () => this.go(Math.min(total - 1, idx + 1)),
+      review: () => {},
+      zoom: () => {},
+      rootRef: (el) => {
+        if (!el) return;
+        el.className = 'ou ou--' + (this.props.theme ?? 'dark') + ' ou--' + (this.props.density ?? 'normal');
+      },
+    };
+  }
+}
+</script>
+</body>
+</html>

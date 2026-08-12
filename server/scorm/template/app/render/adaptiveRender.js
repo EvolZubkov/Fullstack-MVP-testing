@@ -7,113 +7,153 @@
 function renderAdaptiveQuestion() {
   var app = document.getElementById('app');
   var qData = getCurrentAdaptiveQuestion();
-
   if (!qData) {
-    // No more questions - show results
     renderAdaptiveResults();
     return;
   }
+  ensureAdaptiveShuffleMapping(qData.question);
 
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['question'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto) {
+    renderAdaptiveQuestionTemplated(app, qData);
+    return;
+  }
+  renderAdaptiveQuestionFallback(app, qData);
+}
+
+/** Seed the per-question shuffle mapping for an adaptive question (idempotent). */
+function ensureAdaptiveShuffleMapping(q) {
+  if (state.shuffleMappings[q.id]) return;
+  // Same seam as the standard mode (see shuffleMappingFor): honours the
+  // question's «Случайный порядок вариантов» switch, always shuffles ranking.
+  var mapping = shuffleMappingFor(q);
+  if (!mapping) return;
+  state.shuffleMappings[q.id] = mapping;
+  if (q.type === 'ranking' && !state.answers[q.id]) state.answers[q.id] = mapping.slice();
+}
+
+/** Adaptive feedback block HTML (uses lastAdaptiveResult; binary, no partial credit).
+ *  Emits the shared DS `.ou-banner` — same component as the standard mode. */
+function buildAdaptiveFeedbackHtml(q) {
+  var isCorrect = state.lastAdaptiveResult.isCorrect;
+  var statusText = isCorrect ? 'Правильно!' : 'Неверно';
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.feedbackBanner) return '';
+  // issue #34: общий/условный режим разбирает ОБЩЕЕ правило (см. feedback.js).
+  var feedbackText = TB.feedbackTextFor(q, isCorrect);
+  return TB.feedbackBanner(isCorrect ? 'success' : 'error', statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
+}
+
+/**
+ * Navigation STATE of the adaptive question (`state.nav`) — the row itself comes
+ * from the template's `question.html` footer, exactly as in the standard mode
+ * (buildQuestionNavState). Adaptive is strictly sequential, so the row is the
+ * strict-linear one: no «Назад» / «Пропустить» / «К обзору», and the next step is
+ * always unknown to the client — hence `hasNext: true` (never «Завершить тест»,
+ * the server decides when the session ends).
+ *
+ * @returns {Object|null} The `state.nav` block, or null when the shared builder
+ *   is unavailable (the layout then prints no usable row and the caller falls back).
+ */
+function buildAdaptiveNavState() {
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (!TB || !TB.buildQuestionNav) return null;
+  // Gate «Принять»/«Далее» on a usable answer for the current adaptive question
+  // (same rule as the standard flow; refreshSubmitEnabled keeps it in sync).
+  var aq = typeof currentAnsweringQuestion === 'function' ? currentAnsweringQuestion() : null;
+  var aReady = (!aq || typeof hasAnswer !== 'function') ? true : hasAnswer(aq, state.answers[aq.id]);
+  return TB.buildQuestionNav({
+    flexible: false,
+    committed: !!state.feedbackShown,
+    canPrev: false,
+    // After the feedback is shown the answer is fixed — «Далее» is always available.
+    answerReady: state.feedbackShown ? true : aReady,
+    hasNext: true,
+    showAccept: !!TEST_DATA.showCorrectAnswers && !state.feedbackShown,
+    showReview: false
+  });
+}
+
+/**
+ * Binds the adaptive question footer (the layout's `.tb-scene__foot`) to the
+ * adaptive handlers. The standard `wireQuestionNav` cannot be reused: its
+ * `answer-submit`/`answer-next` point at the standard flow's confirmAnswer/next.
+ *
+ * @param {Element} row The `.tb-scene__foot` element just mounted.
+ */
+function wireAdaptiveNav(row) {
+  if (!row) return;
+  var handlers = {
+    // «Принять» — fix the answer and show the feedback (showCorrectAnswers only).
+    'answer-submit': confirmAdaptiveAnswer,
+    // «Далее» — either continue past the shown feedback, or submit and advance.
+    'answer-next': function () {
+      if (TEST_DATA.showCorrectAnswers && state.feedbackShown) continueAfterFeedback();
+      else submitAdaptiveAnswerAndContinue();
+    }
+  };
+  row.querySelectorAll('button').forEach(function (btn) {
+    var handler = handlers[btn.getAttribute('data-action')];
+    if (handler) btn.addEventListener('click', handler);
+  });
+}
+
+/** Render the adaptive question via the shared `question` layout (mirrors the standard path). */
+function renderAdaptiveQuestionTemplated(app, qData) {
   var q = qData.question;
-
-  // Generate shuffle mapping for this question if not exists
-  if (!state.shuffleMappings[q.id]) {
-    if (q.type === 'single' || q.type === 'multiple') {
-      var optCount = q.data.options ? q.data.options.length : 0;
-      if (optCount > 0) {
-        state.shuffleMappings[q.id] = createShuffleMapping(optCount);
-      }
-    } else if (q.type === 'matching') {
-      var leftCount = q.data.left ? q.data.left.length : 0;
-      var rightCount = q.data.right ? q.data.right.length : 0;
-      if (leftCount > 0 && rightCount > 0) {
-        state.shuffleMappings[q.id] = {
-          left: createShuffleMapping(leftCount),
-          right: createShuffleMapping(rightCount)
-        };
-      }
-    } else if (q.type === 'ranking') {
-      var itemCount = q.data.items ? q.data.items.length : 0;
-      if (itemCount > 0) {
-        state.shuffleMappings[q.id] = createShuffleMapping(itemCount);
-        if (!state.answers[q.id]) {
-          state.answers[q.id] = state.shuffleMappings[q.id].slice();
-        }
-      }
-    }
+  var showFeedback = TEST_DATA.showCorrectAnswers && state.feedbackShown && state.lastAdaptiveResult;
+  var counter = 'Тема: ' + qData.topicName + ' · Вопрос ' + qData.questionNumber + ' из ' + qData.totalInLevel;
+  if (TEST_DATA.showDifficultyLevel && qData.levelName) counter += ' · ' + qData.levelName;
+  var slots = {
+    'question-text': authorTextHtml(q.prompt),
+    'question-media': renderQuestionMedia(q),
+    'question-interaction': '<div id="question-input">' + renderQuestionInput(q) + '</div>',
+    'question-feedback': showFeedback ? buildAdaptiveFeedbackHtml(q) : ''
+  };
+  app.innerHTML = '';
+  // Mount directly into #app so .tb-pad > .tb-scene fills the fixed
+  // stage and the footer anchors at its bottom — mirrors renderGalleryPage (no wrapper div).
+  window.TBTemplate.renderScreenInto(app, {
+    protection: buildScormProtection('question'),
+    layout: (typeof systemLayout === 'function') ? systemLayout('question') : state.templateLayouts['question'],
+    context: {
+      course: { title: TEST_DATA.title },
+      state: {
+        questionCounterLabel: counter,
+        // The nav row comes from the LAYOUT (`.tb-scene__foot`), like the standard
+        // mode's — the runtime no longer appends a footer of its own next to the
+        // scene, where neither the scene surface nor the DS palette reach it.
+        nav: buildAdaptiveNavState(),
+        questionHint: (window.TBTemplate && window.TBTemplate.questionHint) ? window.TBTemplate.questionHint(q.type, { type: q.type, dataJson: q.data }) : '',
+        questionFont: (window.TBTemplate && window.TBTemplate.questionFont) ? window.TBTemplate.questionFont(q.prompt) : '',
+        optionFont: (window.TBTemplate && window.TBTemplate.optionFont && window.TBTemplate.answerTexts) ? window.TBTemplate.optionFont(window.TBTemplate.answerTexts({ type: q.type, dataJson: q.data })) : ''
+      },
+      design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
+    },
+    slots: slots
+  });
+  var fill = app.querySelector('#q-progress-fill');
+  if (fill) fill.style.width = ((qData.questionNumber / qData.totalInLevel) * 100) + '%';
+  var timerEl = app.querySelector('#timer-display');
+  if (timerEl && state.remainingSeconds !== null) {
+    timerEl.classList.remove('q-timer--hidden');
+    timerEl.textContent = formatTime(state.remainingSeconds);
+    if (state.remainingSeconds <= 60) { timerEl.style.color = '#dc2626'; timerEl.style.fontWeight = 'bold'; }
   }
-
-  var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
-  html += '<h1 style="margin:0">' + escapeHtml(TEST_DATA.title) + '</h1>';
-  if (state.remainingSeconds !== null) {
-    var timerClass = state.remainingSeconds <= 60 ? 'style="color:#dc2626;font-weight:bold;font-size:18px;"' : 'style="color:#666;font-size:18px;"';
-    html += '<div id="timer-display" ' + timerClass + '>' + formatTime(state.remainingSeconds) + '</div>';
-  }
-  html += '</div>';
-
-  // Topic and level info
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
-  html += '<div style="color:#666;font-size:14px;">Тема: <span style="color:hsl(var(--foreground));font-weight:500;">' + escapeHtml(qData.topicName) + '</span></div>';
-  if (TEST_DATA.showDifficultyLevel) {
-    html += '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));border-radius:20px;font-size:13px;font-weight:500;">';
-    html += escapeHtml(qData.levelName);
-    html += '</div>';
-  }
-  html += '</div>';
-
-  // Progress for current level
-  var progress = (qData.questionNumber / qData.totalInLevel) * 100;
-  html += '<div class="progress-bar"><div class="progress-fill" style="width:' + progress + '%"></div></div>';
-
-  // Question card
-  html += '<div class="card">';
-  html += '<div style="color:#666;margin-bottom:8px;">Вопрос ' + qData.questionNumber + ' из ' + qData.totalInLevel + '</div>';
-  html += '<div class="question-text">' + escapeHtml(q.prompt) + '</div>';
-  html += renderQuestionMedia(q);
-  html += '<div id="question-input">';
-  html += renderQuestionInput(q);
-  html += '</div>';
-
-  // Feedback after answer (if showCorrectAnswers and feedback is shown)
-  if (TEST_DATA.showCorrectAnswers && state.feedbackShown && state.lastAdaptiveResult) {
-    var isCorrect = state.lastAdaptiveResult.isCorrect;
-    var statusColor = isCorrect ? '#16a34a' : '#dc2626';
-    var statusText = isCorrect ? 'Правильно!' : 'Неправильно';
-
-    html += '<div style="margin-top:16px;padding:12px;border-radius:8px;background:' + (isCorrect ? '#dcfce7' : '#fee2e2') + ';border:1px solid ' + statusColor + ';">';
-    html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
-
-    var feedbackText = null;
-    if (q.feedbackMode === 'conditional') {
-      feedbackText = isCorrect ? q.feedbackCorrect : q.feedbackIncorrect;
-    } else {
-      feedbackText = q.feedback;
-    }
-
-    if (feedbackText) {
-      html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
-    }
-    html += '</div>';
-  }
-
-  html += '</div>';
-
-  // Navigation
-  html += '<div class="navigation" style="justify-content:flex-end">';
-  if (TEST_DATA.showCorrectAnswers) {
-    if (!state.feedbackShown) {
-      html += '<button class="btn" onclick="confirmAdaptiveAnswer()">Принять</button>';
-    } else {
-      html += '<button class="btn" onclick="continueAfterFeedback()">Далее</button>';
-    }
-  } else {
-    // Без показа правильных ответов - сразу переходим (с валидацией)
-    html += '<button class="btn" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
-  }
-  html += '</div>';
-
-  app.innerHTML = html;
+  wireAdaptiveNav(app.querySelector('.tb-scene__foot'));
   syncMatchingHeights();
+}
+
+function renderAdaptiveQuestionFallback(app, qData) {
+// Dead last-resort safety net: reached only if neither the active template nor the
+// bundled standard template supplies this layout — the package always bundles the
+// standard scene layout as the fallback, so it never fires. Renders a
+// minimal, stylesheet-independent notice instead of a competing hardcoded design
+// (the standard scene IS the fallback; PRD-12).
+  var el = app || document.getElementById('app');
+  if (el) el.innerHTML = '<div style="padding:24px;font:16px/1.5 system-ui,sans-serif">Экран вопроса недоступен: шаблон не предоставил макет.</div>';
 }
 
 /**
@@ -136,7 +176,7 @@ function confirmAdaptiveAnswer() {
 
   // Check answer correctness but DON'T submit yet - just show feedback
   var isCorrect = checkAnswer(qData.question, answer) === 1;
-  
+
   state.lastAdaptiveResult = {
     isCorrect: isCorrect,
     questionId: qData.id
@@ -155,13 +195,20 @@ function continueAfterFeedback() {
   if (!qData) return;
 
   var answer = state.answers[qData.id];
-  
+
   // Now actually submit the answer
   var result = submitAdaptiveAnswer(qData.id, answer);
-  
+
   // Reset feedback state
   state.feedbackShown = false;
   state.lastAdaptiveResult = null;
+
+  // PRD-4 v1.1 §4.7: when a single-topic adaptive session signals isFinished,
+  // AdaptiveSession.maybeFinishSingleTopic already cleared state.adaptiveState
+  // and invoked the caller's onComplete (returnFromTopic / contentFlow next).
+  // Skip the legacy renderAdaptiveResults — adaptiveState is null and the
+  // caller has already re-rendered the next phase (router page or content).
+  if (result && result.singleTopicHandled) return;
 
   // Check for transitions - only show if showDifficultyLevel is enabled
   if (TEST_DATA.showDifficultyLevel && (result.levelTransition || result.topicTransition)) {
@@ -194,6 +241,11 @@ function submitAdaptiveAnswerAndContinue() {
 
   var result = submitAdaptiveAnswer(qData.id, answer);
 
+  // PRD-4 v1.1 §4.7: single-topic session done — callback already handled
+  // the next phase, don't render adaptive results (state.adaptiveState is
+  // null by now).
+  if (result && result.singleTopicHandled) return;
+
   // Check for transitions - only show if showDifficultyLevel is enabled
   if (TEST_DATA.showDifficultyLevel && (result.levelTransition || result.topicTransition)) {
     state.pendingTransition = result;
@@ -225,6 +277,17 @@ function validateAdaptiveAnswer(question, answer) {
     }
   }
 
+  // PRD-44 FR-31: распределение готово, только когда сумма ровно равна бюджету.
+  // Адаптивный поток идёт своей проверкой, поэтому без этой ветки он пускал бы
+  // дальше с недобором — там, где обычный поток не пускает.
+  if (typeof TBQType !== 'undefined' && TBQType.distributesBudget(question.type)) {
+    var TBv = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (TBv && TBv.isAllocationComplete && !TBv.isAllocationComplete(TBv.allocationSpec(question.data), answer)) {
+      showToast('Распределите все баллы', 'warn');
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -233,70 +296,50 @@ function validateAdaptiveAnswer(question, answer) {
  */
 function renderAdaptiveTransition(result) {
   var app = document.getElementById('app');
-  var isCorrect = result.isCorrect;
-  var transition = result.levelTransition;
-  var topicTransition = result.topicTransition;
-
-  var html = '<div style="max-width:500px;margin:80px auto;text-align:center;">';
-
-  // Icon
-  if (isCorrect) {
-    html += '<div style="width:80px;height:80px;margin:0 auto 24px;background:#166534;border-radius:50%;display:flex;align-items:center;justify-content:center;">';
-    html += '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>';
-    html += '</div>';
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['system.transition'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto && TB.buildTransitionContext) {
+    renderAdaptiveTransitionTemplated(app, result);
   } else {
-    html += '<div style="width:80px;height:80px;margin:0 auto 24px;background:#991b1b;border-radius:50%;display:flex;align-items:center;justify-content:center;">';
-    html += '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="2.5"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>';
-    html += '</div>';
+    renderAdaptiveTransitionFallback(app, result);
   }
-
-  html += '<h2 style="margin:0 0 24px;font-size:28px;color:#fff;">' + (isCorrect ? 'Правильно!' : 'Неправильно') + '</h2>';
-
-  // Level transition message
-  if (transition) {
-    var bgColor, borderColor, textColor, iconSvg;
-    if (transition.type === 'up') {
-      bgColor = '#166534';
-      borderColor = '#22c55e';
-      textColor = '#bbf7d0';
-      iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
-    } else if (transition.type === 'down') {
-      bgColor = '#991b1b';
-      borderColor = '#ef4444';
-      textColor = '#fecaca';
-      iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
-    } else {
-      // complete
-      bgColor = '#1e40af';
-      borderColor = '#3b82f6';
-      textColor = '#bfdbfe';
-      iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>';
-    }
-
-    html += '<div style="padding:20px 24px;background:' + bgColor + ';border:2px solid ' + borderColor + ';border-radius:16px;margin-bottom:20px;">';
-    html += '<div style="display:flex;align-items:center;justify-content:center;gap:12px;">';
-    html += iconSvg;
-    html += '<span style="font-size:18px;font-weight:500;color:' + textColor + ';">' + escapeHtml(transition.message) + '</span>';
-    html += '</div>';
-    html += '</div>';
-  }
-
-  // Topic transition message
-  if (topicTransition) {
-    html += '<p style="color:#9ca3af;font-size:16px;margin-top:16px;">Переход к теме: <strong style="color:#fff;">' + escapeHtml(topicTransition.toTopic) + '</strong></p>';
-  }
-
-  html += '<button class="btn" onclick="continueAfterTransition()" style="margin-top:32px;padding:14px 40px;font-size:16px;">Продолжить</button>';
-  html += '</div>';
-
-  app.innerHTML = html;
-
-  // Auto-continue after delay
-  setTimeout(function() {
-    if (state.pendingTransition) {
-      continueAfterTransition();
-    }
+  // Auto-continue after delay (both paths).
+  setTimeout(function () {
+    if (state.pendingTransition) continueAfterTransition();
   }, 2500);
+}
+
+/** Render the transition via the shared `system.transition` layout. */
+function renderAdaptiveTransitionTemplated(app, result) {
+  // Plan 6.2: a level-change screen for the CURRENT topic — not a verdict, not a topic
+  // move. Name the topic the level is determined for.
+  var qd = (typeof getCurrentAdaptiveQuestion === 'function') ? getCurrentAdaptiveQuestion() : null;
+  var ctx = window.TBTemplate.buildTransitionContext({
+    topicName: (result && result.topicName) || (qd && qd.topicName) || '',
+    levelTransition: result.levelTransition || null,
+    showContinue: true
+  });
+  // Shared header (course.title) + branding, like every learner screen. No «Попытка N»
+  // in-run: without telemetry the package cannot know the number and would print «1».
+  ctx.course = { title: TEST_DATA.title };
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
+  app.innerHTML = '';
+  // Mount directly into #app so .tb-pad > .transition-page fills the fixed stage —
+  // mirrors renderGalleryPage (no wrapper div).
+  window.TBTemplate.renderScreenInto(app, { layout: state.templateLayouts['system.transition'], context: ctx });
+  var cont = app.querySelector('[data-action="continue"]');
+  if (cont) cont.onclick = continueAfterTransition;
+}
+
+function renderAdaptiveTransitionFallback(app, result) {
+// Dead last-resort safety net: reached only if neither the active template nor the
+// bundled standard template supplies this layout — the package always bundles the
+// standard scene layout as the fallback, so it never fires. Renders a
+// minimal, stylesheet-independent notice instead of a competing hardcoded design
+// (the standard scene IS the fallback; PRD-12).
+  var el = app || document.getElementById('app');
+  if (el) el.innerHTML = '<div style="padding:24px;font:16px/1.5 system-ui,sans-serif">Экран перехода недоступен: шаблон не предоставил макет.</div>';
 }
 
 /**
@@ -313,116 +356,137 @@ function continueAfterTransition() {
 }
 
 /**
- * Render adaptive test results
+ * Render adaptive test results. Primary path renders the shared `results.adaptive`
+ * layout via the SHARED renderer (the SAME layout the web host mounts) from a public
+ * context matching the web's buildAdaptiveResultContext (per-topic level pill +
+ * feedback + links); the SCORM-richer actions (Скачать PDF / Пройти заново /
+ * Завершить) are gated layout blocks the web context does not set. Falls back to
+ * the bespoke chrome when the design template is absent.
  */
 function renderAdaptiveResults() {
   var app = document.getElementById('app');
   var result = state.adaptiveState.result;
-
   if (!result) {
     result = buildAdaptiveResult();
     state.adaptiveState.result = result;
   }
 
-  var html = '<div class="results-page">';
-
-  // Hero section
-  html += '<div class="results-hero">';
-  html += '<div class="results-hero-icon" style="background:#1e40af;border-color:#3b82f6;">';
-  html += '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9-9 9-9-1.8-9-9 1.8-9 9-9z"/></svg>';
-  html += '</div>';
-  html += '<div class="results-hero-title">Результаты теста</div>';
-  html += '<div class="results-hero-sub">Адаптивное тестирование</div>';
-  html += '</div>';
-
-  // Topic results
-  html += '<div class="results-section-title">Результаты по темам</div>';
-  var topicCount = result.topicResults.length;
-  var gridStyle = 'display:grid;gap:16px;';
-  if (topicCount === 1) {
-    gridStyle += 'grid-template-columns:1fr;';
-  } else if (topicCount === 2) {
-    gridStyle += 'grid-template-columns:repeat(2,1fr);';
-  } else {
-    gridStyle += 'grid-template-columns:repeat(3,1fr);';
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['results.adaptive'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto) {
+    renderAdaptiveResultsTemplated(app, result);
+    return;
   }
-  gridStyle += 'max-width:100%;';
-  html += '<div style="' + gridStyle + '" class="results-topics-adaptive">';
+  renderAdaptiveResultsFallback(app, result);
+}
 
-  result.topicResults.forEach(function(tr) {
-    var achieved = tr.achievedLevelIndex !== null;
-
-    html += '<div class="card topic-card">';
-    
-    // Topic header (без иконки)
-    html += '<div class="topic-head">';
-    html += '<div class="topic-name" style="font-weight:600;font-size:16px;">' + escapeHtml(tr.topicName) + '</div>';
-    
-    // Achieved level badge (нейтральный стиль)
-    if (achieved) {
-      html += '<div class="results-pill" style="background:#1e40af;color:#bfdbfe;">' + escapeHtml(tr.achievedLevelName) + '</div>';
-    } else {
-      html += '<div class="results-pill" style="background:#374151;color:#9ca3af;">Не достигнут</div>';
-    }
-    html += '</div>';
-
-    // Stats
-    html += '<div class="topic-row">';
-    html += '<div class="k">Вопросов</div>';
-    html += '<div class="val">' + tr.totalQuestionsAnswered + '</div>';
-    html += '</div>';
-
-    html += '<div class="topic-row">';
-    html += '<div class="k">Правильных</div>';
-    html += '<div class="val">' + tr.totalCorrect + ' (' + Math.round(tr.levelPercent) + '%)</div>';
-    html += '</div>';
-
-    // Feedback
-    if (tr.feedback) {
-      html += '<div style="margin-top:12px;padding:10px;background:hsl(var(--muted));border-radius:8px;font-size:13px;color:hsl(var(--muted-foreground));">';
-      html += escapeHtml(tr.feedback);
-      html += '</div>';
-    }
-
-    // Recommended links
-    if (tr.recommendedLinks && tr.recommendedLinks.length > 0) {
-      html += '<div style="margin-top:12px;">';
-      html += '<div style="font-size:12px;color:hsl(var(--muted-foreground));margin-bottom:6px;">Рекомендуемые материалы:</div>';
-      tr.recommendedLinks.forEach(function(link) {
-        html += '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;padding:8px;background:hsl(var(--muted)/.5);border-radius:6px;margin-top:4px;text-decoration:none;color:hsl(var(--primary));font-size:13px;">';
-        html += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>';
-        html += escapeHtml(link.title);
-        html += '</a>';
-      });
-      html += '</div>';
-    }
-
-    html += '</div>';
+/**
+ * Build the adaptive results context via the SHARED builder
+ * (TBTemplate.buildAdaptiveResultContext) and mount the shared layout. SCORM adapts
+ * its runtime result into the normalized input; the SCORM action flags (PDF / retry
+ * / finish — gated layout blocks the web omits) go through opts.
+ */
+function renderAdaptiveResultsTemplated(app, result) {
+  // PRD-31 barrier B: a closed interval between attempts withdraws the retry here
+  // too, so the adaptive results screen cannot offer a run the start would refuse.
+  var intervalOpen = (typeof attemptIntervalState !== 'function') || attemptIntervalState().allowed;
+  var canRetry = hasAttemptsLeft() && intervalOpen;
+  var input = {
+    passed: !!result.overallPassed,
+    topicResults: (result.topicResults || []).map(function (tr) {
+      return {
+        topicName: tr.topicName,
+        achievedLevelIndex: (tr.achievedLevelIndex === undefined ? null : tr.achievedLevelIndex),
+        achievedLevelName: tr.achievedLevelName,
+        // Unified per-topic feedback (plan 6.1): courses (was recommendedLinks) + events.
+        feedback: tr.feedback,
+        recommendedCourses: tr.recommendedCourses || tr.recommendedLinks || [],
+        recommendedEvents: tr.recommendedEvents || [],
+        // Feedback texts and PRD-32 attachments of the topic and of this test's section
+        // over it, for the ONE recommendations block. The very readers the standard
+        // results screens use (viewResults.js) — the package bundles both files flat, so
+        // reusing them is what keeps the two modes reading the same baked section. Handed
+        // over for EVERY topic; the shared builder is what gates them by the topic's
+        // verdict (in this mode: whether any level was confirmed).
+        feedbackTexts: vrTopicFeedbackTexts(tr),
+        recommendedAssets: vrTopicAssets(tr)
+      };
+    })
+  };
+  // PRD-29 / issue #33: scales and indicators of THIS run, through the SAME assembler the
+  // standard results screen goes through (`currentAttemptMeasures`, viewResults.js — the
+  // runtime is concatenated flat, so it is in scope). It wants the result in the STANDARD
+  // shape, which is what `getAdaptiveResultForScorm` restates the level ladder into; the
+  // computation is deterministic, so the values it produces here are the ones
+  // `finishAndClose` later persists and ships to the LMS. Null for a test that declares
+  // no scales and no indicators — the context then stays exactly as it was.
+  var flatResult = (typeof getAdaptiveResultForScorm === 'function') ? getAdaptiveResultForScorm() : null;
+  var measures = (flatResult && typeof currentAttemptMeasures === 'function')
+    ? currentAttemptMeasures(flatResult)
+    : null;
+  var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', {
+    hasScormActions: true,
+    // The test's OWN feedback (`TEST_DATA.testFeedbackJson`) — the widest source of the
+    // block and its first one. A property of the TEST, not of the flow mode: an author
+    // who wrote a closing word for an adaptive test owes it to the learner just the same,
+    // and the web host hands over the very same block on this screen.
+    testFeedback: vrTestFeedback(),
+    // Вводный блок ЭКРАНА — тот же, что у обычного режима: он свойство теста, а не
+    // способа выдачи. Читатель у него один и тот же.
+    intro: (typeof vrScreenIntro === 'function') ? vrScreenIntro() : null,
+    // Absent for a test without measurements — `undefined` and not `null`, so the shared
+    // builder's `if (opts.measures)` reads it the same way the web host's spread does.
+    measures: measures || undefined,
+    // `showPdf` is the LEGACY report flag, kept for external templates whose adaptive
+    // layout predates the unified contract; the shipped layouts read `result.nav`.
+    showPdf: true,
+    // `(!hasLimit) || canRetry` used to be written out here, but it was already
+    // redundant — `hasAttemptsLeft()` returns true whenever no limit is set — and
+    // with PRD-31 it became WRONG: an unlimited test would keep offering the retry
+    // straight through a closed interval. The flag now says what it means.
+    canRetry: canRetry,
+    showFinish: !canRetry
   });
+  // One report contract for BOTH results layouts (shared/template/results-nav): the
+  // adaptive footer used to spell it `showPdf`/`download-pdf`, which the web host never
+  // sets — so the same template offered a report in the LMS and none in the browser.
+  // Retry/finish stay adaptive-specific (`restart-adaptive` is not `restart`).
+  ctx.result.nav = window.TBTemplate.buildResultsNav({
+    canReport: (typeof vrReportEnabled === 'function') ? vrReportEnabled() : true,
+    canRetry: false,
+    hasPostPages: false
+  });
+  // No attempt counter in the header (parity with the web host): the scene header
+  // names the test, run parameters are not header material.
+  // Per-test branding so the shared header logo renders here too.
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
+  app.innerHTML = '';
+  // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage —
+  // mirrors renderGalleryPage (no wrapper div).
+  window.TBTemplate.renderScreenInto(app, {
+    layout: state.templateLayouts['results.adaptive'],
+    context: ctx,
+    protection: buildScormProtection('results')
+  });
+  // Both spellings are bound: `download-report` (unified) and the legacy `download-pdf`,
+  // so an external template on either contract still produces the report.
+  var report = app.querySelector('[data-action="download-report"]') || app.querySelector('[data-action="download-pdf"]');
+  if (report) report.onclick = function () { if (typeof downloadPDF === 'function') downloadPDF(); };
+  var retry = app.querySelector('[data-action="restart-adaptive"]');
+  if (retry) retry.onclick = restartAdaptive;
+  var finish = app.querySelector('[data-action="finish"]');
+  if (finish) finish.onclick = finishAndClose;
+}
 
-  html += '</div>';
-
-  // Actions
-  html += '<div class="results-actions">';
-  html += '<button class="btn btn-outline" onclick="downloadPDF()">📄 Скачать PDF</button>';
-  
-  var hasLimit = !!TEST_DATA.maxAttempts;
-  var canRetry = hasAttemptsLeft();
-  
-  if (!hasLimit) {
-    // Нет лимита - обе кнопки
-    html += '<button class="btn btn-outline" onclick="restartAdaptive()">Пройти заново</button>';
-    html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
-  } else if (canRetry) {
-    // Есть лимит и есть попытки - только "Пройти заново"
-    html += '<button class="btn" onclick="restartAdaptive()">Пройти заново</button>';
-  } else {
-    // Попытки исчерпаны - только "Завершить"
-    html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
-  }
-  html += '</div>';
-
-  app.innerHTML = html;
+function renderAdaptiveResultsFallback(app, result) {
+// Dead last-resort safety net: reached only if neither the active template nor the
+// bundled standard template supplies this layout — the package always bundles the
+// standard scene layout as the fallback, so it never fires. Renders a
+// minimal, stylesheet-independent notice instead of a competing hardcoded design
+// (the standard scene IS the fallback; PRD-12).
+  var el = app || document.getElementById('app');
+  if (el) el.innerHTML = '<div style="padding:24px;font:16px/1.5 system-ui,sans-serif">Экран результатов недоступен: шаблон не предоставил макет.</div>';
 }
 
 // Restart adaptive test
@@ -435,7 +499,7 @@ function restartAdaptive() {
   // Сохраняем текущую попытку если ещё не сохранена
   if (state.adaptiveState && state.adaptiveState.result) {
     var results = getAdaptiveResultForScorm();
-    results.achievedLevels = state.adaptiveState.result.topicResults.map(function(tr) {
+    results.achievedLevels = state.adaptiveState.result.topicResults.map(function (tr) {
       return {
         topicId: tr.topicId,
         topicName: tr.topicName,
@@ -443,7 +507,7 @@ function restartAdaptive() {
         levelName: tr.achievedLevelName
       };
     });
-    
+
     // Телеметрия finish для текущей попытки
     Telemetry.finish(results);
   }
@@ -451,16 +515,16 @@ function restartAdaptive() {
   // Сброс adaptive state
   state.adaptiveState = null;
   state.answers = {};
-  
+
   // Новая попытка в телеметрии
   Telemetry.startNewAttempt();
-  
+
   // Регистрация попытки в SCORM
   registerAttemptStart();
-  
+
   // Переинициализация адаптивного теста
   initAdaptiveTest();
-  
+
   // Запуск
   state.phase = 'question';
   render();

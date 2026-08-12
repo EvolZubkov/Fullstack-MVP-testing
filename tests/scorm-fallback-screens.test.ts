@@ -1,0 +1,223 @@
+/**
+ * @module tests/scorm-fallback-screens
+ * @description Acceptance test for the SCORM fallback (PRD-1 §4.3.2, PRD-3
+ * NFR-05/NFR-06): when the active template declares no `contentTemplate` of a system
+ * kind — even if it ships that LAYOUT — the package must bundle the `default`
+ * template under `template-default/` + `styles-default.css`, flag
+ * `designSettings.fallbackLayoutKeys` in TEST_DATA, and inject the `styles-fallback`
+ * stylesheet link, so the runtime renders those screens from `default` (matching
+ * «Структура» / the editor preview).
+ *
+ * The flag carries LAYOUT KEYS, not kinds — kind `questions` renders through
+ * `layouts.question` and kind `intro` through `layouts["section-intro"]`.
+ *
+ * A template that declares every system kind gets none of this.
+ */
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import JSZip from "jszip";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { generateScormPackage } from "../server/scorm-exporter";
+
+const IDENT = path.resolve(process.cwd(), "uploads", "scorm", "identifiers.json");
+let identSnapshot: Buffer | null = null;
+
+const TOPIC_ID = "fb-topic";
+
+/** Writes a minimal on-disk template dir; `kinds` are the declared contentTemplate kinds. */
+function writeTemplate(dir: string, id: string, kinds: string[]): void {
+  fs.mkdirSync(path.join(dir, "layouts"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "styles"), { recursive: true });
+  const manifest = {
+    id,
+    name: id,
+    version: "1.0.0",
+    templateApiVersion: "1.0",
+    // Ships start/results LAYOUTS regardless of what it declares in contentTemplates.
+    layouts: {
+      shell: "shell.html",
+      start: "layouts/start.html",
+      question: "layouts/question.html",
+      results: "layouts/results.html",
+    },
+    contentTemplates: kinds.map((kind) => ({
+      key: kind + ".x",
+      label: kind,
+      kind,
+      // PRD-27: вид отчёта объявляется вместе со СВОИМ файлом макета — общего макета
+      // «на весь вид» у отчёта нет.
+      ...(kind.startsWith("report") ? { layoutFile: `layouts/${kind}.html`, isDefault: true } : {}),
+    })),
+    params: [],
+  };
+  fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest));
+  fs.writeFileSync(path.join(dir, "shell.html"), '<main data-slot="page"></main>');
+  fs.writeFileSync(path.join(dir, "layouts", "start.html"), "<div>own start</div>");
+  fs.writeFileSync(path.join(dir, "layouts", "question.html"), '<div data-slot="question-text"></div>');
+  fs.writeFileSync(path.join(dir, "layouts", "results.html"), "<div>own results</div>");
+  for (const kind of kinds.filter((k) => k.startsWith("report"))) {
+    fs.writeFileSync(path.join(dir, "layouts", `${kind}.html`), '<div class="tb-report">own report</div>');
+  }
+  fs.writeFileSync(path.join(dir, "styles", "theme.css"), ":root{--primary:0 0% 0%;}");
+  fs.writeFileSync(path.join(dir, "styles", "base.css"), ".own{display:block;}");
+}
+
+function buildFixture(templateDir: string, templateId: string) {
+  const questions = [
+    {
+      id: "q1", topicId: TOPIC_ID, type: "single", prompt: "Q", dataJson: { options: ["A", "B"] },
+      correctJson: { correctIndex: 0 }, points: 1, difficulty: 50, mediaUrl: null, mediaType: null,
+      feedback: null, feedbackMode: "general", feedbackCorrect: null, feedbackIncorrect: null,
+      createdAt: new Date(), updatedAt: new Date(),
+    },
+  ];
+  const topic = { id: TOPIC_ID, name: "Тема", description: "", feedback: null, createdAt: new Date(), updatedAt: new Date() };
+  const test = {
+    id: "fb-test", title: "Fallback тест", description: "", mode: "standard", showDifficultyLevel: false,
+    overallPassRuleJson: { type: "percent", value: 70 }, webhookUrl: null, feedback: null,
+    timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: true, startPageContent: "",
+    published: true, status: "published", folderId: null,
+    designSettingsJson: { templateId, params: {} }, createdAt: new Date(), updatedAt: new Date(),
+  };
+  return {
+    test,
+    sections: [{ id: "s1", testId: "fb-test", topicId: TOPIC_ID, drawCount: 1, sortOrder: 0, required: true, topicPassRuleJson: null, timeLimitMinutes: null, feedbackJson: null, topic, questions, courses: [], events: [] }],
+    adaptiveSettings: null,
+    contentPages: [],
+    designSettings: { templateId, params: {} },
+    templateDir,
+    telemetry: null,
+  };
+}
+
+async function readTestData(zip: JSZip): Promise<any> {
+  const appjs = await zip.file("app.js")!.async("string");
+  const b64 = (appjs.match(/var b64 = "([A-Za-z0-9+/=]+)"/) || [])[1]!;
+  return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+}
+
+beforeAll(() => {
+  identSnapshot = fs.existsSync(IDENT) ? fs.readFileSync(IDENT) : null;
+});
+afterAll(() => {
+  if (identSnapshot === null) {
+    if (fs.existsSync(IDENT)) fs.rmSync(IDENT);
+  } else {
+    fs.writeFileSync(IDENT, identSnapshot);
+  }
+});
+
+describe("SCORM fallback screens (PRD-7 G21)", () => {
+  let tmpRoot: string;
+
+  beforeAll(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scorm-fb-"));
+  });
+  afterAll(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("bundles default + flags the missing screens' layout keys", async () => {
+    const dir = path.join(tmpRoot, "no-sysscreens");
+    // Declares only intro/questions — NOT start/results (though it ships the layouts).
+    writeTemplate(dir, "no-sysscreens", ["intro", "questions"]);
+
+    const buffer = await generateScormPackage(buildFixture(dir, "no-sysscreens") as any);
+    const zip = await JSZip.loadAsync(buffer);
+
+    // Default template bundled under template-default/ + its CSS.
+    expect(zip.file("template-default/manifest.json"), "default manifest bundled").toBeTruthy();
+    expect(zip.file("template-default/layouts/start.html"), "default start layout bundled").toBeTruthy();
+    expect(zip.file("styles-default.css"), "default CSS bundled").toBeTruthy();
+    // default's theme.css is now the single component stylesheet (base.css was folded
+    // into it), so it must be non-trivial.
+    expect((await zip.file("styles-default.css")!.async("string")).length).toBeGreaterThan(500);
+
+    // index.html toggles in the fallback stylesheet.
+    const indexHtml = await zip.file("index.html")!.async("string");
+    expect(indexHtml).toContain('id="styles-fallback"');
+    expect(indexHtml).toContain('id="styles-main"');
+
+    // TEST_DATA flags the missing screens by LAYOUT KEY. `question` and
+    // `section-intro` are absent: their kinds (questions/intro) ARE declared.
+    const td = await readTestData(zip);
+    expect(td.designSettings.fallbackLayoutKeys).toEqual(
+      expect.arrayContaining(["start", "results", "review", "section-results"]),
+    );
+    expect(td.designSettings.fallbackLayoutKeys).not.toContain("question");
+    expect(td.designSettings.fallbackLayoutKeys).not.toContain("section-intro");
+  });
+
+  it("does NOT bundle default when the template declares every system kind", async () => {
+    const dir = path.join(tmpRoot, "has-sysscreens");
+    writeTemplate(dir, "has-sysscreens", [
+      "start",
+      "results",
+      "questions",
+      "intro",
+      "review",
+      "section-results",
+      // PRD-27: отчёт — такой же системный экран с деградацией, поэтому «объявляет
+      // всё» означает и его виды.
+      "report",
+      "report.adaptive",
+    ]);
+
+    const buffer = await generateScormPackage(buildFixture(dir, "has-sysscreens") as any);
+    const zip = await JSZip.loadAsync(buffer);
+
+    expect(zip.file("template-default/manifest.json"), "no default bundle").toBeNull();
+    expect(zip.file("styles-default.css"), "no default CSS").toBeNull();
+    const indexHtml = await zip.file("index.html")!.async("string");
+    expect(indexHtml).not.toContain("styles-fallback");
+
+    const td = await readTestData(zip);
+    expect(td.designSettings.fallbackLayoutKeys).toBeUndefined();
+  });
+
+  it("bundles only the missing screen when the template declares all but results", async () => {
+    const dir = path.join(tmpRoot, "partial-sysscreens");
+    writeTemplate(dir, "partial-sysscreens", [
+      "start",
+      "questions",
+      "intro",
+      "review",
+      "section-results",
+      "report",
+      "report.adaptive",
+    ]);
+
+    const buffer = await generateScormPackage(buildFixture(dir, "partial-sysscreens") as any);
+    const zip = await JSZip.loadAsync(buffer);
+
+    const td = await readTestData(zip);
+    expect(td.designSettings.fallbackLayoutKeys).toEqual(["results"]);
+    expect(zip.file("template-default/manifest.json")).toBeTruthy();
+  });
+
+  it("шаблон без видов отчёта получает отчёт из «Стандартного» (PRD-27 FR-10)", async () => {
+    const dir = path.join(tmpRoot, "no-report");
+    // Объявлено ВСЁ, кроме отчёта: единственный запасной экран — он.
+    writeTemplate(dir, "no-report", [
+      "start",
+      "results",
+      "questions",
+      "intro",
+      "review",
+      "section-results",
+    ]);
+
+    const buffer = await generateScormPackage(buildFixture(dir, "no-report") as any);
+    const zip = await JSZip.loadAsync(buffer);
+
+    const td = await readTestData(zip);
+    expect(td.designSettings.fallbackLayoutKeys).toEqual(["report", "report.adaptive"]);
+    // Макет отчёта приезжает вложенным — без него тест на таком шаблоне остался бы
+    // без документа, хотя все экраны у него свои.
+    expect(zip.file("template-default/layouts/report.html")).toBeTruthy();
+    // И его стиль тоже: страница, собранная без оформления, — это тот же дефект.
+    const css = await zip.file("styles.css")!.async("string");
+    expect(css).toContain(".tb-report");
+  });
+});

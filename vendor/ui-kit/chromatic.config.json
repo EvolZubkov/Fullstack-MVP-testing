@@ -1,0 +1,9 @@
+{
+  "exitOnceUploaded": false,
+  "onlyChanged": true,
+  "projectId": "Project:6a04a3440f91da3147fce59a",
+  "skip": "dependabot/**",
+  "storybookBaseDir": "ui-kit",
+  "storybookBuildDir": "storybook-static",
+  "zip": true
+}

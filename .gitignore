@@ -1,17 +1,61 @@
 node_modules
 dist
+# Exception: committed authoring-doc PDFs (npm run docs:pdf), served for download
+# in the «Шаблоны» section. The bare `dist` above would otherwise ignore them.
+!docs/dist/
+!docs/dist/*.pdf
 .DS_Store
 server/public
 vite.config.ts.*
 *.tar.gz
+*.tar
 server/scorm-exporter_rab.ts.bak
 server/scorm-exporter.ts.bak
 components.zip
-.env
+.env*
+!.env.example
+
+# App config: config/config.jsonc (base) and config/{development,test,production}
+# .config.jsonc (per-environment, non-secret) ARE committed. Only personal local
+# overrides are ignored.
+config/*.local.jsonc
+
 CLAUDE.md
 tmp/
+logs/
+
+# Internal clean-room planning (inherited-code map; keep out of history)
+.cleanroom/
+
+# Electron/Chromium crashpad debug log
+debug.log
 
 # Docker deploy
 docker/config/deploy.env
 docker/build/
 coverage/
+.playwright-mcp/
+/*.png
+
+# SCORM acceptance/debug output (scripts/generate-*-scorm.ts)
+out/
+
+# Large reference binaries (Storyline exports) — keep canonical .story only;
+# ignore byte-identical .zip copies and unpacked extractions
+docs/references/RTK_Test_commits_last.zip
+docs/references/RTK_Test_commits_last/
+docs/references/main/
+docs/references/Обновление сертификации для руководителей.zip
+docs/references/Обновление сертификации для руководителей/
+uploads/
+templates/certification/certification-*.zip
+# HAR captures may carry live session cookies / personal data — never commit.
+*.har
+# Locally built template packages for upload/acceptance runs. The template
+# SOURCE lives under templates/<id>/; the ZIP is a build artefact, and the list
+# of one-off names below had to grow with every test run.
+templates/*.zip
+.claude/settings.json
+.claude/worktrees/
+docs/references/workbook_Выгорание_Маслач (1).xlsx
+.superpowers/

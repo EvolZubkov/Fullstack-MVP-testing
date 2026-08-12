@@ -1,141 +1,214 @@
+/**
+ * Renders the start screen. Primary path renders the shared `start` layout via the
+ * SHARED renderer (the SAME layout + renderer the web host mounts) from a public
+ * context; the SCORM-richer actions (resume-with-position, "Начать заново", "Мой
+ * результат") are gated layout blocks the web context does not set, and the
+ * web-only "back to list" action is likewise gated off here. Falls back to the
+ * last-resort notice only when the design template supplies no layout at all.
+ *
+ * ADAPTIVE renders here too. The templated path used to be gated off for it
+ * (`mode !== 'adaptive'`) because adaptive had bespoke chrome of its own; that
+ * chrome is gone (PRD-12 — one screen, one template), so the guard outlived its
+ * fallback and left an adaptive package with NO start screen, just the notice. The
+ * shared context is already adaptive-aware: `canResume` stays false for it
+ * (an adaptive session cannot be resumed), see buildScormStartContext.
+ */
 function renderStartPage() {
-  var app = document.getElementById('app');
+  // PRD-7 G21: `systemLayout('start')` is the bundled default's start when the
+  // active template doesn't declare a `start` contentTemplate.
+  var layout = resolveStartLayout();
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto) {
+    renderStartPageTemplated();
+    return;
+  }
+  renderStartPageFallback();
+}
+
+/**
+ * Resolve the start screen's layout HTML, honouring the author's chosen start
+ * VARIANT (PRD-1 §4.3). The `start` content page's `templateKey` selects a
+ * contentTemplate whose own `layoutFile` (e.g. `start.image-right`) is preferred
+ * over the generic `start` layout, so switching the start variant in «Структура»
+ * takes effect at runtime. Falls back to `systemLayout('start')` when no variant
+ * is chosen, the template declares none, or its layout was not bundled.
+ */
+function resolveStartLayout() {
+  var base = (typeof systemLayout === 'function')
+    ? systemLayout('start')
+    : (state && state.templateLayouts && state.templateLayouts['start']);
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  var layouts = (state && state.templateLayouts) || {};
+  var manifest = (state && state.templateManifest) || {};
+  var startPage = (TEST_DATA.contentPages || []).filter(function (p) { return p && p.kind === 'start'; })[0];
+  if (startPage && TB && typeof TB.resolveContentTemplate === 'function') {
+    var ct = TB.resolveContentTemplate(startPage, manifest.contentTemplates || []).template;
+    if (ct && ct.layoutFile && layouts[ct.layoutFile]) return layouts[ct.layoutFile];
+  }
+  return base;
+}
+
+/**
+ * Gathers the SCORM start facts (incl. resume eligibility — session staleness /
+ * time-limit / adaptive checks) and delegates the action-flag assembly to the
+ * SHARED builder (TBTemplate.buildStartState), so the SCORM and web start screens
+ * produce the identical model. Returns the full `{ course, state }` context.
+ */
+function buildScormStartContext() {
   var used = getAttemptsUsed();
   var hasLimit = !!TEST_DATA.maxAttempts;
-  var left = hasLimit ? Math.max(0, TEST_DATA.maxAttempts - used) : null;
+  var hasCompleted = !!getAllAttempts() && getAllAttempts().length > 0;
+  // PRD-31 barrier B: the hour interval between attempts INSIDE this assignment.
+  // Decided here, post-Initialize, because its source is suspend_data — the gate
+  // could not read it before Initialize. An open interval leaves the screen exactly
+  // as it was; a closed one disables the start and shows the moment it reopens.
+  var interval = attemptIntervalState();
+  var canStartNew = hasAttemptsLeft() && interval.allowed;
+  // PRD-19 FR-19 «повтор: можно»: prior-attempt summary + downloadable report from
+  // the best saved attempt. Runs post-Initialize (suspend_data available); the
+  // pre-Initialize cooldown gate builds its own minimal context without this.
+  var best = (typeof getBestAttempt === 'function') ? getBestAttempt() : null;
 
-  function pluralizeTopics(n) {
-    var mod10 = n % 10;
-    var mod100 = n % 100;
-    if (mod100 >= 11 && mod100 <= 19) return 'тем';
-    if (mod10 === 1) return 'тема';
-    if (mod10 >= 2 && mod10 <= 4) return 'темы';
-    return 'тем';
+  var suspendObj = readSuspendObj();
+  var pendingSession = suspendObj.currentSession;
+  var canResume = !!(
+    pendingSession &&
+    !TEST_DATA.timeLimitMinutes &&
+    TEST_DATA.mode !== 'adaptive' &&
+    pendingSession.flatQuestions &&
+    pendingSession.flatQuestions.length > 0 &&
+    !isSessionStale(pendingSession)
+  );
+
+  return window.TBTemplate.buildStartState({
+    info: {
+      title: TEST_DATA.title,
+      description: TEST_DATA.description || '',
+      questionCount: TEST_DATA.totalQuestions,
+      passPercent: TEST_DATA.passPercent,
+      // Absent in every package built before the flag existed, and in every package
+      // of a test that does grade — `!== false` is what keeps both showing it.
+      hasGradedContent: TEST_DATA.hasGradedContent !== false,
+      timeLimitMinutes: TEST_DATA.timeLimitMinutes,
+      maxAttempts: TEST_DATA.maxAttempts,
+      // PRD-7 S10: startPageContent migrated to an intro content page; not shown here.
+      startPageContent: ''
+    },
+    maxAttempts: hasLimit ? TEST_DATA.maxAttempts : null,
+    completedAttempts: used,
+    resume: canResume ? { index: (pendingSession.currentIndex || 0), total: pendingSession.flatQuestions.length } : null,
+    hasCompletedResults: hasCompleted,
+    canStartNew: canStartNew,
+    // The shared builder renders the same cooldown card for both barriers; barrier B
+    // carries a moment with a time, and no day countdown — «через N дн.» is
+    // meaningless for an interval measured in hours.
+    cooldown: interval.allowed ? null : {
+      availableDateHuman: fmtInstantHuman(interval.availableAt),
+      daysUntil: null
+    },
+    priorResult: best ? {
+      percent: best.percent,
+      passed: best.passed,
+      attemptNumber: best.attemptNumber != null ? best.attemptNumber : null,
+      maxAttempts: hasLimit ? TEST_DATA.maxAttempts : null
+    } : null,
+    canDownloadReport: !!best,
+    showBack: false
+  });
+}
+
+/** Wire a data-action button (if present) to a runtime handler. */
+function wireStartAction(root, action, fn) {
+  var btn = root.querySelector('[data-action="' + action + '"]');
+  if (btn) btn.onclick = fn;
+}
+
+/**
+ * Resolve per-test branding for the render context (`design.*`, PRD-7). The logo
+ * param is baked into TEST_DATA as a media envelope `{ url, name, … }` (or a bare
+ * string for legacy values); the layout binds a plain URL string, so `.url` is
+ * unwrapped here — mirroring the web host's server-side `resolveLogoUrl`.
+ *
+ * PRD-22: the start ILLUSTRATION is a property of the start page itself
+ * (`settings.image` of the `start.image-right` variant), so it is resolved through
+ * the shared `TBTemplate.resolveStartImageUrl` — the page's own picture wins, the
+ * branding param stays the fallback for tests filled before the property existed.
+ */
+function scormDesignContext() {
+  var p = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) ? TEST_DATA.designSettings.params : null;
+  // Unwrap a media envelope { url, name, … } (or a bare string) to a plain URL.
+  var mediaUrl = function (v) {
+    if (v && typeof v === 'object' && typeof v.url === 'string') return v.url;
+    if (typeof v === 'string') return v;
+    return '';
+  };
+  var out = {};
+  var logo = mediaUrl(p ? p.logoUrl : null);
+  if (logo) out.logoUrl = logo;
+  var startImg = resolveStartImage(p);
+  if (startImg) out.startImageUrl = startImg;
+  return out;
+}
+
+/**
+ * The start screen's illustration. Belongs to the start VARIANT that declares it
+ * (`settings[].image`): its own page value first, the branding param as the
+ * fallback. A variant without the property shows no illustration at all — the
+ * shared `startImageForVariant` is the single rule for both hosts.
+ */
+function resolveStartImage(designParams) {
+  var startPage = ((typeof TEST_DATA !== 'undefined' && TEST_DATA.contentPages) || [])
+    .filter(function (pg) { return pg && pg.kind === 'start'; })[0];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (TB && typeof TB.startImageForVariant === 'function') {
+    var manifest = (typeof state !== 'undefined' && state && state.templateManifest) || {};
+    var variant = null;
+    if (startPage && startPage.templateKey) {
+      variant = (manifest.contentTemplates || []).filter(function (ct) {
+        return ct && ct.key === startPage.templateKey;
+      })[0] || null;
+    }
+    return TB.startImageForVariant(variant, startPage ? startPage.settings : null, designParams);
   }
+  // Bundle without the shared helper (older package): the branding param alone.
+  var v = designParams ? designParams.startImageUrl : null;
+  if (v && typeof v === 'object' && typeof v.url === 'string') return v.url;
+  return typeof v === 'string' ? v : '';
+}
 
-  function pluralizeLevels(n) {
-    var mod10 = n % 10;
-    var mod100 = n % 100;
-    if (mod100 >= 11 && mod100 <= 19) return 'уровней';
-    if (mod10 === 1) return 'уровень';
-    if (mod10 >= 2 && mod10 <= 4) return 'уровня';
-    return 'уровней';
-  }
+/** Build the start context (shared builder) and mount the shared layout (standard mode). */
+function renderStartPageTemplated() {
+  var app = document.getElementById('app');
+  var ctx = buildScormStartContext();
+  ctx.design = scormDesignContext();
+  // PRD-7 G21: when `start` falls back to default, mount default's layout AND
+  // activate default's stylesheet so the screen is fully styled. The chosen start
+  // VARIANT (e.g. `start.image-right`) wins over the generic `start` layout.
+  var layout = resolveStartLayout();
+  if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
+  app.innerHTML = '';
+  // Mount directly into #app so .tb-pad > .cover fills the fixed stage — mirrors
+  // renderGalleryPage (a wrapper div would defeat the child-combinator fill rule).
+  window.TBTemplate.renderScreenInto(app, { layout: layout, context: ctx });
+  wireStartAction(app, 'start-test', startTest);
+  wireStartAction(app, 'resume', continueSession);
+  wireStartAction(app, 'restart', startTest);
+  wireStartAction(app, 'view-results', viewSavedResults);
+  // PRD-19 FR-19 «повтор: можно»: «Скачать отчёт» exports the BEST saved attempt
+  // (not the empty in-progress one) — the same PDF as the results view.
+  wireStartAction(app, 'download-report', function () {
+    if (typeof downloadPDF === 'function') downloadPDF(true);
+  });
+}
 
-  var iconQuestions = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
-  var iconPass = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
-  var iconTime = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-  var iconAttempts = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>';
-
-  var html = '<div class="start-page" style="max-width:600px;margin:40px auto;padding:0 18px;">';
-
-  // Header card
-  html += '<div class="card" style="padding:32px;text-align:center;margin-bottom:24px;background:hsl(var(--card));border:1px solid hsl(var(--border));">';
-  html += '<h1 style="color:hsl(var(--foreground));margin:0;font-size:28px;font-weight:700;">' + escapeHtml(TEST_DATA.title) + '</h1>';
-  if (TEST_DATA.description) {
-    html += '<p style="color:hsl(var(--muted-foreground));margin-top:12px;margin-bottom:0;font-size:15px;">' + escapeHtml(TEST_DATA.description) + '</p>';
-  }
-  html += '</div>';
-
-  // Info section
-  html += '<div class="card" style="padding:24px;background:hsl(var(--card));border:1px solid hsl(var(--border));">';
-  html += '<h2 style="margin:0 0 20px 0;font-size:18px;font-weight:700;color:hsl(var(--foreground));">Информация о тесте</h2>';
-
-  html += '<div style="display:grid;gap:12px;">';
-
-  // Количество вопросов / тем
-  html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
-  html += '<div style="flex-shrink:0;color:#4f46e5;">' + iconQuestions + '</div>';
-  if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
-    var topicCount = TEST_DATA.adaptiveTopics.length;
-    var levelCount = TEST_DATA.adaptiveTopics.reduce(function (sum, t) { return sum + (t.levels ? t.levels.length : 0); }, 0);
-    html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Адаптивный тест</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' + topicCount + ' ' + pluralizeTopics(topicCount) + ', ' + levelCount + ' ' + pluralizeLevels(levelCount) + '</div></div>';
-  } else {
-    html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Количество вопросов</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' + TEST_DATA.totalQuestions + '</div></div>';
-  }
-  html += '</div>';
-
-  // Проходной балл (только для стандартного теста)
-  if (TEST_DATA.mode !== 'adaptive') {
-    html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
-    html += '<div style="flex-shrink:0;color:#16a34a;">' + iconPass + '</div>';
-    html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Проходной балл</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' + TEST_DATA.passPercent + '%</div></div>';
-    html += '</div>';
-  }
-
-  // Ограничение времени
-  if (TEST_DATA.timeLimitMinutes) {
-    html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
-    html += '<div style="flex-shrink:0;color:#f59e0b;">' + iconTime + '</div>';
-    html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Ограничение времени</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' + TEST_DATA.timeLimitMinutes + ' минут</div></div>';
-    html += '</div>';
-  }
-
-  // Количество попыток
-  if (TEST_DATA.maxAttempts) {
-    html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
-    html += '<div style="flex-shrink:0;color:#8b5cf6;">' + iconAttempts + '</div>';
-    html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Попытки</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">'
-      + (hasLimit ? ('осталось ' + left + ' из ' + TEST_DATA.maxAttempts) : 'без ограничений')
-      + '</div></div>';
-    html += '</div>';
-  }
-
-  html += '</div>';
-
-  // Custom content
-  if (TEST_DATA.startPageContent) {
-    html += '<div style="margin-top:20px;padding:16px;background:hsl(var(--muted));border-radius:12px;border-left:4px solid hsl(var(--primary));border:1px solid hsl(var(--border));">';
-    html += '<div style="color:hsl(var(--foreground));font-size:14px;line-height:1.6;">' + escapeHtml(TEST_DATA.startPageContent) + '</div>';
-    html += '</div>';
-  }
-
-  // ===== ЛОГИКА КНОПОК =====
-  var noAttempts = hasLimit && left <= 0;
-  var hasCompletedAttempts = !!getAllAttempts() && getAllAttempts().length > 0;
-  var canStartNewAttempt = hasAttemptsLeft();
-
-  html += '<div style="margin-top:24px;">';
-
-  // Случай 1: Попытки закончились, есть результаты — только "Мой результат"
-  if (noAttempts && hasCompletedAttempts) {
-    html += '<div style="text-align:center;">';
-    html += '<button class="btn" onclick="viewSavedResults()" style="padding:14px 40px;font-size:16px;font-weight:600;">';
-    html += 'Мой результат';
-    html += '</button>';
-    html += '</div>';
-  }
-  // Случай 2: Есть попытки И есть завершённые результаты — две кнопки
-  else if (canStartNewAttempt && hasCompletedAttempts) {
-    html += '<div style="display:flex;gap:12px;flex-direction:column;align-items:center;">';
-    html += '<button class="btn" onclick="startTest()" style="padding:14px 40px;font-size:16px;font-weight:600;">';
-    html += 'Начать тестирование заново';
-    html += '</button>';
-    html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="viewSavedResults()">';
-    html += 'Мой результат';
-    html += '</button>';
-    html += '</div>';
-  }
-  // Случай 3: Первый вход или нет завершённых попыток
-  else {
-    html += '<div style="text-align:center;">';
-    html += '<button class="btn" '
-      + (noAttempts ? 'disabled ' : '')
-      + 'onclick="' + (noAttempts ? 'return false;' : 'startTest()') + '" '
-      + 'style="padding:14px 40px;font-size:16px;font-weight:600;'
-      + (noAttempts ? 'opacity:.55;cursor:not-allowed;' : '')
-      + '">'
-      + (noAttempts ? 'Попытки закончились' : 'Начать тестирование')
-      + '</button>';
-    html += '</div>';
-  }
-
-  html += '</div>';
-
-  // закрываем карточку и обёртку страницы
-  html += '</div></div>';
-
-  app.innerHTML = html;
+function renderStartPageFallback() {
+// Dead last-resort safety net: reached only if neither the active template nor the
+// bundled standard template supplies this layout — the package always bundles the
+// standard scene layout as the fallback, so it never fires. Renders a
+// minimal, stylesheet-independent notice instead of a competing hardcoded design
+// (the standard scene IS the fallback; PRD-12).
+  var app = document.getElementById('app');
+  if (app) app.innerHTML = '<div style="padding:24px;font:16px/1.5 system-ui,sans-serif">Стартовый экран недоступен: шаблон не предоставил макет.</div>';
 }
 
 function startTest() {
@@ -172,7 +245,6 @@ function startTest() {
       correct: results.correct,
       achievedLevels: results.achievedLevels || null
     }, currentAttemptNum);
-    console.log('📤 Телеметрия finish отправлена для попытки:', currentAttemptNum);
 
     // Сбрасываем state для новой попытки
     state.answers = {};
@@ -183,6 +255,7 @@ function startTest() {
     state.variant = null;
     state.flatQuestions = [];
     state.shuffleMappings = {};
+    state.rankingTouched = {};
 
     // Генерируем новый вариант
     generateVariant();
@@ -198,7 +271,8 @@ function startTest() {
   // Send telemetry start
   Telemetry.start();
 
-  state.phase = 'question';
+  if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
+  else state.phase = 'question';
   initTimer();
   render();
 }
@@ -251,12 +325,10 @@ function restart() {
   state.flatQuestions = [];
   state.shuffleMappings = {};
   state.matchingPools = {};
+  state.rankingTouched = {};
 
   // Сброс таймера
-  if (state.timerInterval) {
-    clearInterval(state.timerInterval);
-    state.timerInterval = null;
-  }
+  stopTestTimer();
   state.remainingSeconds = null;
 
   // Сброс adaptive state если есть
@@ -289,7 +361,8 @@ function restart() {
   }
 
   // ===== ЗАПУСК ТЕСТА =====
-  state.phase = 'question';
+  if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
+  else state.phase = 'question';
   initTimer();
   render();
 }
@@ -312,3 +385,31 @@ function viewSavedResults() {
 }
 
 window.viewSavedResults = viewSavedResults;
+
+// ===== ПРОДОЛЖЕНИЕ НЕЗАВЕРШЁННОЙ СЕССИИ =====
+function continueSession() {
+  var recovery = determineRecovery();
+  if (recovery.action !== 'restore') {
+    showToast('Нет незавершённой сессии', 'warn');
+    return;
+  }
+  restoreSession(recovery.session);
+  // PRD-19 (Block B): mirror the bootstrap restore path — rebuild the page
+  // sequence and jump to the resumed question item so syncPhaseToCurrentPage
+  // re-establishes state.activeSectionTopic and the timer/freeze hooks. Without
+  // this the first post-restore section boundary fails to freeze the prior
+  // section (answerCommitScope='section').
+  if (typeof rebuildPageSequence === 'function') {
+    rebuildPageSequence();
+    var qIndex = state.currentIndex || 0;
+    var itemIndex = (state.pageSequence || []).findIndex(function (item) {
+      return item && item.kind === 'question' && item.questionIndex === qIndex;
+    });
+    if (typeof goToPageSequenceIndex === 'function') {
+      goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+    }
+  }
+  render();
+}
+
+window.continueSession = continueSession;

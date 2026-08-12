@@ -1,0 +1,408 @@
+/*
+ * tb-templates-admin.css — PRD-3 admin template registry page + modals.
+ *
+ * Project DS-extension layer (tb-*): mirrors the conventions of tb-components.css
+ * (`tpl-gallery-*`, `tpl-preview-*`). Uses ONLY `--ou-*` design tokens; no raw
+ * colors/spacing/fonts. Renders correctly under ou--light/ou--dark.
+ *
+ * Sections:
+ *   1) Page: toolbar + card grid (PRD-3 §3.2 — cards, real preview)
+ *   2) Preview + check modal: split rail (section -> type -> variant) + stage
+ *   3) Route status dot + smoke verdict (the variant status indicator)
+ *   4) Details modal grid
+ */
+
+/* ─── 1) Page ──────────────────────────────────────────────────────────────── */
+
+.tpl-admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-4);
+  margin-bottom: var(--ou-space-6);
+}
+.tpl-admin-toolbar__text { min-width: 0; }
+.tpl-admin-toolbar__title {
+  font: var(--ou-text-heading-l);
+  margin: 0;
+}
+.tpl-admin-toolbar__sub {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  margin: var(--ou-space-1) 0 0;
+}
+.tpl-admin-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.tpl-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--ou-size-280, 280px), 1fr));
+  gap: var(--ou-space-5);
+}
+
+.tpl-admin-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--ou-bg-elevated);
+  border: var(--ou-border-width) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+}
+.tpl-admin-card.is-inactive { opacity: .72; }
+
+.tpl-admin-card__thumb {
+  aspect-ratio: 16 / 9;
+  background: var(--ou-bg-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: var(--ou-border-width) solid var(--ou-border-soft);
+  overflow: hidden;
+}
+.tpl-admin-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tpl-admin-card__thumb-empty {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-subtle, var(--ou-fg-muted));
+  text-align: center;
+  padding: var(--ou-space-4);
+}
+
+.tpl-admin-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-4);
+  flex: 1 1 auto;
+}
+.tpl-admin-card__name {
+  font: var(--ou-text-body-m);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+}
+.tpl-admin-card__desc {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tpl-admin-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ou-space-2);
+}
+.tpl-admin-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border-top: var(--ou-border-width) solid var(--ou-border-soft);
+  margin-top: auto;
+}
+.tpl-admin-card__foot-tags {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+}
+
+.tpl-admin-empty {
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-muted);
+  padding: var(--ou-space-9) var(--ou-space-4);
+  text-align: center;
+}
+
+/* ─── 2) Preview + check modal: split + rail + stage ───────────────────────── */
+
+/* Make this modal a fixed-height workspace: the body fills the space between the
+   header and footer, and the split (rail + stage) fills the body. Both panes then
+   share the SAME height and scroll internally — so the rail is never clipped short
+   while the stage runs longer. (DS `.ou-modal` is a flex column with a max-height;
+   pinning the height lets the flex children resolve.) */
+.tpl-check-modal .ou-modal {
+  /* Wider than DS `xl` (960px): a 16:9 stage next to the screen rail needs the
+     horizontal room, so the preview reads at a comfortable size. */
+  max-width: min(var(--wf-size-1320, 1320px), 94vw);
+  width: 100%;
+  height: calc(100vh - var(--ou-space-7) * 2);
+}
+.tpl-check-modal .ou-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+.tpl-check-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(var(--ou-size-240, 240px), 18rem) 1fr;
+  gap: var(--ou-space-5);
+}
+
+.tpl-check-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+  min-height: 0;
+  overflow: auto;
+  padding-right: var(--ou-space-2);
+  border-right: var(--ou-border-width) solid var(--ou-border-soft);
+}
+.tpl-check-rail__section {
+  font: var(--ou-text-label-s, var(--ou-text-body-s));
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--ou-fg-subtle, var(--ou-fg-muted));
+  margin: var(--ou-space-3) 0 var(--ou-space-1);
+}
+.tpl-check-rail__section:first-child { margin-top: 0; }
+
+.tpl-check-rail__type {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: var(--ou-space-2);
+  border-radius: var(--ou-radius-s);
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-default);
+  text-align: left;
+}
+.tpl-check-rail__type:hover { background: var(--ou-bg-muted); }
+.tpl-check-rail__chevron {
+  flex: 0 0 auto;
+  color: var(--ou-fg-muted);
+  transition: transform .15s ease;
+}
+.tpl-check-rail__type.is-open .tpl-check-rail__chevron { transform: rotate(90deg); }
+.tpl-check-rail__type-label { flex: 1 1 auto; min-width: 0; }
+.tpl-check-rail__type-n {
+  flex: 0 0 auto;
+  font: var(--ou-text-body-xs, var(--ou-text-body-s));
+  color: var(--ou-fg-muted);
+  background: var(--ou-bg-muted);
+  border-radius: var(--ou-radius-pill, 999px);
+  padding: 0 var(--ou-space-2);
+}
+
+.tpl-check-rail__var {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-2);
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: var(--ou-space-2) var(--ou-space-2) var(--ou-space-2) var(--ou-space-6);
+  border-radius: var(--ou-radius-s);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-default);
+  text-align: left;
+}
+/* Section-level screen row (single-variant type rendered without the middle level). */
+.tpl-check-rail__var--top { padding-left: var(--ou-space-2); font-weight: 500; }
+.tpl-check-rail__var:hover { background: var(--ou-bg-muted); }
+.tpl-check-rail__var.is-active {
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-strong, var(--ou-fg-default));
+  font-weight: 600;
+}
+
+.tpl-check-stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-3);
+  min-width: 0;
+  min-height: 0;
+}
+.tpl-check-stage__frame {
+  /* A 16:9 preview surface (the screen the learner sees): full width of the stage
+     column, height taken from the 16:9 ratio. Was a height-filling box of arbitrary
+     proportion. The scene scrolls inside when a screen is taller than the frame. */
+  flex: 0 0 auto;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  border: var(--ou-border-width) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  overflow: auto;
+  background: var(--ou-bg-canvas, var(--ou-bg-muted));
+}
+.tpl-check-stage__caption {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+/* PRD-23: palette switch above the stage. Only for a template with themes —
+   otherwise there is nothing to switch between. */
+.tpl-check-stage__themes {
+  display: flex;
+  justify-content: flex-end;
+}
+.tpl-check-stage__empty {
+  padding: var(--ou-space-5);
+}
+
+.tpl-check-errors {
+  border: var(--ou-border-width) solid var(--ou-error-border, var(--ou-error-default));
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+}
+.tpl-check-errors__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-4);
+  background: var(--ou-error-soft);
+  color: var(--ou-error-strong, var(--ou-error-default));
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+}
+.tpl-check-errors__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--ou-space-2) var(--ou-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tpl-check-errors__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  font: var(--ou-text-body-s);
+}
+/* Non-blocking variant: same block, warning tone (Э2 — the warn text is shown,
+   not only counted by the summary banner). */
+.tpl-check-errors--warn {
+  border-color: var(--ou-warning-border, var(--ou-warning-default));
+}
+.tpl-check-errors--warn .tpl-check-errors__head {
+  background: var(--ou-warning-soft);
+  color: var(--ou-warning-strong, var(--ou-warning-default));
+}
+.tpl-check-errors__item code {
+  font-family: var(--ou-font-mono, monospace);
+  background: var(--ou-bg-muted);
+  border-radius: var(--ou-radius-s);
+  padding: 0 var(--ou-space-1);
+}
+
+.tpl-check-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-3);
+  width: 100%;
+}
+.tpl-check-foot__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+}
+
+/* ─── 3) Status dot + verdict ──────────────────────────────────────────────── */
+
+.tpl-check-dot {
+  flex: 0 0 auto;
+  width: var(--ou-space-2);
+  height: var(--ou-space-2);
+  border-radius: 50%;
+  background: var(--ou-border-default);
+}
+.tpl-check-dot--pass { background: hsl(var(--ou-success-default-h, 142) var(--ou-success-default-s, 71%) var(--ou-success-default-l, 45%)); background: var(--ou-success-default); }
+.tpl-check-dot--warn { background: var(--ou-warning-default); }
+.tpl-check-dot--fail { background: var(--ou-error-default); }
+.tpl-check-dot--run {
+  background: var(--ou-accent-default, var(--ou-fg-muted));
+  animation: tpl-check-pulse .9s ease-in-out infinite;
+}
+@keyframes tpl-check-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+.tpl-check-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tpl-check-verdict--ok { color: var(--ou-success-strong, var(--ou-success-default)); }
+.tpl-check-verdict--blocked { color: var(--ou-error-strong, var(--ou-error-default)); }
+
+/* ─── 4) Details modal ─────────────────────────────────────────────────────── */
+
+.tpl-detail-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--ou-space-2) var(--ou-space-5);
+  margin: 0 0 var(--ou-space-5);
+}
+.tpl-detail-grid dt {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tpl-detail-grid dd {
+  font: var(--ou-text-body-s);
+  margin: 0;
+}
+.tpl-detail-section-title {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  margin: var(--ou-space-5) 0 var(--ou-space-2);
+}
+.tpl-detail-code {
+  font-family: var(--ou-font-mono, monospace);
+  font-size: var(--ou-text-body-s-size, .85em);
+  white-space: pre-wrap;
+  background: var(--ou-bg-muted);
+  border: var(--ou-border-width) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  padding: var(--ou-space-3);
+  color: var(--ou-fg-default);
+}
+
+/* ─── Upload modal ─────────────────────────────────────────────────────────── */
+
+.tpl-upload-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-4);
+}
+.tpl-upload-hint {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tpl-upload-result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tpl-upload-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  font: var(--ou-text-body-s);
+}

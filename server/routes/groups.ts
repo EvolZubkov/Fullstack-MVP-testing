@@ -1,11 +1,65 @@
 import { Router } from "express";
+import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireAuthor, requireLearner } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
+import { deliverAssignmentLink } from "../services/assignment-link";
 
 const router = Router();
 
+// Уведомляет нового участника группы по всем её активным назначениям: решение
+// «выдать passwordless-ссылку или нет» (D-3, PLAN_MAGIC_LINK_SCOPE.md Этап 3)
+// принимает deliverAssignmentLink — та же точка, что используют все пути
+// выпуска ссылки в server/routes/assignments.ts. Раньше этот путь минтил
+// токен вручную и НЕ проверял роль получателя — учётная запись с правами выше
+// учащегося, добавленная в группу с активным назначением, получала обход
+// пароля.
+async function notifyNewGroupMember(userId: string, groupId: string) {
+  try {
+    const assignments = await storage.getGroupAssignments(groupId);
+    if (assignments.length === 0) return;
+
+    const user = await storage.getUser(userId);
+    if (!user) return;
+
+    const { decryptEmail } = await import("../utils/crypto");
+    let email = user.email;
+    try {
+      if (user.email && !user.email.includes("@")) {
+        email = await decryptEmail(user.email);
+      }
+    } catch { return; }
+
+    for (const assignment of assignments) {
+      const test = await storage.getTest(assignment.testId);
+      if (!test) continue;
+
+      const expiresAt = assignment.linkExpiresAt
+        ? new Date(assignment.linkExpiresAt)
+        : assignment.dueDate
+          ? new Date(assignment.dueDate)
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      // A brand-new group member has no prior token for this assignment, so
+      // there is nothing to revoke — `revokeExisting: false` skips that call.
+      await deliverAssignmentLink({
+        user,
+        email,
+        assignmentId: assignment.id,
+        testId: assignment.testId,
+        testTitle: test.title,
+        testDescription: test.description,
+        dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
+        expiresAt,
+        revokeExisting: false,
+      });
+    }
+  } catch (e) {
+    logger.error("notifyNewGroupMember error: " + (e as Error).message);
+  }
+}
+
 // GET /api/groups - Список групп
-router.get("/", requireAuthor, async (req, res) => {
+router.get("/", requirePermission("groups.manage"), async (req, res) => {
   try {
     const groups = await storage.getGroups();
     const groupsWithUsers = await Promise.all(
@@ -20,13 +74,13 @@ router.get("/", requireAuthor, async (req, res) => {
     );
     res.json(groupsWithUsers);
   } catch (error) {
-    console.error("Get groups error:", error);
+    logger.error("Get groups error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get groups" });
   }
 });
 
 // GET /api/groups/:id - Получить группу
-router.get("/:id", requireAuthor, async (req, res) => {
+router.get("/:id", requirePermission("groups.manage"), async (req, res) => {
   try {
     const group = await storage.getGroup(req.params.id);
     if (!group) {
@@ -39,13 +93,13 @@ router.get("/:id", requireAuthor, async (req, res) => {
       users: users.map((u) => ({ id: u.id, email: u.email, name: u.name })),
     });
   } catch (error) {
-    console.error("Get group error:", error);
+    logger.error("Get group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get group" });
   }
 });
 
 // POST /api/groups - Создать группу
-router.post("/", requireAuthor, async (req, res) => {
+router.post("/", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { name, description } = req.body;
     if (!name) {
@@ -60,13 +114,13 @@ router.post("/", requireAuthor, async (req, res) => {
 
     res.status(201).json({ ...group, users: [], userCount: 0 });
   } catch (error) {
-    console.error("Create group error:", error);
+    logger.error("Create group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create group" });
   }
 });
 
 // PUT /api/groups/:id - Обновить группу
-router.put("/:id", requireAuthor, async (req, res) => {
+router.put("/:id", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { name, description } = req.body;
     const updated = await storage.updateGroup(req.params.id, { name, description });
@@ -75,13 +129,13 @@ router.put("/:id", requireAuthor, async (req, res) => {
     }
     res.json(updated);
   } catch (error) {
-    console.error("Update group error:", error);
+    logger.error("Update group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update group" });
   }
 });
 
 // DELETE /api/groups/:id - Удалить группу
-router.delete("/:id", requireAuthor, async (req, res) => {
+router.delete("/:id", requirePermission("groups.manage"), async (req, res) => {
   try {
     const success = await storage.deleteGroup(req.params.id);
     if (!success) {
@@ -89,13 +143,13 @@ router.delete("/:id", requireAuthor, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete group error:", error);
+    logger.error("Delete group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete group" });
   }
 });
 
 // POST /api/groups/:id/users - Добавить пользователей в группу
-router.post("/:id/users", requireAuthor, async (req, res) => {
+router.post("/:id/users", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { userIds, userId } = req.body;
     const groupId = req.params.id;
@@ -121,6 +175,8 @@ router.post("/:id/users", requireAuthor, async (req, res) => {
     for (const uid of idsToAdd) {
       if (!currentUserIds.has(uid)) {
         await storage.addUserToGroup(uid, groupId);
+        // Асинхронно шлём письма — не блокируем ответ
+        notifyNewGroupMember(uid, groupId).catch(() => {});
       }
     }
 
@@ -131,13 +187,13 @@ router.post("/:id/users", requireAuthor, async (req, res) => {
       userCount: updatedUsers.length,
     });
   } catch (error) {
-    console.error("Add users to group error:", error);
+    logger.error("Add users to group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to add users to group" });
   }
 });
 
 // DELETE /api/groups/:id/users/:userId - Удалить пользователя из группы
-router.delete("/:id/users/:userId", requireAuthor, async (req, res) => {
+router.delete("/:id/users/:userId", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { id: groupId, userId } = req.params;
 
@@ -148,7 +204,7 @@ router.delete("/:id/users/:userId", requireAuthor, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Remove user from group error:", error);
+    logger.error("Remove user from group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to remove user from group" });
   }
 });

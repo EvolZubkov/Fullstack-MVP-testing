@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-15: Недоступная тема в редакторе теста (E-11)</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    .wf-state.active { display: block; }
+    .tu-wrap { max-width: 720px; margin: 0 auto; padding: var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-4); }
+    .tu-head { font: var(--ou-text-body-s); font-weight: 700; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .04em; }
+    .tu-sec { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); background: var(--ou-bg-elevated); }
+    .tu-sec--blocked { border-color: var(--ou-warning-default); background: var(--ou-warning-soft); }
+    .tu-actions { display: flex; align-items: center; gap: var(--ou-space-3); }
+    .tu-grip { color: var(--ou-fg-muted); flex-shrink: 0; }
+    .tu-sec__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--ou-space-1); }
+    .tu-sec__title { font: var(--ou-text-body-m); font-weight: 500; display: flex; align-items: center; gap: var(--ou-space-2); }
+    .tu-sec__hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .tu-sec__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); flex-shrink: 0; }
+    .tu-pick { border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); overflow: hidden; }
+    .tu-pick__item { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-3) var(--ou-space-4); border-bottom: 1px solid var(--ou-border-soft); cursor: pointer; }
+    .tu-pick__item:last-child { border-bottom: 0; }
+    .tu-pick__item:hover { background: var(--ou-bg-hover); }
+    .tu-pick__item.is-disabled { color: var(--ou-fg-disabled, var(--ou-fg-muted)); cursor: not-allowed; opacity: .6; }
+    .tu-pick__sp { flex: 1; }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></symbol>
+  <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-15 · Недоступная тема (E-11):</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-existing')">Индикатор в секции</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-add')">Добавление новой темы</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- s-existing: секция с недоступной темой; тест работает и сохраняется -->
+<div class="wf-state active" id="s-existing">
+  <div class="tu-wrap">
+    <div class="tu-head">Состав теста · разделы</div>
+
+    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+      <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-eye-off"/></svg></div>
+      <div class="ou-banner__body"><div class="ou-banner__desc">Доступ к одной из тем теста отозван или тема стала приватной. Тест продолжит работать и доставляться обучающимся; вы можете сохранять его, заменить или удалить недоступный раздел, но добавлять из этой темы новые вопросы нельзя.</div></div>
+    </div>
+
+    <div class="tu-sec">
+      <svg class="tu-grip" width="16" height="16"><use href="#i-grip"/></svg>
+      <div class="tu-sec__main"><div class="tu-sec__title">Финансовая грамотность</div></div>
+      <span class="tu-sec__count">выдать 5 из 32</span>
+    </div>
+
+    <div class="tu-sec tu-sec--blocked">
+      <svg class="tu-grip" width="16" height="16"><use href="#i-grip"/></svg>
+      <div class="tu-sec__main">
+        <div class="tu-sec__title">Инвестиции <span class="ou-tag ou-tag--warning ou-tag--s"><svg width="11" height="11"><use href="#i-eye-off"/></svg> Тема недоступна</span></div>
+        <div class="tu-sec__hint">Доступ к теме отозван. Раздел сохранён в тесте (чтение в контексте теста); состав вопросов не редактируется.</div>
+      </div>
+      <span class="tu-sec__count">выдать 4 из 27</span>
+    </div>
+
+    <div class="tu-sec">
+      <svg class="tu-grip" width="16" height="16"><use href="#i-grip"/></svg>
+      <div class="tu-sec__main"><div class="tu-sec__title">Налоги физлиц</div></div>
+      <span class="tu-sec__count">выдать 3 из 18</span>
+    </div>
+
+    <div class="tu-actions">
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m"><svg width="16" height="16"><use href="#i-plus"/></svg> Добавить раздел</button>
+      <span class="tu-pick__sp"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- s-add: выбор темы для нового раздела — недоступные не выбираются -->
+<div class="wf-state" id="s-add">
+  <div class="tu-wrap">
+    <div class="tu-head">Добавить раздел · выбор темы</div>
+    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск темы…" aria-label="Поиск темы" /></div></div>
+    <div class="tu-pick" role="listbox" aria-label="Темы для нового раздела">
+      <div class="tu-pick__item" role="option"><span>Финансовая грамотность</span></div>
+      <div class="tu-pick__item" role="option"><span>Страхование</span></div>
+      <div class="tu-pick__item" role="option"><span>Налоги физлиц</span></div>
+      <div class="tu-pick__item is-disabled" role="option" aria-disabled="true"><svg width="14" height="14"><use href="#i-lock"/></svg><span>Инвестиции</span></div>
+    </div>
+    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+      <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-lock"/></svg></div>
+      <div class="ou-banner__body"><div class="ou-banner__desc">Темы без доступа в списке выбора недоступны: новый раздел можно создать только из видимой вам темы. Уже добавленные разделы это не затрагивает.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Правило (PRD-15)</th></tr></thead>
+    <tbody>
+      <tr><td>Индикатор «Тема недоступна»</td><td>На разделе, чья тема стала недоступной (грант отозван / тема приватизирована). Раздел остаётся, тест работает и сохраняется</td><td>E-11; производное чтение в контексте теста (FR-25); доставка не страдает (FR-24)</td></tr>
+      <tr><td>Сохранение теста</td><td>Разрешено: уже использованные темы освобождены от проверки видимости (in-context read). Кнопка «Сохранить» активна</td><td>FR-23 с исключением уже использованных тем</td></tr>
+      <tr><td>Добавление нового раздела</td><td>В выборе темы — два состояния: доступна (обычная строка) и недоступна (приглушённая строка с замком, не выбирается). Никаких меток видимости/принадлежности. Попытка сослаться на невидимую тему — 403 topic_forbidden</td><td>FR-22/FR-23; E-13</td></tr>
+      <tr><td>Доставка обучающемуся</td><td>Не зависит от прав автора на тему — идёт по назначению / снапшоту</td><td>FR-24 (инвариант доставки)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-banner--info</code></td><td>Пояснение об отзыве / о выборе темы</td><td>Banner</td><td><code>Banner</code></td></tr>
+      <tr><td><code>.ou-tag--warning</code></td><td>Метка «Тема недоступна» на разделе (единственная метка состояния)</td><td>Tag</td><td><code>Tag</code></td></tr>
+      <tr><td><code>.is-disabled</code> + замок</td><td>Недоступная тема в выборе — приглушённая строка, без меток</td><td>—</td><td>disabled-опция списка</td></tr>
+      <tr><td><code>.ou-field</code></td><td>Поиск темы</td><td>Field / Input</td><td><code>Input</code></td></tr>
+      <tr><td><code>.ou-btn</code></td><td>Добавить раздел, Сохранить, Отмена</td><td>Button</td><td><code>Button</code></td></tr>
+      <tr><td><code>.tu-sec</code> (локальный)</td><td>Строка раздела — композиция на токенах</td><td>—</td><td>верстка раздела в редакторе</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+</script>
+</body>
+</html>
