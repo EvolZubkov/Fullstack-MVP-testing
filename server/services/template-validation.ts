@@ -197,6 +197,32 @@ function collectTemplateSources(manifest: Record<string, unknown>): Array<{ ref:
 }
 
 /**
+ * PRD-49: static check of `manifest.labels[]`. A template that declares no labels is
+ * valid — it keeps printing the hard-coded strings of its own layouts.
+ */
+export function validateLabelDeclarations(labels: unknown): string[] {
+  if (labels === undefined || labels === null) return [];
+  if (!Array.isArray(labels)) return ['labels: ожидается массив'];
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  labels.forEach((raw, i) => {
+    const decl = (raw ?? {}) as Record<string, unknown>;
+    const key = typeof decl.key === "string" ? decl.key : "";
+    if (!key) {
+      errors.push(`labels[${i}]: отсутствует "key"`);
+      return;
+    }
+    if (seen.has(key)) {
+      errors.push(`labels[${i}]: ключ ${key} объявлен дважды`);
+      return;
+    }
+    seen.add(key);
+    if (typeof decl.default !== "string") errors.push(`labels[${i}] (${key}): отсутствует "default"`);
+  });
+  return errors;
+}
+
+/**
  * Field-type problems across all variants of a manifest, as blocking issues
  * (PRD-22). Exported so the activation gate can re-check an ALREADY installed
  * template — one that predates the closed registry and would otherwise stay
@@ -334,6 +360,13 @@ export function validateTemplatePackage(
         ref: issue.path.join(".") || "<root>",
       });
     }
+  }
+
+  // ── labels declared by the manifest (PRD-49) ──────────────────────────────
+  // A template that declares no labels at all is fine — its layouts keep printing
+  // their own hard-coded strings. This only rejects a MALFORMED declaration list.
+  for (const message of validateLabelDeclarations(manifest.labels)) {
+    blocking.push({ code: "LABELS_INVALID", message, ref: "labels" });
   }
 
   // ── field types of every variant (PRD-22) ─────────────────────────────────
