@@ -417,6 +417,35 @@ describe("PUT /api/tests/:id — section formSetJson (PRD-17)", () => {
     expect(savePayload.sections[0].formSetJson).toEqual(formSet);
   });
 
+  // Same Zod-strip class of bug: «Тест пройден, если» reached the route in the body,
+  // was not listed in the schema, and vanished before the save — the editor re-read
+  // the old value and the radio group appeared to reset itself on every save.
+  it("passes passDecisionPolicy through to the save service instead of stripping it", async () => {
+    const res = await asAuthor(
+      request(app).put("/api/tests/test1").send({
+        title: "My Test",
+        mode: "standard",
+        passDecisionPolicy: "required_topics_only",
+        sections: [{ topicId: "t1", drawCount: 2 }],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(serviceMock.save.mock.calls[0][1].test.passDecisionPolicy).toBe("required_topics_only");
+  });
+
+  it("rejects an unknown passDecisionPolicy with 400", async () => {
+    const res = await asAuthor(
+      request(app).put("/api/tests/test1").send({
+        title: "My Test",
+        mode: "standard",
+        passDecisionPolicy: "whatever",
+        sections: [{ topicId: "t1", drawCount: 2 }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(serviceMock.save).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid form set (< 2 variants) with 400", async () => {
     const res = await asAuthor(
       request(app).put("/api/tests/test1").send({

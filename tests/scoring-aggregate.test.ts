@@ -522,3 +522,100 @@ describe("adaptiveResultAsStandard", () => {
     expect(adaptiveResultAsStandard(empty).percent).toBe(0);
   });
 });
+
+// ─── passDecisionPolicy: how the overall rule and the topic gates combine ───────
+
+describe("aggregateStandardResult — passDecisionPolicy", () => {
+  /** Overall 50% is met (2 of 3 correct = 67%); topic B fails its own 100% gate. */
+  const input = (
+    passDecisionPolicy: unknown,
+    { requiredB = true }: { requiredB?: boolean } = {},
+  ) => ({
+    passDecisionPolicy,
+    overallPassRule: { type: "percent", value: 50 },
+    sections: [
+      { ...section("A", { source: "custom", type: "percent", value: 50 }, [single(0, 0), single(0, 0)]), required: true },
+      { ...section("B", { source: "custom", type: "percent", value: 100 }, [single(0, 1)]), required: requiredB },
+    ],
+  });
+
+  it("overall_only: a failed topic is informational and never demotes the test", () => {
+    const r = aggregateStandardResult(input("overall_only"));
+    expect(r.topicResults[1].passed).toBe(false);
+    expect(r.overallPassed).toBe(true);
+    expect(r.passed).toBe(true);
+  });
+
+  it("overall_and_required_topics: only REQUIRED topics gate the verdict", () => {
+    expect(aggregateStandardResult(input("overall_and_required_topics")).passed).toBe(false);
+    expect(aggregateStandardResult(input("overall_and_required_topics", { requiredB: false })).passed).toBe(true);
+  });
+
+  it("overall_and_required_topics: a missed overall threshold still fails the test", () => {
+    const r = aggregateStandardResult({
+      passDecisionPolicy: "overall_and_required_topics",
+      overallPassRule: { type: "percent", value: 90 },
+      sections: [{ ...section("A", { source: "custom", type: "percent", value: 50 }, [single(0, 0), single(0, 1)]), required: true }],
+    });
+    expect(r.overallPassed).toBe(false);
+    expect(r.passed).toBe(false);
+  });
+
+  it("required_topics_only: the overall threshold is informational", () => {
+    const r = aggregateStandardResult({
+      passDecisionPolicy: "required_topics_only",
+      overallPassRule: { type: "percent", value: 90 }, // NOT met (50%)
+      sections: [
+        { ...section("A", { source: "custom", type: "percent", value: 50 }, [single(0, 0), single(0, 1)]), required: true },
+        { ...section("B", { source: "custom", type: "percent", value: 100 }, [single(0, 1)]), required: false },
+      ],
+    });
+    expect(r.overallPassed).toBe(false);
+    expect(r.passed).toBe(true); // the required topic met its own 50% gate
+  });
+
+  it("all_topics_passed: EVERY gated topic must pass, required or not; overall is informational", () => {
+    const r = aggregateStandardResult(input("all_topics_passed", { requiredB: false }));
+    expect(r.passed).toBe(false);
+    const ok = aggregateStandardResult({
+      passDecisionPolicy: "all_topics_passed",
+      overallPassRule: { type: "percent", value: 90 }, // NOT met (67%)
+      sections: [
+        { ...section("A", { source: "custom", type: "percent", value: 50 }, [single(0, 0), single(0, 0)]), required: true },
+        { ...section("B", { source: "custom", type: "percent", value: 50 }, [single(0, 1)]), required: false },
+      ],
+    });
+    expect(ok.overallPassed).toBe(false);
+    expect(ok.topicResults[1].passed).toBe(false);
+    expect(ok.passed).toBe(false);
+  });
+
+  it("an ungated topic (passed=null) never blocks any policy", () => {
+    const r = aggregateStandardResult({
+      passDecisionPolicy: "all_topics_passed",
+      overallPassRule: { type: "percent", value: 50 },
+      sections: [
+        { ...section("A", { source: "custom", type: "percent", value: 50 }, [single(0, 0), single(0, 0)]), required: true },
+        { ...section("survey", { source: "none" }, [single(0, 1)]), required: true },
+      ],
+    });
+    expect(r.topicResults[1].passed).toBeNull();
+    expect(r.passed).toBe(true);
+  });
+
+  it("LEGACY: an absent/unknown policy keeps the pre-policy verdict (overall AND every gated topic)", () => {
+    // Sections carry no `required` flag either — legacy attempts / legacy SCORM state.
+    expect(aggregateStandardResult(input(undefined)).passed).toBe(false);
+    expect(aggregateStandardResult(input("nonsense")).passed).toBe(false);
+    expect(aggregateStandardResult(input(null, { requiredB: false })).passed).toBe(false);
+  });
+
+  it("a section with no `required` flag counts as required (DB default)", () => {
+    const r = aggregateStandardResult({
+      passDecisionPolicy: "overall_and_required_topics",
+      overallPassRule: { type: "percent", value: 50 },
+      sections: [section("B", { source: "custom", type: "percent", value: 100 }, [single(0, 1)])],
+    });
+    expect(r.passed).toBe(false);
+  });
+});
