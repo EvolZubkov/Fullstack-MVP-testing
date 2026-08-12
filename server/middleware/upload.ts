@@ -53,6 +53,36 @@ export function workbookUploadSingle(field: string) {
     });
 }
 
+/**
+ * Upload ceiling for a `.tbtest` transfer package.
+ *
+ * Higher than the workbook's: a package carries the test's pictures, audio and attachments
+ * beside the data, so its size is driven by media rather than by rows. Still capped, and
+ * still held in memory — the ZIP is read, not streamed.
+ */
+export const TRANSFER_UPLOAD_LIMIT_BYTES = 200 * 1024 * 1024;
+
+const transferUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: TRANSFER_UPLOAD_LIMIT_BYTES },
+});
+
+/** Accept one uploaded package under `field`, answering `413` when it is too large. */
+export function transferUploadSingle(field: string) {
+  const handler = transferUpload.single(field);
+  return (req: Request, res: Response, next: NextFunction) =>
+    handler(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          error: "Transfer package is too large",
+          code: "too_large",
+          maxBytes: TRANSFER_UPLOAD_LIMIT_BYTES,
+        });
+      }
+      next(err);
+    });
+}
+
 // Uploads land in a scratch directory; `MediaStore.putFile` moves them to their
 // checksum-derived final key, so the upload never picks the storage layout itself.
 const tmpDir = path.resolve(process.cwd(), "uploads", "tmp");

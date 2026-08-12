@@ -23,6 +23,13 @@ import { ContentPagesRepository, type ContentPageBinding } from "./storage/conte
 import { AssignmentsRepository } from "./storage/assignments-repository";
 import { FoldersRepository } from "./storage/folders-repository";
 import { MediaRepository, type MediaUsageRef } from "./storage/media-repository";
+import {
+  TestTransferRepository,
+  type ImportWriteResult,
+} from "./storage/test-transfer-repository";
+// Type-only: `test-snapshot` imports this module at runtime, so a value import here
+// would close the cycle.
+import type { TestSnapshotContent } from "./services/test-snapshot";
 
 export type { TestUsageRef };
 export type { MediaUsageRef };
@@ -361,6 +368,10 @@ export interface IStorage {
   getMediaUsagesByAsset(assetId: string): Promise<MediaUsage[]>;
   listOrphanMediaAssets(): Promise<MediaAsset[]>;
   deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void>;
+
+  // Перенос теста между инсталляциями (.tbtest): запись уже перенумерованного графа
+  // одной транзакцией. Идентификаторы приходят готовыми — см. services/test-transfer/plan.
+  writeImportedTest(content: TestSnapshotContent): Promise<ImportWriteResult>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -380,6 +391,7 @@ export class DatabaseStorage implements IStorage {
   private readonly assignmentsRepo = new AssignmentsRepository();
   private readonly foldersRepo = new FoldersRepository();
   private readonly mediaRepo = new MediaRepository();
+  private readonly transferRepo = new TestTransferRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -1240,6 +1252,10 @@ export class DatabaseStorage implements IStorage {
 
   deleteMediaUsagesExcept(entityType: MediaEntityType, keepIds: string[]): Promise<void> {
     return this.mediaRepo.deleteUsagesExcept(entityType, keepIds);
+  }
+
+  writeImportedTest(content: TestSnapshotContent): Promise<ImportWriteResult> {
+    return this.transferRepo.writeImportedTest(content);
   }
 }
 
