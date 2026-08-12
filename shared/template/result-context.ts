@@ -18,12 +18,15 @@
 import type {
   CtxCourse,
   CtxResult,
+  CtxResultBlock,
   CtxSectionResult,
   CtxSectionIntro,
   CtxTopicResultView,
   CtxAdaptiveTopicView,
   CtxRecommendation,
 } from "./context";
+import { resolveBlockOrder, DEFAULT_BLOCK_ORDER, type ResultsBlockKey } from "./results-order";
+import { labelsTree } from "./labels";
 import { buildMeasureView, type RenderKind } from "./measure-view";
 import { richTextToHtml, type RichTextFormat } from "./rich-text";
 import { buildScalesChart, type ChartKindSettings } from "./scales-chart";
@@ -38,6 +41,14 @@ import type {
   ScaleInterpretation,
 } from "../scales/interpretation";
 import type { LevelRamp } from "./level-ramp";
+
+/** Layout-facing flag per sub-block: the DSL has no equality test, only truthiness. */
+const BLOCK_FLAG: Record<ResultsBlockKey, string> = {
+  summary: "isSummary",
+  scales: "isScales",
+  indicators: "isIndicators",
+  topics: "isTopics",
+};
 
 /** Ring geometry from `layouts/results.html` (`<circle r="63">`). */
 const RING_RADIUS = 63;
@@ -524,12 +535,22 @@ export interface ResultContextOptions {
    * Пустой текст блока не даёт (см. {@link CtxResult.introHtml}).
    */
   intro?: { text?: string | null; format?: RichTextFormat | null } | null;
+  /**
+   * PRD-49: resolved labels of THIS screen, flat map from `shared/template/labels`
+   * (`{"results.scales": "По шкалам"}`). Absent = the caller has not been taught the
+   * labels yet, and the context stays exactly as it was before this PRD.
+   */
+  labels?: Record<string, string>;
+  /** PRD-49: the author's order of the sub-blocks; absent = the shipped order. */
+  blockOrder?: ResultsBlockKey[];
 }
 
 /** Built `{ course, result }` for the results layouts. */
 export interface ResultRenderContext {
   course: CtxCourse;
   result: CtxResult;
+  /** PRD-49: resolved interface labels as a nested tree (`labels.results.scales`). */
+  labels?: Record<string, unknown>;
 }
 
 /**
@@ -753,7 +774,31 @@ export function buildResultContext(
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
-  return { course: { title }, result };
+  // PRD-49. The umbrella's sub-blocks: same visibility rules as before, only gathered into
+  // one ordered array. `summary` reads the INVERTED flag the screen itself reads, so the
+  // list says «visible» exactly where the summary prints — including a control test, which
+  // never reaches the toggle and has always shown it. `topics` has no `auto/show/hide`
+  // setting of its own — it is visible exactly when there is a topic card to show, which is
+  // what the layout gated on before.
+  const visible: Record<ResultsBlockKey, boolean> = {
+    summary: !result.hideScoreSummary,
+    scales: !!result.scales?.length,
+    indicators: !!result.indicators?.length,
+    topics: !!result.topicResults?.length,
+  };
+  const labels = opts.labels ?? {};
+  const order = resolveBlockOrder(opts.blockOrder, DEFAULT_BLOCK_ORDER);
+  // Named `subBlocks` and not `blocks`: `blocks` in this scope already holds the PRD-29
+  // show/hide answers of the measurement blocks, a different thing entirely.
+  const subBlocks = order
+    .filter((key) => visible[key])
+    .map((key) => ({
+      key,
+      heading: labels[`results.${key}`] ?? "",
+      [BLOCK_FLAG[key]]: true,
+    })) as CtxResultBlock[];
+  if (subBlocks.length) result.blocks = subBlocks;
+  return { course: { title }, result, ...(opts.labels ? { labels: labelsTree(labels) } : {}) };
 }
 
 /** Normalized input for the staged section-results screen (PRD-19 FR-05a). */
