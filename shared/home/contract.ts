@@ -108,8 +108,18 @@ export interface HomePayload {
   myTopics?: HomeSection<{ items: MyTopicItem[]; total: number }>;
   peopleAssignments?: HomeSection<{ activeAssignments: number; notStarted: number; newUsers7d: number }>;
   summary?: HomeSection<{ attempts30d: number; passRate: number; avgPercent: number; activeUsers: number }>;
-  /** `activeTemplates` are NAMES: PRD-3 allows several templates in the `active` state at once. */
-  materials?: HomeSection<{ activeTemplates: string[]; docs: Array<{ id: string; label: string; href: string }> }>;
+  /**
+   * The documentation shelf. `docs` is already filtered by the reader's rights.
+   * `showTemplates` says whether the reader manages design templates: only then
+   * does the block list them, and only then does an empty `activeTemplates`
+   * mean «нет активных шаблонов» rather than «не ваше дело».
+   * `activeTemplates` are NAMES: PRD-3 allows several templates in the `active` state at once.
+   */
+  materials?: HomeSection<{
+    showTemplates: boolean;
+    activeTemplates: string[];
+    docs: Array<{ id: string; label: string; href: string }>;
+  }>;
 }
 
 /** Narrowing helper: did this section fail to load. */

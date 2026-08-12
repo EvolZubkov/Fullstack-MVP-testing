@@ -35,7 +35,12 @@ vi.mock("../server/services/home/my-tests", () => ({ buildMyTests: sectionsMock.
 vi.mock("../server/services/home/my-topics", () => ({ buildMyTopics: sectionsMock.buildMyTopics }));
 vi.mock("../server/services/home/people", () => ({ buildPeople: sectionsMock.buildPeople }));
 vi.mock("../server/services/home/summary", () => ({ buildSummary: sectionsMock.buildSummary }));
-vi.mock("../server/services/home/materials", () => ({ buildMaterials: sectionsMock.buildMaterials }));
+// MATERIAL_CAPABILITIES is the real list — the gate under test is «есть хотя бы
+// один доступный документ», so mocking it away would test nothing.
+vi.mock("../server/services/home/materials", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server/services/home/materials")>();
+  return { MATERIAL_CAPABILITIES: actual.MATERIAL_CAPABILITIES, buildMaterials: sectionsMock.buildMaterials };
+});
 vi.mock("../server/services/topic-access", () => ({
   duplicateNameGroups: topicAccessMock.duplicateNameGroups,
 }));
@@ -130,10 +135,13 @@ describe("GET /api/home", () => {
     expect(res.body).toHaveProperty("summary");
     expect(res.body).toHaveProperty("quickActions");
     expect(sectionsMock.buildMyTests).toHaveBeenCalledWith("u1", ["author"]);
-    // An author holds neither users.read nor adminTemplates.manage.
+    // An author does not hold users.read, so the people section stays away…
     expect(res.body).not.toHaveProperty("peopleAssignments");
-    expect(res.body).not.toHaveProperty("materials");
     expect(sectionsMock.buildPeople).not.toHaveBeenCalled();
+    // …but «Материалы» is the shared documentation shelf: an author reaches the
+    // authoring and import guides, so the section is built for them too.
+    expect(res.body).toHaveProperty("materials");
+    expect(sectionsMock.buildMaterials).toHaveBeenCalledWith(["author"]);
   });
 
   it("gives a manager the people section without the content ones", async () => {

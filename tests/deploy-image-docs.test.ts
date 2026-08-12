@@ -1,46 +1,32 @@
 /**
  * @module tests/deploy-image-docs
  *
- * Packaging contract for the downloadable authoring PDFs. `GET
- * /api/admin/templates/docs/:doc` and `GET /api/workbook/docs/:doc` read
- * pre-built artifacts from `docs/dist` at runtime (`resolveDocPath`), so the
- * files must be present next to the app inside the Docker image. The route
- * tests alone cannot catch a packaging gap: they pass in the repo, where the
- * committed PDFs are always on disk, while the deployed container answered 404
- * («Документ не собран») because `docker/Dockerfile` never copied `docs/dist`.
+ * Packaging contract for the downloadable authoring PDFs. `GET /api/docs/:doc`
+ * (and the two section-local routes that share its registry) reads pre-built
+ * artifacts from `docs/dist` at runtime (`resolveDocPath`), so the files must be
+ * present next to the app inside the Docker image. The route tests alone cannot
+ * catch a packaging gap: they pass in the repo, where the committed PDFs are
+ * always on disk, while the deployed container answered 404 («Документ не
+ * собран») because `docker/Dockerfile` never copied `docs/dist`.
  *
  * These checks are static (no Docker daemon needed): they assert the build
- * files ship every PDF the download routes advertise.
+ * files ship every PDF the download registry advertises.
  */
 
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DOC_DOWNLOADS } from "../server/services/doc-downloads";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-/** PDF file names advertised by the two doc-download routes. */
-function advertisedDocFiles(): string[] {
-  const sources = [
-    path.resolve(ROOT, "server", "routes", "admin-templates.ts"),
-    path.resolve(ROOT, "server", "routes", "workbook.ts"),
-  ];
-  const files = new Set<string>();
-  for (const src of sources) {
-    const text = readFileSync(src, "utf8");
-    for (const m of text.matchAll(/file:\s*"([^"]+\.pdf)"/g)) files.add(m[1]);
-  }
-  return [...files];
-}
-
 describe("docs/dist в прод-сборке", () => {
-  it("каждый документ из роутов скачивания собран и закоммичен", () => {
-    const files = advertisedDocFiles();
-    expect(files.length).toBeGreaterThan(0);
-    for (const file of files) {
-      expect(existsSync(path.resolve(ROOT, "docs", "dist", file)), `docs/dist/${file}`).toBe(true);
+  it("каждый документ из реестра скачивания собран и закоммичен", () => {
+    expect(DOC_DOWNLOADS.length).toBeGreaterThan(0);
+    for (const doc of DOC_DOWNLOADS) {
+      expect(existsSync(path.resolve(ROOT, "docs", "dist", doc.file)), `docs/dist/${doc.file}`).toBe(true);
     }
   });
 
