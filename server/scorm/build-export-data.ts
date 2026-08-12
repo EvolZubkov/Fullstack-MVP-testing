@@ -11,6 +11,10 @@
 import { drawnScaleKeys, isTestIpsative } from "../services/scale-composition";
 import { exportSourceForTest, liveDataSource } from "../services/test-snapshot";
 import { resolveTemplateDir } from "../services/template-dir";
+import { readResultsDeclarations } from "../services/template-render";
+import { resolveScreenLabels } from "../services/result-context";
+import { templateBlockOrder } from "@shared/template/results-order";
+import type { DesignSettings } from "@shared/schema";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import type { ExportData } from "./builders/test-json";
 
@@ -83,6 +87,42 @@ export async function buildScormExportData(
     );
   }
 
+  // The package is a learner-facing artifact: a non-active template must not ship —
+  // `resolveTemplateDir` falls back to `default` (same in debug, which shows what
+  // would ship). Resolved here, ahead of the design settings, because the PRD-49
+  // labels are resolved against THIS template's manifest.
+  const templateDir = await resolveTemplateDir(designTemplateId, { activeOnly: true });
+
+  // PRD-49 §8. There is no manifest inside an LMS, so the package carries the ALREADY
+  // RESOLVED wording — the template default with the test's own words on top — exactly
+  // as it carries the resolved report variant. The runtime unfolds nothing: it hands
+  // this flat «key → text» map to the shared builder, and the builder alone turns it
+  // into the `labels.*` tree, so there is only ever ONE place that shapes it.
+  const declarations = readResultsDeclarations(templateDir);
+  const design = (rawDesignSettings ?? null) as DesignSettings | null;
+  const labels = resolveScreenLabels(declarations.labels, design, "results");
+  // …the ORDER, on the other hand, cannot be reduced to one screen: the shipped manifest
+  // gives the adaptive results screen its own composition (topics first, no score
+  // summary). It is resolved per screen HERE, again because the manifest does not travel.
+  const screenBlockOrder = declarations.blockOrder
+    ? {
+        results: templateBlockOrder(declarations.blockOrder, "results"),
+        "results.adaptive": templateBlockOrder(declarations.blockOrder, "results.adaptive"),
+      }
+    : null;
+  // Rides on the TEMPLATE, not on the test having design settings: a test that never
+  // opened «Оформление» still renders from the template's layouts, and the web host
+  // resolves its labels all the same. Leaving these out of the `else` branch below would
+  // give such a test headings on the web and none in the package — the very drift PRD-49
+  // §2.5 forbids. Every key is still absent for a template that declares nothing.
+  const prd49 = {
+    ...(Object.keys(labels).length ? { labels } : {}),
+    ...(design?.resultsBlockOrder ? { resultsBlockOrder: design.resultsBlockOrder } : {}),
+    // Absent for a template that declares no order at all: the runtime then falls back
+    // to the shipped list inside the shared builder, which is what it did before.
+    ...(screenBlockOrder ? { templateBlockOrder: screenBlockOrder } : {}),
+  };
+
   const designSettings = rawDesignSettings && Object.keys(rawDesignSettings).length > 0
     ? {
         templateId: designTemplateId,
@@ -96,8 +136,10 @@ export async function buildScormExportData(
         ...(rawDesignSettings.paramsByTheme
           ? { paramsByTheme: rawDesignSettings.paramsByTheme as Record<string, Record<string, unknown>> }
           : {}),
+        // PRD-49: надписи и порядок подблоков — см. `prd49` выше.
+        ...prd49,
       }
-    : { templateId: "default", params: {} };
+    : { templateId: "default", params: {}, ...prd49 };
 
   const contentPages = await src.getContentPages(test.id);
   const resultVariables = await src.getResultVariables(test.id);
@@ -138,11 +180,6 @@ export async function buildScormExportData(
     );
     adaptiveSettings = { topicSettings, levels: levelsWithLinks };
   }
-
-  // The package is a learner-facing artifact: a non-active template must not ship —
-  // `resolveTemplateDir` falls back to `default` (same in debug, which shows what
-  // would ship).
-  const templateDir = await resolveTemplateDir(designTemplateId, { activeOnly: true });
 
   return {
     test,

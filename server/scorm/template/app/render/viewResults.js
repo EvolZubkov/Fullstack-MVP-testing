@@ -132,6 +132,41 @@ function vrReportEnabled() {
 }
 
 /**
+ * PRD-49: надписи блоков итогов и порядок подблоков — как их несёт пакет.
+ *
+ * Приезжают УЖЕ РАЗРЕШЁННЫМИ (`build-export-data`): манифеста с умолчаниями в LMS нет, и
+ * второго источника этого факта у рантайма быть не может — так же устроен признак выдачи
+ * отчёта. Рантайм НИЧЕГО не разворачивает: плоская карта «ключ → текст» уходит в ядро как
+ * есть, и дерево `labels.*` строит только оно (`shared/template/labels`). Второе место,
+ * где строится дерево, означало бы второй шанс разойтись с веб-хостом.
+ *
+ * Пакет, собранный до этого PRD (или на шаблоне без раздела `labels`), не несёт ни одного
+ * из трёх полей — и опции остаются пустыми, то есть экран собирается ровно как прежде.
+ *
+ * @param {string} screen Экран, чей список подблоков нужен (`results`).
+ * @returns {object} Опции для `TBTemplate.buildResultContext`.
+ */
+function vrLabelOptions(screen) {
+  var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || {};
+  var opts = {};
+  if (ds.labels) opts.labels = ds.labels;
+  if (ds.resultsBlockOrder) opts.blockOrder = ds.resultsBlockOrder;
+  if (ds.templateBlockOrder && ds.templateBlockOrder[screen]) {
+    opts.templateBlockOrder = ds.templateBlockOrder[screen];
+  }
+  return opts;
+}
+
+/** Домешать надписи и порядок подблоков в уже собранные опции построителя. */
+function vrApplyLabelOptions(opts, screen) {
+  var extra = vrLabelOptions(screen);
+  for (var key in extra) {
+    if (Object.prototype.hasOwnProperty.call(extra, key)) opts[key] = extra[key];
+  }
+  return opts;
+}
+
+/**
  * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`,
  * baked as `TEST_DATA.overallPassRule`). It is the one fact that tells an explicit
  * «Пройден» from a test that pronounces no verdict. The shared builder reads it twice:
@@ -384,6 +419,8 @@ function renderViewResultsTemplated(app, results) {
   if (measures) opts.measures = measures;
   var screenIntro = vrScreenIntro();
   if (screenIntro) opts.intro = screenIntro;
+  // PRD-49: заголовки блоков и порядок подблоков — из пакета, разрешёнными.
+  vrApplyLabelOptions(opts, 'results');
   var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   // NB: no attempt counter in the header — the scene header names the test, run
@@ -473,6 +510,8 @@ function renderResultsTemplated(app, results) {
   if (measures) opts.measures = measures;
   var screenIntro = vrScreenIntro();
   if (screenIntro) opts.intro = screenIntro;
+  // PRD-49: тот же экран, те же надписи — финиш и «Мой результат» рисуют один макет.
+  vrApplyLabelOptions(opts, 'results');
   var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
 

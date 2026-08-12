@@ -28,6 +28,7 @@ import {
   readResultsRenderPayload,
   readReportRenderPayload,
   completeMeasuresSource,
+  readResultsDeclarations,
 } from "../services/template-render";
 import { reportKindForMode } from "@shared/report/report-variants";
 import {
@@ -68,6 +69,7 @@ import type {
   PassRule,
   RetakePolicy,
   ReportSettings,
+  DesignSettings,
   TestIntro,
   FeedbackContent,
   QuestionScoring,
@@ -242,10 +244,26 @@ async function resultsMaterialForAttempt(
         ? deliveredTest?.reportSettingsJson?.adaptive
         : deliveredTest?.reportSettingsJson?.standard;
     const reportChartSettings = (reportBranch?.values ?? {}) as ChartKindSettings;
+    // PRD-49: надписи и порядок подблоков — свойство ТЕСТА (`design_settings_json`), а не
+    // страницы итогов: одна формулировка обслуживает экран итогов, адаптивные итоги, итоги
+    // раздела и отчёт. Берутся из ВЫДАННОЙ версии, как и всё остальное здесь: снапшот
+    // замораживает ряд теста вместе с настройками дизайна (спека §8), поэтому завершённая
+    // попытка печатает те заголовки, с которыми её проходили.
+    const design = (deliveredTest?.designSettingsJson as DesignSettings | null) ?? null;
+    // Объявления — из манифеста АКТИВНОГО шаблона: против них автор и правил формулировки,
+    // и против них же их разрешает сборка пакета SCORM (`build-export-data`), поэтому оба
+    // хоста печатают одно и то же. Шаблон, не объявивший надписей, отдаёт пустой список —
+    // и его макеты печатают свои жёсткие строки, как до этого PRD (спека §9).
+    const declarations = readResultsDeclarations(
+      await resolveTemplateDir(design?.templateId, { activeOnly: true }),
+    );
     return {
       scales,
       variables,
       blockSettings,
+      design,
+      labelDeclarations: declarations.labels,
+      templateBlockOrder: declarations.blockOrder,
       // PRD-46 §5: read from the SAME delivered source as the scales, so a finished attempt
       // is judged on the content it was taken on. Costs nothing unless the author left the
       // choice of the diagram to the system — on the screen or in the report.
@@ -1409,6 +1427,8 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         topicPassRule: section?.topicPassRuleJson ?? null,
         // PRD-24: the variant delivered for this topic decides which threshold gates it.
         formId: variantSection.formId ?? null,
+        // «Тест пройден, если»: the `*_required_topics*` policies gate on this flag.
+        required: section?.required ?? true,
         questions: questions.map((q) => {
           questionTypes[q.id] = q.type as QuestionType;
           const effective = scoring.resolve(q);

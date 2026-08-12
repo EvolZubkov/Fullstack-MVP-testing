@@ -24,6 +24,8 @@ import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/
 import { resolveThemeParams } from "@shared/template/theme-params";
 import { supportsThemes } from "@shared/template/themes";
 import type { StoredDesignSettings } from "@shared/template/theme-params";
+import type { LabelDeclaration } from "@shared/template/labels";
+import type { TemplateBlockOrder, ResultsBlockKey } from "@shared/template/results-order";
 import type { AttemptResult } from "@shared/schema";
 import {
   resolveReportVariant,
@@ -200,6 +202,45 @@ function readBrandingManifest(dir: string): { params?: TemplateParamDef[]; theme
     };
   } catch {
     return {};
+  }
+}
+
+/**
+ * PRD-49 sections of a template manifest: the interface labels the template declares
+ * (`labels[]`) and the per-screen composition/order of the results sub-blocks
+ * (`resultsBlockOrder`).
+ */
+export interface ResultsDeclarations {
+  /** `manifest.labels[]`; EMPTY for a template that declares none (spec §9). */
+  labels: LabelDeclaration[];
+  /** `manifest.resultsBlockOrder`; `null` when the template declares nothing. */
+  blockOrder: TemplateBlockOrder | ResultsBlockKey[] | null;
+}
+
+/**
+ * Read the PRD-49 declarations of ONE template from its manifest.
+ *
+ * Read from the SAME on-disk manifest the report-variant bake reads
+ * (`server/scorm/index.ts`), so the web host and the SCORM package resolve the author's
+ * wording against the very same declarations — the point of PRD-49 §2.5.
+ *
+ * Empty on any read/parse failure, and empty is meaningful: a template that declares no
+ * labels keeps printing the hard-coded strings of its own layouts, so the caller must not
+ * hand an empty map to the context builder (that would replace «no labels key at all»
+ * with an empty tree).
+ */
+export function readResultsDeclarations(dir: string): ResultsDeclarations {
+  try {
+    const raw = readFileSafe(path.join(dir, "manifest.json"));
+    if (!raw) return { labels: [], blockOrder: null };
+    const manifest = JSON.parse(raw) as { labels?: unknown; resultsBlockOrder?: unknown };
+    return {
+      labels: Array.isArray(manifest.labels) ? (manifest.labels as LabelDeclaration[]) : [],
+      blockOrder:
+        (manifest.resultsBlockOrder as TemplateBlockOrder | ResultsBlockKey[] | undefined) ?? null,
+    };
+  } catch {
+    return { labels: [], blockOrder: null };
   }
 }
 

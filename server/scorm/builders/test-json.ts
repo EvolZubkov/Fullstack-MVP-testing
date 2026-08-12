@@ -50,6 +50,24 @@ interface DesignSettingsExport {
    * отчёт собирается канонической деградацией, как до этого PRD (FR-28).
    */
   report?: ReportBake;
+  /**
+   * PRD-49 §8: the ALREADY RESOLVED interface labels of the results screen — a flat
+   * «key → text» map, where an empty string means «do not print this label». Resolved by
+   * the assembler (`build-export-data`), because the manifest that declares the defaults
+   * does not travel into an LMS; the runtime hands the map to the shared builder as it
+   * is, and the builder alone turns it into the `labels.*` tree. Absent for a template
+   * that declares no labels — its layouts print their own strings, as before this PRD.
+   */
+  labels?: Record<string, string>;
+  /** PRD-49: the author's order of the results sub-blocks (`design_settings_json`). */
+  resultsBlockOrder?: string[];
+  /**
+   * PRD-49: what each results SCREEN of this template prints, and in what order — the
+   * list the author's order is cleaned against. Per screen, because composition differs:
+   * the adaptive results screen has no score summary. Resolved from the manifest at bake
+   * for the same reason the labels are.
+   */
+  templateBlockOrder?: Record<string, readonly string[]>;
 }
 
 interface ExportData {
@@ -474,6 +492,17 @@ export function buildTestJson(data: ExportData): string {
       // PRD-27: включается только когда шаблон вид отчёта объявил — пакет теста на
       // шаблоне без отчёта сохраняет прежнюю форму TEST_DATA (FR-28).
       ...(data.designSettings.report ? { report: data.designSettings.report } : {}),
+      // PRD-49: в пакет едут УЖЕ РАЗРЕШЁННЫЕ надписи и разрешённые по экранам списки
+      // подблоков — манифеста в LMS нет, и второго источника умолчаний у рантайма быть не
+      // может (так же устроен признак выдачи отчёта). Ни одно из трёх полей не появляется
+      // у шаблона, который надписей не объявлял: форма TEST_DATA остаётся прежней.
+      ...(data.designSettings.labels ? { labels: data.designSettings.labels } : {}),
+      ...(data.designSettings.resultsBlockOrder
+        ? { resultsBlockOrder: data.designSettings.resultsBlockOrder }
+        : {}),
+      ...(data.designSettings.templateBlockOrder
+        ? { templateBlockOrder: data.designSettings.templateBlockOrder }
+        : {}),
     };
   }
 
