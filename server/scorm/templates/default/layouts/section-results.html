@@ -23,7 +23,7 @@
     <div class="tb-scene__col tb-scene__col--center tb-scene__col--narrow">
       <!-- PRD-34 (FR-16): место водяного знака, объявленное макетом. -->
       <div data-slot="protection-mark"></div>
-      <span class="tb-eyebrow">Итоги раздела</span>
+      {{#if labels.section.eyebrow}}<span class="tb-eyebrow">{{ labels.section.eyebrow }}</span>{{/if}}
       <h2 class="tb-scene__hero tb-scene__hero--s">Раздел «<span data-path="sectionResult.topicName"></span>»</h2>
 
       <div class="ou-ring tb-ring">
@@ -42,11 +42,11 @@
       <div class="tb-facts tb-facts--center">
         <div class="tb-facts__item">
           <div class="tb-facts__num" data-path="sectionResult.total"></div>
-          <div class="tb-facts__lbl">вопросов</div>
+          <div class="tb-facts__lbl">{{ labels.facts.questions }}</div>
         </div>
         <div class="tb-facts__item">
           <div class="tb-facts__num">{{sectionResult.correct}} / {{sectionResult.total}}</div>
-          <div class="tb-facts__lbl">верно</div>
+          <div class="tb-facts__lbl">{{ labels.facts.correct }}</div>
         </div>
       </div>
     </div>
