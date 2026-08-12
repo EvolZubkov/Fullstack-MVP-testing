@@ -41,6 +41,20 @@ export const RESULT_VAR_WIDTHS = [18, 28, 10, 60, 18, 14, 20];
 export const MEASUREMENT_HEADERS = ["Вопрос", "Шкала", "Источник", "Ключ источника", "Значение", "Вес"];
 export const MEASUREMENT_WIDTHS = [14, 16, 12, 16, 10, 8];
 
+// ─── «Исходы показателей» (PRD-48) ───────────────────────────────────────────
+//
+// The texts a learner actually reads. They live in `result_variables.config_json
+// .outcomes` and had no column anywhere, so a test carried by the book arrived
+// printing the raw scale key instead of the name of a style — silently, with no
+// import error. One ROW per outcome, because an outcome carries a paragraph of
+// text and a grammar packed into one cell (as «Диапазоны» does for a scale) would
+// be unreadable and unfixable by hand.
+//
+// The outcome's FEEDBACK (attachments, links) deliberately stays out: the book is
+// a format for text, and the package (`.tbtest`) carries the rest.
+export const OUTCOME_HEADERS = ["Показатель", "Код", "Метка", "Текст", "Тональность"];
+export const OUTCOME_WIDTHS = [18, 14, 28, 60, 16];
+
 // ─── «Варианты теста» column of the «Вопросы» sheet ──────────────────────────
 //
 // Variant membership (PRD-17) rides on the «Вопросы» sheet. The column used to be
@@ -1056,4 +1070,105 @@ export function serializeScoringOverrideRow(
       : "",
     "Сложность": o.difficulty ?? "",
   };
+}
+
+// ─── «Исходы показателей» ─────────────────────────────────────────────────────
+
+/** One outcome as the book expresses it; absent keys mean "the sheet has no column". */
+export interface ParsedOutcomeRow {
+  variableName: string;
+  code: string;
+  /** Present only when the sheet HAS the column. */
+  label?: string;
+  text?: string;
+  tone?: string;
+}
+
+/**
+ * Parse an «Исходы показателей» row.
+ *
+ * `headers` decides which fields the sheet HAS a column for, and is read from row 1 rather
+ * than from the row object: `sheetToObjects` drops empty cells, which would make an emptied
+ * «Текст» indistinguishable from a missing column — and those two mean opposite things.
+ */
+export function parseOutcomeRow(
+  row: Record<string, unknown>,
+  headers: Set<string>,
+): ParseResult<ParsedOutcomeRow> {
+  const variableName = String(row["Показатель"] ?? "").trim();
+  if (!variableName) return { ok: false, error: "не указан «Показатель»" };
+
+  const code = String(row["Код"] ?? "").trim();
+  // The code IS the match: an outcome without one can never fire (mirrors the editor).
+  if (!code) return { ok: false, error: "не указан «Код» исхода" };
+
+  const parsed: ParsedOutcomeRow = { variableName, code };
+  if (headers.has("Метка")) parsed.label = String(row["Метка"] ?? "").trim();
+  if (headers.has("Текст")) parsed.text = String(row["Текст"] ?? "").trim();
+  if (headers.has("Тональность")) {
+    const tone = String(row["Тональность"] ?? "").trim();
+    if (tone && !OUTCOME_TONE_CHOICES.includes(tone)) {
+      return { ok: false, error: `неизвестная тональность "${tone}"` };
+    }
+    parsed.tone = tone;
+  }
+  return { ok: true, value: parsed };
+}
+
+/** The tones an outcome may carry, straight from the shared contract. */
+export const OUTCOME_TONE_CHOICES = ["favorable", "neutral", "attention", "critical"];
+
+/** Serialize an indicator's outcomes to «Исходы показателей» rows. */
+export function serializeOutcomeRows(v: {
+  name: string;
+  configJson: unknown;
+}): Record<string, unknown>[] {
+  const outcomes = ((v.configJson as { outcomes?: unknown })?.outcomes ?? []) as Array<
+    Record<string, unknown>
+  >;
+  return outcomes.map((o) => ({
+    "Показатель": v.name,
+    "Код": String(o.code ?? ""),
+    "Метка": String(o.label ?? ""),
+    "Текст": String(o.text ?? ""),
+    "Тональность": String(o.tone ?? ""),
+  }));
+}
+
+/**
+ * Merge the rows of one indicator onto its stored outcomes.
+ *
+ * The rule of «Шкалы» applies here too: a column the sheet HAS defines its field in full —
+ * an emptied «Текст» cell clears the text, because that cell is the author's only way to
+ * clear it — while a column the sheet LACKS leaves the stored value alone. What the book
+ * cannot express at all, the outcome's feedback, is carried over from the stored outcome of
+ * the same code: the book must never be the reason an attachment disappears.
+ *
+ * The result is the sheet's ORDER: the rows are what the author sees.
+ */
+export function mergeOutcomes(
+  stored: unknown,
+  rows: ParsedOutcomeRow[],
+): Array<Record<string, unknown>> {
+  const before = new Map(
+    (((stored as { outcomes?: unknown })?.outcomes ?? []) as Array<Record<string, unknown>>).map(
+      (o) => [String(o.code ?? ""), o],
+    ),
+  );
+
+  return rows.map((row) => {
+    const kept = before.get(row.code) ?? {};
+    const merged: Record<string, unknown> = { ...kept, code: row.code };
+
+    if (row.label !== undefined) merged.label = row.label;
+    if (row.text !== undefined) {
+      if (row.text === "") delete merged.text;
+      else merged.text = row.text;
+    }
+    if (row.tone !== undefined) {
+      if (row.tone === "") delete merged.tone;
+      else merged.tone = row.tone;
+    }
+    return merged;
+  });
 }

@@ -295,6 +295,9 @@ describe("GET /api/workbook/template", () => {
       "Оценка",
       "Шкалы",
       "Показатели",
+      // PRD-48: тексты исходов показателя — то, что ученик читает на итогах и что
+      // книга до сих пор не несла вовсе.
+      "Исходы показателей",
       "Вклады вопросов",
       // Documentation sheets close the book; neither is a role name, so the
       // importer ignores them and the filled example can never be imported.

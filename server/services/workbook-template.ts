@@ -36,6 +36,9 @@ import {
   SCALE_HEADERS,
   SCALE_WIDTHS,
   RESULT_VAR_HEADERS,
+  OUTCOME_HEADERS,
+  OUTCOME_WIDTHS,
+  OUTCOME_TONE_CHOICES,
   RESULT_VAR_WIDTHS,
   MEASUREMENT_HEADERS,
   MEASUREMENT_WIDTHS,
@@ -78,6 +81,8 @@ export const SHEET_SCORING = "Оценка";
 export const SHEET_SCALES = "Шкалы";
 export const SHEET_RESULT_VARS = "Показатели";
 export const SHEET_MEASUREMENTS = "Вклады вопросов";
+/** PRD-48: тексты исходов показателя — то, что ученик читает на итогах. */
+export const SHEET_OUTCOMES = "Исходы показателей";
 
 /** Reference sheet name — documentation, never imported. */
 export const HELP_SHEET = "Справка";
@@ -138,6 +143,7 @@ const ROLE_SHEETS: RoleSheet[] = [
   { name: SHEET_SCORING, headers: SCORING_OVERRIDE_HEADERS, widths: SCORING_OVERRIDE_WIDTHS },
   { name: SHEET_SCALES, headers: SCALE_HEADERS, widths: SCALE_WIDTHS },
   { name: SHEET_RESULT_VARS, headers: RESULT_VAR_HEADERS, widths: RESULT_VAR_WIDTHS },
+  { name: SHEET_OUTCOMES, headers: OUTCOME_HEADERS, widths: OUTCOME_WIDTHS },
   { name: SHEET_MEASUREMENTS, headers: MEASUREMENT_HEADERS, widths: MEASUREMENT_WIDTHS },
 ];
 
@@ -203,6 +209,9 @@ const VALIDATED_COLUMNS: Record<string, Record<string, string[]>> = {
     "Показывать ученику": VISIBILITY_CHOICES,
     "SCORM": RESULT_VAR_SCORM_CHOICES,
     "Управляет статусом": CONTROLS_CHOICES,
+  },
+  [SHEET_OUTCOMES]: {
+    "Тональность": OUTCOME_TONE_CHOICES,
   },
   [SHEET_MEASUREMENTS]: {
     "Источник": MEASUREMENT_SOURCE_CHOICES,
@@ -723,6 +732,14 @@ const HELP_ROWS: HelpRow[] = [
   [SHEET_RESULT_VARS, "Показывать ученику", "нет", "Что видит ученик: нет (по умолчанию) | уровень | уровень и значение. «Уровень» открывает толкование, но прячет само значение. Книги прежнего формата читаются: «да» = уровень и значение.", "уровень и значение"],
   [SHEET_RESULT_VARS, "SCORM", "нет", "both (по умолчанию) | interaction | suspend_data | none.", "both"],
   [SHEET_RESULT_VARS, "Управляет статусом", "нет", "нет (по умолчанию) | успех | завершение. Показатель сообщает системе обучения итог попытки. Успехом может управлять не более одного показателя теста, завершением — тоже не более одного.", "успех"],
+  GAP,
+
+  title("ЛИСТ «Исходы показателей» — тексты, которые ученик читает на итогах. Одна строка = один исход."),
+  [SHEET_OUTCOMES, "Показатель", "да", "«Имя» с листа «Показатели». Лист меняет исходы только у названных здесь показателей, остальные не трогает.", "lead_style"],
+  [SHEET_OUTCOMES, "Код", "да", "Значение, которое возвращает формула показателя. По нему исход и находится, поэтому он обязателен.", "vdo"],
+  [SHEET_OUTCOMES, "Метка", "нет", "Короткое название исхода для ученика.", "Вдохновляющий"],
+  [SHEET_OUTCOMES, "Текст", "нет", "Описание исхода. Пустая ячейка ОЧИЩАЕТ сохранённый текст: это единственный способ его убрать.", "Ведёт за собой смыслом"],
+  [SHEET_OUTCOMES, "Тональность", "нет", "favorable | neutral | attention | critical. Влияет на цвет исхода на экране итогов.", "favorable"],
   GAP,
 
   title("ПОРЯДОК ЧТЕНИЯ ЛИСТОВ ПРИ ЗАГРУЗКЕ"),

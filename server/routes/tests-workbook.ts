@@ -31,6 +31,9 @@ import {
   SCALE_HEADERS,
   SCALE_WIDTHS,
   RESULT_VAR_HEADERS,
+  OUTCOME_HEADERS,
+  OUTCOME_WIDTHS,
+  serializeOutcomeRows,
   RESULT_VAR_WIDTHS,
   MEASUREMENT_HEADERS,
   MEASUREMENT_WIDTHS,
@@ -151,6 +154,7 @@ router.get(
       const scaleRows = scales.map((s) => serializeScaleRow(s));
       const scaleKeyById = new Map(scales.map((s) => [s.id, s.key]));
       const rvRows = resultVars.map((v) => serializeResultVariableRow(v));
+      const outcomeRows = resultVars.flatMap((v) => serializeOutcomeRows(v));
       const measRows = measurements
         .filter((m) => aliasByQuestionId.has(m.questionId) && scaleKeyById.has(m.scaleId))
         .map((m) => serializeMeasurementRow(m, aliasByQuestionId.get(m.questionId)!, scaleKeyById.get(m.scaleId)!));
@@ -222,6 +226,9 @@ router.get(
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);
+      // PRD-48: тексты, которые ученик читает на итогах. Без них перенесённый книгой
+      // тест печатал сырой ключ шкалы вместо названия стиля.
+      addSheet(wb, "Исходы показателей", outcomeRows, OUTCOME_HEADERS, OUTCOME_WIDTHS);
       addSheet(wb, "Вклады вопросов", measRows, MEASUREMENT_HEADERS, MEASUREMENT_WIDTHS);
 
       const buffer = await workbookToBuffer(wb);
