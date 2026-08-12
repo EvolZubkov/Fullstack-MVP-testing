@@ -52,6 +52,8 @@ import { config } from "../server/config";
 // eslint-disable-next-line import/first
 import { addAoaSheet, workbookToBuffer } from "../server/utils/excel";
 // eslint-disable-next-line import/first
+import { audit, logger } from "../server/logger";
+// eslint-disable-next-line import/first
 import assignmentsRouter from "../server/routes/assignments";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -255,5 +257,81 @@ describe("GET /api/tests/:id/participants/template", () => {
     const res = await as("lrn1", request(app).get("/api/tests/t1/participants/template"));
 
     expect(res.status).toBe(403);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FR-20: both facts are recorded, and neither the log nor the audit trail may
+// carry a working key. The links here are REAL (only the transport is mocked),
+// so a leak would actually show up in the captured lines.
+describe("аудит прогона и выгрузки ссылок (PRD-28 FR-20)", () => {
+  const rows = [{ index: 0, email: "a@x.ru", name: "Анна", status: "new", userId: null }];
+
+  /** Everything the run wrote: audit calls (by their arguments) and log lines. */
+  let journal: string[];
+
+  beforeEach(() => {
+    journal = [];
+    // The audit trail appends to `logs/audit-*.log`; intercepting it here lets
+    // the case read the arguments — which is what `writeAudit` serializes — and
+    // keeps the suite from leaving a file behind. Log lines are captured too:
+    // a link leaking into an ordinary `logger.info` would be just as bad.
+    vi.spyOn(audit, "participantsInvite").mockImplementation((...args: unknown[]) => {
+      journal.push("participants.invite " + JSON.stringify(args));
+    });
+    vi.spyOn(audit, "participantLinksExported").mockImplementation((...args: unknown[]) => {
+      journal.push("participants.linksExported " + JSON.stringify(args));
+    });
+    for (const level of ["info", "warn", "error", "debug"] as const) {
+      vi.spyOn(logger, level).mockImplementation((...args: unknown[]) => {
+        journal.push(String(args[0]));
+      });
+    }
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("прогон и отметка о выгрузке дают обе записи", async () => {
+    const run = await as("mgr1", request(app).post("/api/tests/t1/participants/invite"))
+      .send({ rows });
+    expect(run.status).toBe(200);
+
+    const marked = await as("mgr1", request(app).post("/api/tests/t1/participants/links-exported"))
+      .send({ count: 3 });
+    // The file is built on the client from the report it already holds; the
+    // server is told the fact and the count, and answers with nothing.
+    expect(marked.status).toBe(204);
+    expect(marked.body).toEqual({});
+
+    expect(audit.participantsInvite).toHaveBeenCalledWith("t1", 1, 1);
+    expect(audit.participantLinksExported).toHaveBeenCalledWith("t1", 3);
+    expect(journal.join("\n")).toContain("participants.invite");
+    expect(journal.join("\n")).toContain("participants.linksExported");
+  });
+
+  it("ни сырого токена, ни подстроки /access/ в журнале нет", async () => {
+    const run = await as("mgr1", request(app).post("/api/tests/t1/participants/invite"))
+      .send({ rows });
+    await as("mgr1", request(app).post("/api/tests/t1/participants/links-exported"))
+      .send({ count: 1 });
+
+    const magicLink: string = run.body.results[0].magicLink;
+    // The run really did mint one — otherwise the case would pass vacuously.
+    expect(magicLink).toContain("/access/");
+    const rawToken = magicLink.split("/access/")[1];
+
+    const lines = journal.join("\n");
+    expect(lines).not.toContain("/access/");
+    expect(lines).not.toContain(rawToken);
+  });
+
+  it("отметку о выгрузке учащемуся ставить нельзя", async () => {
+    const res = await as("lrn1", request(app).post("/api/tests/t1/participants/links-exported"))
+      .send({ count: 1 });
+
+    expect(res.status).toBe(403);
+    expect(audit.participantLinksExported).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import ExcelJS from "exceljs";
-import { logger } from "../logger";
+import { audit, logger } from "../logger";
 import { config } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
@@ -481,11 +481,13 @@ router.patch("/assignments/:id/revoke-user/:userId", requirePermission("assignme
 });
 
 // ─── Рассылка списком из файла (PRD-28) ──────────────────────────────────────
-// All three endpoints carry the same gate (FR-22): the capability to assign, the
-// capability to create accounts — the run brings participants into being — and
-// the object-level `assign` scope on THIS test. Two `requirePermission` in one
-// chain is intended: each is an independent gate that either answers 403 or
-// hands over to the next, and the capability model has no "all of these" form.
+// The two endpoints that act on accounts — preview and run — carry the full
+// gate of FR-22: the capability to assign, the capability to create accounts
+// (the run brings participants into being), and the object-level `assign` scope
+// on THIS test. Two `requirePermission` in one chain is intended: each is an
+// independent gate that either answers 403 or hands over to the next, and the
+// capability model has no "all of these" form. The template download and the
+// export mark create nothing, so they stop at `assignments.manage` + scope.
 
 /** Multipart field the participants workbook arrives in. */
 const participantsUpload = workbookUploadSingle("file");
@@ -536,6 +538,9 @@ router.post(
         groupName: typeof groupName === "string" ? groupName : null,
         storage,
       });
+      // FR-20: the fact of the run, in counts. The report going back to the
+      // operator carries the freshly minted links; the trail carries none.
+      audit.participantsInvite(req.params.id, report.created, report.assigned);
       res.json(report);
     } catch (error) {
       const message = (error as Error).message;
@@ -551,6 +556,22 @@ router.post(
       }
       res.status(500).json({ error: "Failed to invite participants" });
     }
+  },
+);
+
+// ─── POST /api/tests/:id/participants/links-exported — отметка (PRD-28 FR-20) ─
+// Records that the operator saved the run's links to a file, and nothing else.
+// The links do NOT travel here: the file is assembled on the client from the
+// report it already holds (раздел 7), so the server is told only the fact and
+// the count. Answers 204 — there is nothing to give back.
+router.post(
+  "/tests/:id/participants/links-exported",
+  requirePermission("assignments.manage"),
+  requireTestScope("assign"),
+  (req, res) => {
+    const raw = Number(req.body?.count);
+    audit.participantLinksExported(req.params.id, Number.isFinite(raw) ? raw : 0);
+    res.status(204).end();
   },
 );
 
