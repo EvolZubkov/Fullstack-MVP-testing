@@ -109,9 +109,20 @@ describe("labelsTree", () => {
     });
   });
 
-  it("throws when one key is a prefix of another", () => {
-    expect(() => labelsTree({ "results.heading": "Заголовок", results: "Ваш результат" })).toThrow(
-      /results/,
-    );
+  it("skips a mutually-prefixed key and keeps every other label", () => {
+    // Rendering is total: a template with such a pair loses ONE heading, not the screen.
+    // The pair itself is rejected by the manifest validator, at upload.
+    expect(
+      labelsTree({ "results.heading": "Заголовок", results: "Ваш результат", "facts.points": "баллов" }),
+    ).toEqual({
+      results: { heading: "Заголовок" },
+      facts: { points: "баллов" },
+    });
+  });
+
+  it("skips the prefixed key whichever order the keys arrive in", () => {
+    expect(labelsTree({ results: "Ваш результат", "results.heading": "Заголовок" })).toEqual({
+      results: "Ваш результат",
+    });
   });
 });

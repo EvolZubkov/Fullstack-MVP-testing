@@ -42,8 +42,15 @@ import type {
 } from "../scales/interpretation";
 import type { LevelRamp } from "./level-ramp";
 
-/** Layout-facing flag per sub-block: the DSL has no equality test, only truthiness. */
-const BLOCK_FLAG: Record<ResultsBlockKey, string> = {
+/**
+ * Layout-facing flag per sub-block: the DSL has no equality test, only truthiness.
+ *
+ * Typed against `CtxResultBlock` and not `string`: a misspelt flag («isScale») is a block
+ * that silently disappears from the screen — the layout's `{{#if isScales}}` simply never
+ * fires, no host throws, and no existing test looks at the flag of a block it does not
+ * render. The compiler is the only thing that can catch it early.
+ */
+const BLOCK_FLAG: Record<ResultsBlockKey, keyof CtxResultBlock> = {
   summary: "isSummary",
   scales: "isScales",
   indicators: "isIndicators",
@@ -541,8 +548,19 @@ export interface ResultContextOptions {
    * labels yet, and the context stays exactly as it was before this PRD.
    */
   labels?: Record<string, string>;
-  /** PRD-49: the author's order of the sub-blocks; absent = the shipped order. */
+  /** PRD-49: the author's order of the sub-blocks; absent = the template's order. */
   blockOrder?: ResultsBlockKey[];
+  /**
+   * PRD-49: what THIS screen of THIS template prints, and in what order — the list the
+   * author's order is cleaned against, and the composition it cannot exceed (the adaptive
+   * results screen has no score summary at all).
+   *
+   * The builder takes a READY list rather than the manifest: resolving «manifest → this
+   * screen» is the caller's job ({@link templateBlockOrder}), exactly as it is for the
+   * labels. Absent = the shipped order, so a host not yet taught to pass it renders what
+   * it always did.
+   */
+  templateBlockOrder?: readonly ResultsBlockKey[];
 }
 
 /** Built `{ course, result }` for the results layouts. */
@@ -787,7 +805,7 @@ export function buildResultContext(
     topics: !!result.topicResults?.length,
   };
   const labels = opts.labels ?? {};
-  const order = resolveBlockOrder(opts.blockOrder, DEFAULT_BLOCK_ORDER);
+  const order = resolveBlockOrder(opts.blockOrder, opts.templateBlockOrder ?? DEFAULT_BLOCK_ORDER);
   // Named `subBlocks` and not `blocks`: `blocks` in this scope already holds the PRD-29
   // show/hide answers of the measurement blocks, a different thing entirely.
   const subBlocks = order

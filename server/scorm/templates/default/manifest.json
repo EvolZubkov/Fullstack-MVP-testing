@@ -255,7 +255,10 @@
     { "key": "topic.points", "group": "Карточка темы", "label": "Строка «Баллов»", "default": "Баллов" },
     { "key": "section.eyebrow", "group": "Итоги раздела", "label": "Надпись над итогами раздела", "default": "Итоги раздела" }
   ],
-  "resultsBlockOrder": ["summary", "scales", "indicators", "topics"],
+  "resultsBlockOrder": {
+    "default": ["summary", "scales", "indicators", "topics"],
+    "results.adaptive": ["topics", "scales", "indicators"]
+  },
   "contentTemplates": [
     {
       "key": "start.standard",

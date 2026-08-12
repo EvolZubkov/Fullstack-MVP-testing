@@ -37,6 +37,48 @@ describe("validateLabelDeclarations", () => {
   it("accepts a template that declares no labels at all", () => {
     expect(validateLabelDeclarations(undefined)).toEqual([]);
   });
+
+  it("rejects a key that is the beginning of another key", () => {
+    // `labelsTree` cannot hold both: `results` would be a string where `results.heading`
+    // needs an object. It resolves that silently at render time, so the shout belongs here.
+    const decls = [
+      { key: "results", group: "G", label: "L", default: "Ваш результат" },
+      { key: "results.heading", group: "G", label: "L", default: "Заголовок" },
+    ];
+    expect(validateLabelDeclarations(decls)).toEqual([
+      "labels[1]: ключ results.heading конфликтует с ключом results — один ключ является началом другого",
+    ]);
+  });
+
+  it("rejects the same pair declared the other way round", () => {
+    const decls = [
+      { key: "results.heading", group: "G", label: "L", default: "Заголовок" },
+      { key: "results", group: "G", label: "L", default: "Ваш результат" },
+    ];
+    expect(validateLabelDeclarations(decls)).toEqual([
+      "labels[1]: ключ results конфликтует с ключом results.heading — один ключ является началом другого",
+    ]);
+  });
+
+  it("rejects a conflict at any depth, not only the first segment", () => {
+    const decls = [
+      { key: "a.b", group: "G", label: "L", default: "X" },
+      { key: "a.b.c", group: "G", label: "L", default: "Y" },
+    ];
+    expect(validateLabelDeclarations(decls)).toEqual([
+      "labels[1]: ключ a.b.c конфликтует с ключом a.b — один ключ является началом другого",
+    ]);
+  });
+
+  it("does not mistake a shared prefix for a conflict", () => {
+    // `results.heading` and `results.summary` are siblings, not a prefix pair.
+    const decls = [
+      { key: "results.heading", group: "G", label: "L", default: "X" },
+      { key: "results.summary", group: "G", label: "L", default: "Y" },
+      { key: "results.summaries", group: "G", label: "L", default: "Z" },
+    ];
+    expect(validateLabelDeclarations(decls)).toEqual([]);
+  });
 });
 
 /**
@@ -72,7 +114,7 @@ interface LabelDecl {
 
 const manifest = JSON.parse(
   readFileSync(resolve("server/scorm/templates/default/manifest.json"), "utf-8"),
-) as { labels?: LabelDecl[]; resultsBlockOrder?: string[] };
+) as { labels?: LabelDecl[]; resultsBlockOrder?: Record<string, string[]> };
 
 describe("манифест «Стандартного»: объявление надписей (PRD-49)", () => {
   it("объявляет все 15 ключей с непустым default", () => {
@@ -88,7 +130,13 @@ describe("манифест «Стандартного»: объявление н
     expect(validateLabelDeclarations(manifest.labels)).toEqual([]);
   });
 
-  it("объявляет порядок подблоков итогов", () => {
-    expect(manifest.resultsBlockOrder).toEqual(["summary", "scales", "indicators", "topics"]);
+  it("объявляет порядок подблоков итогов ПО ЭКРАНАМ", () => {
+    // Состав у экранов разный, а не только порядок: на адаптивных итогах сводки баллов
+    // нет и никогда не было (в макете нет ни `hideScoreSummary`, ни блока сводки), и
+    // отсутствие ключа `summary` в списке — это и есть «на этом экране сводки не бывает».
+    expect(manifest.resultsBlockOrder).toEqual({
+      default: ["summary", "scales", "indicators", "topics"],
+      "results.adaptive": ["topics", "scales", "indicators"],
+    });
   });
 });

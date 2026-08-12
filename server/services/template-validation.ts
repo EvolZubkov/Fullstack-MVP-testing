@@ -199,6 +199,13 @@ function collectTemplateSources(manifest: Record<string, unknown>): Array<{ ref:
 /**
  * PRD-49: static check of `manifest.labels[]`. A template that declares no labels is
  * valid — it keeps printing the hard-coded strings of its own layouts.
+ *
+ * Rejects MUTUALLY-PREFIXED keys (`results` together with `results.heading`) as well as the
+ * malformed ones. The renderer addresses a label by a dotted PATH (`{{ labels.results.heading }}`),
+ * so one such key can only exist at the cost of the other: `labelsTree` keeps the first and
+ * drops the second, deliberately and silently, because it runs while a learner is waiting
+ * for the results screen. This is the place where the loss is visible to somebody who can
+ * fix it — the author, at upload, with both keys named.
  */
 export function validateLabelDeclarations(labels: unknown): string[] {
   if (labels === undefined || labels === null) return [];
@@ -215,6 +222,23 @@ export function validateLabelDeclarations(labels: unknown): string[] {
     if (seen.has(key)) {
       errors.push(`labels[${i}]: ключ ${key} объявлен дважды`);
       return;
+    }
+    // Every ancestor path of this key: `a.b.c` claims `a` and `a.b` as objects, so a
+    // declared label at either of those paths cannot coexist with it.
+    const parts = key.split(".");
+    for (let depth = 1; depth < parts.length; depth += 1) {
+      const prefix = parts.slice(0, depth).join(".");
+      if (seen.has(prefix)) {
+        errors.push(`labels[${i}]: ключ ${key} конфликтует с ключом ${prefix} — один ключ является началом другого`);
+        return;
+      }
+    }
+    // …and the mirror case: a SHORTER key arriving after the longer one it starts.
+    for (const earlier of seen) {
+      if (earlier.startsWith(`${key}.`)) {
+        errors.push(`labels[${i}]: ключ ${key} конфликтует с ключом ${earlier} — один ключ является началом другого`);
+        return;
+      }
     }
     seen.add(key);
     if (typeof decl.default !== "string") errors.push(`labels[${i}] (${key}): отсутствует "default"`);

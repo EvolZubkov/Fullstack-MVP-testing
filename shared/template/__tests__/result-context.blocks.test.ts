@@ -12,6 +12,55 @@ const INPUT: ResultInput = {
   topicResults: [],
 };
 
+/** One topic with something to say, so the `topics` sub-block becomes visible. */
+const TOPIC = {
+  topicId: "t1",
+  topicName: "Тема",
+  correct: 4,
+  total: 5,
+  percent: 80,
+  passed: true,
+  earnedPoints: 4,
+  possiblePoints: 5,
+};
+
+/** One visible scale and one visible indicator — enough for both measurement sub-blocks. */
+const MEASURES = {
+  ramp: LEVEL_SCHEMES.traffic,
+  scaleKind: "band_ruler" as const,
+  indicatorKind: "label" as const,
+  scales: [
+    {
+      key: "stress",
+      name: "Стресс",
+      value: 27,
+      visibility: "level_and_value" as const,
+      interpretation: {
+        domainMin: 0,
+        domainMax: 45,
+        valence: "lower_is_better" as const,
+        bands: [{ min: 0, max: 45, level: "high", label: "Высокий" }],
+      },
+    },
+  ],
+  indicators: [
+    {
+      key: "state",
+      name: "Состояние",
+      value: "growing",
+      visibility: "level" as const,
+      interpretation: {
+        domainMin: null,
+        domainMax: null,
+        valence: "none" as const,
+        bands: [],
+        outcomes: [{ code: "growing", label: "Возрастает", tone: "attention" as const }],
+      },
+    },
+  ],
+  blockSettings: { scoreSummary: "show" as const },
+};
+
 const LABELS = {
   "results.heading": "Ваш результат",
   "results.summary": "Общий балл",
@@ -74,6 +123,34 @@ describe("buildResultContext — sub-blocks (PRD-49)", () => {
       },
     });
     expect(ctx.result.blocks ?? []).toEqual([]);
+  });
+
+  it("flags every sub-block with the name its layout gates on", () => {
+    // Covers `isScales`/`isIndicators` too: a misspelt flag makes a block vanish from the
+    // screen without any host throwing, so all four names are asserted somewhere.
+    const ctx = buildResultContext(
+      { ...INPUT, topicResults: [TOPIC] },
+      "Тест",
+      { labels: LABELS, hasPassThreshold: true, measures: MEASURES },
+    );
+    expect(ctx.result.blocks).toEqual([
+      { key: "summary", heading: "Общий балл", isSummary: true },
+      { key: "scales", heading: "По шкалам", isScales: true },
+      { key: "indicators", heading: "По показателям", isIndicators: true },
+      { key: "topics", heading: "По темам", isTopics: true },
+    ]);
+  });
+
+  it("cannot print a sub-block the template's screen does not have", () => {
+    // The adaptive results screen has never carried a score summary: the template's list
+    // leaves `summary` out, so the author's order cannot bring it back.
+    const ctx = buildResultContext({ ...INPUT, topicResults: [TOPIC] }, "Тест", {
+      labels: LABELS,
+      hasPassThreshold: true,
+      templateBlockOrder: ["topics", "scales", "indicators"],
+      blockOrder: ["summary", "topics"],
+    });
+    expect(ctx.result.blocks?.map((b) => b.key)).toEqual(["topics"]);
   });
 
   it("keeps the summary visible for a control test with nothing to grade", () => {

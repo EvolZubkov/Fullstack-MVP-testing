@@ -97,33 +97,43 @@ export function resolveLabels({
  * template path on dots, so `labels["results.scales"]` would never be reachable from
  * `{{ labels.results.scales }}`.
  *
- * Invariant: keys must not be mutual prefixes (e.g. `"results"` and `"results.heading"`
- * together). A prefix key would need to hold both a string leaf and a nested object at the
- * same path, and whichever is written second silently overwrites the first — a real label
- * would vanish from the tree with no error. The manifest never declares such a pair today,
- * but this function is generic, so the collision is rejected explicitly instead of trusting
- * every future caller to avoid it.
+ * Keys must not be mutual prefixes (e.g. `"results"` and `"results.heading"` together): a
+ * prefix key would need to hold both a string leaf and a nested object at the same path.
+ *
+ * SUCH A PAIR IS SKIPPED, NOT THROWN ON — the conflicting key is dropped and every other
+ * label survives. This function runs inside the build of the LEARNER's results context, on
+ * both hosts: a third-party template uploaded through the PRD-3 registry could otherwise
+ * take down the results screen, and inside a SCORM package it would do so silently, as a
+ * blank screen in someone's LMS. One missing heading is a defect; a learner who cannot see
+ * the result of a finished attempt is a lost attempt.
+ *
+ * The real place to catch the pair is the MANIFEST VALIDATOR
+ * (`validateLabelDeclarations`), which rejects the template at upload, where the author is
+ * standing there and can be told what is wrong. Rendering is total by design; validation is
+ * where the shouting belongs.
  */
 export function labelsTree(labels: ResolvedLabels): Record<string, unknown> {
   const root: Record<string, unknown> = {};
   for (const [key, text] of Object.entries(labels)) {
     const parts = key.split(".");
     let node = root;
+    let collided = false;
     for (let i = 0; i < parts.length - 1; i += 1) {
       const part = parts[i];
       const existing = node[part];
+      // A string here means a SHORTER key already claimed this path as a leaf.
       if (typeof existing === "string") {
-        throw new Error(
-          `labelsTree: key "${parts.slice(0, i + 1).join(".")}" collides with key "${key}" — keys must not be mutual prefixes`,
-        );
+        collided = true;
+        break;
       }
       if (typeof existing !== "object" || existing === null) node[part] = {};
       node = node[part] as Record<string, unknown>;
     }
+    if (collided) continue;
     const leaf = parts[parts.length - 1];
-    if (typeof node[leaf] === "object" && node[leaf] !== null) {
-      throw new Error(`labelsTree: key "${key}" collides with a longer key under the same prefix — keys must not be mutual prefixes`);
-    }
+    // An object here means a LONGER key already built a branch at this path; keeping the
+    // branch drops one label, overwriting it would drop all the labels underneath.
+    if (typeof node[leaf] === "object" && node[leaf] !== null) continue;
     node[leaf] = text;
   }
   return root;
