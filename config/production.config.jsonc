@@ -49,5 +49,7 @@
       "pass": { "env": "SMTP_PASS" }
     }
   },
-  "access": { "superadminEmails": { "env": "SUPERADMIN_EMAILS" } }
+  "access": { "superadminEmails": { "env": "SUPERADMIN_EMAILS" } },
+  // Operational ceilings — see config/config.jsonc for what each one bounds.
+  "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3 }
 }

@@ -38,5 +38,7 @@
       "pass": { "env": "SMTP_PASS" }
     }
   },
-  "access": { "superadminEmails": ["admin@test.com", "vvlad1973@gmail.com"] }
+  "access": { "superadminEmails": ["admin@test.com", "vvlad1973@gmail.com"] },
+  // Operational ceilings — see config/config.jsonc for what each one bounds.
+  "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3 }
 }

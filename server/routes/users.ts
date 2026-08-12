@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { logger, audit } from "../logger";
-import { appBaseUrl } from "../config";
+import { config, appBaseUrl } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { respondWorkbookReadError } from "../middleware/upload";
@@ -330,8 +330,9 @@ router.post("/:id/invite", requirePermission("users.manage"), async (req, res) =
 
     // Same anti-mail-bomb budget as POST /api/auth/forgot-password: both paths
     // mint rows in `password_reset_tokens`, so one shared counter covers both.
+    // The hourly ceiling comes from configuration (`limits.passwordEmailsPerHour`).
     const recentTokens = await storage.getRecentTokensCount(user.id, 1);
-    if (recentTokens >= 3) {
+    if (recentTokens >= config.limits.passwordEmailsPerHour) {
       return res.status(429).json({ error: "Too many invites. Please try again later." });
     }
 
@@ -517,7 +518,10 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
     const rows: any[] = sheetToObjects(ws, { defval: "" });
 
     if (rows.length === 0) return res.status(400).json({ error: "File is empty" });
-    if (rows.length > 500) return res.status(400).json({ error: "Maximum 500 rows per upload" });
+    const maxRows = config.limits.participantsImportMaxRows;
+    if (rows.length > maxRows) {
+      return res.status(400).json({ error: `Maximum ${maxRows} rows per upload` });
+    }
 
     const allGroups = await storage.getGroups();
 

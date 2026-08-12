@@ -6,7 +6,7 @@ import { getEffectiveRoles, getUserCapabilities } from "../services/access";
 import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
 import { logger, audit, requestContext } from "../logger";
-import { appBaseUrl } from "../config";
+import { config, appBaseUrl } from "../config";
 import "../middleware/magic-scope";
 
 const router = Router();
@@ -225,9 +225,10 @@ router.post("/forgot-password", async (req, res) => {
       });
     }
 
-    // Проверяем лимит запросов (3 в час)
+    // Проверяем почасовой лимит писем (значение из настроек:
+    // limits.passwordEmailsPerHour; бюджет общий с приглашением задать пароль)
     const recentTokens = await storage.getRecentTokensCount(user.id, 1);
-    if (recentTokens >= 3) {
+    if (recentTokens >= config.limits.passwordEmailsPerHour) {
       return res.status(429).json({
         error: "Too many reset requests. Please try again later.",
       });
