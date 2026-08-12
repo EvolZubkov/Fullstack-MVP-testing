@@ -82,7 +82,13 @@ import {
   type ScaleRef,
   type TopicRef,
 } from "../result-variables-builder";
-import { bandSpan, DomainFields, VALENCE_OPTIONS, VISIBILITY_OPTIONS } from "./scales-section";
+import {
+  bandSpan,
+  CardSlotToggles,
+  DomainFields,
+  VALENCE_OPTIONS,
+  VISIBILITY_OPTIONS,
+} from "./scales-section";
 import { LevelsEditor } from "./levels-editor";
 import { OutcomesEditor } from "./outcomes-editor";
 
@@ -692,6 +698,18 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
           data-testid={`metrics-target-${index}`}
         />
       </Grid>
+
+      {/* PRD-49 §6: the card's other slots. «Показывать обучающемуся» above governs the
+          VALUE slot only, so without these two an author who needs a card with just an
+          explanation has to blank the level label — which prints the level CODE instead. */}
+      <CardSlotToggles
+        showName={v.showName}
+        showLevel={v.showLevel}
+        readOnly={readOnly}
+        testIdPrefix="metrics"
+        index={index}
+        onChange={onChange}
+      />
     </>
   );
 }

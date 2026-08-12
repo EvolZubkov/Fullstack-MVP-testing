@@ -26,6 +26,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
   EmptyState,
+  FormField,
   Grid,
   IconButton,
   Input,
@@ -827,6 +828,17 @@ function ScaleForm({
           />
         </div>
       </div>
+
+      {/* PRD-49 §6: the remaining slots of the same card, next to the control that
+          already governs the value slot. */}
+      <CardSlotToggles
+        showName={s.showName}
+        showLevel={s.showLevel}
+        readOnly={readOnly}
+        testIdPrefix="scales"
+        index={index}
+        onChange={onChange}
+      />
     </>
   );
 }
@@ -922,6 +934,65 @@ export function DomainFields({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * PRD-49 §6: the two slot switches of the results card, shared by a scale and an
+ * indicator — both render the SAME four-slot card (name, value, level, explanation),
+ * so a second copy would drift the moment either side changed.
+ *
+ * The value slot is not here: it is already governed by «Показывать обучающемуся»
+ * (`learner_visibility`), which these two stand next to.
+ *
+ * What is switched off is the DISPLAY of a slot, never its content. Clearing the level
+ * label instead is what authors used to do, and it does not work: a numeric band drops
+ * an empty label during normalisation and the reader prints `label ?? level`, so the
+ * learner ends up looking at the level CODE. The label also has to survive for the
+ * report, the analytics and the export.
+ *
+ * @public
+ */
+export function CardSlotToggles({
+  showName,
+  showLevel,
+  readOnly,
+  testIdPrefix,
+  index,
+  onChange,
+}: {
+  /** `undefined` = shown: the flag is stored only when the author switches it off. */
+  showName: boolean | undefined;
+  showLevel: boolean | undefined;
+  readOnly: boolean;
+  /** `scales` | `metrics` — the section this card belongs to. */
+  testIdPrefix: string;
+  index: number;
+  onChange: (patch: { showName?: boolean; showLevel?: boolean }) => void;
+}) {
+  return (
+    <FormField
+      label="Слоты карточки"
+      hint="Выключается ПОКАЗ слота — название и метка уровня остаются в данных: их берут отчёт, аналитика и выгрузка."
+      data-testid={`${testIdPrefix}-slots-${index}`}
+    >
+      <Stack gap={2}>
+        <Switch
+          label="Показывать название"
+          checked={showName !== false}
+          disabled={readOnly}
+          onChange={(e) => onChange({ showName: e.target.checked })}
+          data-testid={`${testIdPrefix}-show-name-${index}`}
+        />
+        <Switch
+          label="Показывать уровень"
+          checked={showLevel !== false}
+          disabled={readOnly}
+          onChange={(e) => onChange({ showLevel: e.target.checked })}
+          data-testid={`${testIdPrefix}-show-level-${index}`}
+        />
+      </Stack>
+    </FormField>
   );
 }
 
