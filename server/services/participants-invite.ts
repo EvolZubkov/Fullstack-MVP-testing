@@ -11,6 +11,7 @@
  * operator confirms rows carrying the very statuses the run acts on.
  */
 import { readWorkbookFromBuffer, sheetToObjects } from "../utils/excel";
+import type { IStorage } from "../storage";
 
 /** One participant as read from the uploaded sheet, before anything is known about them. */
 export interface ParticipantRow {
@@ -58,4 +59,77 @@ export async function parseParticipantsWorkbook(
     rows.push({ index, email, name: name || null });
   });
   return rows;
+}
+
+/** Statuses a preview row can carry; `error` rows are never selectable. */
+export type ParticipantStatus = "new" | "external" | "learner" | "privileged" | "assigned" | "error";
+
+/** A parsed row plus what the system already knows about that address. */
+export interface ParticipantPreviewRow extends ParticipantRow {
+  status: ParticipantStatus;
+  userId: string | null;
+  /** Present only for `status: "error"`; shown verbatim in the preview table. */
+  error?: string;
+}
+
+/**
+ * Collect every user the test is already assigned to, directly or through a
+ * group.
+ *
+ * Group membership counts: a member of an assigned group holds the test just as
+ * a personally assigned user does (`server/routes/assignments.ts` enumerates the
+ * members the same way when it sends the letters). Ignoring it would let the run
+ * create a SECOND assignment for the same person and hand them a second link,
+ * while the "already assigned" branch — which reissues and revokes the old one —
+ * never fires.
+ */
+async function collectAssignedUserIds(testId: string, storage: IStorage): Promise<Set<string>> {
+  const assignments = await storage.getTestAssignments(testId);
+  const assigned = new Set<string>();
+  for (const assignment of assignments) {
+    if (assignment.userId) assigned.add(assignment.userId);
+    if (assignment.groupId) {
+      const members = await storage.getGroupUsers(assignment.groupId);
+      for (const member of members) assigned.add(member.id);
+    }
+  }
+  return assigned;
+}
+
+/**
+ * Decide what the run would do with each row, without doing any of it (PRD-28
+ * раздел 5.2). The operator sees these statuses in the preview table and ticks
+ * the rows to run; the run then reads the same statuses back, so what was shown
+ * and what happens cannot drift apart.
+ *
+ * @param rows Parsed rows, in sheet order.
+ * @param ctx.testId The test being assigned; decides the `assigned` status.
+ * @param ctx.storage Data access; read-only here by construction.
+ * @returns One preview row per input row, in the same order.
+ */
+export async function classifyParticipants(
+  rows: readonly ParticipantRow[],
+  ctx: { testId: string; storage: IStorage },
+): Promise<ParticipantPreviewRow[]> {
+  const assignedUserIds = await collectAssignedUserIds(ctx.testId, ctx.storage);
+
+  return Promise.all(rows.map(async (row): Promise<ParticipantPreviewRow> => {
+    if (!row.email || !row.email.includes("@")) {
+      return { ...row, status: "error", userId: null, error: "Некорректный адрес" };
+    }
+
+    const user = await ctx.storage.getUserByEmail(row.email);
+    if (!user) return { ...row, status: "new", userId: null };
+    if (user.status === "inactive") {
+      return { ...row, status: "error", userId: user.id, error: "Учётная запись деактивирована" };
+    }
+    if (assignedUserIds.has(user.id)) return { ...row, status: "assigned", userId: user.id };
+
+    const roles = await ctx.storage.getUserRoles(user.id);
+    // Anything beyond `learner` is a privileged recipient: the assignment is
+    // made, but no one-time link is issued (rule D-3, PRD-28 раздел 6).
+    const privileged = roles.some((r) => r !== "learner");
+    if (privileged) return { ...row, status: "privileged", userId: user.id };
+    return { ...row, status: user.isExternal ? "external" : "learner", userId: user.id };
+  }));
 }
