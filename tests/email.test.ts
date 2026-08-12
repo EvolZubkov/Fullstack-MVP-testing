@@ -99,7 +99,7 @@ describe("sendPasswordResetEmail", () => {
 });
 
 describe("sendAssignmentEmail", () => {
-  const base = { to: "u@x.test", testTitle: "Quiz", magicLink: "https://go" };
+  const base = { to: "u@x.test", testId: "t1", testTitle: "Quiz", magicLink: "https://go" };
 
   it("returns false and logs when SMTP is not configured", async () => {
     disableSmtp();
@@ -130,19 +130,21 @@ describe("sendAssignmentEmail", () => {
   });
 
   // D-3 (PLAN_MAGIC_LINK_SCOPE.md, Этап 3): withheld for privileged recipients —
-  // `magicLink` is omitted and the letter falls back to a plain login link.
+  // `magicLink` is omitted and the letter falls back to a plain link that needs
+  // an ordinary sign-in. Since PRD-28 раздел 6 that fallback addresses the test
+  // itself (`/learner/test/<id>`), not the general login page.
   describe("without a magicLink (withheld for a privileged recipient)", () => {
-    const withheld = { to: "u@x.test", testTitle: "Quiz" };
+    const withheld = { to: "u@x.test", testId: "t1", testTitle: "Quiz" };
 
-    it("renders a login call-to-action instead of a magic link", async () => {
+    it("renders a sign-in call-to-action instead of a magic link", async () => {
       const ok = await sendAssignmentEmail(withheld);
       expect(ok).toBe(true);
       const call = m.sendMail.mock.calls[0][0];
-      expect(call.html).toContain("/login");
+      expect(call.html).toContain("/learner/test/t1");
       expect(call.html).toContain("Войти и пройти тест");
-      expect(call.html).toContain("После входа тест будет в списке назначенных.");
-      expect(call.text).toContain("/login");
-      expect(call.text).toContain("После входа тест будет в списке назначенных.");
+      expect(call.html).toContain("После входа откроется страница теста.");
+      expect(call.text).toContain("/learner/test/t1");
+      expect(call.text).toContain("После входа откроется страница теста.");
     });
 
     it("mentions no token, access link or the reason it is absent", async () => {
@@ -157,26 +159,26 @@ describe("sendAssignmentEmail", () => {
       expect(call.text).not.toMatch(/роль|прав/i);
     });
 
-    it("logs the login URL (and no token) when SMTP is not configured", async () => {
+    it("logs the fallback URL (and no token) when SMTP is not configured", async () => {
       disableSmtp();
       expect(await sendAssignmentEmail(withheld)).toBe(false);
       const loggedLoginLine = (logger.info as any).mock.calls
         .map((c: unknown[]) => String(c[0]))
-        .find((line: string) => line.startsWith("Login: "));
-      expect(loggedLoginLine).toContain("/login");
+        .find((line: string) => line.startsWith("Login required: "));
+      expect(loggedLoginLine).toContain("/learner/test/t1");
       const loggedLinkLine = (logger.info as any).mock.calls
         .map((c: unknown[]) => String(c[0]))
         .find((line: string) => line.startsWith("Link: "));
       expect(loggedLinkLine).toBeUndefined();
     });
 
-    it("logs the login URL (and no token) when the transport throws", async () => {
+    it("logs the fallback URL (and no token) when the transport throws", async () => {
       m.sendMail.mockRejectedValueOnce(new Error("boom"));
       expect(await sendAssignmentEmail(withheld)).toBe(false);
       const loggedLoginLine = (logger.info as any).mock.calls
         .map((c: unknown[]) => String(c[0]))
-        .find((line: string) => line.startsWith("Login: "));
-      expect(loggedLoginLine).toContain("/login");
+        .find((line: string) => line.startsWith("Login required: "));
+      expect(loggedLoginLine).toContain("/learner/test/t1");
     });
   });
 
@@ -227,8 +229,8 @@ describe("sendInviteEmail", () => {
 describe("call-to-action button contrast", () => {
   const cases: Array<[string, () => Promise<unknown>]> = [
     ["password reset", () => sendPasswordResetEmail("u@x.test", "https://reset")],
-    ["assignment (magic link)", () => sendAssignmentEmail({ to: "u@x.test", testTitle: "Q", magicLink: "https://go" })],
-    ["assignment (login fallback)", () => sendAssignmentEmail({ to: "u@x.test", testTitle: "Q" })],
+    ["assignment (magic link)", () => sendAssignmentEmail({ to: "u@x.test", testId: "t1", testTitle: "Q", magicLink: "https://go" })],
+    ["assignment (sign-in fallback)", () => sendAssignmentEmail({ to: "u@x.test", testId: "t1", testTitle: "Q" })],
     ["invite", () => sendInviteEmail({ to: "u@x.test", inviteLink: "https://invite" })],
   ];
 

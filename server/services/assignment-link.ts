@@ -99,6 +99,7 @@ export async function deliverAssignmentLink(
     const delivered = await sendAssignmentEmail({
       to: email,
       userName: user.name || undefined,
+      testId,
       testTitle,
       testDescription,
       dueDate,
@@ -130,6 +131,7 @@ export async function deliverAssignmentLink(
   const delivered = await sendAssignmentEmail({
     to: email,
     userName: user.name || undefined,
+    testId,
     testTitle,
     testDescription,
     dueDate,

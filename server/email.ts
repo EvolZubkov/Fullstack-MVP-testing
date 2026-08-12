@@ -181,6 +181,8 @@ ${resetLink}
 export async function sendAssignmentEmail(opts: {
   to: string;
   userName?: string;
+  /** The assigned test, used for the fallback address when no link is minted. */
+  testId: string;
   testTitle: string;
   testDescription?: string | null;
   dueDate?: Date | null;
@@ -189,9 +191,9 @@ export async function sendAssignmentEmail(opts: {
    * recipient holds any role other than `learner` (see
    * `mayReceiveAssignmentLink`, PLAN_MAGIC_LINK_SCOPE.md Этап 3): such an
    * account must never receive a password-free entry link, so the letter falls
-   * back to an ordinary link to the login page and says nothing about why the
-   * quick link is absent (no mention of roles/permissions — an e-mail gets
-   * forwarded, spelling out the protection in it is pointless disclosure).
+   * back to an ordinary link and says nothing about why the quick link is
+   * absent (no mention of roles/permissions — an e-mail gets forwarded,
+   * spelling out the protection in it is pointless disclosure).
    */
   magicLink?: string;
 }): Promise<boolean> {
@@ -203,17 +205,19 @@ export async function sendAssignmentEmail(opts: {
     ? opts.dueDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })
     : null;
 
-  // No magic link was minted for this recipient: fall back to the ordinary
-  // login page. `ctaHref` is never a token in this branch.
+  // No magic link was minted for this recipient: point at the TEST itself
+  // (PRD-28 раздел 6) rather than the general login page — the recipient signs
+  // in with their own password and lands on the assigned test instead of the
+  // cabinet. `ctaHref` is never a token in this branch.
   const hasMagicLink = Boolean(opts.magicLink);
-  const ctaHref = opts.magicLink ?? `${appBaseUrl()}/login`;
+  const ctaHref = opts.magicLink ?? `${appBaseUrl()}/learner/test/${opts.testId}`;
 
   if (!transport) {
     logger.info("===========================================");
     logger.info("ASSIGNMENT MAGIC LINK (SMTP not configured):");
     logger.info(`Test: ${opts.testTitle}`);
     logger.info(`To: ${opts.to}`);
-    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login: ${ctaHref}`);
+    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login required: ${ctaHref}`);
     logger.info("===========================================");
     return false;
   }
@@ -236,7 +240,7 @@ export async function sendAssignmentEmail(opts: {
       <p style="text-align: center;">
         ${ctaButton(ctaHref, "Войти и пройти тест")}
       </p>
-      <p style="font-size:13px;color:${C.fgMuted};">После входа тест будет в списке назначенных.</p>`;
+      <p style="font-size:13px;color:${C.fgMuted};">После входа откроется страница теста.</p>`;
 
   const html = `
 <!DOCTYPE html>
@@ -285,10 +289,10 @@ export async function sendAssignmentEmail(opts: {
 ${ctaHref}
 
 Ссылка персональная — не передавайте её другим.`
-    : `Для прохождения теста перейдите на страницу входа:
+    : `Для прохождения теста перейдите по ссылке:
 ${ctaHref}
 
-После входа тест будет в списке назначенных.`;
+После входа откроется страница теста.`;
 
   const text = `
 Вам назначен тест — ${APP_NAME}
@@ -320,7 +324,7 @@ ${ctaTextBlock}
     logger.info("ASSIGNMENT MAGIC LINK (email send failed):");
     logger.info(`Test: ${opts.testTitle}`);
     logger.info(`To: ${opts.to}`);
-    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login: ${ctaHref}`);
+    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login required: ${ctaHref}`);
     logger.info("===========================================");
     return false;
   }
