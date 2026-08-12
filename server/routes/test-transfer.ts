@@ -27,8 +27,94 @@ import {
   InvalidPackageError,
   UnsupportedPackageError,
 } from "../services/test-transfer/import";
+import {
+  inspectParsedPackage,
+  readTransferPackage,
+  type InspectPorts,
+} from "../services/test-transfer/inspect";
+import {
+  createTransferSession,
+  dropTransferSession,
+  getTransferSession,
+} from "../services/test-transfer/session-store";
+import { buildTargetSnapshot } from "../services/test-transfer/target";
+import { diffTransfer, type TransferOptions } from "../services/test-transfer/diff";
+import { applyTransfer, TransferForbiddenError } from "../services/test-transfer/apply";
+import { canManageTopicContent } from "../services/topic-access";
 
 const router = Router();
+
+/**
+ * Binds the inventory to THIS actor.
+ *
+ * Topic rights come from the ordinary `topic-access` rule — the same one the questions API
+ * obeys — so the form cannot offer a policy that `apply` will refuse.
+ */
+function inspectPortsFor(req: Request): InspectPorts {
+  const roles = req.effectiveRoles ?? [];
+  const userId = req.currentUser?.id ?? "";
+  return {
+    testExists: async (id) => Boolean(await storage.getTest(id)),
+    existingTopics: async (ids) => {
+      const found = [];
+      for (const id of ids) {
+        const topic = await storage.getTopic(id);
+        if (topic) found.push(topic);
+      }
+      return found;
+    },
+    canManageTopic: (topic) => canManageTopicContent(roles, userId, topic),
+  };
+}
+
+/** The options as the form sends them, with the safe defaults of PRD-48 §3. */
+function readOptions(body: unknown): TransferOptions {
+  const raw = (body ?? {}) as Partial<TransferOptions> & { parts?: Partial<TransferOptions["parts"]> };
+  return {
+    parts: {
+      structure: raw.parts?.structure ?? true,
+      scoring: raw.parts?.scoring ?? true,
+      scales: raw.parts?.scales ?? true,
+      results: raw.parts?.results ?? true,
+      media: raw.parts?.media ?? true,
+    },
+    // Upsert is the default everywhere: the mode that cannot erase is the one chosen for you.
+    modes: {
+      scoring: raw.modes?.scoring === "replace" ? "replace" : "upsert",
+      scales: raw.modes?.scales === "replace" ? "replace" : "upsert",
+    },
+    topics: raw.topics ?? {},
+  };
+}
+
+/** Answers the session-store's three outcomes; `null` means the handler already replied. */
+function requireSession(req: Request, res: Response) {
+  const token = String((req.body as { token?: unknown })?.token ?? "");
+  const userId = req.session.userId ?? "";
+  const session = getTransferSession(token, userId);
+  if (session === "expired") {
+    res.status(410).json({ error: "Загруженный пакет устарел, загрузите файл заново" });
+    return null;
+  }
+  if (!session) {
+    res.status(404).json({ error: "Пакет не найден: загрузите файл заново" });
+    return null;
+  }
+  return session;
+}
+
+/** One place turning a package failure into an answer, so the three steps agree. */
+function packageError(error: unknown, res: Response): boolean {
+  if (error instanceof InvalidPackageError || error instanceof UnsupportedPackageError) {
+    res.status(422).json({ error: error.message });
+    return true;
+  }
+  if (error instanceof TransferForbiddenError) {
+    res.status(403).json({ error: error.message, topicId: error.topicId });
+    return true;
+  }
+  return false;
+}
 
 // ─── GET /api/tests/:id/transfer ─────────────────────────────────────────────
 router.get(
@@ -109,6 +195,107 @@ router.post(
       }
       logger.error("Transfer import error: " + (error as Error).message, "test-transfer");
       res.status(500).json({ error: "Failed to import transfer package" });
+    }
+  },
+);
+
+// ─── POST /api/tests/transfer/inspect ────────────────────────────────────────
+//
+// Step one: read the package, write NOTHING, and keep it under a one-time token so the plan
+// and the application that follow come from the SAME bytes.
+router.post(
+  "/transfer/inspect",
+  requirePermission("tests.create"),
+  transferUploadSingle("file"),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "File required" });
+      const userId = req.session.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const { pkg } = await readTransferPackage(req.file.buffer);
+      const summary = await inspectParsedPackage(pkg, inspectPortsFor(req));
+      const token = createTransferSession(userId, req.file.buffer, pkg);
+
+      res.json({ token, summary });
+    } catch (error) {
+      if (packageError(error, res)) return;
+      logger.error("Transfer inspect error: " + (error as Error).message, "test-transfer");
+      res.status(500).json({ error: "Failed to read transfer package" });
+    }
+  },
+);
+
+// ─── POST /api/tests/transfer/plan ───────────────────────────────────────────
+//
+// Step two: what the chosen options WOULD do. Recomputed on every change of an option — the
+// list of deletions depends on the mode, and a plan the author has not seen must never run.
+router.post(
+  "/transfer/plan",
+  requirePermission("tests.create"),
+  async (req: Request, res: Response) => {
+    try {
+      const session = requireSession(req, res);
+      if (!session) return;
+
+      const options = readOptions(req.body);
+      const target = await buildTargetSnapshot(session.pkg, { ownerId: session.userId });
+      const operations = diffTransfer(session.pkg, target, options);
+
+      res.json({
+        operations,
+        summary: await inspectParsedPackage(session.pkg, inspectPortsFor(req)),
+      });
+    } catch (error) {
+      if (packageError(error, res)) return;
+      logger.error("Transfer plan error: " + (error as Error).message, "test-transfer");
+      res.status(500).json({ error: "Failed to plan transfer import" });
+    }
+  },
+);
+
+// ─── POST /api/tests/transfer/apply ──────────────────────────────────────────
+//
+// Step three. The plan is recomputed inside `applyTransfer` from the package and a freshly
+// read target: what the client sends is the author's CHOICE, never the list of writes.
+router.post(
+  "/transfer/apply",
+  requirePermission("tests.create"),
+  async (req: Request, res: Response) => {
+    try {
+      const session = requireSession(req, res);
+      if (!session) return;
+
+      const roles = req.effectiveRoles ?? [];
+      const userId = session.userId;
+      const options = readOptions(req.body);
+      const target = await buildTargetSnapshot(session.pkg, { ownerId: userId });
+
+      const report = await applyTransfer({
+        archive: session.archive,
+        pkg: session.pkg,
+        target,
+        options,
+        ownerId: userId,
+        canManageTopic: async (topicId) => {
+          const topic = await storage.getTopic(topicId);
+          return topic ? canManageTopicContent(roles, userId, topic) : false;
+        },
+      });
+
+      // The upload has done its work; holding it longer only keeps bytes in memory.
+      dropTransferSession(String((req.body as { token?: unknown })?.token ?? ""), userId);
+
+      logger.info(
+        `Transfer applied: test=${report.testId} created=${JSON.stringify(report.created)} ` +
+          `updated=${JSON.stringify(report.updated)} deleted=${JSON.stringify(report.deleted)} by user=${userId}`,
+        "test-transfer",
+      );
+      res.status(200).json(report);
+    } catch (error) {
+      if (packageError(error, res)) return;
+      logger.error("Transfer apply error: " + (error as Error).message, "test-transfer");
+      res.status(500).json({ error: "Failed to apply transfer import" });
     }
   },
 );
