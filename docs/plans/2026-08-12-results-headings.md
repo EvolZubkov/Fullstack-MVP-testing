@@ -59,7 +59,7 @@
 - `client/src/features/tests/editor/sections/design-section.tsx` — новая панель.
 - `client/src/features/tests/editor/sections/scales-section.tsx`,
   `result-variables-section.tsx` — тумблеры слотов карточки.
-- `docs/specs/spec-template-platform.md` — формат шаблона 1.4.0.
+- `docs/specs/spec-template-platform.md` — формат шаблона 1.5.0.
 
 ---
 
@@ -490,13 +490,27 @@ export function validateLabelDeclarations(labels: unknown): string[] {
   { "key": "topic.points", "group": "Карточка темы", "label": "Строка «Баллов»", "default": "Баллов" },
   { "key": "section.eyebrow", "group": "Итоги раздела", "label": "Надпись над итогами раздела", "default": "Итоги раздела" }
 ],
-"resultsBlockOrder": ["summary", "scales", "indicators", "topics"],
+"resultsBlockOrder": {
+  "default": ["summary", "scales", "indicators", "topics"],
+  "results.adaptive": ["topics", "scales", "indicators"]
+},
 ```
+
+Форма объявления порядка — объект по экранам (см. «Уточнения, принятые по ходу реализации»):
+список экрана несёт и состав, и порядок, поэтому отсутствие `summary` у адаптивных итогов и
+означает «сводки на этом экране не бывает».
 
 - [ ] **Шаг 6. Проверить, что манифест читается**
 
-Команда: `node -e "const m=require('./server/scorm/templates/default/manifest.json'); console.log(m.labels.length, m.resultsBlockOrder.join(','))"`
-Ожидание: `15 summary,scales,indicators,topics`.
+Команда:
+
+```bash
+node -e "const m=require('./server/scorm/templates/default/manifest.json');
+console.log(m.labels.length, m.resultsBlockOrder.default.join(','),
+m.resultsBlockOrder['results.adaptive'].join(','))"
+```
+
+Ожидание: `15 summary,scales,indicators,topics topics,scales,indicators`.
 
 ГОЧА: приложение читает манифест из БАЗЫ, а не с диска. Правка `manifest.json` не видна без
 перезапуска сервера — при приёмке сверять по ответу `GET /api/templates`.
@@ -1112,7 +1126,7 @@ export function resolveScreenLabels(
   overrides: LabelValues = {},
 ): ResolvedLabels {
   if (!declarations?.length) return {};
-  return resolveLabels(declarations, design?.labels ?? {}, overrides, screen);
+  return resolveLabels({ declarations, values: design?.labels ?? {}, overrides, screen });
 }
 ```
 
@@ -1693,12 +1707,12 @@ git commit -m "feat(prd-49): паритет шаблона «Сертифика�
 - Изменить: `docs/specs/spec-template-platform.md`
 - Изменить: руководство автора по тестам (файл найти: `ls docs/guides`)
 
-- [ ] **Шаг 1. Поднять формат шаблона до 1.4.0**
+- [ ] **Шаг 1. Поднять формат шаблона до 1.5.0**
 
 В таблицу версий добавить строку:
 
 ```markdown
-| 1.4.0 | 2026-08-12 | Надписи интерфейса итогов объявляются шаблоном — раздел `labels[]`
+| 1.5.0 | 2026-08-12 | Надписи интерфейса итогов объявляются шаблоном — раздел `labels[]`
 (ключ, группа, подпись поля, `default`, необязательные `defaults.<экран>`); контекст `labels.*`
 (§10.2); порядок подблоков итогов `resultsBlockOrder`; подблоки экрана итогов приходят массивом
 `result.blocks`. Расширение обратно-совместимое: шаблон без `labels[]` печатает собственные строки. |
@@ -1721,10 +1735,35 @@ git commit -m "feat(prd-49): паритет шаблона «Сертифика�
 
 ```bash
 git add docs/specs/spec-template-platform.md docs/guides
-git commit -m "docs(prd-49): формат шаблона 1.4.0 и руководство автора"
+git commit -m "docs(prd-49): формат шаблона 1.5.0 и руководство автора"
 ```
 
 ---
+
+## Уточнения, принятые по ходу реализации
+
+Задачи 1-5 выявили расхождения плана с фактическим устройством кода. Принятые решения:
+
+- **Слой переопределений принадлежит вызову.** `resolveLabels` не знает, что сегодня этот слой
+  заполняет только отчёт: экран без своего слоя просто его не передаёт. Сигнатура — объект
+  именованных параметров (`{declarations, values, overrides?, screen}`), потому что `values` и
+  `overrides` одного типа и позиционно перепутываемы.
+- **Порядок подблоков шаблон объявляет ПО ЭКРАНАМ** — `resultsBlockOrder` в манифесте стал
+  объектом (`default` плюс ключ экрана). Состав экранов разный: адаптивные итоги никогда не
+  печатали сводку баллов, «Сертификация» ставит показатели перед шкалами. Список экрана — это
+  одновременно и состав. Ядро принимает уже разрешённый список опцией `templateBlockOrder`;
+  разрешение делает вызывающий (задачи 9-10), как и с надписями.
+- **`labelsTree` не бросает исключений** — коллизия взаимно-префиксных ключей пропускает ключ, а
+  ловится она валидатором манифеста: экран ученика не имеет права падать из-за объявления шаблона.
+- **Видимость сводки** читается ровно так, как её печатает макет: `hideScoreSummary` выставляется
+  только в ветке измерений, поэтому контрольный тест без измерений сводку сохраняет. Тест плана,
+  ожидавший обратного, заменён на два честных.
+- **Тест `shared/template/__tests__/result-context.test.ts` из шага 6 задачи 5 не существует** —
+  фактические соседи: `result-context-measures.test.ts`, `results-blocks.test.ts`,
+  `measure-view.test.ts`, плюс в `tests/`: `result-context.test.ts`, `report-context.test.ts`,
+  `results-template-gating.test.ts`.
+- **Маршрут `PUT /api/tests/:id/design` пересобирает настройки по явному списку полей** — новые
+  ключи надо добавлять и туда, иначе они теряются при сохранении, даже когда схема их принимает.
 
 ## Приёмка
 
