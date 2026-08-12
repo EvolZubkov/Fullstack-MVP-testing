@@ -125,3 +125,53 @@ export function checkPassRule(rule: ResolvedRule | null, percent: number, earned
   if (rule.type === "percent") return percent >= rule.value;
   return earnedScore >= rule.value;
 }
+
+/** Round to one decimal — points show at most one fractional digit. */
+function round1(n: number): number {
+  return Math.round((Number(n) || 0) * 10) / 10;
+}
+
+/**
+ * Was there anything to grade in this run at all (PRD-29 §6.7)?
+ *
+ * Read off the possible points, which every host already carries: a measurement
+ * question has no correct grading, so it brings no points and never can. Deriving
+ * it from the run itself also makes it true for attempts finished before the rule
+ * existed — no migration, no new stored field.
+ */
+export function nothingToGrade(possiblePoints: number): boolean {
+  return round1(possiblePoints) <= 0;
+}
+
+/**
+ * Does this run carry a graded SCORE to speak about — the «сводка» gate of
+ * PRD-29 §6.7? TWO conditions, not one: a threshold IS declared AND there is
+ * something to grade. Every new test carries the default 70% threshold, so the
+ * threshold alone would call a measurement questionnaire graded and put «0 %»,
+ * «0 из 0 верно» and a 100% pass rate over a burnout inventory.
+ *
+ * An ABSENT flag is «unknown» and answers `false`: this gate only ever hides a
+ * summary, and a number nobody can vouch for is worse than no number.
+ *
+ * @param thresholdDeclared Whether the test declares an overall pass threshold at
+ *   all (`tests.overall_pass_rule_json.type !== 'none'`, i.e.
+ *   {@link resolveOverallRule} returns a rule). `undefined` = unknown.
+ * @param possiblePoints The run's total possible points.
+ */
+export function hasGradedScore(thresholdDeclared: boolean | undefined, possiblePoints: number): boolean {
+  return thresholdDeclared === true && !nothingToGrade(possiblePoints);
+}
+
+/**
+ * Was a VERDICT actually pronounced on this run (PRD-29 §6.7)?
+ *
+ * The same question as {@link hasGradedScore} with ONE deliberate difference: an
+ * unknown threshold flag does NOT silence it. The summary gate may read unknown as
+ * «no» because it only ever hides a number; the verdict is the headline, and a
+ * caller that has not been taught to send the flag must not lose the verdict of
+ * every graded test it shows. So this falls only on what is KNOWN: nothing was
+ * graded, or the author declared no threshold at all.
+ */
+export function hasPronouncedVerdict(thresholdDeclared: boolean | undefined, possiblePoints: number): boolean {
+  return !(nothingToGrade(possiblePoints) || thresholdDeclared === false);
+}
