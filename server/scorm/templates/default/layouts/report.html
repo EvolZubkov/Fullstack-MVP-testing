@@ -7,7 +7,10 @@
        методики без баллов эта карточка вырождалась в плашку с одним названием. -->
   <div class="tb-report__title tb-report__title--head" data-path="course.title"></div>
   <div class="tb-report__headline" data-path="report.verdictHeadline"></div>
-  <div class="tb-report__attempts" data-path="report.attemptsCountLabel"></div>
+  <!-- Число попыток — на пустой подписи строки нет вовсе: у теста, который ничего не
+       оценивает, «лучшего результата» не существует, и узел с отступом остался бы пустым
+       разрывом между шапкой и слушателем. Гейт тот же, что у плашки вердикта. -->
+  {{#if report.attemptsCountLabel}}<div class="tb-report__attempts" data-path="report.attemptsCountLabel"></div>{{/if}}
   {{#if report.hasLearnerName}}<div class="tb-report__learner">Слушатель: <span data-path="report.learnerName"></span></div>{{/if}}
   <div class="tb-report__date">Дата прохождения: <span data-path="report.attemptDateLabel"></span></div>
 

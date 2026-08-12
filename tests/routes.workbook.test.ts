@@ -40,6 +40,9 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     updateResultVariable: vi.fn(),
     validateResultVariableFormula: vi.fn(),
     upsertQuestionMeasurements: vi.fn(),
+    // Разделы приёмника: импорт «Структуры» читает их, чтобы не стереть обратную
+    // связь раздела, которого книга не назвала. У свежесозданного теста их нет.
+    getTestSections: vi.fn(),
   },
   testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
@@ -98,6 +101,7 @@ beforeEach(() => {
   storageMock.createResultVariable.mockResolvedValue({ id: "rv-new" });
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.upsertQuestionMeasurements.mockResolvedValue([]);
+  storageMock.getTestSections.mockResolvedValue([]);
   storageMock.getTest.mockResolvedValue({ id: "test-new", title: "Новый тест", status: "draft" });
   testSettingsMock.create.mockResolvedValue({ id: "test-new", title: "Новый тест" });
   testSettingsMock.save.mockResolvedValue({ id: "test-new" });
@@ -175,7 +179,7 @@ describe("POST /api/workbook/import-new", () => {
     expect(storageMock.createScale).toHaveBeenCalled();
   });
 
-  it("со «Структурой»: создаёт тест и применяет разделы (router_by_topics)", async () => {
+  it("со «Структурой»: создаёт тест и применяет разделы", async () => {
     const buf = await makeWorkbook({
       "Вопросы": [questionRow],
       "Структура": [
@@ -193,10 +197,84 @@ describe("POST /api/workbook/import-new", () => {
     expect(testSettingsMock.save).toHaveBeenCalledWith(
       "test-new",
       expect.objectContaining({
-        test: expect.objectContaining({ flowPolicyJson: { mode: "router_by_topics" } }),
         sections: [expect.objectContaining({ topicId: "t1", drawCount: 5 })],
       }),
     );
+  });
+
+  // PRD-48 FR-07: тест, созданный импортом, остаётся линейным, пока книга не
+  // назвала сценарий. Ни `create`, ни `save` не пишут `flow_policy_json` — а
+  // пустую колонку все читатели трактуют как «Линейный». Раньше проход
+  // «Структуры» ставил здесь маршрутизатор (PRD-14 FR-16).
+  it("книга без сценария создаёт ЛИНЕЙНЫЙ тест", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [
+        { "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4" },
+      ],
+    });
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Линейный тест")
+      .attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(201);
+    expect(res.body.errors).toEqual([]);
+    const created = (testSettingsMock.create.mock.calls[0][0] as any).test;
+    expect(created).not.toHaveProperty("flowPolicyJson");
+    expect(testSettingsMock.save).toHaveBeenCalledTimes(1);
+    const saved = (testSettingsMock.save.mock.calls[0][1] as any).test;
+    expect(saved).not.toHaveProperty("flowPolicyJson");
+  });
+
+  it("сценарий из «Настроек» применяется и к новому тесту", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [{ "Параметр": "Сценарий прохождения", "Значение": "Через страницу-маршрутизатор" }],
+      "Вопросы": [questionRow],
+      "Структура": [
+        { "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4" },
+      ],
+    });
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Маршрутизатор")
+      .attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(201);
+    expect(res.body.errors).toEqual([]);
+    const saved = (testSettingsMock.save.mock.calls[0][1] as any).test;
+    expect(saved.flowPolicyJson).toMatchObject({ mode: "router_by_topics" });
+  });
+
+  // PRD-48 §4.1: «При создании нового теста выигрывает название из ФОРМЫ: автор
+  // только что ввёл его руками, и книга не вправе его отменить». Иначе ответ роута
+  // отдавал название формы, а в базе оказывалось книжное — список тестов и база
+  // показывали разное.
+  it("«Название» из книги НЕ отменяет название из формы", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [
+        { "Параметр": "Название", "Значение": "Имя из книги" },
+        { "Параметр": "Описание", "Значение": "Описание из книги" },
+      ],
+      "Вопросы": [questionRow],
+    });
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Имя из формы")
+      .attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(201);
+    // Игнорирование молчаливое: ни ошибки, ни предупреждения (так требует спека).
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.warnings).toEqual([]);
+    expect(res.body.test).toEqual({ id: "test-new", title: "Новый тест" });
+    expect(testSettingsMock.create).toHaveBeenCalledWith(
+      expect.objectContaining({ test: expect.objectContaining({ title: "Имя из формы" }) }),
+    );
+    // Остальные параметры книги применяются как обычно — молчит только «Название».
+    const saved = (testSettingsMock.save.mock.calls[0][1] as any).test;
+    expect(saved).not.toHaveProperty("title");
+    expect(saved).toMatchObject({ description: "Описание из книги" });
   });
 
   it("без названия нового теста → 400", async () => {
@@ -250,6 +328,18 @@ describe("GET /api/workbook/template", () => {
       "Структура",
       "Квоты",
       "Пороги вариантов",
+      // PRD-48: обратная связь принадлежит структуре теста, а не оценке, поэтому
+      // оба листа стоят перед «Оценкой» — тем же порядком, что пишет выгрузка.
+      "Обратная связь",
+      "Рекомендации",
+      // PRD-48: страницы теста — тоже его структура, поэтому оба листа идут следом,
+      // всё ещё перед «Оценкой».
+      "Страницы",
+      "Поля страниц",
+      // PRD-48: уровни адаптивных тем — предпоследний структурный лист, снова перед «Оценкой».
+      "Адаптивные уровни",
+      // PRD-48: оформление и отчёт — облик теста, поэтому лист замыкает структурные.
+      "Оформление",
       "Оценка",
       "Шкалы",
       "Показатели",

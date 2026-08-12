@@ -329,6 +329,30 @@ describe("содержательные правила отчёта, перене
     expect(forms(undefined)).toContain("за 1 попытку");
   });
 
+  it("у теста, который ничего не оценивает, строки попыток нет вовсе", () => {
+    // «Лучший результат за 1 попытку» над профилем измерений сравнивает прогоны по баллам,
+    // которых у методики нет. Гейт стоит на УЗЛЕ: пустой подписи мало — блок несёт отступ и
+    // оставил бы разрыв между шапкой и строкой слушателя.
+    const measurement: ReportInput = {
+      ...STANDARD,
+      hasPassThreshold: true,
+      result: {
+        passed: true,
+        percent: 0,
+        totalQuestions: 0,
+        correct: 0,
+        earnedPoints: 0,
+        possiblePoints: 0,
+        topicResults: [],
+      },
+    };
+    const root = renderToRoot(REPORT, buildReportContext(measurement));
+    expect(root.querySelector(".tb-report__attempts")).toBeNull();
+    expect(visibleText(root)).not.toContain("Лучший результат");
+    // Дата прохождения — не утверждение о баллах, она остаётся.
+    expect(visibleText(root)).toContain("Дата прохождения:");
+  });
+
   it("авторский текст экранируется, а не исполняется", () => {
     const evil: ReportInput = { ...STANDARD, testName: '<img src=x onerror="alert(1)">' };
     const root = renderToRoot(REPORT, buildReportContext(evil));

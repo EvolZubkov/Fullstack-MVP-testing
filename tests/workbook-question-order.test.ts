@@ -13,7 +13,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
-  parseSettingsRow,
+  parseSettingsSheet,
   parseStructureRow,
   serializeSettingsRows,
   serializeStructureRow,
@@ -152,59 +152,32 @@ describe("round trip «Структура»", () => {
  * новая не должна расширять строку, которая уже есть у каждого автора.
  */
 describe("лист «Настройки» — правило теста", () => {
-  const row = (value: unknown) => ({ "Параметр": "Порядок выдачи вопросов", "Значение": value });
-
-  it("читает все три значения", () => {
-    expect(parseSettingsRow(row("Фиксированный порядок"))).toMatchObject({
-      ok: true,
-      value: { questionOrder: "fixed" },
-    });
-    expect(parseSettingsRow(row("Перемешивание"))).toMatchObject({
-      ok: true,
-      value: { questionOrder: "random" },
-    });
-    expect(parseSettingsRow(row("Полное перемешивание"))).toMatchObject({
-      ok: true,
-      value: { questionOrder: "shuffle_all" },
-    });
+  it("«Порядок выдачи вопросов» читается по всем трём значениям", () => {
+    for (const [label, expected] of [
+      ["Фиксированный порядок", "fixed"],
+      ["Перемешивание", "random"],
+      ["Полное перемешивание", "shuffle_all"],
+      ["  полное ПЕРЕМЕШИВАНИЕ ", "shuffle_all"],
+    ] as const) {
+      const { draft, errors } = parseSettingsSheet([
+        { "Параметр": "Порядок выдачи вопросов", "Значение": label },
+      ]);
+      expect(errors).toEqual([]);
+      expect(draft.test.questionOrder).toBe(expected);
+    }
   });
 
-  it("не различает регистр и лишние пробелы", () => {
-    expect(parseSettingsRow(row("  полное ПЕРЕМЕШИВАНИЕ "))).toMatchObject({
-      ok: true,
-      value: { questionOrder: "shuffle_all" },
-    });
+  it("пустое значение не меняет порядок, мусорное даёт ошибку строки", () => {
+    expect(parseSettingsSheet([{ "Параметр": "Порядок выдачи вопросов", "Значение": "" }]).draft.test)
+      .toEqual({});
+    expect(parseSettingsSheet([{ "Параметр": "Порядок выдачи вопросов", "Значение": "как-нибудь" }]).errors)
+      .toHaveLength(1);
   });
 
-  it("пустое значение = «не трогать настройку»", () => {
-    expect(parseSettingsRow(row(""))).toEqual({ ok: true, value: {} });
-  });
-
-  it("непонятное значение — ошибка, а не молчаливое умолчание", () => {
-    const r = parseSettingsRow(row("как-нибудь"));
-
-    expect(r.ok).toBe(false);
-  });
-
-  it("неизвестный параметр — ошибка с его именем", () => {
-    const r = parseSettingsRow({ "Параметр": "Цвет фона", "Значение": "синий" });
-
-    expect(r).toMatchObject({ ok: false });
-    expect(r.ok === false && r.error).toMatch(/Цвет фона/);
-  });
-
-  it("строка без параметра — ошибка", () => {
-    expect(parseSettingsRow({ "Параметр": "", "Значение": "Перемешивание" })).toMatchObject({ ok: false });
-  });
-
-  it("экспорт пишет подпись значения, умолчание — «Перемешивание»", () => {
-    expect(serializeSettingsRows({ questionOrder: "shuffle_all" })[0]["Значение"]).toBe("Полное перемешивание");
-    expect(serializeSettingsRows({ questionOrder: null })[0]["Значение"]).toBe("Перемешивание");
-  });
-
-  it("round trip: экспорт → импорт сохраняет значение", () => {
-    const exported = serializeSettingsRows({ questionOrder: "fixed" })[0];
-
-    expect(parseSettingsRow(exported)).toMatchObject({ ok: true, value: { questionOrder: "fixed" } });
+  it("порядок выдачи переживает круг «экспорт — импорт»", () => {
+    const rows = serializeSettingsRows({ questionOrder: "fixed" });
+    expect(parseSettingsSheet(rows).draft.test.questionOrder).toBe("fixed");
+    expect(serializeSettingsRows({ questionOrder: null })
+      .find((r) => r["Параметр"] === "Порядок выдачи вопросов")?.["Значение"]).toBe("");
   });
 });

@@ -246,6 +246,8 @@ describe("parseStructureRow", () => {
     );
     expect(r.ok && r.value).toEqual({
       topicName: "О компании",
+      // PRD-48 FR-10: колонки «Код темы» нет — код не переносится.
+      topicCode: null,
       sortOrder: 1,
       drawCount: 12,
       passRule: { source: "custom", type: "absolute", value: 15 },
@@ -253,6 +255,15 @@ describe("parseStructureRow", () => {
       // PRD-30 FR-02: книга без колонки «Случайный порядок вопросов» читается
       // как сегодняшняя случайная выдача.
       questionOrder: null,
+      // PRD-48 FR-09: колонок нет — значит умолчания раздела, а не нули.
+      drawAll: false,
+      timeLimitMinutes: null,
+      defaultPoints: null,
+      // PRD-48 FR-11: колонок правил нет — разблокировку книга не трогает.
+      unlockMode: null,
+      unlockDependsOn: [],
+      // PRD-48 FR-16: колонки нет — обратную связь темы книга не трогает.
+      failureFeedback: null,
     });
   });
 
@@ -293,6 +304,124 @@ describe("parseStructureRow", () => {
       required: parsed.value.required,
     });
     expect(out).toMatchObject({ "Раздел": "О компании", "Вопросов в выборке": 12, "Тип порога": "Сумма баллов", "Порог": 15, "Обязательный": "да" });
+  });
+});
+
+describe("«Структура»: поля раздела (PRD-48 FR-09)", () => {
+  it("три новые колонки ходят по кругу", () => {
+    const row = serializeStructureRow({
+      topicName: "Финансы",
+      sortOrder: 0,
+      drawCount: 5,
+      topicPassRuleJson: null,
+      required: true,
+      drawAll: true,
+      timeLimitMinutes: 15,
+      defaultPoints: 2,
+    });
+    expect(row["Выдавать все вопросы темы"]).toBe("да");
+    expect(row["Лимит времени темы"]).toBe(15);
+    expect(row["Балл по умолчанию в секции"]).toBe(2);
+
+    const parsed = parseStructureRow(row, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.drawAll).toBe(true);
+    expect(parsed.value.timeLimitMinutes).toBe(15);
+    expect(parsed.value.defaultPoints).toBe(2);
+  });
+
+  // Книги, выгруженные до PRD-48, этих колонок не несут — и обязаны
+  // импортироваться ровно как раньше.
+  it("отсутствие колонок оставляет умолчания", () => {
+    const parsed = parseStructureRow(
+      { "Раздел": "Финансы", "Порядок": 1, "Вопросов в выборке": 5 },
+      0,
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.drawAll).toBe(false);
+    expect(parsed.value.timeLimitMinutes).toBeNull();
+    expect(parsed.value.defaultPoints).toBeNull();
+  });
+
+  it("правила разблокировки ходят по кругу", () => {
+    const row = serializeStructureRow({
+      topicName: "Основной",
+      sortOrder: 1,
+      drawCount: 5,
+      topicPassRuleJson: null,
+      required: true,
+      unlockMode: "after_sections_passed",
+      unlockDependsOn: ["Вводный", "Правовой"],
+    });
+    expect(row["Доступность раздела"]).toBe("После успешного прохождения выбранных разделов");
+    expect(row["Зависит от разделов"]).toBe("Вводный; Правовой");
+
+    const parsed = parseStructureRow(row, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.unlockMode).toBe("after_sections_passed");
+    expect(parsed.value.unlockDependsOn).toEqual(["Вводный", "Правовой"]);
+  });
+
+  // PRD-48 FR-16: значение ОДНО на тему, поэтому оно и стоит на листе, где строка одна
+  // на тему. Пустая ячейка — «оставить как есть», как у прочих колонок «Структуры».
+  it("обратная связь темы при непройденном уровне ходит по кругу", () => {
+    const row = serializeStructureRow({
+      topicName: "Финансы",
+      sortOrder: 0,
+      drawCount: 5,
+      topicPassRuleJson: null,
+      required: true,
+      failureFeedback: "Вернитесь к материалам уровня.",
+    });
+    expect(row["Обратная связь при непройденном уровне"]).toBe("Вернитесь к материалам уровня.");
+
+    const parsed = parseStructureRow(row, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.failureFeedback).toBe("Вернитесь к материалам уровня.");
+
+    const empty = parseStructureRow({ ...row, "Обратная связь при непройденном уровне": "   " }, 0);
+    expect(empty.ok && empty.value.failureFeedback).toBeNull();
+  });
+
+  // Значения-«стирателя» в книге нет ни в одной ячейке (PRD-48 §4.4): книга, где ровно одна
+  // ячейка из сотни понимает волшебное значение, хуже книги, которая последовательно не
+  // умеет стирать. Прочерк едет текстом и текстом же записывается.
+  it("прочерк в обратной связи темы — это текст, а не команда стереть", () => {
+    for (const dash of ["-", "–", "—"]) {
+      const parsed = parseStructureRow(
+        { "Раздел": "Финансы", "Вопросов в выборке": 5, "Обратная связь при непройденном уровне": dash },
+        0,
+      );
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.value.failureFeedback).toBe(dash);
+    }
+  });
+
+  it("без колонок правил раздел доступен сразу, зависимостей нет", () => {
+    const parsed = parseStructureRow({ "Раздел": "Финансы", "Вопросов в выборке": 5 }, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.unlockMode).toBeNull();
+    expect(parsed.value.unlockDependsOn).toEqual([]);
+  });
+
+  it("недопустимая «Доступность раздела» → ошибка строки", () => {
+    const r = parseStructureRow(
+      { "Раздел": "Финансы", "Вопросов в выборке": 5, "Доступность раздела": "когда-нибудь" },
+      0,
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("нецелые «Лимит времени темы» / «Балл по умолчанию в секции» → ошибка строки", () => {
+    const base = { "Раздел": "Финансы", "Вопросов в выборке": 5 };
+    expect(parseStructureRow({ ...base, "Лимит времени темы": "полчаса" }, 0).ok).toBe(false);
+    expect(parseStructureRow({ ...base, "Балл по умолчанию в секции": "1,5" }, 0).ok).toBe(false);
   });
 });
 

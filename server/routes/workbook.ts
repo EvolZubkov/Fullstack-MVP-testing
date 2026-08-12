@@ -11,7 +11,8 @@
  *   тест» is required (only test-scoped sheets need one). No writes.
  * - POST /import-new?dryRun= — create a NEW (sectionless, draft) test from a
  *   title and import the workbook into it. `dryRun` validates and counts the plan
- *   against an empty target without creating anything.
+ *   against an empty target without creating anything. The title comes from the
+ *   FORM: the «Название» parameter of the book is ignored here (PRD-48 §4.1).
  * - GET /template — an empty 4-sheet workbook (headers only) plus a reference
  *   sheet, the download for the section's «Скачать шаблон».
  * - GET /docs/:doc — the beginner's guide to filling that template, as PDF. The
@@ -153,7 +154,11 @@ router.post(
       if (dryRun) {
         // Plan against an empty target — nothing is created, so the synthetic id
         // is never persisted; every test-scoped DB read resolves to empty.
-        const result = await importWorkbook(DRYRUN_NEW_TEST_ID, workbook, { dryRun: true, actor });
+        const result = await importWorkbook(DRYRUN_NEW_TEST_ID, workbook, {
+          dryRun: true,
+          actor,
+          keepTitle: true,
+        });
         return res.json({ ...result, test: { id: null, title } });
       }
 
@@ -171,7 +176,14 @@ router.post(
       // Redundant safety net — the INSERT above already owns the row; kept idempotent.
       await storage.setTestOwner(test.id, importerId);
 
-      const result = await importWorkbook(test.id, workbook, { dryRun: false, actor });
+      // PRD-48 §4.1: `keepTitle` — the title comes from the FORM the author has just
+      // filled in; the book's «Название» is ignored here (silently, per the spec).
+      // Without it the response said one name and the database held another.
+      const result = await importWorkbook(test.id, workbook, {
+        dryRun: false,
+        actor,
+        keepTitle: true,
+      });
       res.status(201).json({ ...result, test: { id: test.id, title: test.title } });
     } catch (error) {
       logger.error("Workbook import-new error: " + (error as Error).message, "workbook");

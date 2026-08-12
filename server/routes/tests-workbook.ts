@@ -46,8 +46,38 @@ import {
   SCORING_OVERRIDE_HEADERS,
   SCORING_OVERRIDE_WIDTHS,
   VARIANTS_COLUMN,
+  FEEDBACK_SHEET_NAME,
+  FEEDBACK_HEADERS,
+  FEEDBACK_WIDTHS,
+  RECOMMENDATION_SHEET_NAME,
+  RECOMMENDATION_HEADERS,
+  RECOMMENDATION_WIDTHS,
+  serializeFeedbackRows,
+  serializeRecommendationRows,
+  PAGE_SHEET_NAME,
+  PAGE_FIELD_SHEET_NAME,
+  PAGE_HEADERS,
+  PAGE_WIDTHS,
+  PAGE_FIELD_HEADERS,
+  PAGE_FIELD_WIDTHS,
+  serializePageRows,
+  serializePageFieldRows,
+  ADAPTIVE_LEVEL_SHEET_NAME,
+  ADAPTIVE_LEVEL_HEADERS,
+  ADAPTIVE_LEVEL_WIDTHS,
+  serializeAdaptiveLevelRows,
+  DESIGN_SHEET_NAME,
+  DESIGN_HEADERS,
+  DESIGN_WIDTHS,
+  serializeDesignRows,
+  type DesignSource,
+  type ReportSource,
+  type FeedbackSource,
+  type FeedbackLevelSource,
+  type PageSource,
+  type AdaptiveTopicSource,
 } from "../utils/workbook-sheets";
-import type { DrawBlueprint, FormSet } from "@shared/schema";
+import type { ContentPage, DrawBlueprint, FormSet } from "@shared/schema";
 
 const router = Router();
 
@@ -61,6 +91,42 @@ function addSheet(
 ): void {
   if (rows.length > 0) addJsonSheet(wb, name, rows, widths);
   else addAoaSheet(wb, name, [headers], widths);
+}
+
+/**
+ * Content pages as the «Страницы» sheet needs them: the topic resolved to a NAME (the
+ * only key that survives a trip to another stand) and the rows ordered so the ordinal
+ * the sheet assigns is the one the author sees in the editor.
+ *
+ * The ordinal counts inside a ZONE and follows `sort_order` there, so the rows of one
+ * zone are sorted by it; the zones themselves keep the order the storage returned them
+ * in, which is the delivery order of the test. Position in the incoming array breaks a
+ * tie — `sort_order` is not unique by contract, and a sort that reshuffles equals would
+ * hand the same page a different number on every export.
+ */
+function pagesForSheet(
+  pages: readonly ContentPage[],
+  topicNameById: Map<string, string>,
+): PageSource[] {
+  const zoneRank = new Map<string, number>();
+  return pages
+    .map((page, at) => {
+      const zoneKey = `${page.position}|${page.topicId ?? ""}`;
+      if (!zoneRank.has(zoneKey)) zoneRank.set(zoneKey, zoneRank.size);
+      return { page, at, zone: zoneRank.get(zoneKey)! };
+    })
+    .sort((a, b) => a.zone - b.zone || a.page.sortOrder - b.page.sortOrder || a.at - b.at)
+    .map(({ page }) => ({
+      position: page.position,
+      topicName: page.topicId ? topicNameById.get(page.topicId) ?? "" : "",
+      kind: page.kind,
+      templateKey: page.templateKey,
+      mode: page.mode,
+      autoAdvance: page.autoAdvance,
+      autoAdvanceDelayMs: page.autoAdvanceDelayMs,
+      valuesJson: page.valuesJson,
+      settingsJson: page.settingsJson,
+    }));
 }
 
 // ─── POST /api/tests/:id/workbook/import ─────────────────────────────────────
@@ -108,6 +174,9 @@ router.get(
       const topicIds = new Set(sections.map((s) => s.topicId));
       const topics = await storage.getTopics();
       const topicName = new Map(topics.map((t) => [t.id, t.name]));
+      // PRD-48 FR-10: the topic's short code rides along so the formulas that address
+      // it as `topicById("<code>")` keep their addressee on another stand.
+      const topicCode = new Map(topics.map((t) => [t.id, t.code]));
 
       const scales = await storage.getScales(testId);
       const resultVars = await storage.getResultVariables(testId);
@@ -157,15 +226,63 @@ router.get(
       // «Структура» + «Квоты» (FR-16): sections ordered by sortOrder; each
       // section's blueprint strata flatten into «Квоты» rows (round-trip).
       const orderedSections = sections.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+
+      // «Адаптивные уровни» (PRD-48 FR-16). Levels belong to a TOPIC, so they are gathered
+      // exactly the way `GET /api/tests/:id` gathers them for the editor: the topic's
+      // settings, its levels by ascending `level_index`, and the materials of each level.
+      // Gathered HERE, before «Структура», because the pieces scatter across three sheets:
+      // the topic's «failed a level» text is a column of «Структура», the levels themselves
+      // are their own sheet, and their materials are «Рекомендации» rows.
+      const adaptiveTopics: AdaptiveTopicSource[] = [];
+      const adaptiveLevelSources: FeedbackLevelSource[] = [];
+      const failureFeedbackByTopic = new Map<string, string | null>();
+      if (test.mode === "adaptive") {
+        const topicSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
+        const allLevels = await storage.getAdaptiveLevelsByTest(testId);
+        for (const ts of topicSettings) {
+          failureFeedbackByTopic.set(ts.topicId, ts.failureFeedback ?? null);
+          const name = topicName.get(ts.topicId) ?? "";
+          const levels = allLevels
+            .filter((l) => l.topicId === ts.topicId)
+            .sort((a, b) => a.levelIndex - b.levelIndex);
+          adaptiveTopics.push({ topicName: name, levels });
+          for (const level of levels) {
+            const links = await storage.getAdaptiveLevelLinks(level.id);
+            if (links.length > 0) {
+              adaptiveLevelSources.push({ topicName: name, levelIndex: level.levelIndex, links });
+            }
+          }
+        }
+      }
+      const adaptiveRows = serializeAdaptiveLevelRows(adaptiveTopics);
+
+      // PRD-48 FR-11: the router's unlock rules are keyed by TOPIC id — the workbook
+      // spells both the rule's owner and its dependencies as topic names.
+      const routerRules =
+        (test.flowPolicyJson as {
+          router?: { sectionUnlockRules?: Record<string, { mode?: string; sectionIds?: string[] }> };
+        } | null)?.router?.sectionUnlockRules ?? {};
       const structureRows = orderedSections.map((s) =>
         serializeStructureRow({
           topicName: topicName.get(s.topicId) || "",
+          topicCode: topicCode.get(s.topicId) ?? null,
           sortOrder: s.sortOrder,
           drawCount: s.drawCount,
           topicPassRuleJson: s.topicPassRuleJson,
           required: s.required,
           // PRD-30 FR-15: delivery order of the topic's questions.
           questionOrder: s.questionOrder,
+          // PRD-48 FR-09: whole-topic delivery, time limit and the price default.
+          drawAll: s.drawAll,
+          timeLimitMinutes: s.timeLimitMinutes,
+          defaultPoints: s.defaultPoints,
+          unlockMode: routerRules[s.topicId]?.mode ?? null,
+          unlockDependsOn: (routerRules[s.topicId]?.sectionIds ?? []).map(
+            (id) => topicName.get(id) ?? id,
+          ),
+          // PRD-48 FR-16: одно значение на тему, поэтому оно едет листом, у которого
+          // ровно одна строка на тему.
+          failureFeedback: failureFeedbackByTopic.get(s.topicId) ?? null,
         }),
       );
       const quotaRows: Record<string, unknown>[] = [];
@@ -203,6 +320,40 @@ router.get(
         });
       }
 
+      // «Обратная связь» + «Рекомендации» (PRD-48 FR-12/FR-13): the feedback of the
+      // test and of every section, plus the courses/materials/events that live inside
+      // it. The section is addressed by TOPIC NAME, the only key that survives the trip
+      // to another stand — section and topic ids are minted anew there.
+      const feedbackSections = orderedSections.map((s) => ({
+        topicName: topicName.get(s.topicId) || "",
+        feedback: (s.feedbackJson ?? null) as FeedbackSource | null,
+      }));
+      const testFeedback = (test.feedbackJson ?? null) as FeedbackSource | null;
+      const feedbackRows = serializeFeedbackRows(testFeedback, feedbackSections);
+      const recommendationRows = serializeRecommendationRows(
+        testFeedback,
+        feedbackSections,
+        adaptiveLevelSources,
+      );
+
+      // «Страницы» + «Поля страниц» (PRD-48 FR-14/FR-15): the pages of the test and
+      // the values of their fields. A page has no natural key, so it travels by its
+      // address — zone, section, kind and the ordinal inside the zone.
+      const contentPages = await storage.getContentPages(testId);
+      const pageSources = pagesForSheet(contentPages, topicName);
+      const pageRows = serializePageRows(pageSources);
+      const pageFieldRows = serializePageFieldRows(pageSources);
+
+      // «Оформление» (PRD-48 FR-17/FR-18): the design of the test and the settings of its
+      // report, read straight off the two `jsonb` columns. NO template VERSION travels:
+      // `templateVersion` from the source stand raises the «Шаблон обновлён» banner on the
+      // receiver, whose one button drops every parameter the new manifest no longer
+      // declares — the server stamps both version fields itself.
+      const designRows = serializeDesignRows(
+        test.designSettingsJson as DesignSource | null,
+        test.reportSettingsJson as ReportSource | null,
+      );
+
       // «Оценка» (PRD-15 block D, FR-36): the test's per-question scoring
       // overrides, referenced by the same local alias as «Вклады вопросов».
       const overrides = await storage.getTestQuestionScoring(testId);
@@ -210,14 +361,43 @@ router.get(
         .filter((o) => aliasByQuestionId.has(o.questionId))
         .map((o) => serializeScoringOverrideRow(o, aliasByQuestionId.get(o.questionId)!));
 
+      // «Папка» of the settings sheet — the path from the root, walked up the parents.
+      const folders = await storage.getTestFolders();
+      const folderById = new Map(folders.map((f) => [f.id, f]));
+      const folderPath = (() => {
+        const parts: string[] = [];
+        let cur = test.folderId ? folderById.get(test.folderId) : undefined;
+        const guard = new Set<string>();
+        while (cur && !guard.has(cur.id)) {
+          guard.add(cur.id);
+          parts.unshift(cur.name);
+          cur = cur.parentId ? folderById.get(cur.parentId) : undefined;
+        }
+        return parts.join(" / ");
+      })();
+
       const wb = new ExcelJS.Workbook();
       // PRD-30 FR-22: настройки САМОГО теста идут первым листом: они
       // описывают всю книгу, а остальные листы — её содержимое.
-      addSheet(wb, "Настройки", serializeSettingsRows(test), SETTINGS_HEADERS, SETTINGS_WIDTHS);
+      addSheet(wb, "Настройки", serializeSettingsRows({ ...test, folderPath }), SETTINGS_HEADERS, SETTINGS_WIDTHS);
       addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS, VARIANTS_COLUMN], [12, ...QUESTION_WIDTHS, 25]);
       addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
       addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);
       addSheet(wb, "Пороги вариантов", variantThresholdRows, VARIANT_THRESHOLD_HEADERS, VARIANT_THRESHOLD_WIDTHS);
+      // PRD-48 FR-12/FR-13: обратная связь принадлежит СТРУКТУРЕ теста, а не его
+      // оценке, поэтому оба листа стоят сразу за разделами и перед «Оценкой».
+      addSheet(wb, FEEDBACK_SHEET_NAME, feedbackRows, FEEDBACK_HEADERS, FEEDBACK_WIDTHS);
+      addSheet(wb, RECOMMENDATION_SHEET_NAME, recommendationRows, RECOMMENDATION_HEADERS, RECOMMENDATION_WIDTHS);
+      // PRD-48 FR-14/FR-15: страницы — тоже структура теста, поэтому оба листа стоят
+      // сразу за обратной связью и по-прежнему перед «Оценкой».
+      addSheet(wb, PAGE_SHEET_NAME, pageRows, PAGE_HEADERS, PAGE_WIDTHS);
+      addSheet(wb, PAGE_FIELD_SHEET_NAME, pageFieldRows, PAGE_FIELD_HEADERS, PAGE_FIELD_WIDTHS);
+      // PRD-48 FR-16: адаптивные уровни — тоже структура теста, поэтому лист стоит
+      // последним среди структурных и по-прежнему перед «Оценкой».
+      addSheet(wb, ADAPTIVE_LEVEL_SHEET_NAME, adaptiveRows, ADAPTIVE_LEVEL_HEADERS, ADAPTIVE_LEVEL_WIDTHS);
+      // PRD-48 FR-17/FR-18: оформление и отчёт — облик теста, а не его содержимое,
+      // поэтому лист замыкает структурные и по-прежнему стоит перед «Оценкой».
+      addSheet(wb, DESIGN_SHEET_NAME, designRows, DESIGN_HEADERS, DESIGN_WIDTHS);
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);
