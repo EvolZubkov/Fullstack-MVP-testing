@@ -1916,6 +1916,14 @@ export const designSettingsSchema = z.object({
   paramsByTheme: z
     .record(z.enum(["light", "dark"]), z.record(z.string(), z.unknown()))
     .optional(),
+  /**
+   * PRD-49: the test's own wording of the results-screen labels. Absent = the template's
+   * own texts. A value is a record, not a bare string: «switched off» and «never touched»
+   * must stay distinguishable (see `shared/template/labels`).
+   */
+  labels: z.record(z.string(), z.object({ on: z.boolean().optional(), text: z.string().optional() })).optional(),
+  /** PRD-49: the author's order of the four sub-blocks under the results umbrella. */
+  resultsBlockOrder: z.array(z.enum(["summary", "scales", "indicators", "topics"])).optional(),
 });
 
 export type DesignSettings = z.infer<typeof designSettingsSchema>;

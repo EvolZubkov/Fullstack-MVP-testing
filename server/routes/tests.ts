@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, questionScoringSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, questionScoringSchema, designSettingsSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
@@ -811,6 +811,8 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       params = {},
       theme,
       paramsByTheme = {},
+      labels,
+      resultsBlockOrder,
     } = body as {
       templateId?: string;
       templateVersion?: string;
@@ -820,6 +822,10 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       theme?: unknown;
       /** PRD-23: colour overrides per declared theme. */
       paramsByTheme?: Record<string, Record<string, unknown>>;
+      /** PRD-49: the test's own wording of the results-screen labels; validated below. */
+      labels?: unknown;
+      /** PRD-49: the author's order of the four results sub-blocks; validated below. */
+      resultsBlockOrder?: unknown;
     };
 
     if (!templateId) {
@@ -910,6 +916,18 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       }
     }
 
+    // ── PRD-49: results labels and sub-block order ──────────────────────────
+    // Rejected rather than dropped, for the same reason as theme/paramsByTheme above: a
+    // silently ignored field would let the editor believe a wording change was saved.
+    const labelsResult = designSettingsSchema.shape.labels.safeParse(labels);
+    if (!labelsResult.success) {
+      return res.status(422).json({ error: "Invalid labels", field: "labels" });
+    }
+    const resultsBlockOrderResult = designSettingsSchema.shape.resultsBlockOrder.safeParse(resultsBlockOrder);
+    if (!resultsBlockOrderResult.success) {
+      return res.status(422).json({ error: "Invalid resultsBlockOrder", field: "resultsBlockOrder" });
+    }
+
     const designSettings: Record<string, unknown> = {
       templateId,
       templateVersion: templateVersion ?? template.version,
@@ -921,6 +939,14 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
     if (themed) {
       designSettings.theme = theme ?? "auto";
       if (Object.keys(byTheme).length > 0) designSettings.paramsByTheme = byTheme;
+    }
+    // Same "only when meaningful" convention as theme/paramsByTheme: an empty
+    // labels/order payload keeps the exact JSON shape a pre-PRD-49 test had.
+    if (labelsResult.data && Object.keys(labelsResult.data).length > 0) {
+      designSettings.labels = labelsResult.data;
+    }
+    if (resultsBlockOrderResult.data && resultsBlockOrderResult.data.length > 0) {
+      designSettings.resultsBlockOrder = resultsBlockOrderResult.data;
     }
 
     await storage.updateTest(testId, { designSettingsJson: designSettings });
