@@ -16,7 +16,7 @@
  */
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { normalizeTopicName } from "@shared/topics/naming";
+import { freeTopicName, normalizeTopicName } from "@shared/topics/naming";
 import {
   tests,
   topics,
@@ -51,22 +51,6 @@ function insertable<T extends Record<string, unknown>>(row: T): Record<string, u
   return out;
 }
 
-/**
- * Frees a topic name that the importer already uses.
- *
- * `(owner_id, name_normalized)` is unique, so an importer who owns «Лидерство» cannot
- * receive a second one. Renaming keeps the import whole and is reported; joining the
- * existing topic silently would attach the incoming questions to content the author did not
- * choose, which is the more expensive mistake to discover later.
- */
-function freeName(name: string, taken: Set<string>): string {
-  if (!taken.has(normalizeTopicName(name))) return name;
-  for (let n = 2; ; n++) {
-    const candidate = `${name} (импорт ${n})`;
-    if (!taken.has(normalizeTopicName(candidate))) return candidate;
-  }
-}
-
 export class TestTransferRepository {
   /**
    * Stores a planned graph. All ids in `content` are already the ones to be written
@@ -87,7 +71,7 @@ export class TestTransferRepository {
       const topicRows = (content.topics ?? []).map((topic) => {
         const row = insertable(topic as unknown as Record<string, unknown>);
         const original = String(row.name ?? "");
-        const free = freeName(original, taken);
+        const free = freeTopicName(original, taken);
         if (free !== original) renamedTopics.push(`${original} -> ${free}`);
         taken.add(normalizeTopicName(free));
         row.name = free;
