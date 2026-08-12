@@ -25,6 +25,26 @@ import { sendAssignmentEmail } from "../email";
 import { mayReceiveAssignmentLink } from "./access";
 import type { User } from "@shared/schema";
 
+/** Default lifetime of an assignment access token when nothing else says otherwise. */
+const DEFAULT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * When a freshly minted assignment link stops working: the operator's explicit
+ * choice, else the due date of the assignment, else 30 days from now.
+ *
+ * Lives next to the minting itself rather than at the call sites, so the senders
+ * — the assignment routes and the bulk participant run (PRD-28) — cannot come to
+ * disagree about how long a link lasts.
+ */
+export function resolveAssignmentTokenExpiry(
+  linkExpiresAt?: Date | null,
+  dueDate?: Date | null,
+): Date {
+  if (linkExpiresAt) return linkExpiresAt;
+  if (dueDate) return dueDate;
+  return new Date(Date.now() + DEFAULT_TOKEN_TTL_MS);
+}
+
 /** Input to {@link deliverAssignmentLink}. */
 export interface DeliverAssignmentLinkOptions {
   /** The recipient, already resolved (used for the role check and the greeting). */

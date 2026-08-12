@@ -7,13 +7,28 @@
  * is about what the operator's file says, classification about what the system
  * already knows, and the run about what must and must not happen to accounts.
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import ExcelJS from "exceljs";
+
+// ─── Hoist mocks ──────────────────────────────────────────────────────────────
+// The delivery seam is mocked whole: whether a privileged recipient gets a link
+// is `deliverAssignmentLink`'s decision and is pinned in its own suite. Here the
+// run is judged on what it asks for, and on the report it builds from the answer.
+const { deliverMock } = vi.hoisted(() => ({ deliverMock: vi.fn() }));
+vi.mock("../server/services/assignment-link", () => ({
+  deliverAssignmentLink: deliverMock,
+  resolveAssignmentTokenExpiry: (linkExpiresAt: Date | null, dueDate: Date | null) =>
+    linkExpiresAt ?? dueDate ?? new Date("2026-09-01T00:00:00.000Z"),
+}));
+
 import { addAoaSheet, workbookToBuffer } from "../server/utils/excel";
 import {
   classifyParticipants,
   parseParticipantsWorkbook,
+  runParticipantsInvite,
+  type ParticipantPreviewRow,
   type ParticipantRow,
+  type ParticipantStatus,
 } from "../server/services/participants-invite";
 import type { IStorage } from "../server/storage";
 
@@ -27,14 +42,44 @@ async function workbookWith(rows: unknown[][]): Promise<Buffer> {
 /** Only the handful of `IStorage` methods the pipeline touches, all mocked. */
 function makeStorage(overrides: Partial<Record<string, unknown>> = {}) {
   const mock = {
+    getTest: vi.fn().mockResolvedValue({ id: "t1", title: "Тест", description: null }),
     getTestAssignments: vi.fn().mockResolvedValue([]),
     getGroupUsers: vi.fn().mockResolvedValue([]),
     getUserByEmail: vi.fn().mockResolvedValue(undefined),
     getUserRoles: vi.fn().mockResolvedValue(["learner"]),
+    createUser: vi.fn((u: Record<string, unknown>) =>
+      Promise.resolve({ ...u, id: `u-${u.email}`, name: u.name ?? null })),
+    setUserRoles: vi.fn().mockResolvedValue(undefined),
+    updateUser: vi.fn((id: string, data: Record<string, unknown>) => Promise.resolve({ id, ...data })),
+    getGroups: vi.fn().mockResolvedValue([]),
+    createGroup: vi.fn((g: Record<string, unknown>) => Promise.resolve({ ...g, id: "g-new" })),
+    addUserToGroup: vi.fn().mockResolvedValue(undefined),
+    createTestAssignment: vi.fn((a: Record<string, unknown>) => Promise.resolve({ ...a, id: "as-1" })),
+    revokeAssignmentAccessTokensByAssignmentAndUser: vi.fn().mockResolvedValue(undefined),
+    createPasswordResetToken: vi.fn().mockResolvedValue({}),
     ...overrides,
   };
   return mock as unknown as IStorage & Record<string, ReturnType<typeof vi.fn>>;
 }
+
+/** A preview row as the operator would have confirmed it. */
+function previewRow(
+  index: number,
+  email: string,
+  status: ParticipantStatus,
+  extra: Partial<ParticipantPreviewRow> = {},
+): ParticipantPreviewRow {
+  return { index, email, name: null, status, userId: null, ...extra };
+}
+
+/** Everything `runParticipantsInvite` needs beyond the rows and the storage. */
+const runDefaults = {
+  testId: "t1",
+  actorId: "op1",
+  dueDate: null,
+  linkExpiresAt: null,
+  groupName: null,
+};
 
 /** Turn addresses into parsed rows, the way {@link parseParticipantsWorkbook} would. */
 function rowsOf(...emails: string[]): ParticipantRow[] {
@@ -121,5 +166,146 @@ describe("классификация строк", () => {
     // Missing this would hand the person a SECOND link to a test they already
     // have, and revoke nothing of the first assignment.
     expect(preview[0].status).toBe("assigned");
+  });
+});
+
+describe("прогон", () => {
+  beforeEach(() => {
+    deliverMock.mockReset();
+    deliverMock.mockResolvedValue({
+      issued: true,
+      magicLink: "https://host/access/abc",
+      delivered: true,
+    });
+  });
+
+  it("создаёт внешних без пароля, назначает и собирает отчёт", async () => {
+    const storage = makeStorage();
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new", { name: "Анна" })],
+      storage,
+    });
+
+    expect(storage.createUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: "a@x.ru", passwordHash: null, isExternal: true, status: "pending", createdBy: "op1",
+    }));
+    expect(storage.setUserRoles).toHaveBeenCalledWith("u-a@x.ru", ["learner"], "op1");
+    // FR-15: this scenario mints no password-setup token at all.
+    expect(storage.createPasswordResetToken).not.toHaveBeenCalled();
+    expect(report).toMatchObject({ created: 1, reused: 0, assigned: 1, groupId: null });
+    expect(report.results[0]).toMatchObject({ email: "a@x.ru", delivered: true });
+    expect(report.results[0].magicLink).toMatch(/\/access\//);
+  });
+
+  it("создаёт группу и одно назначение на неё", async () => {
+    const storage = makeStorage();
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new"), previewRow(1, "b@x.ru", "new")],
+      groupName: "Набор апреля",
+      storage,
+    });
+
+    expect(storage.createGroup).toHaveBeenCalledWith(expect.objectContaining({ name: "Набор апреля" }));
+    expect(storage.addUserToGroup).toHaveBeenCalledTimes(2);
+    // One assignment on the group, not one per person.
+    expect(storage.createTestAssignment).toHaveBeenCalledTimes(1);
+    expect(storage.createTestAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: "g-new", userId: null }),
+    );
+    expect(report.groupId).toBe("g-new");
+    expect(report.results).toHaveLength(2);
+  });
+
+  it("занятое имя группы отклоняется до любых изменений", async () => {
+    const storage = makeStorage({
+      getGroups: vi.fn().mockResolvedValue([{ id: "g1", name: "Набор апреля" }]),
+    });
+
+    await expect(runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new")],
+      groupName: "набор апреля",
+      storage,
+    })).rejects.toThrow(/группа с таким именем/i);
+
+    // Refused BEFORE anything was written: the operator renames and retries on a
+    // system that never saw the first attempt.
+    expect(storage.createUser).not.toHaveBeenCalled();
+    expect(storage.createTestAssignment).not.toHaveBeenCalled();
+  });
+
+  it("сбой на строке не прерывает прогон", async () => {
+    const storage = makeStorage();
+    storage.createUser
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockImplementationOnce((u: Record<string, unknown>) => Promise.resolve({ ...u, id: "u-b" }));
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new"), previewRow(1, "b@x.ru", "new")],
+      storage,
+    });
+
+    expect(report.created).toBe(1);
+    expect(report.failed).toEqual([{ email: "a@x.ru", reason: "boom" }]);
+    expect(report.results).toHaveLength(1);
+  });
+
+  it("привилегированному ссылка не выдаётся, но назначение делается", async () => {
+    deliverMock.mockResolvedValue({ issued: false, delivered: true });
+    const storage = makeStorage({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: "u-boss", email: "boss@x.ru", name: "Босс" }),
+    });
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "boss@x.ru", "privileged", { userId: "u-boss" })],
+      storage,
+    });
+
+    expect(storage.createTestAssignment).toHaveBeenCalledTimes(1);
+    expect(report).toMatchObject({ created: 0, reused: 1, assigned: 1 });
+    expect(report.results[0].magicLink).toBeUndefined();
+    expect(report.results[0].delivered).toBe(true);
+  });
+
+  it("уже назначенному второго назначения не создаётся, ссылка перевыпускается", async () => {
+    const storage = makeStorage({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: "u-done", email: "done@x.ru", name: "Готов" }),
+      getTestAssignments: vi.fn().mockResolvedValue([{ id: "as-old", userId: "u-done", groupId: null }]),
+    });
+
+    await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "done@x.ru", "assigned", { userId: "u-done" })],
+      storage,
+    });
+
+    // FR-16: the person keeps one assignment; the previous link is revoked by the
+    // delivery seam because the run asks it to.
+    expect(storage.createTestAssignment).not.toHaveBeenCalled();
+    expect(deliverMock).toHaveBeenCalledWith(expect.objectContaining({
+      assignmentId: "as-old", revokeExisting: true,
+    }));
+  });
+
+  it("имя из файла не затирает уже заполненное, признак не навешивается", async () => {
+    const storage = makeStorage({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: "u-staff", email: "staff@x.ru", name: "Своё имя" }),
+    });
+
+    await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "staff@x.ru", "learner", { userId: "u-staff", name: "Из файла" })],
+      storage,
+    });
+
+    // The account is left exactly as it was: the file may fill a gap, never
+    // overwrite, and the external flag is never written onto an ordinary account.
+    expect(storage.updateUser).not.toHaveBeenCalled();
   });
 });

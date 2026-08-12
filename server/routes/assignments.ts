@@ -3,17 +3,13 @@ import { logger } from "../logger";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope, requireAssignmentScope } from "../middleware/test-scope";
-import { deliverAssignmentLink } from "../services/assignment-link";
+import {
+  deliverAssignmentLink,
+  // Срок жизни magic link считается там же, где ссылка выпускается.
+  resolveAssignmentTokenExpiry as resolveTokenExpiry,
+} from "../services/assignment-link";
 
 const router = Router();
-
-// ─── Вычислить срок жизни magic link ─────────────────────────────────────────
-function resolveTokenExpiry(linkExpiresAt?: Date | null, dueDate?: Date | null): Date {
-  if (linkExpiresAt) return linkExpiresAt;
-  if (dueDate) return dueDate;
-  // Дефолт: 30 дней
-  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-}
 
 // ─── Отправить письмо пользователю ───────────────────────────────────────────
 async function notifyUser(opts: {
