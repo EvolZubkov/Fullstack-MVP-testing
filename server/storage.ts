@@ -84,6 +84,8 @@ export interface IStorage {
   updateUserPassword(id: string, newPasswordHash: string): Promise<void>;
   deactivateUser(id: string): Promise<User | undefined>;
   activateUser(id: string): Promise<User | undefined>;
+  /** PRD-28: clear the external-participant flag (one-way; see the repository). */
+  promoteExternalUser(id: string): Promise<User | undefined>;
 
   // Groups
   getGroups(): Promise<Group[]>;
@@ -435,6 +437,10 @@ export class DatabaseStorage implements IStorage {
 
   deactivateUser(id: string): Promise<User | undefined> {
     return this.usersRepo.deactivateUser(id);
+  }
+
+  promoteExternalUser(id: string): Promise<User | undefined> {
+    return this.usersRepo.promoteExternalUser(id);
   }
 
   activateUser(id: string): Promise<User | undefined> {

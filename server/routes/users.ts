@@ -78,16 +78,22 @@ router.get("/:id", requirePermission("users.read"), async (req, res) => {
 // POST /api/users - Создать пользователя
 router.post("/", requirePermission("users.create"), async (req, res) => {
   try {
-    const { email, password, name, role, roles, groupIds, sendInvite } = req.body;
+    const { email, password, name, role, roles, groupIds, sendInvite, isExternal } = req.body;
 
-    if (!email || !password) {
+    // PRD-28: an external participant has no password and no invitation letter;
+    // the role set is fixed to `learner`, so the caller cannot widen it.
+    if (isExternal) {
+      if (!email) return res.status(400).json({ error: "Email required" });
+    } else if (!email || !password) {
       return res.status(400).json({ error: "Email and password required" });
     }
 
     // Requested role set: new `roles[]`, else legacy single `role` (default learner).
-    const requestedRoles: string[] = Array.isArray(roles) && roles.length > 0
-      ? roles.map((r: unknown) => String(r))
-      : [String(role || "learner")];
+    const requestedRoles: string[] = isExternal
+      ? ["learner"]
+      : Array.isArray(roles) && roles.length > 0
+        ? roles.map((r: unknown) => String(r))
+        : [String(role || "learner")];
     if (!requestedRoles.every(isStoredRole)) {
       return res.status(400).json({ error: "Invalid role in request" });
     }
@@ -110,7 +116,8 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
 
     const user = await storage.createUser({
       email,
-      passwordHash: password,
+      passwordHash: isExternal ? null : password,
+      isExternal: Boolean(isExternal),
       name: name || null,
       status: "pending",
       mustChangePassword: true,
@@ -132,7 +139,7 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
     // reported as `inviteSent: false` and the operator can re-send from the row
     // menu (POST /:id/invite), which mints exactly the same kind of token.
     let inviteSent = false;
-    if (sendInvite) {
+    if (sendInvite && !isExternal) {
       try {
         const rawToken = randomBytes(32).toString("hex");
         const tokenHash = createHash("sha256").update(rawToken).digest("hex");
@@ -342,6 +349,36 @@ router.post("/:id/invite", requirePermission("users.manage"), async (req, res) =
   } catch (error) {
     logger.error("Invite user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to send invite" });
+  }
+});
+
+// POST /api/users/:id/promote — сделать внешнего участника штатным (PRD-28 FR-05)
+router.post("/:id/promote", requirePermission("users.manage"), async (req, res) => {
+  try {
+    const user = await storage.getUser(req.params.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user.isExternal) {
+      return res.status(400).json({ error: "Account is not an external participant" });
+    }
+
+    await storage.promoteExternalUser(user.id);
+
+    // The account now needs a password of its own: same letter the ordinary
+    // invite path sends, same token kind, same lifetime.
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+    await storage.createPasswordResetToken(user.id, tokenHash, "promote", INVITE_TTL_MS);
+    const sent = await sendInviteEmail({
+      to: user.email,
+      userName: user.name || undefined,
+      inviteLink: `${appBaseUrl()}/reset-password?token=${rawToken}`,
+    });
+
+    audit.userInvite(user.id);
+    res.json({ success: true, sent });
+  } catch (error) {
+    logger.error("Promote external user error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to promote user" });
   }
 });
 

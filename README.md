@@ -669,8 +669,9 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 | id | varchar(36) PK | UUID |
 | email | text | Зашифрованный email (AES) |
 | emailHash | varchar(64) | SHA-256 хеш для поиска |
-| passwordHash | text | scrypt-хеш пароля (PRD-9; legacy bcrypt до ленивого rehash при логине) |
+| passwordHash | text NULL | scrypt-хеш пароля (PRD-9; legacy bcrypt до ленивого rehash при логине). NULL -- пароля нет вовсе (внешний участник) |
 | name | text | Отображаемое имя |
+| isExternal | boolean | Признак внешнего участника (PRD-28): учётка без пароля, вход только по ссылке-приглашению на тест; вход по паролю, восстановление и приглашение задать пароль отклоняются. По умолчанию `false` |
 | status | enum | pending, active, inactive |
 | mustChangePassword | boolean | Принудительная смена пароля |
 | gdprConsent | boolean | Согласие GDPR |
@@ -681,6 +682,9 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 | createdBy | varchar | Создатель |
 
 Столбец `role` удалён (миграция 017): роли живут в `user_roles` (см. ниже) + конфиг-суперадмин.
+Признак `isExternal` -- не роль: у внешнего участника набор ролей фиксирован (`learner`).
+Перевод возможен только в одну сторону -- `POST /api/users/:id/promote` снимает признак и шлёт
+письмо-приглашение; обратного перевода нет (для блокировки есть деактивация).
 
 #### userRoles
 

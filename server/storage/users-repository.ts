@@ -169,6 +169,19 @@ export class UsersRepository {
     return updated || undefined;
   }
 
+  /**
+   * PRD-28: turn an external participant into an ordinary account. Only this
+   * direction exists — the reverse would strip an active employee of their
+   * password and cabinet, which is a block dressed up as a kind change.
+   */
+  async promoteExternalUser(userId: string): Promise<User | undefined> {
+    const [user] = await db.update(users)
+      .set({ isExternal: false, mustChangePassword: true })
+      .where(eq(users.id, userId))
+      .returning();
+    return user ? { ...user, email: await decryptEmail(user.email) } : undefined;
+  }
+
   // ─── Password reset tokens (part of the user aggregate) ─────────────────────
 
   async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
