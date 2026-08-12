@@ -54,6 +54,20 @@ const base = {
 };
 /** The acting operator: `users.create`/`users.manage` come from the mocked role set. */
 const adminUser = { ...base, id: "admin1", email: "admin@test.com" };
+/** The account under test: external, and otherwise an ordinary row. */
+const externalUser = { ...base, id: "u9", email: "e@x.ru", isExternal: true, passwordHash: null, status: "pending" };
+/** An ordinary account, used where the external branch must NOT fire. */
+const staffUser = { ...base, id: "u1", email: "staff@x.ru" };
+
+/**
+ * Dispatch `getUser` by id: the handler reads the operator from the session as
+ * well as the account named in the path, and a blanket `mockResolvedValue`
+ * would make the two the same row — a test that passes because the operator IS
+ * the account under test proves nothing about the account under test.
+ */
+function getUserById(...accounts: { id: string }[]) {
+  return (id: string) => Promise.resolve(accounts.find((a) => a.id === id) ?? adminUser);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function makeApp() {
@@ -92,12 +106,44 @@ describe("заведение внешнего участника и перево
     const res = await request(app).post("/api/users").send({ email: "e@x.ru", name: "Внешний", isExternal: true });
 
     expect(res.status).toBe(201);
-    expect(storageMock.createUser).toHaveBeenCalledWith(expect.objectContaining({ passwordHash: null, isExternal: true }));
+    expect(storageMock.createUser).toHaveBeenCalledWith(expect.objectContaining({
+      passwordHash: null,
+      isExternal: true,
+      // Nothing to change on the next sign-in: there is no password to replace.
+      mustChangePassword: false,
+    }));
     expect(storageMock.setUserRoles).toHaveBeenCalledWith("u9", ["learner"], expect.anything());
   });
 
+  it("признак вместе с паролем, ролями или приглашением отклоняется", async () => {
+    for (const extra of [{ password: "Secret!2026" }, { roles: ["author"] }, { role: "author" }, { sendInvite: true }]) {
+      vi.clearAllMocks();
+      storageMock.getUserByEmail.mockResolvedValue(null);
+
+      const res = await request(app).post("/api/users").send({ email: "e@x.ru", isExternal: true, ...extra });
+
+      // Dropping the field in silence would answer a request the caller never
+      // made; the account must not appear at all.
+      expect(res.status).toBe(400);
+      expect(storageMock.createUser).not.toHaveBeenCalled();
+    }
+  });
+
+  it("сбой письма после перевода не отменяет снятия признака", async () => {
+    storageMock.getUser.mockImplementation(getUserById(externalUser));
+    storageMock.createPasswordResetToken.mockRejectedValue(new Error("token store down"));
+
+    const res = await request(app).post("/api/users/u9/promote").send({});
+
+    // The irreversible half already happened. Reporting 500 would invite a retry
+    // that answers "Account is not an external participant".
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, sent: false });
+    expect(storageMock.promoteExternalUser).toHaveBeenCalledWith("u9");
+  });
+
   it("перевод в штатные снимает признак и шлёт приглашение", async () => {
-    storageMock.getUser.mockResolvedValue({ id: "u9", email: "e@x.ru", isExternal: true, status: "pending" });
+    storageMock.getUser.mockImplementation(getUserById(externalUser));
 
     const res = await request(app).post("/api/users/u9/promote").send({});
 
@@ -107,16 +153,19 @@ describe("заведение внешнего участника и перево
   });
 
   it("обратный перевод недоступен: признак нельзя выставить существующей штатной учётке", async () => {
-    storageMock.getUser.mockResolvedValue({ id: "u1", isExternal: false });
+    storageMock.getUser.mockImplementation(getUserById(staffUser));
 
     const res = await request(app).put("/api/users/u1").send({ isExternal: true });
 
     expect(res.status).toBe(200);
-    expect(storageMock.updateUser).toHaveBeenCalledWith("u1", expect.not.objectContaining({ isExternal: true }));
+    // Exactly the two fields the handler is allowed to change, and nothing more:
+    // `not.objectContaining` would also pass on `{ isExternal: false }`, which is
+    // still the flag being written from a request body.
+    expect(storageMock.updateUser).toHaveBeenCalledWith("u1", { email: undefined, name: undefined });
   });
 
   it("перевод штатной учётки отклоняется и ничего не меняет", async () => {
-    storageMock.getUser.mockResolvedValue({ ...base, id: "u1", email: "staff@x.ru" });
+    storageMock.getUser.mockImplementation(getUserById(staffUser));
 
     const res = await request(app).post("/api/users/u1/promote").send({});
 

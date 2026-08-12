@@ -216,9 +216,12 @@ router.post("/forgot-password", async (req, res) => {
 
     // PRD-28: an external participant has no password to reset. The answer is the
     // same neutral one the unknown-address branch gives, so the reply does not
-    // disclose that the address exists as an external account.
+    // disclose that the address exists as an external account. Nothing is
+    // written to the journal either: the unknown-address branch above writes
+    // nothing, and a line of its own — even one naming no address — would, by
+    // its timestamp against the request, confirm that the address exists. The
+    // two refusals must be identical from the outside, answer and record alike.
     if (user.isExternal) {
-      logger.info("Password reset refused for an external participant", "auth");
       return res.json({
         success: true,
         message: "If this email exists, a reset link has been sent",

@@ -308,6 +308,13 @@ export const audit = {
     writeAudit("user.deactivate", { targetUserId }),
   userActivate:   (targetUserId: string) =>
     writeAudit("user.activate", { targetUserId }),
+  /**
+   * PRD-28: an external participant became an ordinary account. Recorded on its
+   * own because the change is one-way — there is no endpoint back — so the audit
+   * trail is the only place the previous kind of the account survives.
+   */
+  userPromote:    (targetUserId: string) =>
+    writeAudit("user.promote", { targetUserId }),
   userInvite:     (targetUserId: string) =>
     writeAudit("user.invite", { targetUserId }),
   bulkImport:     (created: number, updated: number, skipped: number) =>

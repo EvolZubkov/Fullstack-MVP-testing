@@ -49,6 +49,22 @@ const base = {
 };
 /** The acting operator: `users.manage` comes from the mocked role set. */
 const adminUser = { ...base, id: "admin1", email: "admin@test.com" };
+/** The account under test: external, hence passwordless, and still `pending`. */
+const externalUser = {
+  ...base, id: "u1", email: "ext@example.com", isExternal: true, passwordHash: null, status: "pending",
+};
+/** Its antipode: an ordinary account on the same paths. */
+const staffUser = { ...base, id: "u2", email: "staff@example.com" };
+
+/**
+ * Dispatch `getUser` by id. The users API reads the operator from the session
+ * as well as the account named in the path; a blanket `mockResolvedValue` makes
+ * the two the same row, and then a refusal aimed at the target could just as
+ * well have come from the operator.
+ */
+function getUserById(...accounts: { id: string }[]) {
+  return (id: string) => Promise.resolve(accounts.find((a) => a.id === id) ?? adminUser);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function makeApp() {
@@ -82,7 +98,7 @@ beforeEach(() => {
 
 describe("внешний участник и пути восстановления", () => {
   it("forgot-password не выпускает токен и отвечает нейтрально", async () => {
-    storageMock.getUserByEmail.mockResolvedValue({ id: "u1", email: "ext@example.com", isExternal: true });
+    storageMock.getUserByEmail.mockResolvedValue(externalUser);
 
     const res = await request(app).post("/api/auth/forgot-password").send({ email: "ext@example.com" });
 
@@ -96,7 +112,7 @@ describe("внешний участник и пути восстановлени
   });
 
   it("forgot-password штатной учётки по-прежнему выпускает токен", async () => {
-    storageMock.getUserByEmail.mockResolvedValue({ ...base, id: "u2", email: "staff@example.com" });
+    storageMock.getUserByEmail.mockResolvedValue(staffUser);
 
     const res = await request(app).post("/api/auth/forgot-password").send({ email: "staff@example.com" });
 
@@ -106,7 +122,7 @@ describe("внешний участник и пути восстановлени
   });
 
   it("приглашение задать пароль внешней учётке отклоняется", async () => {
-    storageMock.getUser.mockResolvedValue({ id: "u1", status: "pending", isExternal: true });
+    storageMock.getUser.mockImplementation(getUserById(externalUser));
 
     const res = await request(app).post("/api/users/u1/invite").send({});
 
@@ -116,9 +132,7 @@ describe("внешний участник и пути восстановлени
   });
 
   it("приглашение штатной учётке в статусе pending уходит как раньше", async () => {
-    storageMock.getUser.mockImplementation((id: string) =>
-      Promise.resolve(id === "u2" ? { ...base, id: "u2", email: "staff@example.com", status: "pending" } : adminUser),
-    );
+    storageMock.getUser.mockImplementation(getUserById({ ...staffUser, status: "pending" }));
 
     const res = await request(app).post("/api/users/u2/invite").send({});
 
