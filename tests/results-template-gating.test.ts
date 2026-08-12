@@ -261,8 +261,13 @@ describe("results.html — пустая плашка не рисуется", () 
 
 const webAdaptive = {
   course: { title: "Адаптивный тест" },
+  // PRD-49: адаптивный экран, как и обычный, проходит `result.blocks` и берёт надписи из
+  // словаря, поэтому рукописный контекст обязан нести и то, и другое — ровно так их
+  // отдаёт `buildAdaptiveResultContext`. Сводки в списке нет: на этом экране её не бывает.
+  labels,
   result: {
     adaptive: true,
+    blocks: [{ key: "topics", heading: "Результаты по темам", isTopics: true }],
     topicResults: [
       { topicName: "Сети", levelLabel: "Средний", levelClass: "ou-tag--solid ou-tag--accent", hasFeedback: false, hasLinks: false },
     ],
@@ -329,8 +334,10 @@ describe("results.adaptive.html — superset gating", () => {
   it("renders per-topic level pill + feedback/links only where present", () => {
     const ctx = {
       course: { title: "T" },
+      labels,
       result: {
         adaptive: true,
+        blocks: [{ key: "topics", heading: "Результаты по темам", isTopics: true }],
         topicResults: [
           {
             topicName: "Сети",
@@ -377,6 +384,7 @@ describe("results.adaptive.html — консолидированный блок 
     it(`${templateId}: рисует тексты, курсы, мероприятия и материалы`, () => {
       const root = render(layout, {
         course: { title: "Адаптивный тест" },
+        labels,
         result: { ...webAdaptive.result, recommendations },
       });
       const block = root.querySelector(".tb-recs-block");
@@ -406,8 +414,10 @@ describe("results.adaptive.html — консолидированный блок 
     it(`${templateId}: обратная связь уровня остаётся в карточке темы`, () => {
       const root = render(layout, {
         course: { title: "Адаптивный тест" },
+        labels,
         result: {
           adaptive: true,
+          blocks: [{ key: "topics", heading: "Результаты по темам", isTopics: true }],
           topicResults: [
             {
               topicName: "Сети",
