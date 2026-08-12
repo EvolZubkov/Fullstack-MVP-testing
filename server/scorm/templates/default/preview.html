@@ -8577,6 +8577,9 @@ var TBTemplate = (() => {
   }
 
   // shared/scoring/pass-rule.ts
+  function resolvePassDecisionPolicy(raw) {
+    return raw === "overall_only" || raw === "overall_and_required_topics" || raw === "required_topics_only" || raw === "all_topics_passed" ? raw : null;
+  }
   function resolveOverallRule(raw) {
     if (!raw || typeof raw !== "object") return null;
     const r = raw;
@@ -8619,6 +8622,8 @@ var TBTemplate = (() => {
     let tQuestions = 0;
     let tScored = 0;
     let allTopicsPassed = true;
+    let requiredTopicsPassed = true;
+    const policy = resolvePassDecisionPolicy(input.passDecisionPolicy);
     const topicResults = input.sections.map((sec) => {
       var _a;
       let earned = 0;
@@ -8637,7 +8642,10 @@ var TBTemplate = (() => {
       const percent3 = possible > 0 ? earned / possible * 100 : 0;
       const resolved = resolveTopicRule(sec.topicPassRule, overall, { formId: (_a = sec.formId) != null ? _a : null });
       const passed = resolved && scored > 0 ? checkPassRule(resolved, percent3, earned) : null;
-      if (passed === false) allTopicsPassed = false;
+      if (passed === false) {
+        allTopicsPassed = false;
+        if (sec.required !== false) requiredTopicsPassed = false;
+      }
       tEarned += earned;
       tPossible += possible;
       tCorrect += correct;
@@ -8667,9 +8675,23 @@ var TBTemplate = (() => {
       possiblePoints: tPossible,
       percent: percent2,
       overallPassed,
-      passed: overallPassed && allTopicsPassed,
+      passed: decideVerdict(policy, { overallPassed, requiredTopicsPassed, allTopicsPassed }),
       topicResults
     };
+  }
+  function decideVerdict(policy, gates) {
+    switch (policy) {
+      case "overall_only":
+        return gates.overallPassed;
+      case "overall_and_required_topics":
+        return gates.overallPassed && gates.requiredTopicsPassed;
+      case "required_topics_only":
+        return gates.requiredTopicsPassed;
+      case "all_topics_passed":
+        return gates.allTopicsPassed;
+      default:
+        return gates.overallPassed && gates.allTopicsPassed;
+    }
   }
   function aggregateAdaptiveResult(input) {
     let overallPassed = true;
