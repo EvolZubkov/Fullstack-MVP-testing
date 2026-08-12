@@ -59,18 +59,18 @@
         {{#each @root.result.indicators}}
         <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
           <div class="ou-formsection__intro">
-            <h4 class="ou-formsection__title">{{name}}</h4>
+            {{#unless hideName}}<h4 class="ou-formsection__title">{{name}}</h4>{{/unless}}
           </div>
           <div class="ou-formsection__body">
             {{#if showValue}}<span class="ou-slider__val"><strong>{{valueLabel}}</strong></span>{{/if}}
-            {{#if levelLabel}}
+            {{#unless hideBanner}}
             <div class="ou-banner ou-banner--subtle ou-banner--{{bannerVariant}}">
               <div class="ou-banner__body">
-                <div class="ou-banner__title">{{levelLabel}}</div>
+                {{#unless hideLevel}}{{#if levelLabel}}<div class="ou-banner__title">{{levelLabel}}</div>{{/if}}{{/unless}}
                 {{#if text}}<div class="ou-banner__desc">{{& textHtml }}</div>{{/if}}
               </div>
             </div>
-            {{/if}}
+            {{/unless}}
           </div>
         </div>
         {{/each}}
@@ -121,10 +121,10 @@
         <div class="ou-formsection tb-measure" data-render="{{renderKind}}">
           <div class="ou-formsection__intro">
             <div class="tb-measure__head">
-              <h4 class="ou-formsection__title">{{name}}</h4>
+              {{#unless hideName}}<h4 class="ou-formsection__title">{{name}}</h4>{{/unless}}
               {{#unless isRing}}{{#if showValue}}<span class="ou-slider__val"><strong>{{valueText}}</strong>{{#if maxText}} из {{maxText}}{{/if}}</span>{{/if}}{{/unless}}
             </div>
-            {{#if levelLabel}}<span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>{{/if}}
+            {{#unless hideLevel}}{{#if levelLabel}}<span class="ou-tag ou-tag--l tb-measure__level {{toneClass}}">{{levelLabel}}</span>{{/if}}{{/unless}}
           </div>
           <div class="ou-formsection__body">
             {{#if zones}}
@@ -153,7 +153,7 @@
               </svg>
               <div class="ou-ring__center">
                 <div class="ou-ring__value">{{valueText}}</div>
-                <div class="ou-ring__label">{{levelLabel}}</div>
+                {{#unless hideLevel}}<div class="ou-ring__label">{{levelLabel}}</div>{{/unless}}
               </div>
             </div>
             {{/if}}

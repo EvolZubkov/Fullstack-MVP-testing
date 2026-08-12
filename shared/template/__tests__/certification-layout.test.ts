@@ -295,6 +295,123 @@ describe("certification section-results layout (PRD-49 task 15)", () => {
   });
 });
 
+// PRD-49 section 6 (already merged into the default template in `825578b6`) gives the
+// measure card (indicator or scale) independent gates for its NAME, LEVEL and BANNER
+// slots: `hideName`/`hideLevel`/`hideBanner` on the resolved item. The flags are
+// INVERTED on purpose — absent key means "show" — so a context assembled without
+// `buildMeasureView` (which always sets all three) never silently loses a slot.
+// Certification had NOT carried this gate: an author toggling "Показывать название"
+// off on the default template hid the name, but on Certification it kept printing —
+// the same setting producing a different result on two templates is the parity defect
+// this addendum closes. Both `results.html` and `results.adaptive.html` carry the SAME
+// three gates (task 15 addendum), so both are exercised here.
+describe("certification measure-card slot gates (PRD-49 section 6)", () => {
+  const indicatorFull = {
+    name: "Показатель слота",
+    renderKind: "label",
+    levelLabel: "Норма слота",
+    bannerVariant: "info",
+    showValue: true,
+    valueLabel: "5",
+    text: "Пояснение показателя",
+    textHtml: "<p>Пояснение показателя</p>",
+  };
+
+  const scaleFull = {
+    name: "Шкала слота",
+    renderKind: "band_ruler",
+    levelLabel: "Высокий слот",
+    toneClass: "",
+  };
+
+  const scaleRing = {
+    name: "Кольцевая шкала",
+    renderKind: "ring",
+    isRing: true,
+    levelLabel: "Кольцевой уровень",
+    valueText: "80",
+    toneClass: "",
+  };
+
+  function ctxWithIndicator(overrides: Record<string, unknown>) {
+    return {
+      ...CTX,
+      result: {
+        ...CTX.result,
+        blocks: [{ key: "indicators", heading: "Показатели слота", isIndicators: true }],
+        indicators: [{ ...indicatorFull, ...overrides }],
+      },
+    };
+  }
+
+  function ctxWithScale(overrides: Record<string, unknown>, scaleBase: Record<string, unknown> = scaleFull) {
+    return {
+      ...CTX,
+      result: {
+        ...CTX.result,
+        blocks: [{ key: "scales", heading: "Шкалы слота", isScales: true }],
+        scales: [{ ...scaleBase, ...overrides }],
+      },
+    };
+  }
+
+  describe.each([
+    ["results.html", LAYOUT],
+    ["results.adaptive.html", ADAPTIVE_LAYOUT],
+  ])("%s", (_label, layoutSource) => {
+    it("hides the indicator card name under hideName, keeps the level", () => {
+      const html = compileTemplate(layoutSource)(ctxWithIndicator({ hideName: true }));
+      expect(html).not.toContain("Показатель слота");
+      expect(html).toContain("Норма слота");
+    });
+
+    it("hides the indicator banner's level under hideLevel, keeps the explanatory text", () => {
+      const html = compileTemplate(layoutSource)(ctxWithIndicator({ hideLevel: true }));
+      expect(html).not.toContain("Норма слота");
+      expect(html).toContain("Пояснение показателя");
+      expect(html).toContain("ou-banner");
+    });
+
+    it("hides the whole indicator banner under hideBanner", () => {
+      const html = compileTemplate(layoutSource)(ctxWithIndicator({ hideBanner: true }));
+      expect(html).not.toContain("ou-banner");
+      expect(html).not.toContain("Норма слота");
+      expect(html).not.toContain("Пояснение показателя");
+    });
+
+    it("prints the indicator name, level and text when none of the keys is present", () => {
+      const html = compileTemplate(layoutSource)(ctxWithIndicator({}));
+      expect(html).toContain("Показатель слота");
+      expect(html).toContain("Норма слота");
+      expect(html).toContain("Пояснение показателя");
+    });
+
+    it("hides the scale card name under hideName, keeps the level tag", () => {
+      const html = compileTemplate(layoutSource)(ctxWithScale({ hideName: true }));
+      expect(html).not.toContain("Шкала слота");
+      expect(html).toContain("Высокий слот");
+    });
+
+    it("hides the scale level tag under hideLevel, keeps the name", () => {
+      const html = compileTemplate(layoutSource)(ctxWithScale({ hideLevel: true }));
+      expect(html).not.toContain("Высокий слот");
+      expect(html).toContain("Шкала слота");
+    });
+
+    it("hides the ring's center level label under hideLevel, keeps the value", () => {
+      const html = compileTemplate(layoutSource)(ctxWithScale({ hideLevel: true }, scaleRing));
+      expect(html).not.toContain("Кольцевой уровень");
+      expect(html).toContain("80");
+    });
+
+    it("prints the scale name and level when neither key is present", () => {
+      const html = compileTemplate(layoutSource)(ctxWithScale({}));
+      expect(html).toContain("Шкала слота");
+      expect(html).toContain("Высокий слот");
+    });
+  });
+});
+
 describe("certification manifest (PRD-49 task 15, results-heading parity)", () => {
   it("declares all 15 label keys, each with a non-empty default", () => {
     const expectedKeys = [
