@@ -1,8 +1,18 @@
 import { Router } from "express";
+import ExcelJS from "exceljs";
 import { logger } from "../logger";
+import { config } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope, requireAssignmentScope } from "../middleware/test-scope";
+import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
+import { addAoaSheet, workbookToBuffer } from "../utils/excel";
+import {
+  classifyParticipants,
+  parseParticipantsWorkbook,
+  runParticipantsInvite,
+  type ParticipantPreviewRow,
+} from "../services/participants-invite";
 import {
   deliverAssignmentLink,
   // Срок жизни magic link считается там же, где ссылка выпускается.
@@ -469,6 +479,102 @@ router.patch("/assignments/:id/revoke-user/:userId", requirePermission("assignme
     res.status(500).json({ error: "Failed to revoke" });
   }
 });
+
+// ─── Рассылка списком из файла (PRD-28) ──────────────────────────────────────
+// All three endpoints carry the same gate (FR-22): the capability to assign, the
+// capability to create accounts — the run brings participants into being — and
+// the object-level `assign` scope on THIS test. Two `requirePermission` in one
+// chain is intended: each is an independent gate that either answers 403 or
+// hands over to the next, and the capability model has no "all of these" form.
+
+/** Multipart field the participants workbook arrives in. */
+const participantsUpload = workbookUploadSingle("file");
+
+// ─── POST /api/tests/:id/participants/preview — разбор файла (PRD-28 FR-11) ───
+router.post(
+  "/tests/:id/participants/preview",
+  requirePermission("assignments.manage"),
+  requirePermission("users.create"),
+  requireTestScope("assign"),
+  participantsUpload,
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "File required" });
+      const rows = await parseParticipantsWorkbook(req.file.buffer, {
+        maxRows: config.limits.participantsImportMaxRows,
+      });
+      res.json(await classifyParticipants(rows, { testId: req.params.id, storage }));
+    } catch (error) {
+      logger.error("Participants preview error: " + (error as Error).message);
+      if (respondWorkbookReadError(res, error)) return;
+      // Everything else the parser refuses on — an empty book, too many rows —
+      // is about the file the operator picked, so it is their error to fix.
+      res.status(400).json({ error: (error as Error).message });
+    }
+  },
+);
+
+// ─── POST /api/tests/:id/participants/invite — прогон (PRD-28 FR-13..FR-18) ───
+router.post(
+  "/tests/:id/participants/invite",
+  requirePermission("assignments.manage"),
+  requirePermission("users.create"),
+  requireTestScope("assign"),
+  async (req, res) => {
+    const { rows, dueDate, linkExpiresAt, groupName } = req.body ?? {};
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: "rows is required" });
+    }
+
+    try {
+      const report = await runParticipantsInvite({
+        testId: req.params.id,
+        rows: rows as ParticipantPreviewRow[],
+        actorId: req.session.userId!,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        linkExpiresAt: linkExpiresAt ? new Date(linkExpiresAt) : null,
+        groupName: typeof groupName === "string" ? groupName : null,
+        storage,
+      });
+      res.json(report);
+    } catch (error) {
+      const message = (error as Error).message;
+      logger.error("Participants invite error: " + message);
+      // The two conditions the run refuses on BEFORE changing anything are the
+      // operator's to resolve, and they resolve differently. A missing test is
+      // gone (the scope check saw it a moment ago, so this is the race), while a
+      // taken group name is a rename away — and its text is Russian on purpose,
+      // shown verbatim because it names the group standing in the way.
+      if (message === "Test not found") return res.status(404).json({ error: message });
+      if (message.startsWith("Группа с таким именем уже есть")) {
+        return res.status(400).json({ error: message });
+      }
+      res.status(500).json({ error: "Failed to invite participants" });
+    }
+  },
+);
+
+// ─── GET /api/tests/:id/participants/template — шаблон книги (PRD-28 FR-10) ───
+// Two columns only, unlike the users-import template: `role` and `group` are
+// ignored in this scenario (the role is always `learner`, the group comes from
+// the form), and offering them would promise behaviour that does not exist.
+router.get(
+  "/tests/:id/participants/template",
+  requirePermission("assignments.manage"),
+  requireTestScope("assign"),
+  async (_req, res) => {
+    const wb = new ExcelJS.Workbook();
+    addAoaSheet(wb, "Участники", [
+      ["email", "name"],
+      ["ivanov@example.com", "Иван Иванов"],
+      ["petrova@example.com", "Анна Петрова"],
+    ]);
+    const buf = await workbookToBuffer(wb);
+    res.setHeader("Content-Disposition", "attachment; filename=participants-template.xlsx");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buf);
+  },
+);
 
 // ─── GET /api/learner/assigned-tests ─────────────────────────────────────────
 router.get("/learner/assigned-tests", requirePermission("attempts.self.read"), async (req, res) => {
