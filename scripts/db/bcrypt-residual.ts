@@ -17,6 +17,10 @@
  * bcrypt to scrypt: the plaintext password is required and a bcrypt hash does not
  * contain it.
  *
+ * Accounts with NO password at all (external participants, PRD-28) are reported on
+ * their own line and kept out of the scrypt/bcrypt split: they carry no hash of
+ * either format, so counting them as migrated would overstate the progress.
+ *
  * READ-ONLY: issues a single SELECT, writes nothing. Safe to point at production —
  * in fact that is the intended target when deciding whether Этап 3 can proceed.
  *
@@ -33,10 +37,14 @@ import { isLegacyBcryptHash } from "../../server/utils/crypto";
 
 const { Pool } = pg;
 
-/** The columns this report reads from `users` (see `shared/schema.ts`). */
+/**
+ * The columns this report reads from `users` (see `shared/schema.ts`).
+ * `password_hash` is nullable: an external participant (PRD-28) has no password at
+ * all, and such rows are neither bcrypt nor scrypt — they are counted separately.
+ */
 interface UserRow {
   status: string;
-  password_hash: string;
+  password_hash: string | null;
   last_login_at: Date | null;
   expires_at: Date | null;
 }
@@ -59,8 +67,14 @@ function pct(n: number, total: number): string {
 function report(rows: UserRow[]): void {
   const now = new Date();
   const total = rows.length;
-  const legacy = rows.filter((r) => isLegacyBcryptHash(r.password_hash));
-  const onScrypt = total - legacy.length;
+  // PRD-28: passwordless accounts (external participants, and any legacy row with a
+  // NULL hash) hold no hash of either format. They must be excluded before the
+  // scrypt/bcrypt split — counting them as "on scrypt" would overstate the
+  // migration progress that gates PRD-9 Этап 3.
+  const passwordless = rows.filter((r) => r.password_hash == null).length;
+  const withPassword = rows.filter((r) => r.password_hash != null);
+  const legacy = withPassword.filter((r) => isLegacyBcryptHash(r.password_hash));
+  const onScrypt = withPassword.length - legacy.length;
 
   const byStatus = (s: string): number => legacy.filter((r) => r.status === s).length;
   // Dormant on bcrypt: never logged in => the rehash-on-login path never fires, so
@@ -77,6 +91,10 @@ function report(rows: UserRow[]): void {
   console.log(`Users total:          ${total}`);
   console.log(`On scrypt (current):  ${onScrypt} (${pct(onScrypt, total)}%)`);
   console.log(`On bcrypt (legacy):   ${legacy.length} (${pct(legacy.length, total)}%)`);
+  console.log(`No password (PRD-28): ${passwordless} (${pct(passwordless, total)}%)`);
+  if (passwordless > 0) {
+    console.log("  (external participants — no hash of either format, excluded from the split above)");
+  }
 
   if (legacy.length > 0) {
     console.log("");

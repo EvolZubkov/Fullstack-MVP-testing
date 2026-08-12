@@ -103,11 +103,14 @@ export function verifyEmailHash(email: string, hash: string): boolean {
  * True when a stored hash is a legacy bcrypt value (`$2a$`/`$2b$`/`$2y$`) rather
  * than the current scrypt format (`scrypt$…`). Callers use it to route verification
  * to the temporary bcrypt path and to trigger a lazy rehash on login (PRD-9 Этап 2).
- * @param stored - The stored password hash to classify
+ * A missing hash (NULL — an external participant, PRD-28) is not a bcrypt hash:
+ * the argument is nullable so a caller reading raw rows cannot accidentally
+ * stringify `null` into the regexp and misclassify a passwordless account.
+ * @param stored - The stored password hash to classify, or null when there is none
  * @returns True when the value is a legacy bcrypt hash
  */
-export function isLegacyBcryptHash(stored: string): boolean {
-  return /^\$2[aby]\$/.test(stored);
+export function isLegacyBcryptHash(stored: string | null): boolean {
+  return stored != null && /^\$2[aby]\$/.test(stored);
 }
 
 /**

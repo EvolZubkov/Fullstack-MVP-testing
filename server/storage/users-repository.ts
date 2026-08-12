@@ -66,6 +66,7 @@ export class UsersRepository {
       emailHash: emailHashValue,
       passwordHash: hashedPassword,
       name: insertUser.name || null,
+      isExternal: insertUser.isExternal ?? false,
       status: insertUser.status || "pending",
       mustChangePassword: insertUser.mustChangePassword ?? true,
       gdprConsent: false,
@@ -78,16 +79,12 @@ export class UsersRepository {
 
   async validatePassword(email: string, password: string): Promise<User | null> {
     const user = await this.getUserByEmail(email);
-    if (!user) {
-      // Equalize timing with the found-user path so response time does not leak
-      // whether the account exists (anti-enumeration).
-      await dummyVerifyPassword(password);
-      return null;
-    }
-    if (user.passwordHash == null) {
-      // PRD-28: an account without a password (external participant) can never log in
-      // by password. Burn the same time as the found-user path so the absence of a
-      // hash does not leak through response timing.
+    // No password to check: not found, an external participant (PRD-28) or a legacy
+    // row without a hash. All three take the same dummy verification as the
+    // not-found path so response time does not tell them apart. The flag is checked
+    // on its own, not merely the missing hash: an external account that somehow got
+    // a password set (e.g. through `updateUserPassword`) must stay locked out.
+    if (!user || user.isExternal || !user.passwordHash) {
       await dummyVerifyPassword(password);
       return null;
     }
