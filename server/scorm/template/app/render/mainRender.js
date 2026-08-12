@@ -422,6 +422,16 @@ function renderSectionResults(topicId, isLast) {
     var secList = (typeof TEST_DATA !== 'undefined' && TEST_DATA.sections) ? TEST_DATA.sections : [];
     var secPos = 0;
     for (var si = 0; si < secList.length; si++) { if (secList[si].topicId === topicId) { secPos = si + 1; break; } }
+    // PRD-49: заголовки этого экрана (`section.eyebrow`/`facts.*`) — the SAME reader as
+    // the results screens (`vrApplyLabelOptions`, viewResults.js — flat runtime bundle,
+    // reused across render files the same way `vrTestFeedback` already is). The
+    // section-results screen carries no sub-blocks of its own, so only `labels` is ever
+    // set here — `vrLabelOptions` still looks up `templateBlockOrder['section-results']`,
+    // which the package never bakes (build-export-data.ts resolves order for `results`/
+    // `results.adaptive` only), so `sectionResultsOpts.templateBlockOrder` stays absent
+    // and `buildSectionResultContext` — which reads only `opts.labels` — ignores it anyway.
+    var sectionResultsOpts = {};
+    if (typeof vrApplyLabelOptions === 'function') vrApplyLabelOptions(sectionResultsOpts, 'section-results');
     var built = TB.buildSectionResultContext({
         topicName: sr.topicName,
         correct: sr.correct,
@@ -432,12 +442,17 @@ function renderSectionResults(topicId, isLast) {
         sectionIndex: secPos || undefined,
         sectionsTotal: secList.length,
         continueLabel: (isLast && !isRouterMode) ? 'Завершить тест' : 'Продолжить'
-    });
+    }, sectionResultsOpts);
     var context = {
         course: built.course,
         design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
         sectionResult: built.sectionResult
     };
+    // PRD-49: the resolved labels TREE the builder attached above (`built.labels`,
+    // present only when `sectionResultsOpts.labels` was set) — the layout addresses it
+    // as `labels.section.eyebrow` / `labels.facts.*`. Absent for a package built before
+    // this PRD, so such a package renders byte-identical to before.
+    if (built.labels) context.labels = built.labels;
     app.innerHTML = '';
     // Mount directly into #app so .tb-pad > .tb-scene fills the fixed stage
     // (section-results ring centered) — mirrors renderGalleryPage (no wrapper div).

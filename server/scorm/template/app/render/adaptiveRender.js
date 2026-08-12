@@ -425,7 +425,7 @@ function renderAdaptiveResultsTemplated(app, result) {
   var measures = (flatResult && typeof currentAttemptMeasures === 'function')
     ? currentAttemptMeasures(flatResult)
     : null;
-  var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', {
+  var adaptiveOpts = {
     hasScormActions: true,
     // The test's OWN feedback (`TEST_DATA.testFeedbackJson`) — the widest source of the
     // block and its first one. A property of the TEST, not of the flow mode: an author
@@ -447,7 +447,18 @@ function renderAdaptiveResultsTemplated(app, result) {
     // straight through a closed interval. The flag now says what it means.
     canRetry: canRetry,
     showFinish: !canRetry
-  });
+  };
+  // PRD-49: заголовки блоков + порядок подблоков, для THIS screen — `results.adaptive`
+  // carries its OWN composition (no score summary), declared by the manifest and baked
+  // into `designSettings.templateBlockOrder['results.adaptive']`. Passing the standard
+  // screen's list here would be harmless for the summary (`buildAdaptiveResultContext`
+  // hardcodes `hasSummary: false` regardless of what the order says), but the topics/
+  // scales/indicators ORDER would still come from the wrong screen's authoring —
+  // `vrApplyLabelOptions` (viewResults.js — flat runtime bundle, in scope here the same
+  // way `vrTestFeedback`/`vrScreenIntro`/`currentAttemptMeasures` already are) is what
+  // keeps it screen-correct.
+  if (typeof vrApplyLabelOptions === 'function') vrApplyLabelOptions(adaptiveOpts, 'results.adaptive');
+  var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', adaptiveOpts);
   // One report contract for BOTH results layouts (shared/template/results-nav): the
   // adaptive footer used to spell it `showPdf`/`download-pdf`, which the web host never
   // sets — so the same template offered a report in the LMS and none in the browser.
