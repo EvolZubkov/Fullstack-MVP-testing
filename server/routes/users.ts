@@ -81,15 +81,19 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
     const { email, password, name, role, roles, groupIds, sendInvite, isExternal } = req.body;
 
     // PRD-28: an external participant has no password and no invitation letter;
-    // the role set is fixed to `learner`, so the caller cannot widen it.
-    if (isExternal) {
+    // the role set is fixed to `learner`, so the caller cannot widen it. The flag is
+    // compared to `true` rather than tested for truthiness: a JSON body carrying the
+    // STRING "false" is truthy, and reading it loosely would silently create a
+    // passwordless account where an ordinary one was asked for.
+    const external = isExternal === true;
+    if (external) {
       if (!email) return res.status(400).json({ error: "Email required" });
     } else if (!email || !password) {
       return res.status(400).json({ error: "Email and password required" });
     }
 
     // Requested role set: new `roles[]`, else legacy single `role` (default learner).
-    const requestedRoles: string[] = isExternal
+    const requestedRoles: string[] = external
       ? ["learner"]
       : Array.isArray(roles) && roles.length > 0
         ? roles.map((r: unknown) => String(r))
@@ -116,8 +120,8 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
 
     const user = await storage.createUser({
       email,
-      passwordHash: isExternal ? null : password,
-      isExternal: Boolean(isExternal),
+      passwordHash: external ? null : password,
+      isExternal: external,
       name: name || null,
       status: "pending",
       mustChangePassword: true,
@@ -139,7 +143,7 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
     // reported as `inviteSent: false` and the operator can re-send from the row
     // menu (POST /:id/invite), which mints exactly the same kind of token.
     let inviteSent = false;
-    if (sendInvite && !isExternal) {
+    if (sendInvite && !external) {
       try {
         const rawToken = randomBytes(32).toString("hex");
         const tokenHash = createHash("sha256").update(rawToken).digest("hex");
