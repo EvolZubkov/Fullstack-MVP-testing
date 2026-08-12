@@ -705,6 +705,48 @@ describe("POST .../finish — branches", () => {
     expect(res.body.error).toBe("Test not found");
   });
 
+  // «Тест пройден, если» must reach the shared engine from the test row: with
+  // `overall_only` a failed topic is informational, and the verdict follows the
+  // overall threshold alone. Before the setting was persisted, the grader had no
+  // policy to read and every gated topic demoted the whole test.
+  it("applies the test's passDecisionPolicy to the verdict", async () => {
+    // Two questions, one answered right: overall 50%, topic 50%. The overall rule
+    // (40%) is met; the topic's own gate (100%) is not — so the two policies must
+    // disagree, which is exactly what makes this a test of the policy and not of
+    // the arithmetic around it.
+    const twoQuestionAttempt = {
+      ...dbAttempt,
+      variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2"] }] },
+    };
+    const grade = async (passDecisionPolicy: string) => {
+      storageMock.updateAttempt.mockClear();
+      storageMock.getAttempt.mockResolvedValue(twoQuestionAttempt);
+      storageMock.getTest.mockResolvedValue({
+        ...dbTest, passDecisionPolicy, overallPassRuleJson: { type: "percent", value: 40 },
+      });
+      storageMock.getTestSections.mockResolvedValue([
+        { topicId: "t1", required: true, topicPassRuleJson: { source: "custom", type: "percent", value: 100 } },
+      ]);
+      storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion, { ...dbQuestion, id: "q2" }]);
+      storageMock.getTestQuestionScoring.mockResolvedValue([]);
+      storageMock.updateAttempt.mockImplementation((_id: string, patch: Record<string, unknown>) =>
+        Promise.resolve({ ...twoQuestionAttempt, ...patch }));
+      await asLearner(
+        request(app).post("/api/attempts/atmp1/finish").send({ answers: { q1: 0, q2: 1 } }),
+      );
+      const lastCall = storageMock.updateAttempt.mock.calls.at(-1);
+      return (lastCall?.[1] as { resultJson: { overallPassed: boolean; topicResults: { passed: boolean | null }[] } }).resultJson;
+    };
+
+    const informational = await grade("overall_only");
+    expect(informational.topicResults[0].passed).toBe(false);
+    expect(informational.overallPassed).toBe(true);
+
+    const gated = await grade("overall_and_required_topics");
+    expect(gated.topicResults[0].passed).toBe(false);
+    expect(gated.overallPassed).toBe(false);
+  });
+
   it("returns 500 when persisting the result throws", async () => {
     storageMock.getAttempt.mockResolvedValue(dbAttempt);
     storageMock.getTest.mockResolvedValue(dbTest);

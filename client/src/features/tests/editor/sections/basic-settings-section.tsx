@@ -8,7 +8,9 @@
  *
  *   - «Основное»          — title (required), description, mode toggle
  *                            (standard / adaptive), flowMode select
- *   - «Ограничения»       — timeLimitMinutes, maxAttempts, showCorrectAnswers
+ *   - «Ограничения»       — timeLimitMinutes, maxAttempts, per-topic limits and
+ *                            the retake block (PRD-6/31/40: cooldown + attempt
+ *                            interval), which used to be a rail item of its own
  *   - «Интеграция»        — webhookUrl, telemetryEnabled
  *   - «Правила прохождения» — passDecisionPolicy + per-topic pass rules
  *   - «Адаптивный режим»   — adaptive levels editor (hidden when mode !== "adaptive")
@@ -89,7 +91,6 @@ type RailKey =
   | "basic"
   | "pass-rules"
   | "limits"
-  | "retake"
   | "integration"
   | "adaptive";
 
@@ -97,7 +98,6 @@ const RAIL_ITEMS: { key: RailKey; label: string }[] = [
   { key: "basic", label: "Основное" },
   { key: "pass-rules", label: "Правила прохождения" },
   { key: "limits", label: "Ограничения" },
-  { key: "retake", label: "Повторное прохождение" },
   { key: "integration", label: "Интеграция" },
   { key: "adaptive", label: "Адаптивный режим" },
 ];
@@ -109,7 +109,6 @@ const RAIL_ERROR_PREFIXES: Record<RailKey, string[]> = {
   basic: ["basic.title", "flowMode"],
   "pass-rules": ["passRules"],
   limits: [],
-  retake: [],
   integration: ["basic.webhookUrl"],
   adaptive: ["adaptive"],
 };
@@ -197,9 +196,6 @@ export function SettingsSection({
         )}
         {effectiveActive === "limits" && (
           <LimitsPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
-        )}
-        {effectiveActive === "retake" && (
-          <RetakePane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
         {effectiveActive === "integration" && (
           <IntegrationPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
@@ -491,6 +487,11 @@ function BasicPane({
 
 // ─── Sub-pane: Ограничения ────────────────────────────────────────────────────
 
+/**
+ * «Ограничения» pane. Holds both barriers the author thinks of as limits:
+ * the in-attempt ones (attempt count, time) and the between-attempts retake
+ * block, which lives here instead of a rail item of its own.
+ */
 function LimitsPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
@@ -535,6 +536,9 @@ function LimitsPane({ model, updateModel }: SettingsSectionProps) {
       {/* PRD-7 S13.2-G8: «Показывать правильные ответы» переехал в Основное
           → секция «Общая обратная связь теста» (вместе с feedback editor),
           per wireframe prd7-editor-settings-tab.html lines 820-837. */}
+      <hr className="wf-sep" />
+      <h3 className="tb-topics-title">Повторное прохождение</h3>
+      <RetakeBlock model={model} updateModel={updateModel} />
     </>
   );
 }
@@ -666,7 +670,7 @@ function PerTopicLimitsBlock({ model, updateModel }: SettingsSectionProps) {
   );
 }
 
-// ─── Sub-pane: Повторное прохождение (PRD-6) ──────────────────────────────────
+// ─── Block: Повторное прохождение (PRD-6), внутри «Ограничений» ───────────────
 
 /** Active eligibility plugin as served by `/api/tests/:id/available-eligibility-plugins`. */
 type EligibilityPluginInfo = {
@@ -679,7 +683,9 @@ type EligibilityPluginInfo = {
 };
 
 /**
- * «Повторное прохождение» pane (PRD-6, wireframe `prd6-retake-policy.html`).
+ * «Повторное прохождение» block (PRD-6, wireframe `prd6-retake-policy.html`).
+ * Rendered at the bottom of the «Ограничения» pane — it is a limit on WHEN the
+ * next attempt opens, next to the limits on how many attempts and how long.
  * Binds `model.retakePolicy`:
  *   - Switch        → `enabled` (off = legacy behaviour, FR-02)
  *   - NumberInput   → `cooldownPeriodDays` (1–3650 calendar days), OR — when the
@@ -694,7 +700,7 @@ type EligibilityPluginInfo = {
  * has exactly one entry — the select is kept for forward compatibility rather than
  * simplified away.
  */
-function RetakePane({ model, updateModel }: SettingsSectionProps) {
+function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
   const testId = model.id;
   const { data } = useQuery<{ plugins: EligibilityPluginInfo[] }>({
     queryKey: [`/api/tests/${testId}/available-eligibility-plugins`],

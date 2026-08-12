@@ -85,6 +85,18 @@ const testBodyBaseSchema = z.object({
   title: z.string().min(1, "Title is required").optional(),
   description: z.string().nullable().optional(),
   overallPassRuleJson: passRuleSchema.optional(),
+  // «Тест пройден, если» — how the overall rule and the topic gates combine into
+  // the verdict (docs/architecture/test-settings-parameter-structure.md §3.4).
+  // MUST be listed here: an unlisted key is stripped by zod and silently lost,
+  // which is exactly how this setting used to vanish on every save.
+  passDecisionPolicy: z
+    .enum([
+      "overall_only",
+      "overall_and_required_topics",
+      "required_topics_only",
+      "all_topics_passed",
+    ])
+    .optional(),
   webhookUrl: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
   sections: z.array(sectionBodySchema).optional(),
   showCorrectAnswers: z.boolean().optional(),
@@ -600,6 +612,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       title,
       description,
       overallPassRuleJson,
+      passDecisionPolicy,
       webhookUrl,
       sections,
       showCorrectAnswers,
@@ -659,6 +672,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         title: title!,
         description,
         overallPassRuleJson: overallPassRuleJson ?? { type: "percent" as const, value: 70 },
+        passDecisionPolicy,
         webhookUrl: webhookUrl || null,
         status,
         published,
@@ -1013,6 +1027,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       title,
       description,
       overallPassRuleJson,
+      passDecisionPolicy,
       webhookUrl,
       sections,
       showCorrectAnswers,
@@ -1077,6 +1092,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         title,
         description,
         overallPassRuleJson,
+        passDecisionPolicy,
         webhookUrl: webhookUrl ?? undefined,
         showCorrectAnswers,
         allowReturnToUnanswered,

@@ -471,7 +471,7 @@ describe("<SettingsSection /> — Повторное прохождение (д�
     const updateModel = vi.fn();
     const model = enabledModel();
     renderSettings(model, updateModel, { seedPlugins: plugins });
-    fireEvent.click(screen.getByTestId("settings-rail-retake"));
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
     fireEvent.change(screen.getByTestId("settings-retake-cooldown-input"), { target: { value: "45" } });
     expect(runUpdater(updateModel, model).retakePolicy.cooldownPeriodDays).toBe(45);
   });
@@ -480,7 +480,7 @@ describe("<SettingsSection /> — Повторное прохождение (д�
     const updateModel = vi.fn();
     const model = enabledModel();
     renderSettings(model, updateModel, { seedPlugins: plugins });
-    fireEvent.click(screen.getByTestId("settings-rail-retake"));
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
     fireEvent.change(screen.getByTestId("settings-retake-cooldown-input"), { target: { value: "5000" } });
     expect(runUpdater(updateModel, model).retakePolicy.cooldownPeriodDays).toBe(3650);
   });

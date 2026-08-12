@@ -1465,7 +1465,15 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       });
     }
 
-    const agg = aggregateStandardResult({ sections: aggSections, overallPassRule: test.overallPassRuleJson });
+    const agg = aggregateStandardResult({
+      sections: aggSections,
+      overallPassRule: test.overallPassRuleJson,
+      // «Тест пройден, если» — read from the SAME source the attempt is graded
+      // against (snapshot or live), so a pinned attempt keeps the policy it was
+      // published with. A snapshot taken before the column existed carries none,
+      // and the engine then falls back to the pre-policy verdict.
+      passDecisionPolicy: test.passDecisionPolicy,
+    });
     const totalCorrect = agg.correct;
     const totalQuestions = agg.totalQuestions;
     const totalEarnedPoints = agg.earnedPoints;

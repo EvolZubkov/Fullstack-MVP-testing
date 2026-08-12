@@ -4,11 +4,11 @@
  * (PRD-7 wireframe `prd7-editor-settings-tab.html`).
  *
  * Coverage:
- *   - Side-rail renders 5 sub-sections; clicking switches the active pane.
+ *   - Side-rail renders 4 sub-sections; clicking switches the active pane.
  *   - Basic pane: title / description / mode toggle / flowMode select bind to
  *     the editor draft via updateModel.
  *   - Limits pane: timeLimitMinutes / maxAttempts (number or null) +
- *     showCorrectAnswers checkbox.
+ *     showCorrectAnswers checkbox + the retake block (PRD-6).
  *   - Integration pane: webhookUrl + telemetryEnabled.
  *   - Pass-rules pane: decisionPolicy / overall rule / per-topic source.
  *   - Adaptive pane: mode warning, master toggle, per-topic accordion +
@@ -104,6 +104,15 @@ describe("<SettingsSection /> — side rail", () => {
     expect(screen.getByTestId("settings-rail-limits")).toBeInTheDocument();
     expect(screen.getByTestId("settings-rail-integration")).toBeInTheDocument();
     expect(screen.queryByTestId("settings-rail-adaptive")).toBeNull();
+    // «Повторное прохождение» — блок внутри «Ограничений», своего пункта нет.
+    expect(screen.queryByTestId("settings-rail-retake")).toBeNull();
+  });
+
+  it("renders the retake block inside the «Ограничения» pane", () => {
+    render(<SettingsSection model={baseModel()} updateModel={() => {}} />);
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    expect(screen.getByTestId("settings-retake-switch")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-attempt-interval-switch")).toBeInTheDocument();
   });
 
   it("reveals «Адаптивный режим» rail item only when mode === adaptive", () => {
@@ -902,12 +911,14 @@ describe("PRD-4 v1.1 L1: adaptive+linear_flat UI guard", () => {
   });
 });
 
-// ─── Повторное прохождение pane (PRD-6) ───────────────────────────────────────
+// ─── Повторное прохождение: блок внутри «Ограничений» (PRD-6) ─────────────────
 
-describe("<SettingsSection /> — Повторное прохождение pane (PRD-6)", () => {
+describe("<SettingsSection /> — Повторное прохождение block (PRD-6)", () => {
   function renderRetake(model: TestEditorModel, updateModel: () => void = () => {}) {
     const utils = render(<SettingsSection model={model} updateModel={updateModel} />);
-    fireEvent.click(screen.getByTestId("settings-rail-retake"));
+    // The retake block lives at the bottom of the «Ограничения» pane; it no
+    // longer has a rail item of its own.
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
     return utils;
   }
 
