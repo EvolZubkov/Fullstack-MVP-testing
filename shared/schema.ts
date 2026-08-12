@@ -11,8 +11,12 @@ export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
   email: text("email").notNull(), // Зашифрованный email
   emailHash: varchar("email_hash", { length: 64 }).unique(), // SHA-256 хеш для поиска
-  passwordHash: text("password_hash").notNull(), // scrypt hash (PRD-9); legacy bcrypt during migration
+  passwordHash: text("password_hash"), // scrypt hash (PRD-9); NULL for an external participant (PRD-28)
   name: text("name"), // заполняется при первом входе
+  // PRD-28: an external participant is a FLAG on the account, never a role. Such an
+  // account has no password at all: password login, recovery and the invite letter
+  // are refused, and the only way in is the assignment link.
+  isExternal: boolean("is_external").notNull().default(false),
   // PRD-13 (T-10): the legacy single `role` column was dropped — roles live in
   // `user_roles` (many-to-many) plus the configuration-derived superadmin.
   status: text("status", { enum: ["pending", "active", "inactive"] }).notNull().default("pending"),

@@ -53,7 +53,10 @@ export class UsersRepository {
 
   async createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
     const id = randomUUID();
-    const hashedPassword = await hashPassword(insertUser.passwordHash);
+    // PRD-28: `passwordHash` is optional — an external participant is stored with no
+    // password at all (NULL), and the assignment link is the only way in.
+    const hashedPassword =
+      insertUser.passwordHash != null ? await hashPassword(insertUser.passwordHash) : null;
     const emailEncrypted = await encryptEmail(insertUser.email);
     const emailHashValue = hashEmail(insertUser.email);
 
@@ -78,6 +81,13 @@ export class UsersRepository {
     if (!user) {
       // Equalize timing with the found-user path so response time does not leak
       // whether the account exists (anti-enumeration).
+      await dummyVerifyPassword(password);
+      return null;
+    }
+    if (user.passwordHash == null) {
+      // PRD-28: an account without a password (external participant) can never log in
+      // by password. Burn the same time as the found-user path so the absence of a
+      // hash does not leak through response timing.
       await dummyVerifyPassword(password);
       return null;
     }
