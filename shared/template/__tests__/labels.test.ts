@@ -48,11 +48,12 @@ describe("resolveLabels", () => {
     expect(map["results.gone"]).toBeUndefined();
   });
 
-  it("lets the report override the shared wording", () => {
+  it("applies the caller's override layer on top of the shared wording", () => {
     const values = { "results.scales": { on: true, text: "Профиль" } };
     const overrides = { "results.scales": { on: true, text: "Профиль по шкалам" } };
     expect(resolveLabels(DECLS, values, overrides, "report")["results.scales"]).toBe("Профиль по шкалам");
-    expect(resolveLabels(DECLS, values, overrides, "results")["results.scales"]).toBe("Профиль");
+    // Экран итогов слоя переопределений не имеет — вызывающий передаёт пустой объект.
+    expect(resolveLabels(DECLS, values, {}, "results")["results.scales"]).toBe("Профиль");
   });
 
   it("lets the report switch a label off on its own", () => {

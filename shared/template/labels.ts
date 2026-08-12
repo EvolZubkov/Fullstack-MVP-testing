@@ -57,11 +57,12 @@ function applyLayer(value: LabelValue | undefined, fallback: string): string | n
 
 /**
  * Effective label texts for one screen: template default, the test's shared values on top,
- * and — on the report screen only — the report's own overrides on top of those. The report
- * is the one screen printed on paper alongside the live results screen, so it is the only
- * one the test may reword independently of what the learner sees on screen; every other
- * screen stops at the shared layer. Keys the template does not declare are dropped — the
- * test may have been moved to another template.
+ * then the CALLER's own override layer on top of those. `overrides` belongs to whichever
+ * screen is being rendered, not to any particular screen by name — the resolver has no
+ * opinion on who gets to override. Today only the report screen fills this layer
+ * (`report_settings_json.labels`); every other caller passes `{}` and gets the shared
+ * wording. Keys the template does not declare are dropped — the test may have been moved
+ * to another template.
  */
 export function resolveLabels(
   declarations: readonly LabelDeclaration[],
@@ -73,7 +74,7 @@ export function resolveLabels(
   for (const decl of declarations) {
     const fallback = pick(decl, screen);
     const shared = applyLayer(values[decl.key], fallback);
-    const own = screen === "report" ? applyLayer(overrides[decl.key], shared ?? fallback) : null;
+    const own = applyLayer(overrides[decl.key], shared ?? fallback);
     out[decl.key] = own ?? shared ?? fallback;
   }
   return out;
