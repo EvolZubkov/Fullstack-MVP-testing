@@ -12,12 +12,21 @@
  * bug fixed): per-question `ratio = scoreAnswer(...).ratio` (0 for unanswered);
  * `earned += points*ratio`, `possible += points`, `correct++` only on `ratio===1`
  * (partial credit does NOT count as correct); per-topic + overall percent are
- * points-based; `passed = overallPassed && every topic with a resolved rule passes`.
+ * points-based; the final verdict combines the overall rule with the topic gates
+ * per the authored `passDecisionPolicy` (see {@link decideVerdict}) — data written
+ * before that policy existed keeps the old `overallPassed && every gated topic`.
  */
 import { scoreAnswer, type Answer, type CorrectData, type QuestionType } from "./engine";
 import type { QuestionScoring } from "../schema";
 import { isMeasurementOnly } from "../questions/question-type";
-import { resolveOverallRule, resolveTopicRule, checkPassRule, type ResolvedRule } from "./pass-rule";
+import {
+  resolveOverallRule,
+  resolveTopicRule,
+  checkPassRule,
+  resolvePassDecisionPolicy,
+  type PassDecisionPolicy,
+  type ResolvedRule,
+} from "./pass-rule";
 
 export interface AggregateQuestion {
   type: QuestionType;
@@ -40,6 +49,12 @@ export interface AggregateSection<E = unknown> {
    * the pin) → the rule degrades to the overall one.
    */
   formId?: string | null;
+  /**
+   * `test_sections.required` — whether the topic is an obligatory gate. Only the
+   * `*_required_topics*` policies read it. Absent (legacy attempt / legacy SCORM
+   * state) counts as REQUIRED, matching the DB default.
+   */
+  required?: boolean;
   questions: AggregateQuestion[];
   /** Host-specific passthrough echoed verbatim into the topic result (feedback/recommendations). */
   extra?: E;
@@ -48,6 +63,12 @@ export interface AggregateSection<E = unknown> {
 export interface AggregateInput<E = unknown> {
   sections: AggregateSection<E>[];
   overallPassRule: unknown;
+  /**
+   * Stored `tests.pass_decision_policy` (any shape — normalised here). Decides HOW
+   * the overall rule and the topic gates combine; see {@link PassDecisionPolicy}.
+   * Absent/unrecognised keeps the pre-policy verdict (see {@link resolvePassDecisionPolicy}).
+   */
+  passDecisionPolicy?: unknown;
 }
 
 export interface AggregateTopicResult<E = unknown> {
@@ -99,6 +120,8 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
   let tQuestions = 0;
   let tScored = 0;
   let allTopicsPassed = true;
+  let requiredTopicsPassed = true;
+  const policy = resolvePassDecisionPolicy(input.passDecisionPolicy);
 
   const topicResults: AggregateTopicResult<E>[] = input.sections.map((sec) => {
     let earned = 0;
@@ -128,7 +151,11 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
     // FR-09: a section with nothing to grade has no percent to compare, so it stays
     // UNGATED (`null`) instead of failing its rule at 0%.
     const passed: boolean | null = resolved && scored > 0 ? checkPassRule(resolved, percent, earned) : null;
-    if (passed === false) allTopicsPassed = false;
+    if (passed === false) {
+      allTopicsPassed = false;
+      // FR: absent flag = required (DB default `test_sections.required = true`).
+      if (sec.required !== false) requiredTopicsPassed = false;
+    }
 
     tEarned += earned;
     tPossible += possible;
@@ -166,9 +193,35 @@ export function aggregateStandardResult<E = unknown>(input: AggregateInput<E>): 
     possiblePoints: tPossible,
     percent,
     overallPassed,
-    passed: overallPassed && allTopicsPassed,
+    passed: decideVerdict(policy, { overallPassed, requiredTopicsPassed, allTopicsPassed }),
     topicResults,
   };
+}
+
+/**
+ * Combine the overall verdict with the topic gates per the authored policy.
+ *
+ * `null` policy = data written before the policy shipped (legacy attempt, legacy
+ * snapshot, SCORM package built earlier): it keeps the pre-policy rule — the overall
+ * threshold AND every gated topic, `required` ignored — so an old package regrades to
+ * the same verdict it produced on the day it was built.
+ */
+function decideVerdict(
+  policy: PassDecisionPolicy | null,
+  gates: { overallPassed: boolean; requiredTopicsPassed: boolean; allTopicsPassed: boolean },
+): boolean {
+  switch (policy) {
+    case "overall_only":
+      return gates.overallPassed;
+    case "overall_and_required_topics":
+      return gates.overallPassed && gates.requiredTopicsPassed;
+    case "required_topics_only":
+      return gates.requiredTopicsPassed;
+    case "all_topics_passed":
+      return gates.allTopicsPassed;
+    default:
+      return gates.overallPassed && gates.allTopicsPassed;
+  }
 }
 
 // ─── Adaptive aggregation (PRD-4/PRD-18) ─────────────────────────────────────

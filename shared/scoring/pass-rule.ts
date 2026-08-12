@@ -18,6 +18,39 @@
 /** A resolved, runtime-ready pass rule. `null` means "no gate" (topic informational). */
 export type ResolvedRule = { type: "percent" | "count"; value: number };
 
+/**
+ * How the overall threshold and the per-topic gates combine into the test verdict
+ * (`tests.pass_decision_policy`). Semantics per
+ * `docs/architecture/test-settings-parameter-structure.md` §3.4 and PRD-4 §5.2:
+ *
+ * - `overall_only`               — only the overall rule decides; topic results are informational.
+ * - `overall_and_required_topics`— overall rule AND every REQUIRED topic's gate.
+ * - `required_topics_only`       — every REQUIRED topic's gate; the overall result is informational.
+ * - `all_topics_passed`          — every gated topic, required or not; overall informational.
+ */
+export type PassDecisionPolicy =
+  | "overall_only"
+  | "overall_and_required_topics"
+  | "required_topics_only"
+  | "all_topics_passed";
+
+/**
+ * Normalise a stored policy value. Returns `null` for anything unrecognised —
+ * including a missing field, which is what a legacy attempt, a legacy publication
+ * snapshot or a SCORM package built before the policy shipped carries. `null` is
+ * NOT a synonym for a default policy: {@link aggregateStandardResult} keeps the
+ * pre-policy verdict (overall rule AND every gated topic) for it, so grading such
+ * data never changes retroactively.
+ */
+export function resolvePassDecisionPolicy(raw: unknown): PassDecisionPolicy | null {
+  return raw === "overall_only" ||
+    raw === "overall_and_required_topics" ||
+    raw === "required_topics_only" ||
+    raw === "all_topics_passed"
+    ? raw
+    : null;
+}
+
 /** Resolve the OVERALL pass rule (stored `{type:'percent'|'absolute'|'none', value}`). */
 export function resolveOverallRule(raw: unknown): ResolvedRule | null {
   if (!raw || typeof raw !== "object") return null;
