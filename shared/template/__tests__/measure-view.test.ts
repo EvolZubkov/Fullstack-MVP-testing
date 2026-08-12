@@ -214,6 +214,56 @@ describe("buildMeasureView", () => {
   });
 });
 
+describe("PRD-49: слоты показа названия и уровня (признаки инвертированы)", () => {
+  // Тумблеры гасят ПОКАЗ слота, а не данные: метка уровня и название остаются в виде —
+  // они нужны отчёту, аналитике и выгрузке, свернуть их вправе только макет.
+  //
+  // Признаки инвертированы (`hideName`/`hideLevel`/`hideBanner`), как `hideScoreSummary`
+  // в `result-context.ts`: отсутствие ключа обязано означать «показывать», иначе
+  // рукописный контекст (превью шаблона, старые фикстуры), который никогда не
+  // упоминает эти поля, молча теряет слот.
+  it("по умолчанию оба слота показываются — гасящих ключей нет вовсе", () => {
+    const v = ee();
+    expect(v.hideName).toBeUndefined();
+    expect(v.hideLevel).toBeUndefined();
+  });
+
+  it("showName: false гасит показ (hideName: true), но не название в данных", () => {
+    const v = ee({ showName: false });
+    expect(v.hideName).toBe(true);
+    expect(v.name).toBe("Эмоциональное истощение");
+  });
+
+  it("showLevel: false гасит показ (hideLevel: true), но метка уровня и пояснение остаются в данных", () => {
+    const v = ee({ showLevel: false });
+    expect(v.hideLevel).toBe(true);
+    expect(v.levelLabel).toBe("Высокий");
+    expect(v.text).toBe("Ресурс расходуется быстрее.");
+  });
+
+  describe("hideBanner: банер гасится, только если печатать нечего", () => {
+    it("метка без текста — банер не гасится", () => {
+      const v = ee({ value: 5 }); // low, без text
+      expect(v.levelLabel).toBe("Низкий");
+      expect(v.text).toBeUndefined();
+      expect(v.hideBanner).toBeUndefined();
+    });
+
+    it("текст без заголовка (showLevel: false) — банер не гасится из-за пояснения", () => {
+      const v = ee({ showLevel: false });
+      expect(v.levelLabel).toBe("Высокий");
+      expect(v.text).toBe("Ресурс расходуется быстрее.");
+      expect(v.hideBanner).toBeUndefined();
+    });
+
+    it("ни метки, ни текста — банер гасится", () => {
+      const v = ee({ value: 5, showLevel: false }); // low, без text, метка погашена
+      expect(v.text).toBeUndefined();
+      expect(v.hideBanner).toBe(true);
+    });
+  });
+});
+
 describe("числовой показатель без полос интерпретации", () => {
   // Массовый случай PRD-2: показатель считает ЧИСЛО («Отрыв ведущего стиля»), полос
   // толкования у него нет, а вид показателей в шаблоне по умолчанию — «метка».
