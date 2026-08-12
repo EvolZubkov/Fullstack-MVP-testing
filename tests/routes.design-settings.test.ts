@@ -363,3 +363,79 @@ describe("PUT /api/tests/:id/design — themes (PRD-23)", () => {
     expect(res.body).not.toHaveProperty("paramsByTheme");
   });
 });
+
+// ─── PRD-49: results labels and sub-block order ───────────────────────────────
+
+describe("PUT /api/tests/:id/design — results labels and block order (PRD-49)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.updateTest.mockResolvedValue({ ...baseTest });
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+  });
+
+  it("stores the labels and the sub-block order", async () => {
+    const labels = {
+      "results.scales": { on: true, text: "Профиль" },
+      "results.topics": { on: false },
+    };
+    const resultsBlockOrder = ["topics", "scales", "indicators", "summary"];
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({ templateId: "corporate", params: {}, labels, resultsBlockOrder });
+    expect(res.status).toBe(200);
+    expect(res.body.labels).toEqual(labels);
+    expect(res.body.resultsBlockOrder).toEqual(resultsBlockOrder);
+    expect(storageMock.updateTest).toHaveBeenCalledWith(
+      "test-1",
+      expect.objectContaining({
+        designSettingsJson: expect.objectContaining({ labels, resultsBlockOrder }),
+      }),
+    );
+
+    // What the route saved is what a subsequent GET would hand back.
+    storageMock.getTest.mockResolvedValue({ ...baseTest, designSettingsJson: res.body });
+    const getRes = await request(makeApp()).get("/api/tests/test-1/design");
+    expect(getRes.body.labels).toEqual(labels);
+    expect(getRes.body.resultsBlockOrder).toEqual(resultsBlockOrder);
+  });
+
+  it("refuses a label stored as a bare string instead of a record", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({
+        templateId: "corporate",
+        params: {},
+        labels: { "results.scales": "Профиль" },
+      });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("labels");
+    expect(res.body.badKeys).toEqual(["results.scales"]);
+    expect(res.body.error).toContain("results.scales");
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+  });
+
+  it("refuses a sub-block key the template does not know", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({ templateId: "corporate", params: {}, resultsBlockOrder: ["legacy"] });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("resultsBlockOrder");
+    expect(res.body.badKeys).toEqual(["legacy"]);
+    expect(res.body.error).toContain("legacy");
+    expect(storageMock.updateTest).not.toHaveBeenCalled();
+  });
+
+  it("keeps the pre-PRD-49 JSON shape when neither field is sent", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/design")
+      .send({ templateId: "corporate", params: { primaryColor: "#fff" } });
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty("labels");
+    expect(res.body).not.toHaveProperty("resultsBlockOrder");
+    const saved = storageMock.updateTest.mock.calls[0][1].designSettingsJson;
+    expect(saved).not.toHaveProperty("labels");
+    expect(saved).not.toHaveProperty("resultsBlockOrder");
+  });
+});

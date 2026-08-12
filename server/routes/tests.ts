@@ -921,11 +921,34 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
     // silently ignored field would let the editor believe a wording change was saved.
     const labelsResult = designSettingsSchema.shape.labels.safeParse(labels);
     if (!labelsResult.success) {
-      return res.status(422).json({ error: "Invalid labels", field: "labels" });
+      // A record schema reports each malformed entry with the entry's own key as
+      // issue.path[0] — naming the offending label, same as `extraKeys` does for params.
+      const badKeys = Array.from(
+        new Set(labelsResult.error.issues.map((issue) => String(issue.path[0] ?? ""))),
+      );
+      return res.status(422).json({
+        error: `Invalid labels: ${badKeys.join(", ")}`,
+        field: "labels",
+        badKeys,
+      });
     }
     const resultsBlockOrderResult = designSettingsSchema.shape.resultsBlockOrder.safeParse(resultsBlockOrder);
     if (!resultsBlockOrderResult.success) {
-      return res.status(422).json({ error: "Invalid resultsBlockOrder", field: "resultsBlockOrder" });
+      // An array schema reports the malformed INDEX, not the value — read the value back
+      // out of the submitted array so the error names what was actually sent.
+      const submitted = Array.isArray(resultsBlockOrder) ? resultsBlockOrder : [];
+      const badKeys = Array.from(
+        new Set(
+          resultsBlockOrderResult.error.issues.map((issue) =>
+            String(submitted[issue.path[0] as number] ?? issue.path[0]),
+          ),
+        ),
+      );
+      return res.status(422).json({
+        error: `Invalid resultsBlockOrder: ${badKeys.join(", ")}`,
+        field: "resultsBlockOrder",
+        badKeys,
+      });
     }
 
     const designSettings: Record<string, unknown> = {
