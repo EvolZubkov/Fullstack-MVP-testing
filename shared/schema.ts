@@ -463,6 +463,26 @@ export const tests = pgTable("tests", {
   mode: text("mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
   showDifficultyLevel: boolean("show_difficulty_level").notNull().default(true),
   overallPassRuleJson: jsonb("overall_pass_rule_json").notNull(),
+  /**
+   * How the overall threshold and the per-topic gates combine into the verdict
+   * (`docs/architecture/test-settings-parameter-structure.md` §3.4, PRD-4 §5.2).
+   * The editor radio group «Тест пройден, если» writes exactly this column.
+   *
+   * The backfill migration derives it for existing tests from their topic rules
+   * (`overall_and_required_topics` when any topic carries an own rule, otherwise
+   * `overall_only`) — the same derivation the editor used to display while the
+   * column did not exist, so no author sees their setting change under them.
+   */
+  passDecisionPolicy: text("pass_decision_policy", {
+    enum: [
+      "overall_only",
+      "overall_and_required_topics",
+      "required_topics_only",
+      "all_topics_passed",
+    ],
+  })
+    .notNull()
+    .default("overall_only"),
   webhookUrl: text("webhook_url"),
   /** @deprecated PRD-7: superseded by `status`. Kept for transitional backward compatibility; remove in a later release. */
   published: boolean("published").default(false),

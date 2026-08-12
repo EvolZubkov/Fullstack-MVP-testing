@@ -1,0 +1,1 @@
+ALTER TABLE "tests" ADD COLUMN "pass_decision_policy" text DEFAULT 'overall_only' NOT NULL;
