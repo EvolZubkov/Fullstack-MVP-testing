@@ -276,6 +276,39 @@ describe("diffTransfer: topic policies", () => {
   });
 });
 
+describe("diffTransfer: sections of the test", () => {
+  it("keeps a section whose topic the package does not carry at all", () => {
+    const target = populatedTarget();
+    target.sections = [
+      { id: "sec-a", topicId: "topic-a" },
+      { id: "sec-foreign", topicId: "topic-unknown" },
+    ];
+
+    const ops = diffTransfer(sourcePackage(), target, options());
+
+    // Upsert never deletes: the package simply says nothing about that topic.
+    expect(of(ops, "section").some((op) => op.kind === "delete")).toBe(false);
+  });
+
+  it("removes a leftover section of a topic under full replacement", () => {
+    const target = populatedTarget();
+    target.sections = [
+      { id: "sec-a", topicId: "topic-a" },
+      { id: "sec-a-extra", topicId: "topic-a" },
+      { id: "sec-foreign", topicId: "topic-unknown" },
+    ];
+
+    const ops = diffTransfer(
+      sourcePackage(),
+      target,
+      options({ topics: { "topic-a": "replace" } }),
+    );
+
+    const deletions = of(ops, "section").filter((op) => op.kind === "delete");
+    expect(deletions.map((op) => op.id)).toEqual(["sec-a-extra"]);
+  });
+});
+
 describe("diffTransfer: an adaptive test", () => {
   it("carries the adaptive configuration and never deletes any of it", () => {
     const pkg = sourcePackage();

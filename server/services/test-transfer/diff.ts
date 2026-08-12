@@ -157,6 +157,8 @@ function reconcile<S, T extends { id: string }>(params: {
   handle: (row: S) => ((target: T) => boolean) | null;
   /** Deletions are emitted only when the part's mode allows erasing. */
   deletes: boolean;
+  /** Narrows WHICH leftovers may go; absent means all of them. */
+  deletable?: (row: T) => boolean;
   deleteTitle?: (row: T) => string;
   usedInAttempts?: (row: T) => boolean;
 }): TransferOperation[] {
@@ -180,6 +182,7 @@ function reconcile<S, T extends { id: string }>(params: {
   if (params.deletes) {
     for (const target of params.targets) {
       if (claimed.has(target.id)) continue;
+      if (params.deletable && !params.deletable(target)) continue;
       ops.push({
         kind: "delete",
         entity: params.entity,
@@ -293,8 +296,11 @@ function diffStructure(
     ),
   );
 
-  // The test's own composition converges on the package: a section the package does not carry
-  // describes a block the source test no longer has. It is a deletion, so it is shown.
+  // Sections obey the same rule as everything else: an upsert never deletes. The only
+  // "replace" a section can be governed by is the policy of ITS topic — the part has no
+  // switch of its own (PRD-48 §4: two switches must not exist). A section whose topic the
+  // package does not carry at all therefore survives: the package says nothing about it,
+  // and silence is not an instruction to remove.
   ops.push(
     ...reconcile({
       entity: "section",
@@ -307,6 +313,7 @@ function diffStructure(
         return (row) => row.topicId === topicId;
       },
       deletes: true,
+      deletable: (row) => options.topics[row.topicId] === "replace",
       deleteTitle: (s) => `Раздел ${s.topicId}`,
     }),
   );
