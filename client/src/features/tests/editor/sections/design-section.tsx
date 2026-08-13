@@ -41,9 +41,11 @@ import {
 import {
   Banner,
   Button,
+  Card,
+  CardBody,
+  CardHeader,
   ColorPicker,
   Combobox,
-  FormSection,
   IconButton,
   Input,
   NumberInput,
@@ -581,18 +583,27 @@ function ReportLabelsCard({
   const overrides = (report as { labels?: LabelValues }).labels ?? {};
   return (
     <div data-testid="design-report-labels">
-      <FormSection
-        title="Заголовки и подписи отчёта"
-        subtitle="По умолчанию отчёт говорит теми же словами, что экран итогов. Здесь задаётся отступление — только для документа."
-      >
-        <ResultsLabelsPane
-          declarations={declarations}
-          labels={overrides}
-          screen="report"
-          baseLabels={base}
-          onChange={(next) => onChange({ ...report, labels: next } as NonNullable<TestEditorModel["report"]>)}
+      {/* Карточка, а не `FormSection`: пане внутри сама разложена секциями, а секция в
+          секции — это две колонки заголовков подряд (280px + 280px), от которых полю
+          формулировки остаётся полоска, а вкладке достаётся горизонтальная прокрутка.
+          Карточка ещё и ставит надписи рядом с «Оформлением отчёта» — соседом по экрану. */}
+      <Card variant="outlined" size="sm">
+        <CardHeader
+          title="Заголовки и подписи отчёта"
+          subtitle="По умолчанию отчёт говорит теми же словами, что экран итогов. Здесь задаётся отступление — только для документа."
         />
-      </FormSection>
+        <CardBody>
+          <ResultsLabelsPane
+            declarations={declarations}
+            labels={overrides}
+            screen="report"
+            baseLabels={base}
+            onChange={(next) =>
+              onChange({ ...report, labels: next } as NonNullable<TestEditorModel["report"]>)
+            }
+          />
+        </CardBody>
+      </Card>
     </div>
   );
 }

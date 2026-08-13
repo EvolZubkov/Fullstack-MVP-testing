@@ -161,7 +161,10 @@ export function ResultsLabelsPane({
   return (
     <div data-testid="results-labels-pane">
       {groups.map(({ group, items }) => (
-        <FormSection key={group} title={group}>
+        // Заголовок группы НАД строками: подраздел живёт в панели-ящике (и в карточке
+        // отчёта), где колонка заголовков в 280px отнимает у полей формулировки половину
+        // ширины, а соседние подразделы оформления рисуют поля во всю ширину.
+        <FormSection key={group} title={group} stacked>
           {items.map((decl) => (
             <LabelRow
               key={decl.key}
@@ -300,6 +303,7 @@ function BlockOrderList({
 
   return (
     <FormSection
+      stacked
       title="Порядок подблоков"
       subtitle="Блоки печатаются под общим заголовком итогов в этом порядке. Выключенный заголовок блок не убирает — за видимость отвечают настройки самих блоков."
     >

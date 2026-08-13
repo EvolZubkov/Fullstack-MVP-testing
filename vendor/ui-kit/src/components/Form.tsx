@@ -102,11 +102,22 @@ export interface FormSectionProps extends Omit<React.HTMLAttributes<HTMLDivEleme
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
   meta?: React.ReactNode;
+  /**
+   * Заголовок НАД содержимым, а не в отдельной колонке слева. Нужен в узком
+   * контейнере (карточка, панель-ящик), где колонка в 280px забирает у полей
+   * половину ширины. Модификатор `--stacked` в стилях был, а способа его
+   * включить — нет.
+   */
+  stacked?: boolean;
 }
 
 export const FormSection = forwardRef<HTMLDivElement, FormSectionProps>(
-  ({ title, subtitle, meta, className, children, ...rest }, ref) => (
-    <div ref={ref} className={cn('ou-formsection', className)} {...rest}>
+  ({ title, subtitle, meta, stacked, className, children, ...rest }, ref) => (
+    <div
+      ref={ref}
+      className={cn('ou-formsection', stacked && 'ou-formsection--stacked', className)}
+      {...rest}
+    >
       {(title || subtitle || meta) && (
         <div className="ou-formsection__intro">
           {title && <h3 className="ou-formsection__title">{title}</h3>}
