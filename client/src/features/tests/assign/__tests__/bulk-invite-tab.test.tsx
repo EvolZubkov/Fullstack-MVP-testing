@@ -188,6 +188,37 @@ describe("<BulkInviteTab /> — отчёт", () => {
     expect(screen.getByText("Письмо не доставлено")).toBeInTheDocument();
   });
 
+  it("предупреждает о действующих ключах и считает выпущенные ссылки", async () => {
+    const { container } = renderTab();
+    await goToPreview(container);
+    fireEvent.click(screen.getByRole("button", { name: "Пригласить (5)" }));
+
+    expect(await screen.findByText("Файл со ссылками содержит действующие ключи доступа")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Выгрузка возможна, только пока открыт этот отчёт/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Выгрузить ссылки \(2\)/ })).toBeInTheDocument();
+  });
+
+  it("выгрузка сохраняет книгу и шлёт отметку с количеством", async () => {
+    // jsdom не умеет object-URL — путь сохранения работает через заглушки.
+    URL.createObjectURL = vi.fn(() => "blob:test");
+    URL.revokeObjectURL = vi.fn();
+    HTMLAnchorElement.prototype.click = vi.fn();
+
+    const { container } = renderTab();
+    await goToPreview(container);
+    fireEvent.click(screen.getByRole("button", { name: "Пригласить (5)" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Выгрузить ссылки/ }));
+
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([u]) => String(u).endsWith("/participants/links-exported"));
+      expect(call).toBeTruthy();
+      expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ count: 2 });
+    });
+  });
+
   it("«К назначениям» возвращает на вкладку назначений", async () => {
     const { container, onGoToAssignments } = renderTab();
     await goToPreview(container);

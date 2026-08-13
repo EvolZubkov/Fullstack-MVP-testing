@@ -15,7 +15,7 @@
  */
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Download, Trash2 } from "lucide-react";
+import { Download, KeyRound, Trash2 } from "lucide-react";
 import {
   Banner,
   Box,
@@ -35,6 +35,10 @@ import {
 } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
+import { buildLinksWorkbook, linksWorkbookFileName } from "./bulk-invite-export";
+
+/** MIME type of an `.xlsx` package, for the saved blob. */
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 // ─── Contract with the server (server/services/participants-invite.ts) ────────
 
@@ -182,6 +186,18 @@ function saveFromUrl(url: string) {
   a.remove();
 }
 
+/** Save bytes assembled in the page under a chosen file name. */
+function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface BulkInviteTabProps {
@@ -274,6 +290,38 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       }
       toast({ variant: "destructive", title: t.common.error, description: e.message });
     },
+  });
+
+  /**
+   * Save the issued links and tell the server it happened.
+   *
+   * The book is built from the report in hand — the server is never asked for
+   * the links, because it does not have them (раздел 7). The mark that follows
+   * carries the count and nothing else: the audit trail must not become the
+   * store of live keys the design goes out of its way to avoid.
+   */
+  const exportMutation = useMutation({
+    mutationFn: async () => {
+      if (!report) return 0;
+      const issued = report.results.filter((r) => r.magicLink);
+      const bytes = await buildLinksWorkbook({
+        testTitle,
+        results: report.results,
+        expiresAt: linkExpiresAt || dueDate || null,
+      });
+      saveBlob(new Blob([bytes], { type: XLSX_MIME }), linksWorkbookFileName(testTitle));
+      await fetch(`/api/tests/${testId}/participants/links-exported`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ count: issued.length }),
+      });
+      return issued.length;
+    },
+    onSuccess: (count) =>
+      toast({ title: "Файл сохранён", description: `Ссылок в файле: ${count}` }),
+    onError: () =>
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось собрать файл со ссылками" }),
   });
 
   const handleFiles = (files: File[]) => {
@@ -563,6 +611,27 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
           />
         </Stack>
       )}
+
+      <Banner
+        variant="subtle"
+        tone="warning"
+        stacked
+        icon={<KeyRound size={18} />}
+        title="Файл со ссылками содержит действующие ключи доступа"
+        description="Каждая ссылка открывает тест без пароля — храните файл как список паролей. Выгрузка возможна, только пока открыт этот отчёт: сырые ссылки нигде не хранятся, и после закрытия диалога восстановить их нельзя. Позже останется лишь перевыпустить ссылки, а это отзовёт прежние, включая уже доставленные письмами."
+        actions={[
+          {
+            label: (
+              <>
+                <Download size={14} aria-hidden="true" />
+                {` Выгрузить ссылки (${report.results.filter((r) => r.magicLink).length})`}
+              </>
+            ),
+            primary: true,
+            onClick: () => exportMutation.mutate(),
+          },
+        ]}
+      />
 
       <Cluster justify="end" gap={2}>
         <Button onClick={onGoToAssignments}>К назначениям</Button>
