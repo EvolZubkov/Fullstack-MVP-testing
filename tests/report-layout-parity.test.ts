@@ -695,6 +695,21 @@ describe("макеты отчёта соблюдают контракт сред
     expect(rule![1]).toContain("max-width: 100%");
   });
 
+  it("маркеры авторских списков объявлены сами, в КАЖДОМ поставляемом шаблоне", () => {
+    // Регрессия: список автора приезжал слушателю одними отступами — ни точек, ни
+    // номеров. Отчёт рисуется в документе ПРИЛОЖЕНИЯ, а глобальный сброс веб-хоста
+    // (`preflight.css`: `ol, ul { list-style: none }`) маркеры гасит; браузерных
+    // умолчаний здесь ждать нельзя (§6.3).
+    for (const [templateId, dir] of [["default", DEFAULT_DIR], ["certification", CERT_DIR]] as const) {
+      const css = fs.readFileSync(path.join(dir, "styles", "report.css"), "utf8");
+      expect(css, templateId).toMatch(/\.tb-report ul\s*\{[^}]*list-style:\s*disc/);
+      expect(css, templateId).toMatch(/\.tb-report ol\s*\{[^}]*list-style:\s*decimal/);
+      // Маркер стоит СНАРУЖИ строки, поэтому отступ обязателен: без него точка ушла бы
+      // за левый край карточки.
+      expect(css, templateId).toMatch(/\.tb-report ul,\s*\.tb-report ol\s*\{[^}]*padding-left/);
+    }
+  });
+
   it("таблица стилей отчёта скоуплена и не адресует документ", () => {
     const css = fs.readFileSync(path.join(DEFAULT_DIR, "styles", "report.css"), "utf8");
     const selectors = css.replace(/\/\*[\s\S]*?\*\//g, "").match(/(^|[};])\s*([^{}@;]+)\{/g) ?? [];
