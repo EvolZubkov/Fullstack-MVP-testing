@@ -849,23 +849,31 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
    (`tb-recs`) and the chip itself (`tb-rec`) already exist above and are reused as they
    are; an empty group is not printed at all. */
 /* Вводный блок автора на экране итогов: идёт первым, до сводки. Разметку строит ядро,
-   поэтому здесь только типографика; `pre-wrap` держит абзацы простого текста. */
+   поэтому здесь только типографика; абзацы переносят теги, а не `pre-wrap` (см.
+   `.tb-recs-group__text`). */
 .tb-intro {
   margin-bottom: var(--ou-space-4);
   font: var(--ou-text-body-m);
   color: var(--ou-fg-default);
-  white-space: pre-wrap;
 }
 .tb-intro > :first-child { margin-top: 0; }
 .tb-intro > :last-child { margin-bottom: 0; }
-.tb-intro p, .tb-intro ul, .tb-intro ol { white-space: normal; margin: 0 0 var(--ou-space-2); }
+.tb-intro p, .tb-intro ul, .tb-intro ol { margin: 0 0 var(--ou-space-2); }
 .tb-intro ul, .tb-intro ol { padding-left: 20px; }
 
 .tb-recs-block { display: flex; flex-direction: column; gap: var(--ou-space-4); }
 .tb-recs-group { display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-start; }
-/* Абзацы автора сохраняются: тексты обратной связи и толкований пишутся переводами
-   строк, а HTML их схлопывает. Правило зеркально `report.css`: один текст, две выдачи. */
-.tb-recs-group__text { margin: 0; font: var(--ou-text-body-m); color: var(--ou-fg-soft); white-space: pre-wrap; }
+/* Абзацы автора сохраняются тегами, а не `pre-wrap`: простой текст ядро отдаёт с `<br>`
+   (`richTextToHtml`), форматированный — своими тегами. `pre-wrap` печатал бы пустую
+   строку на каждый перевод строки МЕЖДУ тегами. Правило зеркально `report.css`: один и
+   тот же текст, две выдачи. */
+.tb-recs-group__text { margin: 0; font: var(--ou-text-body-m); color: var(--ou-fg-soft); }
+.tb-recs-group__text > :first-child { margin-top: 0; }
+.tb-recs-group__text > :last-child { margin-bottom: 0; }
+.tb-recs-group__text p,
+.tb-recs-group__text ul,
+.tb-recs-group__text ol { margin: 0 0 var(--ou-space-2); }
+.tb-recs-group__text ul, .tb-recs-group__text ol { padding-left: 20px; }
 
 /* ── Content / gallery pages ────────────────────────────────────── */
 /* The body CENTRES its block — reading measure, balanced, no vertical stretching

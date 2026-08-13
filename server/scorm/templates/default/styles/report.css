@@ -68,13 +68,13 @@
 }
 
 /* Вводный блок автора — обычная карточка отчёта, но без заголовка: его пишет сам автор,
-   если считает нужным. Переводы строк держатся, как и в остальных авторских текстах. */
-.tb-report__intro { font-size: 14px; font-weight: 300; line-height: 1.55; white-space: pre-wrap; }
+   если считает нужным. Текст приходит РАЗМЕТКОЙ (см. `.tb-report__event`), поэтому
+   переносы делают теги, а не `pre-wrap`: он печатал бы пустую строку на каждый перевод
+   строки между тегами. */
+.tb-report__intro { font-size: 14px; font-weight: 300; line-height: 1.55; }
 .tb-report__intro > :first-child { margin-top: 0; }
 .tb-report__intro > :last-child { margin-bottom: 0; }
-/* Разметка автора внутри блока: `pre-wrap` держит переводы строк простого текста, а у
-   готовой разметки переносы делают сами теги — иначе абзацы разъезжались бы вдвое. */
-.tb-report__intro p, .tb-report__intro ul, .tb-report__intro ol { white-space: normal; margin: 0 0 8px; }
+.tb-report__intro p, .tb-report__intro ul, .tb-report__intro ol { margin: 0 0 8px; }
 
 .tb-report__title { font-size: 22px; font-weight: 400; margin-bottom: 4px; }
 .tb-report__title--tight { margin-bottom: 15px; }
@@ -256,9 +256,14 @@
   background: #59209b;
 }
 .tb-report__rec-chip--level { background: #1e40af; }
-/* Текст рекомендации печатается этим же узлом, поэтому переводы строк автора держатся
-   и здесь — см. `.tb-report__scale-text`. */
-.tb-report__event { font-size: 14px; font-weight: 300; color: #fafafa; white-space: pre-wrap; }
+/* Текст рекомендации приходит РАЗМЕТКОЙ: простой текст ядро уже отдаёт с `<br>`
+   (`richTextToHtml`), а форматированный переносит абзацы своими тегами. `pre-wrap` здесь
+   был лишним и печатал ПУСТУЮ строку на каждый перевод строки МЕЖДУ тегами — поверх
+   отступа абзаца, отчего между абзацами методички зияла дыра в две строки. */
+.tb-report__event { font-size: 14px; font-weight: 300; color: #fafafa; }
+.tb-report__event > :first-child { margin-top: 0; }
+.tb-report__event > :last-child { margin-bottom: 0; }
+.tb-report__event p, .tb-report__event ul, .tb-report__event ol { margin: 0 0 8px; }
 
 /* ── PRD-35: шкалы и радар компетенций в отчёте ──────────────────────────────
    Отчёт печатается и растеризуется, поэтому здесь нет ни контейнерных запросов,

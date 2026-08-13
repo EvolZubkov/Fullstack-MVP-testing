@@ -205,7 +205,7 @@
       <div class="tb-recs-block">
         {{#if result.recommendations.texts}}
         <div class="tb-recs-group">
-          {{#each result.recommendations.textsHtml}}<p class="tb-recs-group__text">{{& this }}</p>{{/each}}
+          {{#each result.recommendations.textsHtml}}<div class="tb-recs-group__text">{{& this }}</div>{{/each}}
         </div>
         {{/if}}
         {{#if result.recommendations.links}}
