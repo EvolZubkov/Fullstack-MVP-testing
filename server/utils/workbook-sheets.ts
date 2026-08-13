@@ -21,6 +21,7 @@ import type { InterpretationBand, LearnerVisibility, Valence } from "@shared/sca
 import type { DrawStratum, QuestionScoring } from "@shared/schema";
 import { scales, resultVariables } from "@shared/schema";
 import { normalizeTags, TAG_MAX_LENGTH } from "@shared/tags";
+import { PASS_TYPE_FROM, PASS_TYPE_TO } from "./workbook-settings";
 import { serializeScoring } from "./scoring-excel";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -656,102 +657,156 @@ export function serializeMeasurementRow(m: {
 // The test's structure — its sections (a topic + draw count + per-topic pass rule)
 // and the PRD-11 per-tag draw quotas — is the one part of the model the workbook
 // previously left to the editor. These two sheets carry it so a whole test (not
-// just its content) round-trips through Excel. The flow is fixed to
-// `router_by_topics` by the importer; the router page is materialized by the
-// service. A quota row maps 1:1 to a PRD-11 `DrawStratum` ({tag, count, mode}).
+// just its content) round-trips through Excel. The flow comes from the «Настройки»
+// sheet (PRD-48 FR-06), not from the presence of this one; the router page is
+// materialized by the service. A quota row maps 1:1 to a PRD-11 `DrawStratum`
+// ({tag, count, mode}).
 
 /** Canonical «Структура» headers (one row per section). */
 export const STRUCTURE_HEADERS = [
   // NB: «Порядок» here is the ORDER OF SECTIONS in the test (sort_order), which
   // is why the PRD-30 delivery setting is a separate, explicitly named column.
-  "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
+  "Раздел", "Код темы", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
   "Случайный порядок вопросов",
+  // PRD-48 FR-09: the section fields the workbook was missing for a full transfer.
+  "Выдавать все вопросы темы", "Лимит времени темы", "Балл по умолчанию в секции",
+  // PRD-48 FR-11: the router's unlock rules, addressed by topic NAME.
+  "Доступность раздела", "Зависит от разделов",
+  // PRD-48 FR-16: `adaptive_topic_settings.failure_feedback`. It lives HERE and not on the
+  // «Адаптивные уровни» sheet because there is exactly ONE such text per topic, and
+  // «Структура» is the sheet with exactly one row per topic — on the levels sheet it would
+  // have to be repeated in every row, with nothing to say which copy wins.
+  "Обратная связь при непройденном уровне",
 ];
-export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14, 26];
+export const STRUCTURE_WIDTHS = [28, 22, 10, 20, 16, 10, 14, 26, 24, 20, 26, 34, 34, 60];
 
 /** Canonical «Квоты» headers (one row per PRD-11 stratum). */
 export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
 export const QUOTA_WIDTHS = [28, 24, 14, 14];
 
-/**
- * Canonical «Настройки» headers (PRD-30 FR-22). The sheet is a key/value list,
- * not a table of columns: it carries settings OF THE TEST, of which there is one
- * of each, and a new setting must not widen a row every author already has.
- */
-export const SETTINGS_HEADERS = ["Параметр", "Значение"];
-export const SETTINGS_WIDTHS = [34, 30];
+// ─── «Настройки» (PRD-48 §4.1) ────────────────────────────────────────────────
+// The sheet's contract lives in its own module: it grew from one parameter into a
+// registry of forty, and keeping it here would drown the other eight sheets in it.
+export {
+  SETTINGS_HEADERS,
+  SETTINGS_WIDTHS,
+  SETTING_PARAM_NAMES,
+  SETTING_PARAMS,
+  emptySettingsDraft,
+  parseSettingsSheet,
+  serializeSettingsRows,
+  type SettingsDraft,
+  type SettingsSource,
+} from "./workbook-settings";
 
-/** Test-level settings the workbook transfers. */
-export interface ParsedTestSettings {
-  /** PRD-30 FR-16: test-wide delivery order; absent = `random` (the default). */
-  questionOrder?: "fixed" | "random" | "shuffle_all";
-}
+// ─── «Обратная связь» / «Рекомендации» (PRD-48 §4, FR-12/FR-13) ───────────────
+// Two sheets, one contract, and the second is subordinate to the first: courses,
+// materials and events live INSIDE the owner's `feedback_json`, so a recommendation
+// whose owner is not named on «Обратная связь» has nowhere to be stored. Their module
+// is separate for the same reason «Настройки» has one — it carries its own parsing,
+// serialization and owner resolution — and is re-exported here so the sheets of the
+// workbook keep ONE entry point.
+export {
+  FEEDBACK_SHEET_NAME,
+  RECOMMENDATION_SHEET_NAME,
+  FEEDBACK_HEADERS,
+  FEEDBACK_WIDTHS,
+  RECOMMENDATION_HEADERS,
+  RECOMMENDATION_WIDTHS,
+  OWNER_CHOICES,
+  RECOMMENDATION_OWNER_CHOICES,
+  RECOMMENDATION_TYPE_CHOICES,
+  FEEDBACK_FORMAT_CHOICES,
+  serializeFeedbackRows,
+  serializeRecommendationRows,
+  parseFeedbackSheets,
+  type FeedbackPayload,
+  type FeedbackSource,
+  type FeedbackSectionSource,
+  type FeedbackLevelSource,
+  type ParsedLevelRecommendations,
+  type ParsedFeedbackSheets,
+} from "./workbook-feedback";
 
-/** «Порядок выдачи вопросов» — the parameter name on the sheet. */
-const SETTING_QUESTION_ORDER = "Порядок выдачи вопросов";
+// ─── «Адаптивные уровни» (PRD-48 §4, FR-16) ───────────────────────────────────
+// The levels of an adaptive topic, addressed by «Раздел» + «Номер». Its module is separate
+// for the same reason the others are, and «Рекомендации» leans on it: a level's materials
+// are keyed by the address THIS module spells ({@link adaptiveLevelKey}), so a level row of
+// «Рекомендации» that names a level the book never described is an orphan.
+export {
+  ADAPTIVE_LEVEL_SHEET_NAME,
+  ADAPTIVE_LEVEL_HEADERS,
+  ADAPTIVE_LEVEL_WIDTHS,
+  ADAPTIVE_PASS_TYPE_CHOICES,
+  adaptiveLevelKey,
+  serializeAdaptiveLevelRows,
+  parseAdaptiveLevelSheet,
+  type AdaptiveLevelSource,
+  type AdaptiveTopicSource,
+  type ParsedAdaptiveLevel,
+  type ParsedAdaptiveSheet,
+} from "./workbook-adaptive";
 
-/** Cell ↔ stored value. Labels match the editor's Select verbatim (FR-16). */
-const TEST_ORDER_FROM: Record<string, "fixed" | "random" | "shuffle_all"> = {
-  "фиксированный порядок": "fixed",
-  "перемешивание": "random",
-  "полное перемешивание": "shuffle_all",
-};
-const TEST_ORDER_TO: Record<"fixed" | "random" | "shuffle_all", string> = {
-  fixed: "Фиксированный порядок",
-  random: "Перемешивание",
-  shuffle_all: "Полное перемешивание",
-};
+// ─── «Страницы» / «Поля страниц» (PRD-48 §4, FR-14/FR-15) ─────────────────────
+// Two sheets and one contract again, subordinate the same way: a page has no natural
+// key, so it is addressed by «Зона» + «Раздел» + «Вид» + «Номер», and a field row whose
+// address is not on the page sheet has nowhere to be stored. The module knows nothing of
+// the variant manifest on purpose — filtering keys and sanitising values is the import's
+// duty (`server/services/content-page-fields`), so the book never becomes an entry point
+// past the sanitiser. Re-exported here so the sheets keep ONE entry point.
+export {
+  PAGE_SHEET_NAME,
+  PAGE_FIELD_SHEET_NAME,
+  PAGE_HEADERS,
+  PAGE_WIDTHS,
+  PAGE_FIELD_HEADERS,
+  PAGE_FIELD_WIDTHS,
+  PAGE_ZONE_CHOICES,
+  PAGE_KIND_CHOICES,
+  PAGE_MODE_CHOICES,
+  PAGE_TARGET_CHOICES,
+  serializePageRows,
+  serializePageFieldRows,
+  parsePageSheets,
+  formatPageAddress,
+  formatPageZone,
+  type PageSource,
+  type PageZone,
+  type PageKind,
+  type PageMode,
+  type PageFieldTarget,
+  type ParsedPage,
+  type ParsedPageSheets,
+} from "./workbook-pages";
 
-/**
- * Parse one «Настройки» row. An empty value means «оставить как есть» — the
- * import must not silently reset a setting the author cleared out of the cell.
- */
-export function parseSettingsRow(row: Record<string, unknown>): ParseResult<ParsedTestSettings> {
-  const name = String(row["Параметр"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
-  if (!name) return { ok: false, error: "не указан «Параметр»" };
-  const raw = String(row["Значение"] ?? "").trim();
+// ─── «Оформление» (PRD-48 §4, FR-17/FR-18) ───────────────────────────────────
+// The test's design (template, palette, manifest parameters — flat and per palette) and
+// its report settings, on ONE sheet: both describe how the test LOOKS and both are typed
+// by the same template manifest. The module knows nothing of that manifest on purpose —
+// filtering keys and typing values is the import's duty (`server/services/design-fields`),
+// the same split the page sheets make. Re-exported here so the sheets keep ONE entry point.
+export {
+  DESIGN_SHEET_NAME,
+  DESIGN_HEADERS,
+  DESIGN_WIDTHS,
+  DESIGN_WHAT_CHOICES,
+  DESIGN_MODE_CHOICES,
+  DESIGN_THEME_CHOICES,
+  DESIGN_PALETTE_CHOICES,
+  REPORT_VARIANT_KEY,
+  REPORT_ENABLED_KEY,
+  serializeDesignRows,
+  parseDesignSheet,
+  type DesignSource,
+  type ReportSource,
+  type ReportMode,
+  type ParsedReportBranch,
+  type ParsedDesignSheet,
+} from "./workbook-design";
 
-  if (name.toLowerCase() === SETTING_QUESTION_ORDER.toLowerCase()) {
-    if (raw === "") return { ok: true, value: {} };
-    const order = TEST_ORDER_FROM[raw.toLowerCase()];
-    if (!order) return { ok: false, error: `неизвестное значение «${SETTING_QUESTION_ORDER}»: "${raw}"` };
-    return { ok: true, value: { questionOrder: order } };
-  }
-
-  return { ok: false, error: `неизвестный параметр: "${name}"` };
-}
-
-/** Values offered for «Порядок выдачи вопросов» (template dropdown). */
-export const TEST_ORDER_CHOICES = [
-  TEST_ORDER_TO.fixed,
-  TEST_ORDER_TO.random,
-  TEST_ORDER_TO.shuffle_all,
-];
-
-/** Serialize the test's settings to «Настройки» rows (export). */
-export function serializeSettingsRows(test: {
-  questionOrder?: "fixed" | "random" | "shuffle_all" | null;
-}): Record<string, unknown>[] {
-  return [
-    {
-      "Параметр": SETTING_QUESTION_ORDER,
-      "Значение": TEST_ORDER_TO[test.questionOrder ?? "random"],
-    },
-  ];
-}
-
-/** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
-const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
-  "процент": "percent",
-  "%": "percent",
-  "percent": "percent",
-  "сумма баллов": "absolute",
-  "баллы": "absolute",
-  "балл": "absolute",
-  "absolute": "absolute",
-};
-/** Internal pass type → «Тип порога» cell (export). */
-const PASS_TYPE_TO: Record<string, string> = { percent: "Процент", absolute: "Сумма баллов" };
+// «Тип порога» is asked by three sheets («Структура», «Пороги вариантов» and «Адаптивные
+// уровни»), so its dictionary lives in the shared vocabulary module (imported at the top of
+// this file) rather than here — a per-sheet copy is how the sheets start disagreeing.
 
 /** «Режим» cell → PRD-11 per-tag mode (default `exact`). */
 const QUOTA_MODE_FROM: Record<string, "exact" | "min"> = {
@@ -765,6 +820,35 @@ const QUOTA_MODE_FROM: Record<string, "exact" | "min"> = {
 };
 /** PRD-11 mode → «Режим» cell (export). */
 const QUOTA_MODE_TO: Record<string, string> = { exact: "Ровно", min: "Не менее" };
+
+/** The router's unlock modes (PRD-8 §3.2). */
+export type UnlockMode = "always_available" | "after_sections_completed" | "after_sections_passed";
+
+/**
+ * «Доступность раздела» → the router's unlock mode (PRD-8 §3.2).
+ *
+ * The rules are keyed by TOPIC ids, not section ids: `isSectionUnlocked` in
+ * `shared/flow/router-hub` reads `unlockRules[section.topicId]`. That is why the workbook
+ * addresses them by topic NAME — section ids are minted anew on every import anyway.
+ *
+ * An EMPTY cell is not in the table on purpose: it is handled before the lookup, because
+ * «the book never carried the column» must stay distinguishable from «available right
+ * away» — an older book may not silently rewrite rules it knows nothing about.
+ */
+const UNLOCK_MODE_FROM: Record<string, UnlockMode> = {
+  "доступен сразу": "always_available",
+  "после завершения выбранных разделов": "after_sections_completed",
+  "после успешного прохождения выбранных разделов": "after_sections_passed",
+};
+/** Unlock mode → «Доступность раздела» cell (export). */
+const UNLOCK_MODE_TO: Record<string, string> = {
+  always_available: "Доступен сразу",
+  after_sections_completed: "После завершения выбранных разделов",
+  after_sections_passed: "После успешного прохождения выбранных разделов",
+};
+
+/** «Доступность раздела» of «Структура». */
+export const UNLOCK_MODE_CHOICES = Object.values(UNLOCK_MODE_TO);
 
 /** «Режим» of «Квоты». */
 export const QUOTA_MODE_CHOICES = Object.values(QUOTA_MODE_TO);
@@ -792,6 +876,8 @@ export const STRUCTURE_PASS_TYPE_CHOICES = [
 export interface ParsedSection {
   /** Topic name (resolved to `topicId` by the orchestrator). */
   topicName: string;
+  /** PRD-48 FR-10: the topic's short code (`topics.code`); `null` = not carried. */
+  topicCode: string | null;
   /** Sort order; the orchestrator orders sections by this. */
   sortOrder: number;
   drawCount: number;
@@ -800,6 +886,27 @@ export interface ParsedSection {
   required: boolean;
   /** PRD-30 FR-02/FR-18: the topic's override; `null` = «как в тесте». */
   questionOrder: "random" | "fixed" | null;
+  /** PRD-48 FR-09: deliver the WHOLE topic, ignoring «Вопросов в выборке». */
+  drawAll: boolean;
+  /** PRD-48 FR-09: the section's own time limit; `null` = no limit. */
+  timeLimitMinutes: number | null;
+  /** PRD-48 FR-09: section-level price default; `null` = inherit the test's. */
+  defaultPoints: number | null;
+  /** PRD-48 FR-11: the router's unlock mode; `null` = the book did not carry it. */
+  unlockMode: UnlockMode | null;
+  /** PRD-48 FR-11: topic NAMES the unlock depends on (resolved to ids later). */
+  unlockDependsOn: string[];
+  /**
+   * PRD-48 FR-16: the topic's adaptive «failed a level» text
+   * (`adaptive_topic_settings.failure_feedback`). `null` = the cell was empty (or the book
+   * has no such column), which reads as «leave as is» — like every other optional column of
+   * this sheet, an older book may not silently erase a text it knows nothing about.
+   *
+   * A filled cell is the text itself, whatever it says: the workbook has NO eraser value
+   * anywhere (PRD-48 §4.4), so a dash is a dash and not a command. Erasing a text is the
+   * editor's job — the book can only replace it.
+   */
+  failureFeedback: string | null;
 }
 
 /** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
@@ -809,6 +916,11 @@ export function parseStructureRow(
 ): ParseResult<ParsedSection> {
   const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
   if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
+
+  // The topic code travels for the sake of result-variable FORMULAS: they address a
+  // topic as `topicById("<code>")`, and a book without codes leaves those formulas
+  // without an addressee (`topics.code`, migration 032).
+  const topicCode = String(row["Код темы"] ?? "").trim() || null;
 
   const orderRaw = String(row["Порядок"] ?? "").trim();
   const sortOrder = orderRaw === "" ? rowIndex : Number(orderRaw);
@@ -853,21 +965,70 @@ export function parseStructureRow(
   const randomRaw = String(row["Случайный порядок вопросов"] ?? "").trim();
   const questionOrder = randomRaw === "" ? null : parseBool(randomRaw) ? "random" : "fixed";
 
+  // An empty cell means the section default, NOT zero: the columns may be absent from
+  // the book entirely (an older export).
+  const drawAll = String(row["Выдавать все вопросы темы"] ?? "").trim().toLowerCase() === "да";
+  const timeLimitRaw = String(row["Лимит времени темы"] ?? "").trim();
+  const defaultPointsRaw = String(row["Балл по умолчанию в секции"] ?? "").trim();
+  if (timeLimitRaw !== "" && !/^\d+$/.test(timeLimitRaw)) {
+    return { ok: false, error: `«Лимит времени темы»: нужно целое число, получено "${timeLimitRaw}"` };
+  }
+  if (defaultPointsRaw !== "" && !/^\d+$/.test(defaultPointsRaw)) {
+    return { ok: false, error: `«Балл по умолчанию в секции»: нужно целое число, получено "${defaultPointsRaw}"` };
+  }
+  const timeLimitMinutes = timeLimitRaw === "" ? null : Number(timeLimitRaw);
+  const defaultPoints = defaultPointsRaw === "" ? null : Number(defaultPointsRaw);
+
+  // PRD-48 FR-11: an empty cell leaves the rules alone; a filled one names a mode, and
+  // the dependencies are topic names the orchestrator turns into topic ids.
+  const unlockRaw = String(row["Доступность раздела"] ?? "").trim().toLowerCase();
+  let unlockMode: UnlockMode | null = null;
+  if (unlockRaw !== "") {
+    unlockMode = UNLOCK_MODE_FROM[unlockRaw] ?? null;
+    if (!unlockMode) {
+      return { ok: false, error: `«Доступность раздела»: недопустимое значение "${row["Доступность раздела"]}"` };
+    }
+  }
+  const unlockDependsOn = String(row["Зависит от разделов"] ?? "")
+    .split(";").map((s) => s.trim()).filter(Boolean);
+
+  // Free text: stored verbatim, since its inner spacing is what the author typed. Only a
+  // whitespace-only cell is levelled to `null` — «оставить как есть».
+  const failureRaw = String(row["Обратная связь при непройденном уровне"] ?? "");
+  const failureFeedback = failureRaw.trim() === "" ? null : failureRaw;
+
   return {
     ok: true,
-    value: { topicName, sortOrder, drawCount, passRule, required, questionOrder },
+    value: {
+      topicName, topicCode, sortOrder, drawCount, passRule, required, questionOrder,
+      drawAll, timeLimitMinutes, defaultPoints, unlockMode, unlockDependsOn, failureFeedback,
+    },
   };
 }
 
 /** Serialize a section to a «Структура» row (export). */
 export function serializeStructureRow(s: {
   topicName: string;
+  /** PRD-48 FR-10: the topic's short code, the address formulas call it by. */
+  topicCode?: string | null;
   sortOrder: number;
   drawCount: number;
   topicPassRuleJson: unknown;
   required: boolean;
   /** PRD-30 FR-02/FR-18: null or absent = «как в тесте» (the topic inherits). */
   questionOrder?: "random" | "fixed" | null;
+  /** PRD-48 FR-09: deliver the whole topic instead of a draw. */
+  drawAll?: boolean;
+  /** PRD-48 FR-09: the section's own time limit; null/absent = no limit. */
+  timeLimitMinutes?: number | null;
+  /** PRD-48 FR-09: section-level price default; null/absent = inherit the test's. */
+  defaultPoints?: number | null;
+  /** PRD-48 FR-11: the router's unlock mode; null/absent = available right away. */
+  unlockMode?: string | null;
+  /** PRD-48 FR-11: topic NAMES the unlock depends on. */
+  unlockDependsOn?: string[];
+  /** PRD-48 FR-16: the topic's adaptive «failed a level» text; null/absent = none. */
+  failureFeedback?: string | null;
 }): Record<string, unknown> {
   const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
   let passType = "Как у теста";
@@ -882,6 +1043,7 @@ export function serializeStructureRow(s: {
   }
   return {
     "Раздел": s.topicName,
+    "Код темы": s.topicCode ?? "",
     "Порядок": s.sortOrder + 1,
     "Вопросов в выборке": s.drawCount,
     "Тип порога": passType,
@@ -889,6 +1051,13 @@ export function serializeStructureRow(s: {
     "Обязательный": serBool(s.required),
     // FR-18: пустая ячейка = «как в тесте», иначе явное переопределение темы.
     "Случайный порядок вопросов": s.questionOrder == null ? "" : serBool(s.questionOrder !== "fixed"),
+    "Выдавать все вопросы темы": s.drawAll ? "да" : "нет",
+    "Лимит времени темы": s.timeLimitMinutes ?? "",
+    "Балл по умолчанию в секции": s.defaultPoints ?? "",
+    "Доступность раздела":
+      UNLOCK_MODE_TO[s.unlockMode ?? "always_available"] ?? UNLOCK_MODE_TO.always_available,
+    "Зависит от разделов": (s.unlockDependsOn ?? []).join("; "),
+    "Обратная связь при непройденном уровне": s.failureFeedback ?? "",
   };
 }
 

@@ -160,7 +160,7 @@ export function ReportPreviewModal({
     pages.forEach((page, i) => {
       // Оформление ЛИСТА в окне — скругление и тень: бумага на столе, а не в файле.
       page.style.borderRadius = "8px";
-      page.style.boxShadow = "0 2px 12px rgba(0,0,0,.35)";
+      page.style.boxShadow = "var(--ou-shadow-lg)";
       holder.appendChild(page);
 
       // Подпись — ПОД листом, а не поверх: на плотной странице она легла бы на текст,

@@ -37,8 +37,32 @@ import {
   QUOTA_MODE_CHOICES,
   SCALE_TYPE_CHOICES,
   STRUCTURE_PASS_TYPE_CHOICES,
+  UNLOCK_MODE_CHOICES,
+  SETTING_PARAM_NAMES,
+  FEEDBACK_HEADERS,
+  FEEDBACK_FORMAT_CHOICES,
+  RECOMMENDATION_HEADERS,
+  RECOMMENDATION_TYPE_CHOICES,
+  OWNER_CHOICES,
+  RECOMMENDATION_OWNER_CHOICES,
+  PAGE_HEADERS,
+  PAGE_FIELD_HEADERS,
+  PAGE_ZONE_CHOICES,
+  PAGE_KIND_CHOICES,
+  PAGE_MODE_CHOICES,
+  PAGE_TARGET_CHOICES,
+  ADAPTIVE_LEVEL_HEADERS,
+  ADAPTIVE_PASS_TYPE_CHOICES,
+  DESIGN_HEADERS,
+  DESIGN_WHAT_CHOICES,
+  DESIGN_MODE_CHOICES,
+  DESIGN_PALETTE_CHOICES,
+  parseDesignSheet,
+  parseAdaptiveLevelSheet,
   parseBool,
+  parseFeedbackSheets,
   parseMeasurementRow,
+  parsePageSheets,
   parseQuotaRow,
   parseStructureRow,
   parseVariantThresholdRow,
@@ -52,6 +76,8 @@ vi.hoisted(() => {
 const { storageMock, testSettingsMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
+    // PRD-48 Э5: оформление пишется своим путём, а не через службу настроек.
+    updateTest: vi.fn(),
     getTopics: vi.fn(),
     createTopic: vi.fn(),
     getQuestion: vi.fn(),
@@ -69,11 +95,45 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     upsertQuestionMeasurements: vi.fn(),
     getTestQuestionScoring: vi.fn(),
     replaceTestQuestionScoring: vi.fn(),
+    getContentPages: vi.fn(),
+    createContentPage: vi.fn(),
+    updateContentPage: vi.fn(),
+    deleteContentPage: vi.fn(),
   },
   testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
+/**
+ * Варианты оформления берутся из НАСТОЯЩЕГО манифеста «Стандартного» шаблона: только так
+ * прогон примерных строк проверяет, что ключ варианта и ключи полей в примере существуют.
+ * Выдуманный здесь список проверял бы согласованность примера сам с собой.
+ */
+vi.mock("../server/services/content-page-fields", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server/services/content-page-fields")>();
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const manifest = JSON.parse(
+    readFileSync(join(process.cwd(), "server/scorm/templates/default/manifest.json"), "utf8"),
+  ) as { contentTemplates?: unknown[] };
+  return { ...actual, resolveContentTemplates: vi.fn(async () => manifest.contentTemplates ?? null) };
+});
+/**
+ * Лист «Оформление» типизируется манифестом активного шаблона, который импорт читает
+ * ПРЯМЫМ запросом к таблице шаблонов. Подменяется сам `db`, и строка отдаётся с тем же
+ * НАСТОЯЩИМ манифестом «Стандартного»: только так прогон примерных строк проверяет, что
+ * ключи параметров и вид отчёта в примере существуют, а не согласованы сами с собой.
+ */
+vi.mock("../server/db", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const manifest = JSON.parse(
+    readFileSync(join(process.cwd(), "server/scorm/templates/default/manifest.json"), "utf8"),
+  ) as unknown;
+  const rows = [{ id: "default", isActive: true, version: "1.0.0", templateApiVersion: "1.0", manifest }];
+  const chain: any = { select: () => chain, from: () => chain, where: () => chain, then: (r: any) => r(rows) };
+  return { db: chain };
+});
 vi.mock("../server/services/test-settings", () => ({ testSettingsService: testSettingsMock }));
 vi.mock("../server/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
@@ -99,6 +159,17 @@ beforeEach(() => {
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.getTest.mockResolvedValue({ id: "test-1", status: "draft" });
+  storageMock.updateTest.mockImplementation(async (id: string, patch: any) => ({ id, ...patch }));
+  testSettingsMock.save.mockResolvedValue({ id: "test-1" });
+  // Системные страницы создаёт сам тест, поэтому у приёмника примерных строк обязана
+  // существовать страница итогов: строка «Итоги» её НАХОДИТ, а не создаёт.
+  storageMock.getContentPages.mockResolvedValue([
+    {
+      id: "p-results", testId: "test-1", topicId: null, position: "after", kind: "results",
+      mode: "template", type: "info", templateKey: "results.standard", sortOrder: 0,
+      valuesJson: {}, settingsJson: {}, autoAdvance: false, autoAdvanceDelayMs: null,
+    },
+  ]);
 });
 
 /**
@@ -111,6 +182,12 @@ const CANONICAL: Record<string, string[]> = {
   "Структура": STRUCTURE_HEADERS,
   "Квоты": QUOTA_HEADERS,
   "Пороги вариантов": VARIANT_THRESHOLD_HEADERS,
+  "Обратная связь": FEEDBACK_HEADERS,
+  "Рекомендации": RECOMMENDATION_HEADERS,
+  "Страницы": PAGE_HEADERS,
+  "Поля страниц": PAGE_FIELD_HEADERS,
+  "Адаптивные уровни": ADAPTIVE_LEVEL_HEADERS,
+  "Оформление": DESIGN_HEADERS,
   "Оценка": SCORING_OVERRIDE_HEADERS,
   "Шкалы": SCALE_HEADERS,
   "Показатели": RESULT_VAR_HEADERS,
@@ -124,6 +201,22 @@ function headersOf(ws: ExcelJS.Worksheet): string[] {
   for (let c = 1; c <= (ws.actualColumnCount || ws.columnCount); c++) {
     out.push(String(row.getCell(c).value ?? "").trim());
   }
+  return out;
+}
+
+/**
+ * Строки справки как пары «лист, колонка». Строки-заголовки разделов и пояснения
+ * лист/колонку не называют и сюда не попадают.
+ */
+function helpRowsOf(wb: ExcelJS.Workbook): Array<[string, string]> {
+  const ws = wb.worksheets.find((w) => w.name === HELP_SHEET)!;
+  const out: Array<[string, string]> = [];
+  ws.eachRow((row, i) => {
+    if (i === 1) return; // строка заголовков самой справки
+    const sheet = String(row.getCell(1).value ?? "").trim();
+    const column = String(row.getCell(2).value ?? "").trim();
+    if (sheet && column) out.push([sheet, column]);
+  });
   return out;
 }
 
@@ -169,7 +262,13 @@ describe("шаблон книги — актуальность", () => {
 describe("шаблон книги — полнота справки", () => {
   it("справка описывает каждую колонку каждого ролевого листа", async () => {
     const wb = await buildWorkbookTemplate();
-    const help = textOf(wb.worksheets.find((w) => w.name === HELP_SHEET));
+    // Пары (лист, колонка) из самой справки, а не её сплошной текст: половина имён
+    // колонок повторяется на разных листах («Раздел», «Тип порога», «Значение»), и
+    // проверка «встречается где-нибудь» объявила бы описанной колонку, о которой на
+    // её листе не сказано ни строки.
+    const documented = new Set(
+      helpRowsOf(wb).map(([sheet, column]) => `${sheet} → ${column}`),
+    );
 
     // Read the columns off the TEMPLATE ITSELF, not off a list kept here by
     // hand: any column added to the template must gain a reference row, and a
@@ -178,7 +277,7 @@ describe("шаблон книги — полнота справки", () => {
     for (const name of ROLE_SHEET_NAMES) {
       const ws = wb.worksheets.find((w) => w.name === name)!;
       for (const col of headersOf(ws)) {
-        if (col && !help.includes(col)) missing.push(`${name} → ${col}`);
+        if (col && !documented.has(`${name} → ${col}`)) missing.push(`${name} → ${col}`);
       }
     }
     expect(missing).toEqual([]);
@@ -223,9 +322,29 @@ describe("шаблон книги — валидность примеров", ()
   it("ролевые листы шаблона пусты — скачанный файл ничего не создаёт", async () => {
     const wb = await buildWorkbookTemplate();
     for (const name of ROLE_SHEET_NAMES) {
+      // «Настройки» — единственное исключение: это список «параметр — значение», и
+      // пустой лист не назвал бы автору ни одной настройки. Он проверяется ниже.
+      if (name === "Настройки") continue;
       const ws = wb.worksheets.find((w) => w.name === name)!;
       expect(sheetToObjects(ws), `лист «${name}» должен быть без строк данных`).toEqual([]);
     }
+  });
+
+  it("лист «Настройки» шаблона перечисляет все параметры", async () => {
+    const wb = await buildWorkbookTemplate();
+    const sheet = wb.worksheets.find((w) => w.name === "Настройки")!;
+    const names = sheetToObjects(sheet).map((r) => String(r["Параметр"]));
+    expect(names).toEqual(SETTING_PARAM_NAMES);
+    expect(names.length).toBeGreaterThan(30);
+  });
+
+  it("значения на листе «Настройки» пусты — шаблон ничего не переносит", async () => {
+    // Пустая ячейка «Значение» означает «оставить как есть», поэтому скачанный
+    // шаблон остаётся холостым, несмотря на 38 заполненных строк.
+    const wb = await buildWorkbookTemplate();
+    const sheet = wb.worksheets.find((w) => w.name === "Настройки")!;
+    const values = sheetToObjects(sheet).map((r) => String(r["Значение"] ?? ""));
+    expect(values.filter((v) => v !== "")).toEqual([]);
   });
 
   it("строки-примеры проходят настоящий импорт без единой ошибки", async () => {
@@ -247,6 +366,67 @@ describe("шаблон книги — валидность примеров", ()
     expect(result.scales.created).toBeGreaterThan(0);
     expect(result.resultVariables.created).toBeGreaterThan(0);
     expect(result.measurements.rows).toBeGreaterThan(0);
+    // Обе страницы примера доехали: системная найдена и обновлена, авторская создана.
+    expect(result.pages).toMatchObject({ updated: 1, created: 1 });
+    // Строки примера согласованы между листами, а не просто «не ломают импорт»:
+    // владелец каждой рекомендации назван на «Обратной связи», тема каждого уровня
+    // есть в «Структуре», адрес каждого поля — на «Страницах». Иначе строка была бы
+    // отвергнута и в счётчик не попала.
+    expect(result.settings.params).toBeGreaterThan(0);
+    expect(result.feedback).toMatchObject({ owners: 2, recommendations: 5 });
+    expect(result.adaptive).toMatchObject({ topics: 1, levels: 2 });
+    expect(result.design.params).toBeGreaterThan(0);
+    expect(result.design.report).toBeGreaterThan(0);
+    // Ключ, которого вариант «Стандартного» шаблона не объявляет, применён не был бы —
+    // и загрузка сказала бы об этом. Пример не вправе учить такому.
+    expect(result.warnings.filter((w) => w.includes("не объявляет полей"))).toEqual([]);
+  });
+
+  // Прогон общей книги доказывает, что примерные строки НЕ ломают импорт; здесь
+  // проверяется, что примерное оформление ещё и ПРИМЕНЯЕТСЯ. Без этого лист с опечаткой
+  // в названии просто не читался бы, и «ошибок нет» ничего бы не значило.
+  it("примерное оформление применяется настоящим импортом", async () => {
+    const wb = new ExcelJS.Workbook();
+    addJsonSheet(wb, "Оформление", EXAMPLE_ROWS["Оформление"]);
+    const loaded = await readWorkbookFromBuffer(await workbookToBuffer(wb));
+
+    const result = await importWorkbook("test-1", loaded, { dryRun: false });
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    const [, patch] = storageMock.updateTest.mock.calls[0] as [string, any];
+    expect(patch.designSettingsJson).toMatchObject({
+      templateId: "default",
+      theme: "dark",
+      params: { fontFamily: "Roboto", showProgressBar: true },
+      paramsByTheme: { light: { primaryColor: "#2f6fed" }, dark: { primaryColor: "#88aaff" } },
+    });
+    const [, payload] = testSettingsMock.save.mock.calls[0] as [string, any];
+    expect(payload.test.reportSettingsJson).toMatchObject({
+      enabled: true,
+      standard: { variantKey: "report.standard", values: { scalesChartKind: "rose" } },
+      adaptive: { variantKey: "report.adaptive.standard", values: { scalesChartKind: "none" } },
+    });
+  });
+
+  // Значение поля хранится НА странице: строка примера с адресом, которого нет на листе
+  // «Страницы», дала бы читателю готовую ошибку-сироту. Свойство проверяется на самих
+  // строках, чтобы поломка была названа причиной, а не общей ошибкой импорта.
+  it("каждое примерное поле страницы ссылается на страницу из примера «Страниц»", () => {
+    const address = (r: Record<string, unknown>) =>
+      ["Зона", "Раздел", "Вид", "Номер"]
+        .map((c) => String(r[c] ?? "").trim().toLowerCase())
+        .join("|");
+    const pages = new Set(EXAMPLE_ROWS["Страницы"].map(address));
+
+    expect(pages.size).toBeGreaterThan(1);
+    expect(EXAMPLE_ROWS["Поля страниц"].filter((r) => !pages.has(address(r)))).toEqual([]);
+    // Пример показывает обе стороны страницы: и содержание, и настройку.
+    expect(new Set(EXAMPLE_ROWS["Поля страниц"].map((r) => r["Куда"])))
+      .toEqual(new Set(PAGE_TARGET_CHOICES));
+    // …и оба положения книги: системную страницу, которую можно только найти, и авторскую.
+    expect(EXAMPLE_ROWS["Страницы"].some((r) => r["Вид"] === "Авторская")).toBe(true);
+    expect(EXAMPLE_ROWS["Страницы"].some((r) => r["Вид"] !== "Авторская")).toBe(true);
   });
 
   it("примеры покрывают ВСЕ типы вопросов", async () => {
@@ -274,6 +454,65 @@ describe("шаблон книги — валидность примеров", ()
     expect(contributions.map((r) => r["Ключ источника"])).toEqual(["0", "1", "2", "3", "4"]);
     const scaleKey = contributions[0]["Шкала"];
     expect(EXAMPLE_ROWS["Шкалы"].some((r) => r["Ключ"] === scaleKey)).toBe(true);
+  });
+
+  // Рекомендация хранится ВНУТРИ обратной связи владельца, поэтому строка примера,
+  // ссылающаяся на владельца без строки на листе «Обратная связь», дала бы читателю
+  // готовую ошибку-сироту. Свойство проверяется на самих строках, чтобы поломка была
+  // названа причиной, а не общей ошибкой импорта.
+  it("каждая примерная рекомендация ссылается на владельца из примера обратной связи", () => {
+    const owner = (r: Record<string, unknown>) =>
+      `${String(r["Кому"] ?? "")}|${String(r["Раздел"] ?? "").trim().toLowerCase()}`;
+    const owners = new Set(EXAMPLE_ROWS["Обратная связь"].map(owner));
+    // Владелец-уровень подчинён ДРУГОМУ листу — «Адаптивным уровням», а не «Обратной
+    // связи»: его текст живёт там, поэтому здесь такие строки проверяются отдельно.
+    const plain = EXAMPLE_ROWS["Рекомендации"].filter((r) => r["Кому"] !== "Уровень");
+
+    expect(owners.size).toBeGreaterThan(1);
+    expect(plain.filter((r) => !owners.has(owner(r)))).toEqual([]);
+    // Пример показывает все три вида рекомендаций, иначе о двух из них автор не узнает.
+    expect(new Set(plain.map((r) => r["Тип"]))).toEqual(new Set(RECOMMENDATION_TYPE_CHOICES));
+  });
+
+  // Материал уровня хранится ВНУТРИ уровня, поэтому строка примера, ссылающаяся на
+  // уровень без строки на листе «Адаптивные уровни», дала бы читателю готовую ошибку.
+  it("каждый примерный материал уровня ссылается на уровень из примера «Адаптивных уровней»", () => {
+    const address = (topic: unknown, number: unknown) =>
+      `${String(topic ?? "").trim().toLowerCase()}|${String(number ?? "").trim()}`;
+    const levels = new Set(
+      EXAMPLE_ROWS["Адаптивные уровни"].map((r) => address(r["Раздел"], r["Номер"])),
+    );
+    const levelRows = EXAMPLE_ROWS["Рекомендации"].filter((r) => r["Кому"] === "Уровень");
+
+    expect(levelRows.length).toBeGreaterThan(0);
+    expect(levelRows.filter((r) => !levels.has(address(r["Раздел"], r["Номер уровня"])))).toEqual([]);
+    // Уровню доступен только «Курс»: у его материала есть лишь заголовок и ссылка.
+    expect(new Set(levelRows.map((r) => r["Тип"]))).toEqual(new Set(["Курс"]));
+  });
+
+  // Уровни темы, не входящей в разделы теста, применить некуда — такая строка примера
+  // была бы готовой ошибкой загрузки.
+  it("раздел примерного уровня есть на листе «Структура»", () => {
+    const sections = new Set(
+      EXAMPLE_ROWS["Структура"].map((r) => String(r["Раздел"]).trim().toLowerCase()),
+    );
+    for (const row of EXAMPLE_ROWS["Адаптивные уровни"]) {
+      const name = String(row["Раздел"] ?? "").trim().toLowerCase();
+      expect(sections, `раздела «${row["Раздел"]}» нет на листе «Структура»`).toContain(name);
+    }
+  });
+
+  // Раздел из примера обязан существовать на листе «Структура»: обратная связь раздела,
+  // которого в тесте нет, — ошибка строки.
+  it("раздел примерной обратной связи есть на листе «Структура»", () => {
+    const sections = new Set(
+      EXAMPLE_ROWS["Структура"].map((r) => String(r["Раздел"]).trim().toLowerCase()),
+    );
+    for (const row of EXAMPLE_ROWS["Обратная связь"]) {
+      const name = String(row["Раздел"] ?? "").trim().toLowerCase();
+      if (!name) continue;
+      expect(sections, `раздела «${row["Раздел"]}» нет на листе «Структура»`).toContain(name);
+    }
   });
 
   it("лист «Пример» показывает заполненные строки для каждого ролевого листа с примерами", async () => {
@@ -316,11 +555,58 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Вопросы", "Режим ОС")).toEqual(FEEDBACK_MODE_CHOICES);
     expect(choicesBehind(wb, "Структура", "Тип порога")).toEqual(STRUCTURE_PASS_TYPE_CHOICES);
     expect(choicesBehind(wb, "Структура", "Обязательный")).toEqual(BOOL_CHOICES);
+    expect(choicesBehind(wb, "Структура", "Выдавать все вопросы темы")).toEqual(BOOL_CHOICES);
+    expect(choicesBehind(wb, "Структура", "Доступность раздела")).toEqual(UNLOCK_MODE_CHOICES);
     expect(choicesBehind(wb, "Квоты", "Режим")).toEqual(QUOTA_MODE_CHOICES);
     expect(choicesBehind(wb, "Пороги вариантов", "Тип порога")).toEqual(PASS_TYPE_CHOICES);
     expect(choicesBehind(wb, "Шкалы", "Тип")).toEqual(SCALE_TYPE_CHOICES);
     expect(choicesBehind(wb, "Показатели", "Управляет статусом")).toEqual(CONTROLS_CHOICES);
     expect(choicesBehind(wb, "Вклады вопросов", "Источник")).toEqual(MEASUREMENT_SOURCE_CHOICES);
+    expect(choicesBehind(wb, "Обратная связь", "Кому")).toEqual(OWNER_CHOICES);
+    expect(choicesBehind(wb, "Обратная связь", "Формат")).toEqual(FEEDBACK_FORMAT_CHOICES);
+    // У «Рекомендаций» владельцев на одного больше: материал адаптивного уровня едет
+    // этим же листом, а на «Обратной связи» уровня нет — его текст живёт на своём листе.
+    expect(choicesBehind(wb, "Рекомендации", "Кому")).toEqual(RECOMMENDATION_OWNER_CHOICES);
+    expect(choicesBehind(wb, "Рекомендации", "Тип")).toEqual(RECOMMENDATION_TYPE_CHOICES);
+    // Адрес страницы набирается на ДВУХ листах и должен совпасть побуквенно, поэтому
+    // закрытые колонки адреса получают список на обоих.
+    expect(choicesBehind(wb, "Страницы", "Зона")).toEqual(PAGE_ZONE_CHOICES);
+    expect(choicesBehind(wb, "Страницы", "Вид")).toEqual(PAGE_KIND_CHOICES);
+    expect(choicesBehind(wb, "Страницы", "Режим")).toEqual(PAGE_MODE_CHOICES);
+    expect(choicesBehind(wb, "Страницы", "Автопереход")).toEqual(BOOL_CHOICES);
+    expect(choicesBehind(wb, "Поля страниц", "Зона")).toEqual(PAGE_ZONE_CHOICES);
+    expect(choicesBehind(wb, "Поля страниц", "Вид")).toEqual(PAGE_KIND_CHOICES);
+    expect(choicesBehind(wb, "Поля страниц", "Куда")).toEqual(PAGE_TARGET_CHOICES);
+    // У уровня порог всегда конкретное число, наследовать ему не у кого — поэтому
+    // список короче, чем у «Структуры».
+    expect(choicesBehind(wb, "Адаптивные уровни", "Тип порога")).toEqual(ADAPTIVE_PASS_TYPE_CHOICES);
+    // Оформление: три закрытые колонки из пяти. «Тема» предлагает только палитры —
+    // «Авто» это выбор ТЕСТА, а не палитра, и переопределять параметр по ней нечего.
+    expect(choicesBehind(wb, "Оформление", "Что")).toEqual(DESIGN_WHAT_CHOICES);
+    expect(choicesBehind(wb, "Оформление", "Режим")).toEqual(DESIGN_MODE_CHOICES);
+    expect(choicesBehind(wb, "Оформление", "Тема")).toEqual(DESIGN_PALETTE_CHOICES);
+  });
+
+  // Excel не открывает книгу, где подсказка проверки длиннее 255 символов, а текст
+  // ошибки — 225: файл идёт «на восстановление», и восстановление вырезает сами
+  // проверки. Колонка «Параметр» перечисляет 38 имён, поэтому граница не теоретическая.
+  it("подсказки проверок укладываются в ограничения Excel", async () => {
+    const wb = await buildWorkbookTemplate();
+    const long: string[] = [];
+    for (const name of ROLE_SHEET_NAMES) {
+      const ws = wb.worksheets.find((w) => w.name === name)!;
+      headersOf(ws).forEach((column, i) => {
+        const dv = ws.getCell(2, i + 1).dataValidation as
+          | { promptTitle?: string; prompt?: string; errorTitle?: string; error?: string }
+          | undefined;
+        if (!dv) return;
+        if ((dv.prompt ?? "").length > 255) long.push(`${name}/${column}: подсказка`);
+        if ((dv.error ?? "").length > 225) long.push(`${name}/${column}: текст ошибки`);
+        if ((dv.promptTitle ?? "").length > 32) long.push(`${name}/${column}: заголовок подсказки`);
+        if ((dv.errorTitle ?? "").length > 32) long.push(`${name}/${column}: заголовок ошибки`);
+      });
+    }
+    expect(long).toEqual([]);
   });
 
   it("лист-источник списков скрыт и не является ролевым", async () => {
@@ -354,6 +640,16 @@ describe("шаблон книги — проверка ввода", () => {
       expect(parseStructureRow(row, 0).ok, `«Тип порога» = «${value}»`).toBe(true);
     }
 
+    // Три длинные фразы: список обязан предлагать ровно то написание, которое
+    // разборщик узнаёт, иначе строка отвергается целиком.
+    for (const value of choicesBehind(wb, "Структура", "Доступность раздела")) {
+      const row = {
+        "Раздел": "Финансы", "Вопросов в выборке": 3, "Тип порога": "Нет",
+        "Доступность раздела": value, "Зависит от разделов": "Право",
+      };
+      expect(parseStructureRow(row, 0).ok, `«Доступность раздела» = «${value}»`).toBe(true);
+    }
+
     for (const value of choicesBehind(wb, "Квоты", "Режим")) {
       const row = { "Раздел": "Финансы", "Тег": "базовый", "Количество": 2, "Режим": value };
       expect(parseQuotaRow(row).ok, `«Режим» = «${value}»`).toBe(true);
@@ -375,6 +671,97 @@ describe("шаблон книги — проверка ввода", () => {
     expect(choicesBehind(wb, "Шкалы", "SCORM")).toEqual([...scales.scormTarget.enumValues]);
     expect(choicesBehind(wb, "Показатели", "Тип")).toEqual([...resultVariables.type.enumValues]);
     expect(choicesBehind(wb, "Показатели", "SCORM")).toEqual([...resultVariables.scormTarget.enumValues]);
+
+    // Оба листа обратной связи: значение из списка обязано быть принято разборщиком —
+    // «Кому» опознаёт владельца, «Формат» и «Тип» отвергают строку целиком.
+    for (const level of choicesBehind(wb, "Обратная связь", "Кому")) {
+      const isTest = level === "Тест";
+      for (const format of choicesBehind(wb, "Обратная связь", "Формат")) {
+        const parsed = parseFeedbackSheets(
+          [{ "Кому": level, "Раздел": isTest ? "" : "Финансы", "Формат": format, "Текст": "ОС" }],
+          [],
+        );
+        expect(parsed.errors, `«${level}» / «${format}»`).toEqual([]);
+      }
+    }
+    for (const type of choicesBehind(wb, "Рекомендации", "Тип")) {
+      const parsed = parseFeedbackSheets(
+        [{ "Кому": "Тест", "Раздел": "", "Формат": "Простой", "Текст": "ОС" }],
+        [{ "Кому": "Тест", "Раздел": "", "Тип": type, "Заголовок": "Материал", "Ссылка": "https://a.test" }],
+      );
+      expect(parsed.errors, `«Тип» = «${type}»`).toEqual([]);
+    }
+
+    // Страницы: значение из любого списка обязано читаться разборщиком листов. «Зона»
+    // проверяется двумя прогонами — с разделом и без: какие зоны требуют раздела, знает
+    // сам разборщик, и повторять это знание здесь значило бы разойтись с ним.
+    for (const zone of choicesBehind(wb, "Страницы", "Зона")) {
+      const row = (topic: string) => ({
+        "Зона": zone, "Раздел": topic, "Вид": "Авторская", "Номер": 1,
+        "Вариант": "info.text-lead", "Режим": "Шаблон", "Автопереход": "нет", "Задержка, мс": "",
+      });
+      const clean = [row("Финансы"), row("")].filter((r) => parsePageSheets([r], []).errors.length === 0);
+      expect(clean, `«Зона» = «${zone}» должна читаться ровно в одном из двух видов`).toHaveLength(1);
+    }
+    for (const kind of choicesBehind(wb, "Страницы", "Вид")) {
+      for (const mode of choicesBehind(wb, "Страницы", "Режим")) {
+        for (const auto of choicesBehind(wb, "Страницы", "Автопереход")) {
+          const parsed = parsePageSheets(
+            [{
+              "Зона": "После теста", "Раздел": "", "Вид": kind, "Номер": 1,
+              "Вариант": "info.text-lead", "Режим": mode, "Автопереход": auto, "Задержка, мс": "",
+            }],
+            [],
+          );
+          expect(parsed.errors, `«${kind}» / «${mode}» / «${auto}»`).toEqual([]);
+        }
+      }
+    }
+    for (const target of choicesBehind(wb, "Поля страниц", "Куда")) {
+      const parsed = parsePageSheets(
+        [{ "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1 }],
+        [{
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 1,
+          "Куда": target, "Ключ": "title", "Значение": "Текст",
+        }],
+      );
+      expect(parsed.errors, `«Куда» = «${target}»`).toEqual([]);
+    }
+
+    // Оформление: у каждого значения «Что» своя форма строки, поэтому проверяется, что
+    // хоть одна из четырёх форм читается разборщиком без ошибок — какие колонки нужны
+    // каждому виду строки, знает он сам, и повторять это знание здесь значило бы
+    // разойтись с ним. «Режим» и «Тема» проверяются в своей форме строки.
+    for (const what of choicesBehind(wb, "Оформление", "Что")) {
+      const shapes = [
+        { "Что": what, "Режим": "", "Тема": "", "Ключ": "", "Значение": "default" },
+        { "Что": what, "Режим": "", "Тема": "", "Ключ": "", "Значение": "Тёмная" },
+        { "Что": what, "Режим": "", "Тема": "", "Ключ": "primaryColor", "Значение": "#2f6fed" },
+        { "Что": what, "Режим": "Стандартный", "Тема": "", "Ключ": "Вид отчёта", "Значение": "report.standard" },
+      ];
+      const clean = shapes.filter((r) => parseDesignSheet([r]).errors.length === 0);
+      expect(clean.length, `«Что» = «${what}» не читается ни в одной форме строки`).toBeGreaterThan(0);
+    }
+    for (const mode of choicesBehind(wb, "Оформление", "Режим")) {
+      const parsed = parseDesignSheet([
+        { "Что": "Отчёт", "Режим": mode, "Тема": "", "Ключ": "Вид отчёта", "Значение": "report.standard" },
+      ]);
+      expect(parsed.errors, `«Режим» = «${mode}»`).toEqual([]);
+    }
+    for (const palette of choicesBehind(wb, "Оформление", "Тема")) {
+      const parsed = parseDesignSheet([
+        { "Что": "Параметр", "Режим": "", "Тема": palette, "Ключ": "primaryColor", "Значение": "#2f6fed" },
+      ]);
+      expect(parsed.errors, `«Тема» = «${palette}»`).toEqual([]);
+    }
+
+    for (const value of choicesBehind(wb, "Адаптивные уровни", "Тип порога")) {
+      const row = {
+        "Раздел": "Право", "Номер": 1, "Название": "Базовый", "Сложность от": 0,
+        "Сложность до": 50, "Вопросов": 1, "Тип порога": value, "Порог": 60,
+      };
+      expect(parseAdaptiveLevelSheet([row]).errors, `«Тип порога» = «${value}»`).toEqual([]);
+    }
 
     // «да»/«нет» — то, что пишет экспорт и читает parseBool.
     expect(choicesBehind(wb, "Структура", "Обязательный")).toEqual([serBool(true), serBool(false)]);

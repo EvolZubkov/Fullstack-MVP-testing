@@ -93,6 +93,34 @@ export interface ContentPagesPlan {
   delete: Array<{ id: string }>;
 }
 
+/** Id of the built-in template every test falls back to (NFR-01). */
+export const DEFAULT_TEMPLATE_ID = "default";
+
+/**
+ * Extracts `flowMode` from `tests.flow_policy_json`, defaulting per FR-40.
+ *
+ * Lives HERE, next to the planner it feeds, because two callers must read the column
+ * the same way: the settings service, which reconciles the rows, and the workbook
+ * import, which has to PREDICT that reconciliation for its dry-run preview. A second
+ * copy of the default is how the preview would start promising a different plan.
+ */
+export function extractFlowMode(flowPolicyJson: unknown): FlowMode {
+  if (typeof flowPolicyJson === "object" && flowPolicyJson !== null) {
+    const mode = (flowPolicyJson as { mode?: unknown }).mode;
+    if (mode === "linear_by_topics" || mode === "router_by_topics") return mode;
+  }
+  return "linear_flat";
+}
+
+/** Extracts `templateId` from `tests.design_settings_json`, defaulting per NFR-01. */
+export function extractTemplateId(designSettingsJson: unknown): string {
+  if (typeof designSettingsJson === "object" && designSettingsJson !== null) {
+    const id = (designSettingsJson as { templateId?: unknown }).templateId;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  return DEFAULT_TEMPLATE_ID;
+}
+
 /** Returns true when `flowMode` requires per-topic `kind: questions` rows. */
 export function isPerTopicMode(flowMode: FlowMode): boolean {
   return flowMode === "linear_by_topics" || flowMode === "router_by_topics";
