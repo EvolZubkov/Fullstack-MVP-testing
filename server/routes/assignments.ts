@@ -562,7 +562,10 @@ router.post(
           return res.status(404).json({ error: "Test not found" });
         }
         if (error.kind === "group_name_taken") {
+          // `code` travels beside the sentence so the screen can recognize the
+          // refusal it knows how to resolve without matching Russian prose.
           return res.status(400).json({
+            code: error.kind,
             error: `Группа с таким именем уже есть: ${error.detail.groupName}`,
           });
         }

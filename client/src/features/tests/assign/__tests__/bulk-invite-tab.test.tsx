@@ -156,7 +156,7 @@ describe("<BulkInviteTab /> — предпросмотр", () => {
   });
 
   it("занятое имя группы показывает ошибку и не уводит с предпросмотра", async () => {
-    inviteResponse = () => jsonRes({ error: "Группа с таким именем уже есть: Аудит ИБ" }, false, 400);
+    inviteResponse = () => jsonRes({ code: "group_name_taken", error: "Группа с таким именем уже есть: Аудит ИБ" }, false, 400);
     const { container } = renderTab();
 
     fireEvent.change(screen.getByLabelText("Создать группу из списка"), { target: { value: "Аудит ИБ" } });
@@ -171,7 +171,7 @@ describe("<BulkInviteTab /> — предпросмотр", () => {
   });
 
   it("переименование группы не убирает поле и возвращает кнопку в строй", async () => {
-    inviteResponse = () => jsonRes({ error: "Группа с таким именем уже есть: Аудит ИБ" }, false, 400);
+    inviteResponse = () => jsonRes({ code: "group_name_taken", error: "Группа с таким именем уже есть: Аудит ИБ" }, false, 400);
     const { container } = renderTab();
 
     fireEvent.change(screen.getByLabelText("Создать группу из списка"), { target: { value: "Аудит ИБ" } });

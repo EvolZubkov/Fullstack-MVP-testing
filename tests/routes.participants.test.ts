@@ -200,6 +200,8 @@ describe("POST /api/tests/:id/participants/invite", () => {
     expect(res.status).toBe(400);
     // Shown to the operator verbatim: it names the group they must rename.
     expect(res.body.error).toBe("Группа с таким именем уже есть: Поток 12");
+    // The screen branches on the code, never on the Russian sentence.
+    expect(res.body.code).toBe("group_name_taken");
     expect(storageMock.createGroup).not.toHaveBeenCalled();
   });
 

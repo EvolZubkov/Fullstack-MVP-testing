@@ -167,13 +167,15 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * A taken group name is the one refusal the operator resolves on this screen,
- * and the only thing that tells it apart from any other 400 is the sentence the
- * route composes for it. Matching text is a seam, not a design: the run has no
- * machine-readable error code in its response body.
+ * A refusal from the run, carrying the route's machine-readable `code` beside
+ * the sentence shown to the operator. The code is what the screen branches on:
+ * the Russian prose is for the human and may be reworded at any time.
  */
-function isGroupNameTaken(message: string): boolean {
-  return message.startsWith("Группа с таким именем уже есть");
+class InviteRefusal extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+    this.name = "InviteRefusal";
+  }
 }
 
 /** Hand the browser a URL to save; the response carries its own file name. */
@@ -273,7 +275,10 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
           groupName: groupName.trim() || null,
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Не удалось выполнить рассылку");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new InviteRefusal(body.error || "Не удалось выполнить рассылку", body.code);
+      }
       return res.json() as Promise<ParticipantsReport>;
     },
     onMutate: () => {
@@ -293,7 +298,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       // The refusal keeps the operator on the preview: the rows they confirmed
       // are still valid, and a taken name is one rename away from a run.
       setStep("preview");
-      if (isGroupNameTaken(e.message)) {
+      if (e instanceof InviteRefusal && e.code === "group_name_taken") {
         setGroupNameError("Имя занято");
         setGroupNameConflict(true);
         return;
