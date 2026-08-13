@@ -61,8 +61,10 @@ export interface CtxMeasureView {
    * gate reads as false — the name would vanish from every context this PRD did not
    * touch. `buildMeasureView` sets `hideName`/`hideLevel` ONLY to `true`, and only when
    * the author's `showName`/`showLevel` input said `false`; the label itself is NOT
-   * cleared — it is needed by the report, the analytics and the export, only the SCREEN
-   * slot is switched off.
+   * cleared — the analytics and the export read the data, not the card. Every
+   * LEARNER-FACING surface honours the flag: the results screens and the report layouts
+   * alike (the report builds from the same context, so its layouts gate on the same two
+   * fields).
    */
   hideName?: boolean;
   hideLevel?: boolean;

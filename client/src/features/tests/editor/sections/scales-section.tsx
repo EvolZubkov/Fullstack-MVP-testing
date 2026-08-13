@@ -945,11 +945,13 @@ export function DomainFields({
  * The value slot is not here: it is already governed by «Показывать обучающемуся»
  * (`learner_visibility`), which these two stand next to.
  *
- * What is switched off is the DISPLAY of a slot, never its content. Clearing the level
- * label instead is what authors used to do, and it does not work: a numeric band drops
- * an empty label during normalisation and the reader prints `label ?? level`, so the
- * learner ends up looking at the level CODE. The label also has to survive for the
- * report, the analytics and the export.
+ * What is switched off is the DISPLAY of a slot, never its content, and it is switched
+ * off on every LEARNER-FACING surface: the results screen, the section results and the
+ * PDF report the learner takes away. Clearing the level label instead is what authors
+ * used to do, and it does not work: a numeric band drops an empty label during
+ * normalisation and the reader prints `label ?? level`, so the learner ends up looking
+ * at the level CODE. The label also has to survive for the analytics and the export,
+ * which read the data rather than the card.
  *
  * @public
  */
@@ -973,7 +975,7 @@ export function CardSlotToggles({
   return (
     <FormField
       label="Слоты карточки"
-      hint="Выключается ПОКАЗ слота — название и метка уровня остаются в данных: их берут отчёт, аналитика и выгрузка."
+      hint="Выключается ПОКАЗ слота — на экране итогов и в отчёте. Название и метка уровня остаются в данных: их берут аналитика и выгрузка."
       data-testid={`${testIdPrefix}-slots-${index}`}
     >
       <Stack gap={2}>

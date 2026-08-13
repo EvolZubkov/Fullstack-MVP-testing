@@ -608,6 +608,53 @@ describe("макет печатает консолидированный бло�
       }
     });
 
+    // PRD-49 §6: тумблеры слотов карточки — настройка УЧЕНИЧЕСКОГО показа, а не экрана
+    // итогов. Документ ученик уносит с собой, и погашенное на экране название вместе с
+    // меткой уровня возвращалось в PDF — та самая пара подписей об одном и том же, ради
+    // которой PRD и затевался. Данные при этом не чистятся: их по-прежнему берут
+    // аналитика и выгрузка, гаснет только печать слота.
+    it(`${templateId}: выключенные слоты карточки не печатаются и в отчёте`, () => {
+      const measures = {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler" as const,
+        indicatorKind: "label" as const,
+        scales: [
+          {
+            key: "comm", name: "Коммуникация", value: 8, visibility: "level_and_value" as const,
+            showName: false,
+            interpretation: {
+              domainMin: 0, domainMax: 10, valence: "higher_is_better" as const,
+              bands: [
+                { min: 0, max: 5, level: "low", label: "Низкий" },
+                { min: 5.01, max: 10, level: "high", label: "Высокий" },
+              ],
+            },
+          },
+        ],
+        indicators: [
+          {
+            key: "profile", name: "Профиль", value: "ok", visibility: "level" as const,
+            showLevel: false,
+            interpretation: {
+              domainMin: null, domainMax: null, valence: "none" as const, bands: [],
+              outcomes: [{ code: "ok", label: "Устойчивый" }],
+            },
+          },
+        ],
+      };
+      for (const [layoutName, root] of [
+        ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD, { measures }))],
+        ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE, { measures }))],
+      ] as const) {
+        const text = visibleText(root);
+        expect(text, layoutName).not.toContain("Коммуникация");
+        expect(text, layoutName).not.toContain("Устойчивый");
+        // Соседние слоты той же пары карточек живы: гаснет ровно выключенный слот.
+        expect(text, layoutName).toContain("Высокий");
+        expect(text, layoutName).toContain("Профиль");
+      }
+    });
+
     // Сетка «диаграмма слева, список справа» включается модификатором, а не самим
     // блоком: без диаграммы единственный ребёнок — список толкований — падал в колонку
     // 240 px и печатался лентой в половину ширины страницы A4.
