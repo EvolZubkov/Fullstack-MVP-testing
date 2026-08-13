@@ -123,7 +123,10 @@ export interface TargetSnapshot {
  * the default is to carry, not to drop.
  */
 export const TEST_FIELDS_BY_PART: Partial<Record<PartName, string[]>> = {
-  scoring: ["overallPassRuleJson", "defaultQuestionPoints"],
+  // `passDecisionPolicy` belongs with the pass rule it governs: carrying «Тест пройден,
+  // если» while withholding the threshold it combines would rewrite the receiver's verdict
+  // rule from a part they declined.
+  scoring: ["overallPassRuleJson", "passDecisionPolicy", "defaultQuestionPoints"],
   results: ["introJson", "designSettingsJson", "reportSettingsJson"],
 };
 

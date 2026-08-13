@@ -44,6 +44,30 @@ const A4_HEIGHT_MM = 297;
 // Размеры страницы отчёта в CSS-пикселях приходят из `paginate-dom`: там же живёт
 // раскладка, и второй набор констант рано или поздно разошёлся бы с ней.
 
+/**
+ * Правило, которое чинит ИЗМЕРИТЕЛЬ ШРИФТА растеризатора на время экспорта.
+ *
+ * html2canvas находит базовую линию шрифта скрытой пробой: он кладёт в документ строку из
+ * `<span>` с текстом и картинки 1×1 с `vertical-align: baseline`, а подъём шрифта читает
+ * как `img.offsetTop - span.offsetTop`. Верно это ровно до тех пор, пока картинка остаётся
+ * СТРОЧНОЙ. Глобальный сброс веб-хоста объявляет `img { display: block }`
+ * (`client/src/styles/preflight.css`), проба перестаёт быть строкой, «подъём» вырастает на
+ * пол-строки — и весь текст снимка съезжает вниз примерно на 0.5em, тогда как карточки,
+ * фон и рамки остаются на месте.
+ *
+ * Для постраничного отчёта это не косметика. Разрывы считаются по ОТРИСОВАННЫМ строкам
+ * ({@link module:shared/report/paginate-dom}), а на бумагу их переносит растеризатор:
+ * съехавший текст пересекает границу окна страницы, нижняя строка листа режется пополам,
+ * и её вторая половина всплывает вверху следующего листа.
+ *
+ * Правило адресовано ровно этой пробе — по однопиксельному GIF, который html2canvas зашил
+ * в свой код. Приложение его не замечает: картинка невидима и живёт доли секунды, а сам
+ * стиль уезжает вместе с контейнером отчёта.
+ */
+const FONT_PROBE_CSS =
+  'img[src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"]' +
+  "{display:inline!important;vertical-align:baseline!important}";
+
 /** A clickable region carried over from a `.pdf-link-btn` chip. */
 interface LinkBox {
   url: string;
@@ -125,6 +149,10 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
   container.style.position = "absolute";
   container.style.left = "-9999px";
   container.style.top = "0";
+  // Заплатка измерителя шрифта — первой: ею меряется КАЖДЫЙ снимок (см. FONT_PROBE_CSS).
+  const probeFix = doc.createElement("style");
+  probeFix.textContent = FONT_PROBE_CSS;
+  container.appendChild(probeFix);
   // CSS варианта живёт ВНУТРИ контейнера и уходит вместе с ним: пока отчёт строится,
   // лишних правил в документе нет, а после — и следа не остаётся.
   if (page.css) {

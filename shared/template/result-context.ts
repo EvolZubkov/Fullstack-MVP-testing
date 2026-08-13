@@ -33,6 +33,9 @@ import { buildScalesChart, type ChartKindSettings } from "./scales-chart";
 import { parseScaleAppearance } from "./scale-appearance";
 import { collectRecommendations } from "./recommendations";
 import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
+// PRD-29 §6.7 lives in the scoring layer, not here: the results screen was its first
+// reader, not its owner (see the two gates in `buildResultContext`).
+import { hasGradedScore as isGradedRun, hasPronouncedVerdict } from "../scoring/pass-rule";
 import type {
   FeedbackBlock,
   IndicatorInterpretation,
@@ -749,11 +752,12 @@ export function buildResultContext(
   // Computed BEFORE `result` so the block-visibility flags below can gate the per-topic
   // «Баллов» row the same way they gate the summary itself (issue #30).
   const thresholdDeclared = opts.hasPassThreshold ?? opts.measures?.hasPassThreshold;
-  // «Nothing to grade» stands on its own because the verdict rule below needs it WITHOUT
-  // the threshold flag: it is read off the run itself, so it holds for every host — taught
-  // to send the flag or not — and for attempts finished before any of this existed.
-  const nothingToGrade = round1(input.possiblePoints) <= 0;
-  const hasGradedScore = thresholdDeclared === true && !nothingToGrade;
+  // Both gates come from `@shared/scoring/pass-rule`, which owns the rule itself. They
+  // live there and not here because the LEARNER's screen is no longer their only reader:
+  // the author-facing analytics asks the very same question about the very same run, and
+  // two implementations of «оценивает ли этот прогон» would drift exactly as the two
+  // copies of the verdict gate drifted before 2026-08-06 (see below).
+  const hasGradedScore = isGradedRun(thresholdDeclared, input.possiblePoints);
   // THE VERDICT TAG, for every test — measurement or control alike. Same question as
   // `hasGradedScore` («does this test grade at all»), with ONE deliberate difference: an
   // ABSENT threshold flag does not silence it. `hasGradedScore` may read unknown as «no»
@@ -767,7 +771,7 @@ export function buildResultContext(
   // in the product — kept printing a green «Пройден» while the feedback block, gated by
   // the very same question a few lines down, printed underneath it: the header claimed a
   // success and the block below handed out work on the mistakes.
-  const noVerdict = nothingToGrade || thresholdDeclared === false;
+  const noVerdict = !hasPronouncedVerdict(thresholdDeclared, input.possiblePoints);
   // Visible scales/indicators and the resolved block visibility, gathered ONCE so the
   // scales/indicators sections further below reuse the SAME values instead of refiltering.
   // The SAME resolver the adaptive builder runs (issue #33).

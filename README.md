@@ -775,6 +775,7 @@ PostgreSQL + Drizzle ORM, **29 таблиц**. Схема и Zod-типы -- в 
 | mode | enum | standard, adaptive |
 | showDifficultyLevel | boolean | Показывать сложность |
 | overallPassRuleJson | jsonb | Общее правило прохождения |
+| passDecisionPolicy | text | «Тест пройден, если»: как общий порог и правила тем дают вердикт (drizzle `0016`/`0017`; default `overall_only`) |
 | status | enum | draft / published / archived (`published` boolean — deprecated) |
 | version | integer | Версия теста |
 | flowPolicyJson | jsonb | Политика потока (PRD-4/8) |

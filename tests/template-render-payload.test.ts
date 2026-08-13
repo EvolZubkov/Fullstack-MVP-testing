@@ -75,7 +75,11 @@ describe("readResultsRenderPayload", () => {
     const p = readResultsRenderPayload(DEFAULT_DIR, adaptiveResult, "Адаптивный");
     expect(p).not.toBeNull();
     // The adaptive layout has no score ring/stats — it is the level-based variant.
-    expect(p!.layout).toContain("Результаты по темам");
+    // PRD-49: headings no longer live in the markup (they come from `labels`), so the
+    // variant is recognised by what its markup still owns — the topics branch without
+    // the score strip.
+    expect(p!.layout).toContain("{{#if isTopics}}");
+    expect(p!.layout).not.toContain("tb-score-strip");
     const ctx = p!.context as { result: { adaptive?: boolean; topicResults: any[] } };
     expect(ctx.result.adaptive).toBe(true);
     expect(ctx.result.topicResults[0].levelLabel).toBe("Средний");

@@ -544,6 +544,8 @@ function calculateResults() {
         topicPassRule: section ? section.topicPassRule : null,
         // PRD-24: the delivered variant decides which threshold gates this topic.
         formId: deliveredFormId(fq.topicId),
+        // «Тест пройден, если»: the `*_required_topics*` policies gate on this flag.
+        required: section ? section.required !== false : true,
         questions: [],
         extra: {
           recommendedCourses: (section && section.recommendedCourses) || [],
@@ -565,7 +567,10 @@ function calculateResults() {
   var sections = order.map(function (tid) { return byTopic[tid]; });
   var agg = window.TBTemplate.aggregateStandardResult({
     sections: sections,
-    overallPassRule: TEST_DATA.overallPassRule
+    overallPassRule: TEST_DATA.overallPassRule,
+    // «Тест пройден, если»: baked with the package. Absent in a package built before
+    // the setting shipped — the shared engine then keeps the pre-policy verdict.
+    passDecisionPolicy: TEST_DATA.passDecisionPolicy
   });
 
   return {

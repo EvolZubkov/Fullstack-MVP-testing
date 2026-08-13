@@ -16,6 +16,15 @@
 
 import { paginateBlocks, sliceBySafeLines, type ReportBlockBox } from "./paginate";
 
+/**
+ * Узел ПРИНУДИТЕЛЬНОГО РАЗРЫВА страницы в макете отчёта.
+ *
+ * Контракт рендерера, как `data-path` и `data-action`, а не имя класса: имена классов
+ * принадлежат шаблону, и внешний шаблон, назвавший метку иначе, потерял бы разрыв молча.
+ * Метка ставится на любой глубине — между карточками, внутри карточки, в теле `{{#each}}`.
+ */
+export const PAGE_BREAK_SELECTOR = "[data-page-break]";
+
 /** Ширина страницы отчёта в CSS-пикселях (A4 при 72 dpi). */
 export const PAGE_WIDTH_PX = 595;
 /** Высота страницы отчёта в CSS-пикселях. */
@@ -31,9 +40,11 @@ const MIN_BLOCK_HEIGHT_PX = 40;
 /**
  * Один лист документа.
  *
- * `root` — элемент, который печатается; `top`/`height` — видимая часть этого элемента.
- * Смещение ненулевое только у листов, продолжающих карточку-переросток: она выше страницы,
- * и её единственный элемент показывается несколькими листами по очереди.
+ * `root` — элемент, который печатается; `top`/`height` — видимая часть его СОДЕРЖИМОГО,
+ * отсчитанная от первого пикселя содержимого (верхнее поле страницы в эти координаты не
+ * входит: его держит окно листа). Смещение ненулевое только у листов, продолжающих
+ * карточку-переросток: она выше страницы, и её единственный элемент показывается
+ * несколькими листами по очереди.
  */
 export interface ReportSheet {
   root: HTMLElement;
@@ -139,6 +150,19 @@ function contentHeight(root: HTMLElement, scale: number): number {
   return bottom;
 }
 
+/**
+ * Ординаты ПРИНУДИТЕЛЬНЫХ разрывов — там, где верстальщик шаблона приказал начать лист.
+ *
+ * Берётся ВЕРХНЯЯ граница метки, а не нижняя: узел объявлен пустым, но если шаблон нечаянно
+ * даст ему высоту, разрез по верху всё равно не оставит на бумаге его следа.
+ */
+function forcedCutLines(root: Element, scale: number): number[] {
+  const rootTop = root.getBoundingClientRect().top;
+  return [...root.querySelectorAll(PAGE_BREAK_SELECTOR)].map(
+    (el) => (el.getBoundingClientRect().top - rootTop) / scale,
+  );
+}
+
 function blockCutLines(root: HTMLElement, scale: number, minHeight: number): number[] {
   const rootTop = root.getBoundingClientRect().top;
   const lines: number[] = [];
@@ -235,9 +259,9 @@ export function buildReportPages(rendered: HTMLElement, doc: Document, mount?: H
     // бы дважды. Горизонтальные остаются: их окно не задаёт.
     inner.style.paddingTop = "0";
     inner.style.paddingBottom = "0";
-    // Координаты куска измерены ВМЕСТЕ с верхним полем корня, а копия его лишилась —
-    // отсюда поправка, иначе продолжение съехало бы на высоту поля.
-    inner.style.marginTop = `-${Math.round(Math.max(0, sheet.top - pad.top))}px`;
+    // Кусок отсчитан от ПЕРВОГО ПИКСЕЛЯ СОДЕРЖИМОГО, и копия начинается им же (своё верхнее
+    // поле она отдала окну), поэтому поправка — ровно смещение куска.
+    inner.style.marginTop = `-${Math.round(sheet.top)}px`;
 
     window.appendChild(inner);
     page.appendChild(window);
@@ -263,12 +287,26 @@ export function buildReportPages(rendered: HTMLElement, doc: Document, mount?: H
 export function buildReportSheets(rendered: HTMLElement, doc: Document, mount?: HTMLElement): ReportSheet[] {
   const scale = renderScale(rendered);
   const usable = usablePageHeight(rendered, doc);
+  // Верхнее поле страницы: им отличается пространство ИЗМЕРЕНИЙ от пространства КУСКОВ.
+  const pad = pagePadding(rendered, doc);
   const planned = paginateBlocks(measureBlocks(rendered, scale), usable);
   // Макет без блоков верхнего уровня (один текст в корне — так выглядят проверочные
   // страницы и вырожденные шаблоны) делить не на что: он остаётся одним листом.
   const plan = planned.length ? planned : [{ blocks: [], offset: 0, height: 0 }];
   if (plan.length === 1) {
-    return [{ root: rendered, top: 0, height: plan[0].height }];
+    const measuredOnly = contentHeight(rendered, scale);
+    const onlyHeight = measuredOnly > 0 ? Math.max(0, measuredOnly - pad.top) : plan[0].height;
+    const forcedInside = forcedCutLines(rendered, scale).filter(
+      (line) => line - pad.top > 0 && line - pad.top < onlyHeight,
+    );
+    // Быстрый путь — только пока документ ДЕЙСТВИТЕЛЬНО помещается на лист и делить его
+    // никто не приказывал. Один блок выше страницы (длинное толкование показателя без
+    // всякой шапки) даёт тот же единственный лист, и отданный «как есть» он обрезался бы
+    // окном молча: конец текста не уезжал на второй лист, а пропадал. Такой документ — и
+    // документ с принудительным разрывом — уходит общим путём и режется.
+    if (onlyHeight <= usable && !forcedInside.length) {
+      return [{ root: rendered, top: 0, height: onlyHeight }];
+    }
   }
 
   // Эталон снимается ДО того, как оригинал будет спрятан: клон копирует и инлайн-стили,
@@ -292,15 +330,25 @@ export function buildReportSheets(rendered: HTMLElement, doc: Document, mount?: 
     // Высота СОДЕРЖИМОГО, а не элемента: у корня отчёта `min-height` в целый лист, и
     // `offsetHeight` отдаёт его даже под одной строкой шапки. Лист тогда считался
     // переростком и резался надвое — вторая половина уходила в файл пустой страницей.
-    const height = contentHeight(sheetRoot, scale) || pagePlan.height;
+    //
+    // ВЕРХНЕЕ ПОЛЕ СНИМАЕТСЯ. Меряется всё от верхнего края корня, то есть вместе с полем,
+    // а показывает кусок ОКНО, которое стоит уже за полем и несёт одно содержимое. Пока
+    // поле оставалось в координатах, окно показывало на его высоту БОЛЬШЕ отмеренного:
+    // лишняя полоса приходила из следующего куска, строка на её краю резалась пополам, и
+    // она же выходила целиком на следующем листе. Заодно лист «на всю полезную высоту»
+    // считался переростком — на высоту поля — и делился надвое без нужды.
+    const measured = contentHeight(sheetRoot, scale);
+    const height = measured > 0 ? Math.max(0, measured - pad.top) : pagePlan.height;
     // Подсказки о крупных границах считаются от той же высоты строки, что и правило
     // висячей строки: «выше одной строки» — это и есть «не строка, а блок».
-    const lines = safeCutLines(sheetRoot, doc, scale);
-    const blockLines = blockCutLines(sheetRoot, scale, MIN_BLOCK_HEIGHT_PX);
+    const lines = safeCutLines(sheetRoot, doc, scale).map((line) => line - pad.top);
+    const blockLines = blockCutLines(sheetRoot, scale, MIN_BLOCK_HEIGHT_PX).map((line) => line - pad.top);
+    // Приказ верстальщика шаблона: здесь лист обязан кончиться, сколько бы места ни осталось.
+    const forcedLines = forcedCutLines(sheetRoot, scale).map((line) => line - pad.top);
     // Режется по ПОЛЕЗНОЙ высоте, а не по всему листу: кусок показывается в окне между
     // полями страницы. Кусок ростом в целый лист туда не влезал — страница печатала
     // больше отведённого, обрывала строку на середине, и следующая начинала с неё же.
-    for (const slice of sliceBySafeLines(lines, height, usable, { blockLines })) {
+    for (const slice of sliceBySafeLines(lines, height, usable, { blockLines, forcedLines })) {
       sheets.push({ root: sheetRoot, top: slice.top, height: slice.height });
     }
   }

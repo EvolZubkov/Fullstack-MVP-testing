@@ -27,6 +27,17 @@
   background-position: top center;
 }
 
+/* МАРКЕРЫ АВТОРСКИХ СПИСКОВ. Разметку автора макет печатает как есть (`{{& … }}`), и точки
+   с номерами ей обычно даёт сам браузер. Здесь ждать их нельзя: отчёт рисуется в документе
+   ПРИЛОЖЕНИЯ (§6.3), а глобальный сброс веб-хоста списки гасит (`preflight.css`:
+   `ol, ul { list-style: none }` плюс `padding: 0` на всём). Подробности — в шаблоне
+   «Стандартный», правило держится в паритете с ним. */
+.tb-report ul, .tb-report ol { padding-left: 20px; }
+.tb-report ul { list-style: disc outside; }
+.tb-report ul ul { list-style-type: circle; }
+.tb-report ul ul ul { list-style-type: square; }
+.tb-report ol { list-style: decimal outside; }
+
 .tb-report__brand { margin-bottom: 15px; }
 .tb-report__brand img { height: 32px; }
 
@@ -58,7 +69,6 @@
 /* Разметка автора внутри блока: `pre-wrap` держит переводы строк простого текста, а у
    готовой разметки переносы делают сами теги — иначе абзацы разъезжались бы вдвое. */
 .tb-report__intro p, .tb-report__intro ul, .tb-report__intro ol { white-space: normal; margin: 0 0 8px; }
-.tb-report__intro ul, .tb-report__intro ol { padding-left: 20px; }
 
 .tb-report__title { font-size: 22px; font-weight: 400; margin-bottom: 4px; }
 .tb-report__title--tight { margin-bottom: 15px; }

@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: «Детализация попытки» в аналитике теста — регистрация прохождения.
+    СОГЛАСОВАН 2026-08-13. Итерация при согласовании: в блоке «Показатели» убрана
+    колонка «Толкование» — окно фиксирует результат, а авторский текст исхода
+    («море текста») избыточен здесь и живёт на экране итогов ученика. В approved/.
+
+    Задача: сегодня окно показывает только оценочную сторону прогона — процент,
+    баллы, вердикт и список вопросов с галочкой/крестиком. У измерительной методики
+    (PRD-5 шкалы, PRD-2 показатели) оценки не существует по природе, поэтому в окне
+    не остаётся НИЧЕГО: 14 строк «0/1 ✗», зелёное «Пройден» над «0/0 баллов».
+    Ответ ученика не выводится вообще — ни у измерительного теста, ни у контрольного.
+
+    Данные для всего этого сервер уже отдаёт (`GET /api/analytics/attempts/:id`):
+    `scaleResults`, `resultVariables`, `measures` (названия шкал и показателей),
+    по каждому ответу — `userAnswer`, `correctAnswer`, `contribs` (вклад в шкалы),
+    `ratio`, `graded`/`verdictPronounced`. Клиент их не читает.
+
+    ПРИНЦИП ЭСКИЗА: существующее окно взято 1:1 (тот же ModalDialog размера xl, те же
+    четыре плитки, та же карточка «Ответы»). Дельта минимальная и вся мотивирована:
+      1) две оценочные плитки МЕНЯЮТ СОДЕРЖИМОЕ, когда оценивать нечего (а не печатают
+         «—» дважды): «Ответов N из M» и «Завершена»;
+      2) появляются два блока измерений — «Показатели» и «По шкалам». Порядок как на
+         экране ученика (показатели раньше шкал, `fillMeasureBlocks`): автор смотрит на
+         то же и в том же порядке, что видел ученик;
+      3) строка ответа наконец показывает САМ ОТВЕТ; у измерительного вопроса вместо
+         вердикта и баллов — вклад в шкалы, у контрольного при ошибке — эталон.
+
+    Состояния:
+      s-measure  — измерительная методика (ЧИЛ, реальные данные прогона 12.08.2026)
+      s-control  — контрольный тест (окно не меняется, кроме показа ответа)
+      s-adaptive — адаптивный прогон: уровни и траектория + измерения (issue #33)
+      s-docs     — Пояснения + DS Mapping
+
+    Спеки: PRD-29 §6.7 (вердикт и сводка гасятся, когда оценивать нечего),
+    PRD-5 §9.3/§10 (шкалы доступны аналитику), PRD-2 (показатели), PRD-44 (вклад
+    распределения), PRD-45 (у уровня шкалы код + необязательная метка).
+    Связанные эскизы: prd29-measurement-results.html (та же материя у ученика),
+    prd2-prd5-scoring-tabs.html (где автор всё это настраивает).
+    -->
+    <title>Аналитика — детализация попытки</title>
+    <!--
+      ЖИВАЯ копия DS, а не снимок `docs/wireframes/ds/university-rt.css`: снимок отстал
+      (342 КБ против 365 КБ) и НЕ СОДЕРЖИТ примитива `Box` (`.ou-box*`) — того самого,
+      из которого собраны плитки этого окна в реальном коде. Рисовать эскиз по снимку
+      значило бы либо самому написать `.ou-box`, либо подменить плитки чем-то другим:
+      и то и другое — расхождение с тем, что показывает продукт.
+      Снимок для остальных эскизов обновлять отдельной задачей (см. Пояснения).
+    -->
+    <!--
+      ПОРЯДОК: эскизные листы идут ПЕРВЫМИ, DS — последним. `wf-utils.css` переопределяет
+      `.ou-tag--success` токенами `--ou-success-bg`/`--ou-success-fg`, которых в текущем
+      DS нет (там `--ou-success-soft`/`--ou-success-on-soft`), и при обычном порядке тег
+      «Пройден» выходил бесцветным. Эскизные листы нужны только ради `wf-*` каркаса —
+      за `ou-*` отвечает DS, и последнее слово должно быть за ним.
+    -->
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <link rel="stylesheet" href="/vendor/ui-kit/css/university-rt.css" />
+    <style>
+      /* WIREFRAME-каркас: только эскизные утилиты на токенах. */
+      .wf-sprite { display: none; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+      .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+      .wf-state.active { display: block; }
+      .wf-state > .ou-modal-root { top: var(--wf-nav-offset, var(--wf-size-52)); place-items: start center; }
+      .wf-state > .ou-modal-root .ou-modal {
+        max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-8));
+        margin-top: var(--ou-space-6);
+      }
+      .wf-state > .ou-modal-root .ou-modal--xl { display: flex; flex-direction: column; }
+      .wf-state > .ou-modal-root .ou-modal--xl .ou-modal__body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+      /* Ряд плиток шапки — это Grid minItem="sm" существующего окна. */
+      .wf-tiles {
+        display: grid; gap: var(--ou-space-1);
+        grid-template-columns: repeat(auto-fit, minmax(var(--wf-size-160, 10rem), 1fr));
+        margin-bottom: var(--ou-space-6);
+      }
+      .wf-tile-inner { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-1); }
+      .wf-tile-val { font: var(--ou-text-display-s); font-weight: 700; }
+      .wf-tile-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      .wf-tile-center { justify-content: center; height: 100%; }
+
+      .wf-stack > * + * { margin-top: var(--ou-space-6); }
+      .wf-answers > * + * { margin-top: var(--ou-space-3); }
+
+      /* Строка ответа — это Box border radius="l" существующего окна. */
+      .wf-ans-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--ou-space-2); }
+      .wf-ans-meta { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; margin-bottom: var(--ou-space-1); }
+      .wf-ans-idx { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+      .wf-ans-prompt { font: var(--ou-text-body-s); font-weight: 500; }
+      .wf-ans-score { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: nowrap; }
+      .wf-ok { color: var(--ou-success-default); }
+      .wf-bad { color: var(--ou-error-default); }
+
+      /* Блок «Ответ / Эталон / Вклад» под текстом вопроса. */
+      .wf-ans-rows { margin-top: var(--ou-space-2); display: grid; gap: var(--ou-space-1); }
+      .wf-ans-row { display: grid; grid-template-columns: var(--wf-size-72, 4.5rem) 1fr; gap: var(--ou-space-2); align-items: baseline; }
+      .wf-ans-row__lbl { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      .wf-ans-row__val { font: var(--ou-text-body-s); }
+      .wf-ans-row__val ul { margin: 0; padding-left: var(--ou-space-4); }
+      .wf-chips { display: flex; gap: var(--ou-space-1); flex-wrap: wrap; }
+
+      .wf-measure-grid { display: grid; gap: var(--ou-space-2); }
+      .wf-sep { border: 0; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-4) 0; }
+      .wf-muted { color: var(--ou-fg-muted); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </symbol>
+      <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+      </symbol>
+      <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+      </symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" />
+      </symbol>
+      <symbol id="i-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m12 14 4-4" /><path d="M3.34 19a10 10 0 1 1 17.32 0" />
+      </symbol>
+      <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
+      </symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Детализация попытки:</span>
+      <button type="button" class="active" onclick="showState(this, 'measure')">измерительный</button>
+      <button type="button" onclick="showState(this, 'control')">контрольный</button>
+      <button type="button" onclick="showState(this, 'adaptive')">адаптивный</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd29-measurement-results.html">&harr; Итоги у ученика (PRD-29)</a>
+      <a class="wf-nav-link" href="prd2-prd5-scoring-tabs.html">&harr; Шкалы / Показатели</a>
+    </nav>
+
+    <!-- ═══════════ s-measure: измерительная методика (прогон ЧИЛ) ═══════════ -->
+    <div id="wf-measure" class="wf-state active">
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="m-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title" id="m-title">Детализация попытки <span class="wf-muted">— Приёмка</span></h1>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+
+          <div class="ou-modal__body">
+            <div class="wf-stack">
+              <!-- Плитки: две оценочные заменены, потому что оценивать нечего (PRD-29 §6.7) -->
+              <div class="wf-tiles">
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner">
+                    <span class="wf-tile-val">14 из 14</span>
+                    <span class="wf-tile-lbl">Отвечено</span>
+                  </div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner">
+                    <span class="wf-tile-val">12 авг., 09:50</span>
+                    <span class="wf-tile-lbl">Завершена</span>
+                  </div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner">
+                    <span class="wf-tile-val">1:18</span>
+                    <span class="wf-tile-lbl">Время</span>
+                  </div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner wf-tile-center">
+                    <span class="ou-tag ou-tag--neutral ou-tag--l">Завершена</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Показатели — первыми, как на экране ученика -->
+              <div class="ou-card">
+                <div class="ou-card__header">
+                  <span class="ou-card__lead"><svg width="16" height="16"><use href="#i-target" /></svg></span>
+                  <h2 class="ou-card__title">Показатели</h2>
+                </div>
+                <div class="ou-card__body">
+                  <!-- ДВЕ колонки (уточнено при согласовании 2026-08-13): окно ФИКСИРУЕТ
+                       результат. Колонки «Толкование» нет — авторский текст исхода на
+                       референсной методике идёт на полторы страницы и разносит таблицу;
+                       его место на экране итогов ученика и в отчёте. В ячейке — метка
+                       исхода («Командный»), код («kom») остаётся в Excel-выгрузке. -->
+                  <table class="tb-table">
+                    <thead><tr><th>Показатель</th><th>Значение</th></tr></thead>
+                    <tbody>
+                      <tr><td>Ваш ведущий стиль</td><td><b>Командный</b></td></tr>
+                      <tr><td>Баллов у ведущего стиля</td><td>35</td></tr>
+                      <tr><td>Отрыв ведущего стиля, баллов</td><td>7</td></tr>
+                      <tr><td>Второй близкий стиль</td><td class="wf-muted">—</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Шкалы -->
+              <div class="ou-card">
+                <div class="ou-card__header">
+                  <span class="ou-card__lead"><svg width="16" height="16"><use href="#i-gauge" /></svg></span>
+                  <h2 class="ou-card__title">По шкалам</h2>
+                </div>
+                <div class="ou-card__body">
+                  <table class="tb-table">
+                    <thead><tr><th>Шкала</th><th>Значение</th><th>Уровень</th></tr></thead>
+                    <tbody>
+                      <tr><td>Целеустремленный</td><td>21</td><td class="wf-muted">—</td></tr>
+                      <tr><td>Вдохновляющий</td><td>28</td><td class="wf-muted">—</td></tr>
+                      <tr><td>Командный</td><td><b>35</b></td><td class="wf-muted">—</td></tr>
+                      <tr><td>Процессный</td><td>14</td><td class="wf-muted">—</td></tr>
+                    </tbody>
+                  </table>
+                  <p class="ou-formfield__msg">Колонка «Уровень» появляется только у шкал с полосами толкования; у этой методики их нет.</p>
+                </div>
+              </div>
+
+              <!-- Ответы -->
+              <div class="ou-card">
+                <div class="ou-card__header">
+                  <h2 class="ou-card__title">Ответы (14)</h2>
+                </div>
+                <div class="ou-card__body">
+                  <div class="wf-answers">
+                    <div class="ou-box ou-box--pad-3 ou-box--radius-l ou-box--border">
+                      <div class="wf-ans-head">
+                        <div>
+                          <div class="wf-ans-meta">
+                            <span class="wf-ans-idx">#1</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Человекоцентричное лидерство (ЧИЛ)</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--s">Распределение баллов</span>
+                          </div>
+                          <div class="wf-ans-prompt">Как вы обычно действуете, когда понимаете, что команда отклоняется от цели?</div>
+                        </div>
+                        <!-- ни баллов, ни галочки: вопрос не проверяется -->
+                      </div>
+                      <div class="wf-ans-rows">
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Ответ</span>
+                          <div class="wf-ans-row__val">
+                            <ul>
+                              <li>Я помогаю команде сфокусироваться на главном… — <b>5</b></li>
+                              <li>Я собираю команду для открытого обсуждения проблем… — <b>2</b></li>
+                              <li>Я вдохновляю команду на поиск нестандартных решений… — 0</li>
+                              <li>Я ищу «узкие места» в процессах… — 0</li>
+                            </ul>
+                          </div>
+                        </div>
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Вклад</span>
+                          <div class="wf-ans-row__val wf-chips">
+                            <span class="ou-tag ou-tag--accent ou-tag--s">Командный +5</span>
+                            <span class="ou-tag ou-tag--accent ou-tag--s">Вдохновляющий +2</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="ou-box ou-box--pad-3 ou-box--radius-l ou-box--border">
+                      <div class="wf-ans-head">
+                        <div>
+                          <div class="wf-ans-meta">
+                            <span class="wf-ans-idx">#2</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Человекоцентричное лидерство (ЧИЛ)</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--s">Распределение баллов</span>
+                          </div>
+                          <div class="wf-ans-prompt">На чём вы делаете фокус, когда задача уже реализована?</div>
+                        </div>
+                      </div>
+                      <div class="wf-ans-rows">
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Ответ</span>
+                          <div class="wf-ans-row__val">
+                            <ul>
+                              <li>Анализирую качество выполнения задачи… — <b>1</b></li>
+                              <li>Отмечаю вклад каждого участника… — <b>3</b></li>
+                              <li>Ищу, что можно улучшить в следующий раз… — <b>3</b></li>
+                              <li>Фиксирую регламент, чтобы повторить успех… — 0</li>
+                            </ul>
+                          </div>
+                        </div>
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Вклад</span>
+                          <div class="wf-ans-row__val wf-chips">
+                            <span class="ou-tag ou-tag--accent ou-tag--s">Целеустремленный +1</span>
+                            <span class="ou-tag ou-tag--accent ou-tag--s">Командный +3</span>
+                            <span class="ou-tag ou-tag--accent ou-tag--s">Вдохновляющий +3</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="ou-box ou-box--pad-3 ou-box--radius-l ou-box--border">
+                      <div class="wf-ans-head">
+                        <div>
+                          <div class="wf-ans-meta">
+                            <span class="wf-ans-idx">#3</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Человекоцентричное лидерство (ЧИЛ)</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--s">Шкала</span>
+                          </div>
+                          <div class="wf-ans-prompt">Насколько для вас важно, чтобы решение принималось коллегиально?</div>
+                        </div>
+                      </div>
+                      <div class="wf-ans-rows">
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Ответ</span>
+                          <div class="wf-ans-row__val">4) Скорее важно</div>
+                        </div>
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Вклад</span>
+                          <div class="wf-ans-row__val wf-chips">
+                            <span class="ou-tag ou-tag--accent ou-tag--s">Командный +4</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ s-control: контрольный тест ═══════════ -->
+    <div id="wf-control" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="c-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title" id="c-title">Детализация попытки <span class="wf-muted">— Иванов Пётр</span></h1>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+
+          <div class="ou-modal__body">
+            <div class="wf-stack">
+              <!-- Плитки: без изменений, оценка есть -->
+              <div class="wf-tiles">
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner"><span class="wf-tile-val">72.0%</span><span class="wf-tile-lbl">Результат</span></div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner"><span class="wf-tile-val">18/25</span><span class="wf-tile-lbl">Баллы</span></div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner"><span class="wf-tile-val">14:07</span><span class="wf-tile-lbl">Время</span></div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner wf-tile-center"><span class="ou-tag ou-tag--success ou-tag--l">Пройден</span></div>
+                </div>
+              </div>
+
+              <div class="ou-card">
+                <div class="ou-card__header"><h2 class="ou-card__title">Ответы (3)</h2></div>
+                <div class="ou-card__body">
+                  <div class="wf-answers">
+                    <!-- верный: эталон не печатается, он совпал с ответом -->
+                    <div class="ou-box ou-box--pad-3 ou-box--radius-l ou-box--border ou-box--surface-muted">
+                      <div class="wf-ans-head">
+                        <div>
+                          <div class="wf-ans-meta">
+                            <span class="wf-ans-idx">#1</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Охрана труда</span>
+                          </div>
+                          <div class="wf-ans-prompt">Какой документ закрепляет лимиты расходов?</div>
+                        </div>
+                        <div class="wf-ans-score">
+                          <span>5/5</span>
+                          <span class="wf-ok"><svg width="20" height="20"><use href="#i-check-circle" /></svg></span>
+                        </div>
+                      </div>
+                      <div class="wf-ans-rows">
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Ответ</span>
+                          <div class="wf-ans-row__val">2) Приказ о бюджетной политике</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- неверный: под ответом печатается эталон -->
+                    <div class="ou-box ou-box--pad-3 ou-box--radius-l ou-box--border ou-box--surface-subtle">
+                      <div class="wf-ans-head">
+                        <div>
+                          <div class="wf-ans-meta">
+                            <span class="wf-ans-idx">#2</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Охрана труда</span>
+                          </div>
+                          <div class="wf-ans-prompt">Сопоставьте средство защиты и вид работ</div>
+                        </div>
+                        <div class="wf-ans-score">
+                          <span>0/3</span>
+                          <span class="wf-bad"><svg width="20" height="20"><use href="#i-x-circle" /></svg></span>
+                        </div>
+                      </div>
+                      <div class="wf-ans-rows">
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Ответ</span>
+                          <div class="wf-ans-row__val">
+                            <ul><li>Каска &rarr; Сварка</li><li>Щиток &rarr; Высотные работы</li></ul>
+                          </div>
+                        </div>
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Эталон</span>
+                          <div class="wf-ans-row__val">
+                            <ul><li>Каска &rarr; Высотные работы</li><li>Щиток &rarr; Сварка</li></ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- частично верный (PRD-10 градуировка): дробный балл, крестик не ставится -->
+                    <div class="ou-box ou-box--pad-3 ou-box--radius-l ou-box--border ou-box--surface-subtle">
+                      <div class="wf-ans-head">
+                        <div>
+                          <div class="wf-ans-meta">
+                            <span class="wf-ans-idx">#3</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Охрана труда</span>
+                            <span class="ou-tag ou-tag--warning ou-tag--s">Частично</span>
+                          </div>
+                          <div class="wf-ans-prompt">Отметьте все обязательные средства защиты</div>
+                        </div>
+                        <div class="wf-ans-score">
+                          <span>1.5/3</span>
+                        </div>
+                      </div>
+                      <div class="wf-ans-rows">
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Ответ</span>
+                          <div class="wf-ans-row__val">1) Каска, 3) Перчатки</div>
+                        </div>
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Эталон</span>
+                          <div class="wf-ans-row__val">1) Каска, 2) Очки, 3) Перчатки</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ s-adaptive: адаптивный прогон ═══════════ -->
+    <div id="wf-adaptive" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="a-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title" id="a-title">Детализация попытки <span class="wf-muted">— Смирнова Анна</span></h1>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+
+          <div class="ou-modal__body">
+            <div class="wf-stack">
+              <div class="wf-tiles">
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner"><span class="wf-tile-val">64.0%</span><span class="wf-tile-lbl">Результат</span></div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner"><span class="wf-tile-val">16/25</span><span class="wf-tile-lbl">Баллы</span></div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner"><span class="wf-tile-val">21:40</span><span class="wf-tile-lbl">Время</span></div>
+                </div>
+                <div class="ou-box ou-box--pad-3 ou-box--surface-muted ou-box--radius-l">
+                  <div class="wf-tile-inner wf-tile-center"><span class="ou-tag ou-tag--success ou-tag--l">Пройден</span></div>
+                </div>
+              </div>
+
+              <!-- Существующие адаптивные блоки — без изменений -->
+              <div class="ou-card">
+                <div class="ou-card__header">
+                  <span class="ou-card__lead"><svg width="16" height="16"><use href="#i-layers" /></svg></span>
+                  <h2 class="ou-card__title">Достигнутые уровни</h2>
+                </div>
+                <div class="ou-card__body">
+                  <div class="wf-chips">
+                    <span class="ou-tag ou-tag--success">Финансы: Профи</span>
+                    <span class="ou-tag ou-tag--neutral">Право: Не достигнут</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ou-card">
+                <div class="ou-card__header"><h2 class="ou-card__title">Траектория прохождения</h2></div>
+                <div class="ou-card__body">
+                  <div class="wf-measure-grid">
+                    <div class="wf-ans-meta"><span class="wf-ok"><svg width="16" height="16"><use href="#i-check-circle" /></svg></span><span>Уровень «База» пройден</span></div>
+                    <div class="wf-ans-meta"><span class="wf-ok"><svg width="16" height="16"><use href="#i-check-circle" /></svg></span><span>Уровень «Профи» пройден</span></div>
+                    <div class="wf-ans-meta"><span class="wf-bad"><svg width="16" height="16"><use href="#i-x-circle" /></svg></span><span>Уровень «Эксперт» не пройден</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Измерения адаптивного прогона (issue #33): та же карточка, что у измерительного -->
+              <div class="ou-card">
+                <div class="ou-card__header">
+                  <span class="ou-card__lead"><svg width="16" height="16"><use href="#i-gauge" /></svg></span>
+                  <h2 class="ou-card__title">По шкалам</h2>
+                </div>
+                <div class="ou-card__body">
+                  <table class="tb-table">
+                    <thead><tr><th>Шкала</th><th>Значение</th><th>Уровень</th></tr></thead>
+                    <tbody>
+                      <tr><td>Эмоциональное истощение</td><td>24</td><td><span class="ou-tag ou-tag--warning ou-tag--s">Средний</span></td></tr>
+                      <tr><td>Деперсонализация</td><td>9</td><td><span class="ou-tag ou-tag--success ou-tag--s">Низкий</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="ou-card">
+                <div class="ou-card__header"><h2 class="ou-card__title">Ответы (12)</h2></div>
+                <div class="ou-card__body">
+                  <div class="wf-answers">
+                    <div class="ou-box ou-box--pad-3 ou-box--radius-l ou-box--border ou-box--surface-muted">
+                      <div class="wf-ans-head">
+                        <div>
+                          <div class="wf-ans-meta">
+                            <span class="wf-ans-idx">#1</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Финансы</span>
+                            <span class="ou-tag ou-tag--neutral ou-tag--s">База</span>
+                          </div>
+                          <div class="wf-ans-prompt">Что относится к оборотным активам?</div>
+                        </div>
+                        <div class="wf-ans-score">
+                          <span>1/1</span>
+                          <span class="wf-ok"><svg width="20" height="20"><use href="#i-check-circle" /></svg></span>
+                        </div>
+                      </div>
+                      <div class="wf-ans-rows">
+                        <div class="wf-ans-row">
+                          <span class="wf-ans-row__lbl">Ответ</span>
+                          <div class="wf-ans-row__val">1) Запасы</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ s-docs ═══════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — что меняется в окне и почему</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Плитки 1 и 2 у неоценённого прогона</td>
+                <td><code>graded === false</code> (порог задан И <code>possiblePoints &gt; 0</code>)</td>
+                <td>«Результат %» и «Баллы» заменяются на «Отвечено N из M» и «Завершена &lt;дата&gt;». Печатать два прочерка — значит оставить половину шапки пустой; у измерительного прогона есть что показать вместо них. У контрольного плитки не меняются</td>
+              </tr>
+              <tr>
+                <td>Плитка вердикта</td>
+                <td><code>verdictPronounced</code></td>
+                <td>PRD-29 §6.7. Зелёное «Пройден» над «0/0 баллов» — это порог 70% по умолчанию, применённый к тесту, который не оценивает. Нейтральный тег «Завершена» вместо вердикта, которого никто не выносил</td>
+              </tr>
+              <tr>
+                <td>Блок «Показатели»</td>
+                <td><code>resultVariables</code> + <code>measures.indicators</code></td>
+                <td>PRD-2. Раньше показателей в детализации не было вообще. ДВЕ колонки: ярлык показателя (не имя переменной) и значение. В значении — метка исхода/полосы, когда автор её задал («Командный»), иначе сырое значение («kom», 35). Колонки «Толкование» НЕТ (уточнено при согласовании 2026-08-13): окно фиксирует результат, а авторский текст исхода на референсной методике идёт на полторы страницы и разносит таблицу — его место на экране итогов ученика и в PDF-отчёте. Порядок — авторский (<code>sort_order</code>)</td>
+              </tr>
+              <tr>
+                <td>Блок «По шкалам»</td>
+                <td><code>scaleResults</code> + <code>measures.scales</code></td>
+                <td>PRD-5. Колонка «Уровень» рисуется, только если у шкалы есть полосы толкования (<code>measures.scales[].hasLevels</code>): всегда пустая колонка читается как потеря данных. В ячейке — МЕТКА уровня, код — запасной вариант (PRD-45)</td>
+              </tr>
+              <tr>
+                <td>Порядок блоков</td>
+                <td>показатели &rarr; шкалы &rarr; ответы</td>
+                <td>Тот же, что на экране итогов у ученика (<code>fillMeasureBlocks</code>): автор смотрит на то же и в том же порядке, что видел ученик. Адаптивные блоки (уровни, траектория) остаются выше измерений — они про механику выдачи, а не про результат</td>
+              </tr>
+              <tr>
+                <td>Строка «Ответ»</td>
+                <td><code>answers[].userAnswer</code></td>
+                <td>Ответа не было видно НИКОГДА — ни у измерительного теста, ни у контрольного, хотя сервер его отдаёт в готовом к печати виде (варианты по подписям, пары сопоставления, порядок ранжирования, распределение «утверждение — балл» включая нули, PRD-44)</td>
+              </tr>
+              <tr>
+                <td>Строка «Эталон»</td>
+                <td><code>answers[].correctAnswer</code>, печатается при <code>ratio &lt; 1</code></td>
+                <td>У верного ответа эталон совпадает с ответом — вторая строка была бы шумом. У измерительного вопроса эталона не существует, строки нет</td>
+              </tr>
+              <tr>
+                <td>Строка «Вклад»</td>
+                <td><code>answers[].contribs</code></td>
+                <td>PRD-5/PRD-44. Единственный результат измерительного ответа: на сколько он подвинул каждую шкалу. Знак печатается («+5»), потому что вклад — это движение, а измерение обратного направления вычитает</td>
+              </tr>
+              <tr>
+                <td>Балл и галочка у измерительного вопроса</td>
+                <td><code>isMeasurementOnly(question)</code></td>
+                <td>PRD-26 FR-08 / PRD-44 FR-09. Убираются совсем: «0/1 ✗» — это не низкая оценка, а вердикт вопросу, у которого его не бывает</td>
+              </tr>
+              <tr>
+                <td>Частично верный ответ</td>
+                <td><code>0 &lt; ratio &lt; 1</code></td>
+                <td>PRD-10: дробный балл и тег «Частично» вместо крестика. Сейчас окно ставит крестик всему, что не равно 1, и рядом печатает «1.5/3» — два несогласных утверждения в одной строке</td>
+              </tr>
+              <tr>
+                <td>Смешанный тест</td>
+                <td>один оценочный вопрос среди измерительных</td>
+                <td>Оценивается — значит плитки и вердикт остаются, а измерительные строки внутри списка ответов идут без балла и галочки, со своим «Вкладом». Правило построчное, а не на весь тест</td>
+              </tr>
+              <tr>
+                <td>Источник значений</td>
+                <td>СОХРАНЁННЫЙ результат попытки</td>
+                <td>Не пересчёт по сегодняшней конфигурации: аналитика отвечает на вопрос «что получил этот человек». Пересчёт остаётся запасным путём для попыток, завершённых до того, как значения стали сохраняться</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-mapping">
+          <h2 class="wf-mapping-title">DS Mapping</h2>
+          <p class="wf-mapping-sub">Строка с «custom» в колонке DS-компонент — блокер.</p>
+          <table>
+            <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead>
+            <tbody>
+              <tr><td>Окно</td><td><code>ModalDialog</code> (<code>size="xl"</code>)</td><td><code>--ou-*</code></td><td>Существующее окно, размер и шапка без изменений</td></tr>
+              <tr><td>Плитки шапки</td><td><code>Grid</code> + <code>Box</code> (<code>surface="muted" radius="l"</code>) + <code>Text</code></td><td><code>--ou-bg-*</code>, <code>--ou-radius-l</code></td><td>Существующая разметка 1:1; меняется только содержимое двух плиток</td></tr>
+              <tr><td>Тег вердикта / «Завершена»</td><td><code>Tag</code> (<code>size="l"</code>)</td><td><code>--ou-success-*</code>, <code>--ou-error-*</code>, нейтральный</td><td>Тот же тег, что и сейчас; нейтральный тон — когда вердикта нет</td></tr>
+              <tr><td>«Показатели» / «По шкалам»</td><td><code>Card</code> + <code>CardHeader</code> + <code>CardBody</code></td><td><code>--ou-*</code></td><td>Та же композиция, что у существующих «Достигнутые уровни» и «Траектория прохождения»</td></tr>
+              <tr><td>Таблицы измерений</td><td><code>Table</code> (<code>tb-table</code>)</td><td><code>--ou-border-soft</code></td><td>Тот же <code>Table</code>, что в списке попыток</td></tr>
+              <tr><td>Уровень шкалы</td><td><code>Tag</code> (<code>size="s"</code>)</td><td><code>--ou-warning-*</code>, <code>--ou-success-*</code></td><td>Тон — по рампе уровня (<code>level-ramp</code>), как на итогах ученика</td></tr>
+              <tr><td>Строка ответа</td><td><code>Box</code> (<code>border radius="l"</code>) + <code>Stack</code>/<code>Cluster</code> + <code>Text</code></td><td><code>--ou-*</code></td><td>Существующая карточка ответа; добавляются строки «Ответ» / «Эталон» / «Вклад»</td></tr>
+              <tr><td>Вклад в шкалы</td><td><code>Tag</code> (<code>size="s"</code>, accent)</td><td><code>--ou-accent-soft</code></td><td>По тегу на шкалу — читается и при трёх-четырёх шкалах сразу</td></tr>
+              <tr><td>Тег «Частично»</td><td><code>Tag</code> (<code>tone="warning" size="s"</code>)</td><td><code>--ou-warning-*</code></td><td>Вместо крестика при <code>0 &lt; ratio &lt; 1</code></td></tr>
+              <tr><td>Прокрутка списка ответов</td><td><code>ScrollArea</code> (<code>maxH="md"</code>)</td><td>—</td><td>Как сейчас; механика прокрутки окна не меняется</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Wireframe state switcher (канон approved/prd*).
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el === target);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) {
+          button.classList.toggle('active', button === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

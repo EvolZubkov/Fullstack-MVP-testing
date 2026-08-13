@@ -7,6 +7,7 @@ import { checkAnswer } from "../../utils/check-answer";
 import { loadTestScoringContext } from "../../services/effective-scoring";
 import type { AttemptResult } from "@shared/schema";
 import { stripMarkdown } from "@shared/text";
+import { declaresPassThreshold, gradingOf } from "./helpers";
 
 const router = Router();
 
@@ -25,6 +26,13 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
     const completedAttempts = testAttempts.filter(a => a.resultJson !== null);
 
     const uniqueUsers = new Set(completedAttempts.map(a => a.userId)).size;
+    // PRD-29 §6.7: does this test grade at all? Averaged over runs that graded
+    // NOTHING, «средний балл» and «процент прохождения» are not weak numbers —
+    // they are false ones: a questionnaire carries the default 70% threshold and
+    // an `overallPassed: true` nobody pronounced, so the screen used to headline
+    // «0.0 %» beside «100 % успешно сдали тест». Counts stay (the runs happened);
+    // the grade-shaped metrics answer `null` — «неприменимо», not «ноль».
+    const thresholdDeclared = declaresPassThreshold(test);
 
     let totalPercent = 0;
     let totalPassed = 0;
@@ -32,21 +40,36 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
     let maxScore = 0;
     let totalDuration = 0;
     let durationCount = 0;
+    let gradedCount = 0;
+    let judgedCount = 0;
 
     for (const attempt of completedAttempts) {
       const result = attempt.resultJson as AttemptResult | null;
       if (result) {
-        totalPercent += result.overallPercent || 0;
-        if (result.overallPassed) totalPassed++;
-        totalScore += result.totalEarnedPoints || 0;
-        if ((result.totalPossiblePoints || 0) > maxScore) {
-          maxScore = result.totalPossiblePoints || 0;
-        }
-
+        // Duration is a property of the RUN, not of its grading — every completed
+        // attempt contributes, questionnaire or not.
         if (attempt.startedAt && attempt.finishedAt) {
           const duration = (new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000;
           totalDuration += duration;
           durationCount++;
+        }
+
+        // Two denominators, not one: the score metrics need points to exist, the
+        // pass rate needs a verdict to have been pronounced (see `gradingOf`).
+        const { scored, verdictPronounced } = gradingOf(result, thresholdDeclared);
+
+        if (verdictPronounced) {
+          judgedCount++;
+          if (result.overallPassed) totalPassed++;
+        }
+
+        if (!scored) continue;
+
+        gradedCount++;
+        totalPercent += result.overallPercent || 0;
+        totalScore += result.totalEarnedPoints || 0;
+        if ((result.totalPossiblePoints || 0) > maxScore) {
+          maxScore = result.totalPossiblePoints || 0;
         }
       }
     }
@@ -54,11 +77,15 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
     const summary = {
       totalAttempts: testAttempts.length,
       completedAttempts: completedAttempts.length,
+      // The two denominators, published so a reader can tell «неприменимо» (a `null`
+      // metric over zero of these) from «ноль» (a real zero over a positive count).
+      gradedAttempts: gradedCount,
+      judgedAttempts: judgedCount,
       uniqueUsers,
-      avgPercent: completedAttempts.length > 0 ? totalPercent / completedAttempts.length : 0,
+      avgPercent: gradedCount > 0 ? totalPercent / gradedCount : null,
       avgDuration: durationCount > 0 ? totalDuration / durationCount : null,
-      passRate: completedAttempts.length > 0 ? (totalPassed / completedAttempts.length) * 100 : 0,
-      avgScore: completedAttempts.length > 0 ? totalScore / completedAttempts.length : 0,
+      passRate: judgedCount > 0 ? (totalPassed / judgedCount) * 100 : null,
+      avgScore: gradedCount > 0 ? totalScore / gradedCount : null,
       maxScore,
     };
 
@@ -332,6 +359,8 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
       testId: test.id,
       testTitle: test.title,
       testMode: test.mode,
+      // The test's half of the PRD-29 §6.7 rule (see `summary` above).
+      hasPassThreshold: thresholdDeclared,
       summary,
       topicStats,
       questionStats,
