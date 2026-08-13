@@ -169,6 +169,25 @@ describe("<BulkInviteTab /> — предпросмотр", () => {
     expect(screen.getByText("a.sokolova@partner.ru")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Пригласить (5)" })).toBeDisabled();
   });
+
+  it("переименование группы не убирает поле и возвращает кнопку в строй", async () => {
+    inviteResponse = () => jsonRes({ error: "Группа с таким именем уже есть: Аудит ИБ" }, false, 400);
+    const { container } = renderTab();
+
+    fireEvent.change(screen.getByLabelText("Создать группу из списка"), { target: { value: "Аудит ИБ" } });
+    await goToPreview(container);
+    fireEvent.click(screen.getByRole("button", { name: "Пригласить (5)" }));
+    await screen.findByText("Имя занято");
+
+    fireEvent.change(screen.getByLabelText("Создать группу из списка"), {
+      target: { value: "Аудит ИБ, сентябрь" },
+    });
+    // Поле осталось на месте — переименовать можно не уходя с предпросмотра.
+    expect((screen.getByLabelText("Создать группу из списка") as HTMLInputElement).value)
+      .toBe("Аудит ИБ, сентябрь");
+    expect(screen.queryByText("Имя занято")).toBeNull();
+    expect(screen.getByRole("button", { name: "Пригласить (5)" })).not.toBeDisabled();
+  });
 });
 
 describe("<BulkInviteTab /> — отчёт", () => {

@@ -219,6 +219,14 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
   const [linkExpiresAt, setLinkExpiresAt] = useState("");
   const [groupName, setGroupName] = useState("");
   const [groupNameError, setGroupNameError] = useState<string | null>(null);
+  /**
+   * The run has refused this list over the group name at least once, so the
+   * name field belongs on the preview from now on. Kept apart from
+   * {@link groupNameError}, which the first keystroke clears: tying the field's
+   * presence to the error would make it vanish from under the cursor the moment
+   * the operator starts renaming.
+   */
+  const [groupNameConflict, setGroupNameConflict] = useState(false);
   const [rows, setRows] = useState<ParticipantPreviewRow[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [report, setReport] = useState<ParticipantsReport | null>(null);
@@ -275,6 +283,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
     onSuccess: (result) => {
       setReport(result);
       setStep("report");
+      setGroupNameConflict(false);
       // The «Назначено (N)» counter and the list behind it are now stale.
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -286,6 +295,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       setStep("preview");
       if (isGroupNameTaken(e.message)) {
         setGroupNameError("Имя занято");
+        setGroupNameConflict(true);
         return;
       }
       toast({ variant: "destructive", title: t.common.error, description: e.message });
@@ -339,6 +349,7 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
     setRows([]);
     setSelected([]);
     setGroupNameError(null);
+    setGroupNameConflict(false);
   };
 
   // ── Upload ─────────────────────────────────────────────────────────────────
@@ -491,20 +502,19 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       </Cluster>
 
       {groupNameError && (
-        <>
-          <Banner
-            variant="subtle"
-            tone="error"
-            stacked
-            title={`Группа «${groupName.trim()}» уже существует`}
-            description="Участников нельзя дописать в существующую группу: у неё могут быть другие назначения, и люди из этого списка получат чужие тесты. Задайте другое имя."
-            actions={[
-              { label: "Изменить имя", primary: true, onClick: () => groupInputRef.current?.focus() },
-            ]}
-          />
-          {groupField}
-        </>
+        <Banner
+          variant="subtle"
+          tone="error"
+          stacked
+          title={`Группа «${groupName.trim()}» уже существует`}
+          description="Участников нельзя дописать в существующую группу: у неё могут быть другие назначения, и люди из этого списка получат чужие тесты. Задайте другое имя."
+          actions={[
+            { label: "Изменить имя", primary: true, onClick: () => groupInputRef.current?.focus() },
+          ]}
+        />
       )}
+      {/* Переименовать, не возвращаясь на шаг загрузки (§5.1). */}
+      {groupNameConflict && groupField}
 
       <ScrollArea maxH="md">
         <Table
