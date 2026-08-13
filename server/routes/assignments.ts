@@ -493,6 +493,28 @@ router.patch("/assignments/:id/revoke-user/:userId", requirePermission("assignme
 /** Multipart field the participants workbook arrives in. */
 const participantsUpload = workbookUploadSingle("file");
 
+/**
+ * The sentence the operator reads for a refusal the pipeline raised.
+ *
+ * The service speaks English — its messages go to the log and to developers —
+ * and the Russian phrasing is composed here, out of `kind` and the values the
+ * refusal carries. That is why the ceiling is named by `detail.maxRows` and not
+ * spliced out of the message: rewording the service must never change what the
+ * operator sees, nor the number in it.
+ */
+function participantsRefusalMessage(error: ParticipantsInviteError): string {
+  switch (error.kind) {
+    case "empty_file":
+      return "В файле нет ни одной строки с участниками.";
+    case "too_many_rows":
+      return `Слишком много строк: за один раз можно загрузить не больше ${error.detail.maxRows}.`;
+    case "group_name_taken":
+      return `Группа с таким именем уже есть: ${error.detail.groupName}`;
+    case "test_not_found":
+      return "Тест не найден.";
+  }
+}
+
 // ─── POST /api/tests/:id/participants/preview — разбор файла (PRD-28 FR-11) ───
 router.post(
   "/tests/:id/participants/preview",
@@ -514,8 +536,15 @@ router.post(
       // file the operator picked, so it is their error to fix. Anything else
       // (the classification reading the database, say) is ours, and calling it
       // a bad file would send the operator looking in the wrong place.
+      //
+      // The answer carries the Russian sentence for the human and `code` beside
+      // it for the screen: the service message is English by design and must
+      // not reach the operator's toast.
       if (error instanceof ParticipantsInviteError) {
-        return res.status(400).json({ error: error.message });
+        return res.status(400).json({
+          code: error.kind,
+          error: participantsRefusalMessage(error),
+        });
       }
       res.status(500).json({ error: "Failed to preview participants" });
     }
@@ -557,19 +586,15 @@ router.post(
       // never by the text of the message — the service speaks English, and the
       // sentence the operator reads is composed here, naming the group that
       // stands in the way.
+      //
+      // `code` travels beside the sentence so the screen can recognize the
+      // refusal it knows how to resolve without matching Russian prose.
       if (error instanceof ParticipantsInviteError) {
-        if (error.kind === "test_not_found") {
-          return res.status(404).json({ error: "Test not found" });
-        }
-        if (error.kind === "group_name_taken") {
-          // `code` travels beside the sentence so the screen can recognize the
-          // refusal it knows how to resolve without matching Russian prose.
-          return res.status(400).json({
-            code: error.kind,
-            error: `Группа с таким именем уже есть: ${error.detail.groupName}`,
-          });
-        }
-        return res.status(400).json({ error: error.message });
+        const status = error.kind === "test_not_found" ? 404 : 400;
+        return res.status(status).json({
+          code: error.kind,
+          error: participantsRefusalMessage(error),
+        });
       }
       res.status(500).json({ error: "Failed to invite participants" });
     }

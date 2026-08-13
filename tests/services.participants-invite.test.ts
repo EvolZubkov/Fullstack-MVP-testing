@@ -365,6 +365,54 @@ describe("прогон", () => {
     expect(report).toMatchObject({ created: 1, assigned: 1 });
   });
 
+  it("отчёт несёт срок действия выпущенных ссылок", async () => {
+    const storage = makeStorage();
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new")],
+      storage,
+    });
+
+    // Один срок на весь прогон, и он приходит с сервера: книгу со ссылками
+    // собирает клиент, а взять дату ему негде — оператор её не задавал, и
+    // умолчание (+30 дней) проставляет цепочка выпуска токена.
+    expect(report.linksExpireAt).toBe("2026-09-01T00:00:00.000Z");
+    expect(deliverMock).toHaveBeenCalledWith(expect.objectContaining({
+      expiresAt: new Date("2026-09-01T00:00:00.000Z"),
+    }));
+  });
+
+  it("явный срок оператора уходит в отчёт тем же значением", async () => {
+    const storage = makeStorage();
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      linkExpiresAt: new Date("2026-10-05T00:00:00.000Z"),
+      rows: [previewRow(0, "a@x.ru", "new")],
+      storage,
+    });
+
+    expect(report.linksExpireAt).toBe("2026-10-05T00:00:00.000Z");
+  });
+
+  it("без единой выпущенной ссылки срока в отчёте нет", async () => {
+    deliverMock.mockResolvedValue({ issued: false, delivered: true });
+    const storage = makeStorage({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: "u-boss", email: "boss@x.ru", name: "Босс" }),
+    });
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "boss@x.ru", "privileged", { userId: "u-boss" })],
+      storage,
+    });
+
+    // Привилегированному ссылка не выдаётся: срока действия ссылок у прогона
+    // нет, и выдумывать его отчёт не должен — колонка книги останется пустой.
+    expect(report.linksExpireAt).toBeNull();
+  });
+
   it("в групповом режиме прежние токены тоже отзываются", async () => {
     const storage = makeStorage({
       getUserByEmail: vi.fn().mockResolvedValue({ id: "u-done", email: "done@x.ru", name: "Готов" }),

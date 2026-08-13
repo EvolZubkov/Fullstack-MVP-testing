@@ -263,6 +263,21 @@ export interface ParticipantsReport {
   assigned: number;
   /** The group created from the list, when the operator asked for one AND anyone got through. */
   groupId: string | null;
+  /**
+   * When the links this run issued stop working, as an ISO stamp; `null` when
+   * the run issued none (every recipient privileged, or every row failed).
+   *
+   * One field for the whole run, not one per row: every token minted here is
+   * given the SAME expiry, resolved once by `resolveAssignmentTokenExpiry`.
+   *
+   * It travels in the report because the links workbook is assembled on the
+   * CLIENT (раздел 7), and the client cannot work the date out: when the
+   * operator leaves «Ссылка активна до» empty, the actual expiry comes from the
+   * due date or from the default 30 days, both of which are decided here. The
+   * client used to print what the operator had typed, so the column read «—»
+   * on every row of every run where they had typed nothing.
+   */
+  linksExpireAt: string | null;
   results: ParticipantResult[];
   failed: ParticipantFailure[];
 }
@@ -375,7 +390,8 @@ export async function runParticipantsInvite(
   }
 
   const report: ParticipantsReport = {
-    created: 0, reused: 0, assigned: 0, groupId: null, results: [], failed: [],
+    created: 0, reused: 0, assigned: 0, groupId: null, linksExpireAt: null,
+    results: [], failed: [],
   };
 
   let groupId: string | null = null;
@@ -484,6 +500,10 @@ export async function runParticipantsInvite(
       if (created) report.created++;
       else report.reused++;
       report.assigned++;
+      // Set on the first link actually issued, and not before: a run that hands
+      // out no link has no expiry to report, and stamping one would put a date
+      // in the operator's workbook that nothing lives by.
+      if (outcome.issued && !report.linksExpireAt) report.linksExpireAt = expiresAt.toISOString();
       report.results.push({
         email: user.email,
         name: user.name ?? null,

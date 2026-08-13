@@ -82,6 +82,12 @@ export interface ParticipantsReport {
   reused: number;
   assigned: number;
   groupId: string | null;
+  /**
+   * When the links of this run stop working (ISO), as the server resolved it;
+   * `null` when no link was issued. Not the value from the form: with the
+   * expiry field left empty the real one is the due date, or 30 days out.
+   */
+  linksExpireAt: string | null;
   results: ParticipantResult[];
   failed: ParticipantFailure[];
 }
@@ -322,7 +328,10 @@ export function BulkInviteTab({ testId, testTitle, onGoToAssignments }: BulkInvi
       const bytes = await buildLinksWorkbook({
         testTitle,
         results: report.results,
-        expiresAt: linkExpiresAt || dueDate || null,
+        // The run's own answer, never the form: an empty «Ссылка активна до»
+        // still produces links with an expiry (the due date, else 30 days), and
+        // guessing it here left the column empty on every such run.
+        expiresAt: report.linksExpireAt,
       });
       saveBlob(new Blob([bytes], { type: XLSX_MIME }), linksWorkbookFileName(testTitle));
       await fetch(`/api/tests/${testId}/participants/links-exported`, {

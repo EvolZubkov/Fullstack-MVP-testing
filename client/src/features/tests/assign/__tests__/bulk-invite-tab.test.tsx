@@ -9,6 +9,7 @@
  * preview.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import ExcelJS from "exceljs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
@@ -33,6 +34,9 @@ const report = {
   reused: 4,
   assigned: 5,
   groupId: null,
+  // Срок выпущенных ссылок приходит с сервера: оператор его не задавал, а
+  // умолчание (+30 дней) знает только выпуск токена.
+  linksExpireAt: "2026-09-12T00:00:00.000Z",
   results: [
     { email: "a.sokolova@partner.ru", name: "Соколова Анастасия", status: "new", magicLink: "https://host/access/aaa", delivered: true },
     { email: "anna.frolova@partner.ru", name: "Фролова Анна", status: "external", magicLink: "https://host/access/bbb", delivered: false },
@@ -238,6 +242,39 @@ describe("<BulkInviteTab /> — отчёт", () => {
       expect(call).toBeTruthy();
       expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ count: 2 });
     }, { timeout: 20000 });
+  }, 30000);
+
+  it("в книге стоит срок ссылок с сервера, даже когда оператор его не задавал", async () => {
+    URL.revokeObjectURL = vi.fn();
+    HTMLAnchorElement.prototype.click = vi.fn();
+    let saved: Blob | null = null;
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      saved = blob;
+      return "blob:test";
+    }) as unknown as typeof URL.createObjectURL;
+
+    const { container } = renderTab();
+    await goToPreview(container);
+    // Поле «Ссылка активна до» не трогаем: ровно случай приёмки.
+    fireEvent.click(screen.getByRole("button", { name: "Пригласить (5)" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Выгрузить ссылки/ }));
+
+    await waitFor(() => expect(saved).not.toBeNull(), { timeout: 20000 });
+    const wb = new ExcelJS.Workbook();
+    // Node Buffer, not the ArrayBuffer itself: under jsdom the externalised
+    // `jszip` lives in another realm, where `data instanceof ArrayBuffer` is
+    // false for a perfectly good buffer (see `bulk-invite-export.test`).
+    // The cast is about typings only: exceljs merges its own
+    // `interface Buffer extends ArrayBuffer` into the global one, so no real
+    // Node Buffer satisfies the signature it declares for `load`.
+    const bytes = Buffer.from(new Uint8Array(await saved!.arrayBuffer()));
+    await wb.xlsx.load(bytes as unknown as Parameters<typeof wb.xlsx.load>[0]);
+    const ws = wb.worksheets[0];
+    expect(ws.getRow(1).getCell(5).value).toBe("Действует до");
+    // Колонка была пуста («—»), потому что клиент подставлял то, что ввёл
+    // оператор, — а он не вводил ничего.
+    expect(ws.getRow(2).getCell(5).value).toBe("12.09.2026");
+    expect(ws.getRow(3).getCell(5).value).toBe("12.09.2026");
   }, 30000);
 
   it("«К назначениям» возвращает на вкладку назначений", async () => {

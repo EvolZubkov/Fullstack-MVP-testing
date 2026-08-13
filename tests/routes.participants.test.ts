@@ -153,7 +153,7 @@ describe("POST /api/tests/:id/participants/preview", () => {
     expect(res.body[0]).toMatchObject({ email: "a@x.ru", status: "new" });
   });
 
-  it("отклоняет файл сверх потолка", async () => {
+  it("отклоняет файл сверх потолка по-русски и с кодом отказа", async () => {
     config.limits = { ...config.limits, participantsImportMaxRows: 1 };
     const buf = await workbookWith([["email", "name"], ["a@x.ru", "А"], ["b@x.ru", "Б"]]);
 
@@ -161,7 +161,23 @@ describe("POST /api/tests/:id/participants/preview", () => {
       .attach("file", buf, "list.xlsx");
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/Maximum/);
+    // Оператор читает фразу, а не сообщение сервиса: то английское и живёт в
+    // журнале. Число берётся из настройки, а не из текста.
+    expect(res.body.error).toBe("Слишком много строк: за один раз можно загрузить не больше 1.");
+    expect(res.body.error).not.toMatch(/Maximum/);
+    // Экран ветвится по коду, а не по русской прозе.
+    expect(res.body.code).toBe("too_many_rows");
+  });
+
+  it("пустая книга тоже отклоняется по-русски и с кодом", async () => {
+    const buf = await workbookWith([["email", "name"]]);
+
+    const res = await as("mgr1", request(app).post("/api/tests/t1/participants/preview"))
+      .attach("file", buf, "list.xlsx");
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("В файле нет ни одной строки с участниками.");
+    expect(res.body.code).toBe("empty_file");
   });
 
   it("отсутствие файла — ошибка запроса, а не сбой сервера", async () => {
