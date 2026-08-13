@@ -45,6 +45,14 @@ export interface TableProps<T> extends Omit<React.HTMLAttributes<HTMLDivElement>
   selectable?: boolean;
   selected?: string[];
   onSelectChange?: (ids: string[]) => void;
+  /**
+   * Какие строки вообще можно выбрать. Невыбираемая строка получает
+   * `disabled` чек-бокс и не попадает в «выбрать всё»: список, где галочку
+   * можно поставить, но действие её проигнорирует, лжёт о своём состоянии.
+   */
+  rowSelectable?: (row: T, index: number) => boolean;
+  /** Доп. класс на `<tr>` — для смысловой подсветки строки (ошибка, черновик). */
+  rowClassName?: (row: T, index: number) => string | undefined;
   /** Сортировка (controlled). */
   sortKey?: string;
   sortDir?: SortDir;
@@ -80,17 +88,22 @@ const SortIcon: React.FC<{ dir?: SortDir; active?: boolean }> = ({ dir, active }
 export function Table<T>({
   columns, rows, rowKey,
   density = 'normal',
-  selectable, selected = [], onSelectChange,
+  selectable, selected = [], onSelectChange, rowSelectable, rowClassName,
   sortKey, sortDir, onSort,
   onRowClick, emptyMessage, highlightedKey,
   renderExpanded, expandedKeys = [],
   className, style, ...rest
 }: TableProps<T>) {
   const totalCols = columns.length + (selectable ? 1 : 0);
+  // «Выбрать всё» и индикатор в шапке считаются от выбираемых строк, иначе на
+  // списке с невыбираемыми строками галочка «все» никогда не загорается.
+  const selectableIds = rows
+    .filter((row, idx) => (rowSelectable ? rowSelectable(row, idx) : true))
+    .map(rowKey);
   const toggleAll = () => {
     if (!onSelectChange) return;
-    if (selected.length === rows.length) onSelectChange([]);
-    else onSelectChange(rows.map(rowKey));
+    if (selected.length === selectableIds.length) onSelectChange([]);
+    else onSelectChange(selectableIds);
   };
   const toggle = (id: string) => {
     if (!onSelectChange) return;
@@ -115,9 +128,9 @@ export function Table<T>({
                 <input
                   type="checkbox"
                   aria-label="Выбрать все"
-                  checked={selected.length === rows.length && rows.length > 0}
+                  checked={selected.length === selectableIds.length && selectableIds.length > 0}
                   ref={(el) => {
-                    if (el) el.indeterminate = selected.length > 0 && selected.length < rows.length;
+                    if (el) el.indeterminate = selected.length > 0 && selected.length < selectableIds.length;
                   }}
                   onChange={toggleAll}
                 />
@@ -160,18 +173,27 @@ export function Table<T>({
             const isSel = selected.includes(id);
             const isHi = highlightedKey === id;
             const isExpanded = renderExpanded != null && expandedKeys.includes(id);
+            const canSelect = rowSelectable ? rowSelectable(row, idx) : true;
             return (
               <React.Fragment key={id}>
                 <tr
-                  className={cn(isSel && 'is-selected', isHi && 'is-highlighted', onRowClick && 'is-clickable')}
+                  className={cn(
+                    isSel && 'is-selected',
+                    isHi && 'is-highlighted',
+                    onRowClick && 'is-clickable',
+                    rowClassName?.(row, idx),
+                  )}
                   onClick={onRowClick ? () => onRowClick(row, idx) : undefined}
                 >
                   {selectable && (
                     <td className="ou-tbl__sel" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
-                        aria-label={`Выбрать строку ${idx + 1}`}
+                        aria-label={canSelect
+                          ? `Выбрать строку ${idx + 1}`
+                          : `Строка ${idx + 1} недоступна для выбора`}
                         checked={isSel}
+                        disabled={!canSelect}
                         onChange={() => toggle(id)}
                       />
                     </td>
