@@ -66,6 +66,27 @@ function stubLayout() {
   });
 }
 
+/**
+ * То же, но страница отчёта несёт ВЕРХНЕЕ ПОЛЕ: блоки начинаются под ним, а высота корня
+ * его включает — ровно так, как меряет браузер. Поле — единственная разница между
+ * пространством измерений и пространством кусков, и без него её не проверить.
+ */
+function stubPaddedLayout(pad: number) {
+  return vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const own = Number((this as HTMLElement).dataset?.h ?? NaN);
+    if (Number.isFinite(own)) {
+      let top = pad;
+      for (const sibling of [...(this.parentElement?.children ?? [])]) {
+        if (sibling === this) break;
+        top += Number((sibling as HTMLElement).dataset?.h ?? 0);
+      }
+      return { top, bottom: top + own, left: 0, right: 595, width: 595, height: own } as DOMRect;
+    }
+    const total = [...this.children].reduce((sum, c) => sum + Number((c as HTMLElement).dataset?.h ?? 0), 0);
+    return { top: 0, bottom: pad + total + pad, left: 0, right: 595, width: 595, height: pad + total + pad } as DOMRect;
+  });
+}
+
 /** Страница отчёта: макет варианта + контекст, как их отдаёт шаблон. */
 const PAGE = { layout: '<div class="tb-report">Отчёт: {{ course.title }}</div>', context: { course: { title: "Демо" } } };
 
@@ -89,6 +110,28 @@ describe("exportReportPdf", () => {
     const { jsPDF } = fakePdf();
     await exportReportPdf(PAGE, "T", { jsPDF, html2canvas: vi.fn().mockResolvedValue(fakeCanvas()) });
     expect(document.body.textContent).not.toContain("Отчёт");
+  });
+
+  it("на время растеризации чинит измеритель шрифта html2canvas", async () => {
+    // Растеризатор ищет базовую линию шрифта скрытой пробой из строки и картинки 1×1.
+    // Глобальный сброс веб-хоста (`preflight.css`: `img { display: block }`) выбивает
+    // картинку из строки, «подъём» шрифта вырастает на пол-строки, и весь текст снимка
+    // съезжает вниз — за границу окна страницы, отчего нижняя строка листа режется
+    // пополам, а её половина всплывает вверху следующего. Правило живёт ровно столько,
+    // сколько строится отчёт.
+    const { jsPDF } = fakePdf();
+    const seen: string[] = [];
+    const html2canvas = vi.fn().mockImplementation(() => {
+      seen.push([...document.querySelectorAll("style")].map((s) => s.textContent ?? "").join("\n"));
+      return Promise.resolve(fakeCanvas());
+    });
+    await exportReportPdf(PAGE, "T", { jsPDF, html2canvas });
+
+    // Адрес пробы — тот самый однопиксельный GIF, который html2canvas зашил в свой код.
+    expect(seen[0]).toContain("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+    expect(seen[0]).toContain("display:inline!important");
+    const left = [...document.querySelectorAll("style")].map((s) => s.textContent ?? "").join("\n");
+    expect(left).not.toContain("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
   });
 
   it("cleans up even when rasterizing fails, and surfaces the failure", async () => {
@@ -190,6 +233,78 @@ describe("exportReportPdf", () => {
       expect(calls.link).toHaveLength(1);
       const [, , , , opts] = calls.link[0] as [number, number, number, number, { url: string }];
       expect(opts.url).toBe("https://e/a");
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("поле страницы не считается содержимым: лист в полную высоту не делится надвое", async () => {
+    // Раскладка мерит всё от верхнего края корня, то есть ВМЕСТЕ с полем страницы, а
+    // показывает кусок окно, стоящее уже за полем. Пока поле оставалось в координатах,
+    // содержимое ростом ровно в полезную высоту считалось выше листа — и уезжало на второй,
+    // почти пустой; окно же показывало на высоту поля БОЛЬШЕ отмеренного, отчего строка на
+    // краю резалась пополам и повторялась вверху следующего листа.
+    const rect = stubPaddedLayout(20);
+    try {
+      const { calls, jsPDF } = fakePdf();
+      const html2canvas = vi.fn().mockResolvedValue(fakeCanvas(1190, 1684));
+      await exportReportPdf(
+        {
+          layout:
+            '<div class="tb-report" style="padding: 20px 25px">' +
+            // 790 px содержимого при полезной высоте 802 — лист полон, но не переполнен.
+            '<section data-h="790">Толкование</section>' +
+            '<section data-h="100">Итог</section>' +
+            "</div>",
+          context: {},
+        },
+        "T",
+        { jsPDF, html2canvas },
+      );
+      // Ровно два листа: толкование и итог. Третьего — обрезка толкования в восемь
+      // пикселей — быть не должно.
+      expect(html2canvas.mock.calls.map(([el]) => (el as HTMLElement).textContent)).toEqual([
+        "Толкование",
+        "Итог",
+      ]);
+      expect(calls.addPage).toBe(1);
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
+  it("принудительный разрыв в макете делит документ, который делить было бы не за чем", async () => {
+    // Верстальщик шаблона объявляет `data-page-break` там, где документ читается новым
+    // разделом. Обе карточки помещаются на лист, и без метки лист был бы один.
+    const layout = (breakNode: string) =>
+      '<div class="tb-report" style="padding: 20px 25px">' +
+      '<section data-h="200">Темы</section>' +
+      breakNode +
+      '<section data-h="200">Показатели</section>' +
+      "</div>";
+
+    const rect = stubPaddedLayout(20);
+    try {
+      const plain = fakePdf();
+      const once = vi.fn().mockResolvedValue(fakeCanvas());
+      await exportReportPdf({ layout: layout(""), context: {} }, "T", { jsPDF: plain.jsPDF, html2canvas: once });
+      expect(plain.calls.addPage).toBe(0);
+
+      const split = fakePdf();
+      const twice = vi.fn().mockResolvedValue(fakeCanvas());
+      await exportReportPdf(
+        { layout: layout('<div data-page-break data-h="0"></div>'), context: {} },
+        "T",
+        { jsPDF: split.jsPDF, html2canvas: twice },
+      );
+      expect(split.calls.addPage).toBe(1);
+      expect(split.calls.addImage).toHaveLength(2);
+      // Лист остаётся ЛИСТОМ: разрыв меняет только то, где кончается содержимое, а не
+      // размер бумаги — снимок каждой страницы ложится на полный A4.
+      for (const [, , , , w, h] of split.calls.addImage as [string, string, number, number, number, number][]) {
+        expect(w).toBe(210);
+        expect(Math.round(h)).toBe(297);
+      }
     } finally {
       rect.mockRestore();
     }
