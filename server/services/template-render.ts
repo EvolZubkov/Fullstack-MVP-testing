@@ -28,6 +28,7 @@ import { resolveLabels, type LabelDeclaration, type LabelValues, type ResolvedLa
 import type { TemplateBlockOrder, ResultsBlockKey } from "@shared/template/results-order";
 import type { AttemptResult } from "@shared/schema";
 import {
+  reportVariants,
   resolveReportVariant,
   resolveReportValues,
   type ReportKind,
@@ -242,6 +243,58 @@ export function readResultsDeclarations(dir: string): ResultsDeclarations {
     };
   } catch {
     return { labels: [], blockOrder: null };
+  }
+}
+
+/**
+ * PRD-49. Which of the declared labels the REPORT actually prints — the list the
+ * «Заголовки и подписи отчёта» pane is allowed to offer the author.
+ *
+ * Computed from the report layouts rather than declared a second time in the manifest.
+ * A second list would drift from the layouts silently, and the author would go on being
+ * offered a heading the document does not have — which is exactly the defect this closes:
+ * the pane listed all fifteen labels while the document prints six, so switching
+ * «Заголовок итогов» on did nothing (the document has no umbrella heading at all — its
+ * structure is fixed and the indicators heading plays that role through `defaults.report`).
+ *
+ * The layouts are the only place that knows. On the results screen the sub-block headings
+ * travel as DATA (`result.blocks`), so scanning a screen layout would understate it; the
+ * report gets no `blockOrder` on purpose (see `buildReportContext`), so a direct
+ * `labels.<key>` path is the ONLY way a heading can reach the document. That makes the scan
+ * exact here, not merely a good guess.
+ *
+ * @param dir Template directory.
+ * @returns Declared keys the report layouts reference, in MANIFEST order (the pane must
+ *   not reorder its rows), or `null` when the template declares no report variant at all —
+ *   such a template borrows «Стандартный»'s layouts (FR-10), so the caller must borrow its
+ *   list too. An empty ARRAY is a different answer: the variants exist and print nothing.
+ */
+export function readReportLabelKeys(dir: string): string[] | null {
+  try {
+    const raw = readFileSafe(path.join(dir, "manifest.json"));
+    if (!raw) return null;
+    const manifest = JSON.parse(raw) as unknown;
+    const variants = [
+      ...reportVariants(manifest, "report"),
+      ...reportVariants(manifest, "report.adaptive"),
+    ];
+    if (variants.length === 0) return null;
+    const declarations = readResultsDeclarations(dir).labels;
+    if (declarations.length === 0) return [];
+    const layouts = variants
+      .map((v) => (typeof v.layoutFile === "string" ? readFileSafe(path.join(dir, v.layoutFile)) : ""))
+      .filter(Boolean);
+    return declarations
+      .map((d) => d.key)
+      // `\b` after the key, so a longer key starting with this one cannot answer for it.
+      // Mutually prefixed keys are rejected by the manifest validator, so the boundary is
+      // all that is needed. `{{ @root.labels.x }}` matches too — the prefix is not anchored.
+      .filter((key) => {
+        const pattern = new RegExp(`labels\\.${key.replace(/\./g, "\\.")}\\b`);
+        return layouts.some((html) => pattern.test(html));
+      });
+  } catch {
+    return null;
   }
 }
 

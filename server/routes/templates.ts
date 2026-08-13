@@ -20,6 +20,7 @@ import { isSupportedTemplateApiVersion } from "../template-registry";
 import { encodeJsonForScript, injectIntoPreview } from "../scorm/preview-embed";
 import { resolveTemplateDir } from "../services/template-dir";
 import { readTemplateBundle } from "../services/template-package";
+import { readReportLabelKeys } from "../services/template-render";
 
 const router = Router();
 
@@ -204,7 +205,20 @@ router.get("/:id", requirePermission("templates.read"), async (req, res) => {
 
     if (!row) return res.status(404).json({ error: "Template not found" });
 
-    res.json(row);
+    // PRD-49: перечень надписей, которые печатает ДОКУМЕНТ. Считается по макетам вариантов
+    // отчёта, а не берётся из манифеста: манифест объявляет надписи на все экраны сразу, и
+    // панель отчёта предлагала автору править то, чего в документе нет вовсе. Читается на
+    // запрос, а не при регистрации, — иначе перечень отставал бы от файлов шаблона до
+    // перезапуска, как сам манифест.
+    //
+    // `null` значит «шаблон не объявил ни одного варианта отчёта»: документ ему соберут
+    // макетами «Стандартного» (FR-10), поэтому и перечень берётся оттуда же.
+    const dir = await resolveTemplateDir(row.id, { activeOnly: true });
+    const reportLabelKeys =
+      readReportLabelKeys(dir) ??
+      readReportLabelKeys(await resolveTemplateDir("default", { activeOnly: false }));
+
+    res.json({ ...row, ...(reportLabelKeys ? { reportLabelKeys } : {}) });
   } catch (error) {
     logger.error("Get template error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get template" });

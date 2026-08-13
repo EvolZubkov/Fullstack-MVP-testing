@@ -183,6 +183,18 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
     );
   }, [design.template]);
 
+  // PRD-49: строки панели «Заголовки и подписи отчёта». Документ печатает НЕ все
+  // объявленные надписи — структура у него своя и фиксированная, — поэтому перечень
+  // приходит с сервера, посчитанный по макетам отчёта (`reportLabelKeys`). Поля нет
+  // (старый сервер, шаблон не прочитался) — показываются все объявления, как раньше.
+  const reportLabelDeclarations = useMemo(() => {
+    const declared = design.template?.manifest.labels ?? [];
+    const printed = design.template?.reportLabelKeys;
+    if (!printed) return declared;
+    const allowed = new Set(printed);
+    return declared.filter((d) => allowed.has(d.key));
+  }, [design.template]);
+
   const effectiveActive: DesignRailKey = design.templateMissing
     ? "template"
     : visibleRail.some((i) => i.key === active)
@@ -304,10 +316,13 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
               />
               {/* PRD-49 §7: тот же перечень надписей, но слоем ПЕРЕОПРЕДЕЛЕНИЙ. Пустая
                   строка значит «как на экране итогов», поэтому подсказкой поля стоит уже
-                  разрешённый текст итогов, а не умолчание шаблона. */}
-              {(design.template?.manifest.labels?.length ?? 0) > 0 && (
+                  разрешённый текст итогов, а не умолчание шаблона. Перечень — только те
+                  надписи, которые печатает ДОКУМЕНТ (`reportLabelKeys`): у него своя
+                  фиксированная структура, и строка про заголовок, которого в нём нет,
+                  включалась бы вхолостую. */}
+              {reportLabelDeclarations.length > 0 && (
                 <ReportLabelsCard
-                  declarations={design.template?.manifest.labels ?? []}
+                  declarations={reportLabelDeclarations}
                   sharedLabels={design.draft.labels ?? {}}
                   report={model.report ?? {}}
                   onChange={(next) => updateModel((m) => ({ ...m, report: next }))}

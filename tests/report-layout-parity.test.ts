@@ -48,9 +48,12 @@ const REPORT_LAYOUTS: Array<[string, string, string]> = [
  * проверки здесь остаются состав, порядок и гейты, а не то, откуда пришло слово.
  */
 const LABELS = {
+  "results.heading": "Ваш результат",
   "results.topics": "Результаты по темам",
   "results.scales": "По шкалам",
-  "results.indicators": "Ваш результат",
+  // Отдельного умолчания у отчёта больше нет: зонтик «Ваш результат» печатает сам
+  // документ, и подзаголовок показателей говорит теми же словами, что на экране.
+  "results.indicators": "По показателям",
   "results.recommendations": "Рекомендации",
   "recommendations.courses": "Рекомендации по курсам",
   "recommendations.events": "Рекомендуемые мероприятия",
@@ -608,6 +611,36 @@ describe("макет печатает консолидированный бло�
       }
     });
 
+    // PRD-49: зонтик «Ваш результат» — ОДНА надпись на экран итогов и на документ.
+    // Автор включает её один раз, и она обязана появиться в обоих местах; выключает —
+    // исчезнуть в обоих. Раньше документ не печатал её вовсе, и включённый тумблер не
+    // значил в PDF ничего.
+    it(`${templateId}: печатает зонтик итогов и гасит его выключенной надписью`, () => {
+      for (const [layoutName, on, off] of [
+        [
+          "report.html",
+          renderToRoot(reportLayout, buildReportContext(STANDARD)),
+          renderToRoot(
+            reportLayout,
+            buildReportContextRaw(STANDARD, { labels: { ...LABELS, "results.heading": "" } }),
+          ),
+        ],
+        [
+          "report.adaptive.html",
+          renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE)),
+          renderToRoot(
+            adaptiveLayout,
+            buildAdaptiveReportContextRaw(ADAPTIVE, { labels: { ...LABELS, "results.heading": "" } }),
+          ),
+        ],
+      ] as const) {
+        expect(visibleText(on), layoutName).toContain("Ваш результат");
+        expect(visibleText(off), layoutName).not.toContain("Ваш результат");
+        // Разделы документа выключенный заголовок не уносит.
+        expect(visibleText(off), layoutName).toContain("Результаты по темам");
+      }
+    });
+
     // PRD-49 §6: тумблеры слотов карточки — настройка УЧЕНИЧЕСКОГО показа, а не экрана
     // итогов. Документ ученик уносит с собой, и погашенное на экране название вместе с
     // меткой уровня возвращалось в PDF — та самая пара подписей об одном и том же, ради
@@ -712,12 +745,14 @@ describe("макет печатает консолидированный бло�
     });
 
     // Тест без измерений печатает документ ровно как прежде — карточек не прибавилось.
+    // Проверяется по ПОДЗАГОЛОВКАМ блоков: зонтик «Ваш результат» стоит над всем разделом
+    // результата и печатается независимо от того, есть ли у теста измерения.
     it(`${templateId}: без измерений новых карточек в отчёте нет`, () => {
       for (const [layoutName, root] of [
         ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD))],
         ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE))],
       ] as const) {
-        expect(visibleText(root), layoutName).not.toContain("Ваш результат");
+        expect(visibleText(root), layoutName).not.toContain("По показателям");
         expect(visibleText(root), layoutName).not.toContain("По шкалам");
       }
     });

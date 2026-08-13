@@ -144,6 +144,15 @@ export type TemplateRow = {
    * `manifest.assets.preview`.
    */
   previewPath: string | null;
+  /**
+   * PRD-49: which of the declared labels the REPORT prints. NOT part of the manifest —
+   * the route computes it from the report layouts of this template (or of «Стандартный»,
+   * when this one declares no report variant), because only a layout knows what it
+   * prints. The «Отчёт» pane offers exactly these rows; absent (an older server, a
+   * template that could not be read) means «offer them all», the behaviour before this
+   * field existed.
+   */
+  reportLabelKeys?: string[];
 };
 
 export type DesignSettings = {

@@ -13,6 +13,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ResultsLabelsPane } from "../results-labels-pane";
 import { DesignSection } from "../design-section";
+import { defaultRetakePolicy } from "../../test-editor.mappers";
+import type { TestEditorModel } from "../../test-editor.types";
 import type { LabelDeclaration } from "@shared/template/labels";
 
 const DECLS: LabelDeclaration[] = [
@@ -247,7 +249,7 @@ describe("ResultsLabelsPane — порядок подблоков", () => {
 
 const TEST_ID = "te-49";
 
-function templateRow(labels: LabelDeclaration[] | undefined) {
+function templateRow(labels: LabelDeclaration[] | undefined, reportLabelKeys?: string[]) {
   return {
     id: "default",
     name: "Стандартный",
@@ -257,6 +259,10 @@ function templateRow(labels: LabelDeclaration[] | undefined) {
     isBuiltin: true,
     isActive: true,
     previewPath: null,
+    // PRD-49: перечень надписей, которые печатает ДОКУМЕНТ, — считает сервер по макетам
+    // отчёта и кладёт РЯДОМ с манифестом, а не в него: манифест объявляет надписи на все
+    // экраны сразу.
+    ...(reportLabelKeys ? { reportLabelKeys } : {}),
     manifest: {
       id: "default",
       name: "Стандартный",
@@ -268,7 +274,12 @@ function templateRow(labels: LabelDeclaration[] | undefined) {
   };
 }
 
-function renderDesignTab(labels: LabelDeclaration[] | undefined) {
+function renderDesignTab(
+  labels: LabelDeclaration[] | undefined,
+  reportLabelKeys?: string[],
+  /** Модель теста нужна панели «Отчёт»: её карточки правят `model.report`. */
+  model?: TestEditorModel,
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string) =>
@@ -277,7 +288,7 @@ function renderDesignTab(labels: LabelDeclaration[] | undefined) {
           JSON.stringify(
             url === `/api/tests/${TEST_ID}/design`
               ? { templateId: "default", params: {} }
-              : templateRow(labels),
+              : templateRow(labels, reportLabelKeys),
           ),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -287,7 +298,7 @@ function renderDesignTab(labels: LabelDeclaration[] | undefined) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   render(
     <QueryClientProvider client={client}>
-      <DesignSection testId={TEST_ID} />
+      <DesignSection testId={TEST_ID} model={model} updateModel={model ? vi.fn() : undefined} />
     </QueryClientProvider>,
   );
 }
@@ -312,5 +323,81 @@ describe("«Оформление» → «Итоги»", () => {
     renderDesignTab(undefined);
     await waitFor(() => expect(screen.getByTestId("design-template-pane")).toBeInTheDocument());
     expect(screen.queryByTestId("design-rail-results")).toBeNull();
+  });
+});
+
+/**
+ * Приёмка: панель отчёта предлагала все объявленные надписи, а документ печатает свои
+ * шесть. Включённый «Заголовок итогов» не давал в PDF ничего — зонтика у документа нет
+ * вовсе. Перечень строк панели приходит теперь с сервера (`reportLabelKeys`), посчитанный
+ * по макетам вариантов отчёта.
+ */
+describe("«Оформление» → «Отчёт» → надписи документа", () => {
+  /** Карточки отчёта живут в модели теста, поэтому панель без неё не разворачивается. */
+  function reportModel(): TestEditorModel {
+    return {
+      id: TEST_ID,
+      version: 1,
+      mode: "standard",
+      flowMode: "linear_flat",
+      flowSettings: {},
+      folderId: null,
+      basic: {
+        title: "Опросник", description: "", status: "draft",
+        feedback: { format: "plain", text: "" },
+        feedbackLinks: [], feedbackAssets: [], feedbackEvents: [],
+        webhookUrl: "", telemetryEnabled: false,
+      },
+      runtime: {
+        timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false,
+        allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true,
+        skipReviewWhenComplete: false, quickAdvance: false, copyProtection: true,
+        protectionWatermark: false, protectionHideOnBlur: false,
+      },
+      passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
+      sections: [],
+      adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
+      resultVariables: [],
+      scales: [],
+      measurements: [],
+      retakePolicy: defaultRetakePolicy(),
+      scoring: { defaultQuestionPoints: null, questionOverrides: [] },
+    };
+  }
+
+  function renderReportTab(reportLabelKeys?: string[]) {
+    renderDesignTab(DECLS, reportLabelKeys, reportModel());
+  }
+
+  async function openReportPane() {
+    await waitFor(() => expect(screen.getByTestId("design-template-pane")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("design-rail-report"));
+    await waitFor(() => expect(screen.getByTestId("design-report-labels")).toBeInTheDocument());
+  }
+
+  it("показывает только надписи, которые печатает документ", async () => {
+    renderReportTab(["results.scales", "recommendations.courses"]);
+    await openReportPane();
+
+    expect(screen.getByLabelText("Подзаголовок шкал")).toBeInTheDocument();
+    expect(screen.getByLabelText("Подпись группы курсов")).toBeInTheDocument();
+    // Этих в документе нет — и строки быть не должно.
+    expect(screen.queryByLabelText("Заголовок итогов")).toBeNull();
+    expect(screen.queryByLabelText("Подзаголовок сводки баллов")).toBeNull();
+  });
+
+  it("без перечня (старый сервер) показывает все объявления, как раньше", async () => {
+    renderReportTab();
+    await openReportPane();
+
+    expect(screen.getByLabelText("Заголовок итогов")).toBeInTheDocument();
+    expect(screen.getByLabelText("Подзаголовок шкал")).toBeInTheDocument();
+  });
+
+  it("документ, не печатающий ни одной надписи, карточки не получает", async () => {
+    renderReportTab([]);
+    await waitFor(() => expect(screen.getByTestId("design-template-pane")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("design-rail-report"));
+    expect(screen.queryByTestId("design-report-labels")).toBeNull();
   });
 });

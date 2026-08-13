@@ -115,9 +115,10 @@ describe("сборка SCORM-пакета доводит словарь надп
     });
     const td = await readTestData(zip);
     expect(td.designSettings.report.labels["results.topics"]).toBe("Разделы теста");
-    // Ключ, который автор не трогал, остаётся отчётным умолчанием манифеста —
-    // проводка не подменяет собой разрешение (то read в report-labels.test.ts).
-    expect(td.designSettings.report.labels["results.indicators"]).toBe("Ваш результат");
+    // Ключ, который автор не трогал, остаётся умолчанием манифеста — проводка не
+    // подменяет собой разрешение (то read в report-labels.test.ts). У показателей своего
+    // отчётного умолчания больше нет: зонтик «Ваш результат» документ печатает сам.
+    expect(td.designSettings.report.labels["results.indicators"]).toBe("По показателям");
   });
 
   it("переопределение отчёта (report_settings_json.labels) побеждает общую формулировку", async () => {
@@ -133,13 +134,14 @@ describe("сборка SCORM-пакета доводит словарь надп
     const zip = await pack();
     const td = await readTestData(zip);
     const labels = td.designSettings.report.labels as Record<string, string>;
-    // Четыре ключа с ОТЧЁТНЫМ умолчанием (`defaults.report` в manifest.json).
+    // Три ключа с ОТЧЁТНЫМ умолчанием (`defaults.report` в manifest.json).
     expect(labels["results.topics"]).toBe("Результаты по темам");
-    expect(labels["results.indicators"]).toBe("Ваш результат");
     expect(labels["recommendations.courses"]).toBe("Рекомендации по курсам");
     expect(labels["recommendations.events"]).toBe("Рекомендуемые мероприятия");
-    // Ключ без отчётного умолчания — общий default (тот же, что на экране итогов).
+    // Ключи без отчётного умолчания — общий default (тот же, что на экране итогов).
     expect(labels["results.scales"]).toBe("По шкалам");
+    expect(labels["results.indicators"]).toBe("По показателям");
+    expect(labels["results.heading"]).toBe("Ваш результат");
   });
 });
 
@@ -149,10 +151,12 @@ describe("readReportRenderPayload доводит словарь надписей
   it("без слоёв печатает умолчания манифеста, включая отчётные (defaults.report)", () => {
     const payload = readReportRenderPayload(DEFAULT_TEMPLATE_DIR, "report", null);
     expect(payload?.labels?.["results.topics"]).toBe("Результаты по темам");
-    expect(payload?.labels?.["results.indicators"]).toBe("Ваш результат");
     expect(payload?.labels?.["recommendations.courses"]).toBe("Рекомендации по курсам");
     expect(payload?.labels?.["recommendations.events"]).toBe("Рекомендуемые мероприятия");
     expect(payload?.labels?.["results.scales"]).toBe("По шкалам");
+    expect(payload?.labels?.["results.indicators"]).toBe("По показателям");
+    // Зонтик документа — общая формулировка теста, своего умолчания у отчёта нет.
+    expect(payload?.labels?.["results.heading"]).toBe("Ваш результат");
   });
 
   it("общий слой (design_settings_json.labels) переформулирует надпись", () => {
