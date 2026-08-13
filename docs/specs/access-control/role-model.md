@@ -468,7 +468,7 @@ applyRoleChange(actor, target, requestedRoles):
 | `GET /api/auth/me` | сессия | — |
 | `POST /api/auth/change-password` | `auth.self` | — |
 | `POST /api/auth/complete-first-login` | `auth.self` | — |
-| `POST /api/auth/forgot-password`, `reset-password`, `check-email`, `verify-reset-token` | публично | — |
+| `POST /api/auth/forgot-password`, `reset-password`, `verify-reset-token` | публично | — |
 | `GET /access/:token` | токен | — |
 | `GET /api/learner/tests`, `/api/learner/attempts`, `/api/learner/assigned-tests` | `attempts.self.read` | свои |
 | `POST /api/tests/:id/attempts/start`, `start-adaptive` | `attempts.take` | по назначению |

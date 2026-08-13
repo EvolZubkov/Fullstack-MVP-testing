@@ -3,9 +3,10 @@
  * @description Branch-coverage tests for the /api/auth router that complement
  * {@link module:tests/routes.auth}. They target the branches the happy-path
  * suite leaves out: the login rate limiter and catch block, the `me` /
- * check-email / forgot-password / verify-reset-token / reset-password / change-
- * password error and edge branches, the forgot-password dev-link branch, the
- * authenticated logout branch, and the whole complete-first-login route.
+ * forgot-password / verify-reset-token / reset-password / change-password error
+ * and edge branches, the forgot-password dev-link branch, the authenticated
+ * logout branch, and the whole complete-first-login route. It also holds the
+ * guard that the withdrawn `check-email` probe stays withdrawn.
  *
  * The harness mirrors routes.auth.test.ts: storage and the email module are
  * mocked; the real crypto/logger/audit are used (token hashing is deterministic).
@@ -152,16 +153,23 @@ describe("GET /api/auth/me (coverage)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHECK EMAIL — catch branch
+// CHECK EMAIL — the route is gone, no method may bring it back
 // ─────────────────────────────────────────────────────────────────────────────
-describe("POST /api/auth/check-email (coverage)", () => {
+describe("POST /api/auth/check-email (removed)", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it("returns 500 when getUserByEmail throws", async () => {
-    storageMock.getUserByEmail.mockRejectedValue(new Error("boom"));
+  it("is not declared on the auth router under any verb", () => {
+    const declared = ((authRouter as any).stack as any[])
+      .filter((layer) => layer.route)
+      .map((layer) => layer.route.path as string);
+    expect(declared).not.toContain("/check-email");
+  });
+
+  it("answers 404 to a POST and reaches no storage lookup", async () => {
+    storageMock.getUserByEmail.mockResolvedValue(baseUser);
     const res = await request(makeApp()).post("/api/auth/check-email").send({ email: "kate@test.com" });
-    expect(res.status).toBe(500);
-    expect(res.body.error).toBe("Failed to check email");
+    expect(res.status).toBe(404);
+    expect(storageMock.getUserByEmail).not.toHaveBeenCalled();
   });
 });
 
