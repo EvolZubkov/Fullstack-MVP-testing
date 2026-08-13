@@ -9,6 +9,7 @@ import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/up
 import { addAoaSheet, workbookToBuffer } from "../utils/excel";
 import {
   classifyParticipants,
+  ParticipantsInviteError,
   parseParticipantsWorkbook,
   runParticipantsInvite,
   type ParticipantPreviewRow,
@@ -509,9 +510,14 @@ router.post(
     } catch (error) {
       logger.error("Participants preview error: " + (error as Error).message);
       if (respondWorkbookReadError(res, error)) return;
-      // Everything else the parser refuses on — an empty book, too many rows —
-      // is about the file the operator picked, so it is their error to fix.
-      res.status(400).json({ error: (error as Error).message });
+      // What the parser refuses on — an empty book, too many rows — is about the
+      // file the operator picked, so it is their error to fix. Anything else
+      // (the classification reading the database, say) is ours, and calling it
+      // a bad file would send the operator looking in the wrong place.
+      if (error instanceof ParticipantsInviteError) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: "Failed to preview participants" });
     }
   },
 );
@@ -543,16 +549,24 @@ router.post(
       audit.participantsInvite(req.params.id, report.created, report.assigned);
       res.json(report);
     } catch (error) {
-      const message = (error as Error).message;
-      logger.error("Participants invite error: " + message);
-      // The two conditions the run refuses on BEFORE changing anything are the
-      // operator's to resolve, and they resolve differently. A missing test is
+      logger.error("Participants invite error: " + (error as Error).message);
+      // The conditions the run refuses on BEFORE changing anything are the
+      // operator's to resolve, and they resolve differently: a missing test is
       // gone (the scope check saw it a moment ago, so this is the race), while a
-      // taken group name is a rename away — and its text is Russian on purpose,
-      // shown verbatim because it names the group standing in the way.
-      if (message === "Test not found") return res.status(404).json({ error: message });
-      if (message.startsWith("Группа с таким именем уже есть")) {
-        return res.status(400).json({ error: message });
+      // taken group name is a rename away. They are told apart by `kind` and
+      // never by the text of the message — the service speaks English, and the
+      // sentence the operator reads is composed here, naming the group that
+      // stands in the way.
+      if (error instanceof ParticipantsInviteError) {
+        if (error.kind === "test_not_found") {
+          return res.status(404).json({ error: "Test not found" });
+        }
+        if (error.kind === "group_name_taken") {
+          return res.status(400).json({
+            error: `Группа с таким именем уже есть: ${error.detail.groupName}`,
+          });
+        }
+        return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: "Failed to invite participants" });
     }

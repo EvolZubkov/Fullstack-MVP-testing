@@ -15,6 +15,34 @@ import { deliverAssignmentLink, resolveAssignmentTokenExpiry } from "./assignmen
 import type { IStorage } from "../storage";
 import type { User } from "@shared/schema";
 
+/** What the pipeline refused on, told apart without reading the message. */
+export type ParticipantsInviteErrorKind =
+  | "empty_file"
+  | "too_many_rows"
+  | "test_not_found"
+  | "group_name_taken";
+
+/**
+ * A refusal the operator has to resolve before the run can happen.
+ *
+ * The route used to tell these apart by comparing the text of the message,
+ * which made every wording change a silent change of status code. It reads
+ * {@link kind} instead. The messages here are English on purpose — they go to
+ * the log and to developers; the Russian sentence the operator reads is
+ * composed by the route out of `kind` and {@link detail}.
+ */
+export class ParticipantsInviteError extends Error {
+  constructor(
+    readonly kind: ParticipantsInviteErrorKind,
+    message: string,
+    /** Values the route needs to phrase its own message, by kind. */
+    readonly detail: { groupName?: string; maxRows?: number } = {},
+  ) {
+    super(message);
+    this.name = "ParticipantsInviteError";
+  }
+}
+
 /** One participant as read from the uploaded sheet, before anything is known about them. */
 export interface ParticipantRow {
   /** Zero-based position in the uploaded sheet, used to keep preview and run aligned. */
@@ -34,7 +62,12 @@ export interface ParticipantRow {
  * @param buf The uploaded file; csv is not accepted, the reader takes OOXML only.
  * @param opts.maxRows Ceiling from configuration (`limits.participantsImportMaxRows`).
  * @returns Rows in sheet order, repeated addresses collapsed.
- * @throws Error When the book has no sheet, no data rows, or more than `maxRows` of them.
+ * @throws {WorkbookReadError} From `readWorkbookFromBuffer`, when the upload is
+ *   not an OOXML package at all (a csv, a pdf, a renamed file) or is a zip that
+ *   holds no readable workbook. The commonest refusal on a live file, and the
+ *   route answers it through `respondWorkbookReadError`.
+ * @throws {ParticipantsInviteError} `empty_file` when the book has no sheet or
+ *   no data rows, `too_many_rows` when it holds more than `maxRows` of them.
  */
 export async function parseParticipantsWorkbook(
   buf: Buffer,
@@ -42,11 +75,17 @@ export async function parseParticipantsWorkbook(
 ): Promise<ParticipantRow[]> {
   const wb = await readWorkbookFromBuffer(buf);
   const ws = wb.worksheets[0];
-  if (!ws) throw new Error("File is empty");
+  if (!ws) throw new ParticipantsInviteError("empty_file", "File is empty");
 
   const raw = sheetToObjects(ws, { defval: "" });
-  if (raw.length === 0) throw new Error("File is empty");
-  if (raw.length > opts.maxRows) throw new Error(`Maximum ${opts.maxRows} rows per upload`);
+  if (raw.length === 0) throw new ParticipantsInviteError("empty_file", "File is empty");
+  if (raw.length > opts.maxRows) {
+    throw new ParticipantsInviteError(
+      "too_many_rows",
+      `Maximum ${opts.maxRows} rows per upload`,
+      { maxRows: opts.maxRows },
+    );
+  }
 
   const seen = new Set<string>();
   const rows: ParticipantRow[] = [];
@@ -120,6 +159,18 @@ async function collectAssignmentsByUser(
 }
 
 /**
+ * How many rows are looked up at once during classification.
+ *
+ * Every row costs a `getUserByEmail` (which decrypts addresses) and possibly a
+ * `getUserRoles`, and the file may carry `limits.participantsImportMaxRows`
+ * (500) of them. Opening all of those at once would ask the connection pool for
+ * hundreds of parallel round-trips on the FIRST thing the operator clicks,
+ * while the run that follows is strictly sequential — an asymmetry with nothing
+ * behind it. A small window keeps the preview quick without the spike.
+ */
+const CLASSIFY_CHUNK_SIZE = 16;
+
+/**
  * Decide what the run would do with each row, without doing any of it (PRD-28
  * раздел 5.2). The operator sees these statuses in the preview table and ticks
  * the rows to run; the run then reads the same statuses back, so what was shown
@@ -136,7 +187,7 @@ export async function classifyParticipants(
 ): Promise<ParticipantPreviewRow[]> {
   const assignedUserIds = new Set((await collectAssignmentsByUser(ctx.testId, ctx.storage)).keys());
 
-  return Promise.all(rows.map(async (row): Promise<ParticipantPreviewRow> => {
+  const classifyRow = async (row: ParticipantRow): Promise<ParticipantPreviewRow> => {
     if (!row.email || !row.email.includes("@")) {
       return { ...row, status: "error", userId: null, error: "Некорректный адрес" };
     }
@@ -154,7 +205,14 @@ export async function classifyParticipants(
     const privileged = roles.some((r) => r !== "learner");
     if (privileged) return { ...row, status: "privileged", userId: user.id };
     return { ...row, status: user.isExternal ? "external" : "learner", userId: user.id };
-  }));
+  };
+
+  const preview: ParticipantPreviewRow[] = [];
+  for (let from = 0; from < rows.length; from += CLASSIFY_CHUNK_SIZE) {
+    const chunk = rows.slice(from, from + CLASSIFY_CHUNK_SIZE);
+    preview.push(...(await Promise.all(chunk.map(classifyRow))));
+  }
+  return preview;
 }
 
 /** What happened to one recipient during a run. */
@@ -168,18 +226,45 @@ export interface ParticipantResult {
   delivered: boolean;
 }
 
+/**
+ * A row that did not go all the way through, and what it left behind (FR-18).
+ *
+ * A row fails in stages, and the later ones fail on a system that has already
+ * been written to: the account may exist, the person may be in the new group,
+ * the assignment may be made. Reporting the reason alone would leave the
+ * operator unable to tell "nothing happened" from "half of it did", and the
+ * half-done rows are exactly the ones a blind retry would duplicate.
+ */
+export interface ParticipantFailure {
+  email: string;
+  reason: string;
+  /** An account for this address was brought into being before the failure. */
+  accountCreated: boolean;
+  /** The person holds the test after this run, despite the failure. */
+  assignmentCreated: boolean;
+}
+
 /** What the whole run amounted to; the operator sees this as the report screen. */
 export interface ParticipantsReport {
-  /** Accounts this run brought into being. */
+  /**
+   * Accounts this run brought into being, counted for rows that went ALL the
+   * way through. An account created by a row that failed later is not here — it
+   * is in {@link failed}, flagged `accountCreated`.
+   */
   created: number;
-  /** Accounts that were already there and were used as they are. */
+  /** Accounts that were already there and were used as they are (successful rows only). */
   reused: number;
-  /** People who hold the test after this run (per person, not per assignment row). */
+  /**
+   * People who hold the test after this run and were told about it (per person,
+   * not per assignment row). A row that got an assignment but fell over before
+   * the letter is in {@link failed}, flagged `assignmentCreated`, so no
+   * assignment this run made is missing from the report altogether.
+   */
   assigned: number;
-  /** The group created from the list, when the operator asked for one. */
+  /** The group created from the list, when the operator asked for one AND anyone got through. */
   groupId: string | null;
   results: ParticipantResult[];
-  failed: { email: string; reason: string }[];
+  failed: ParticipantFailure[];
 }
 
 /** Input to {@link runParticipantsInvite}. */
@@ -196,6 +281,12 @@ export interface RunParticipantsInviteOptions {
   storage: IStorage;
 }
 
+/** Traces a row leaves in the database, gathered as the row goes through. */
+interface RowResidue {
+  accountCreated: boolean;
+  assignmentCreated: boolean;
+}
+
 /**
  * Find the account behind a row, or bring it into being.
  *
@@ -208,10 +299,14 @@ export interface RunParticipantsInviteOptions {
  * as it is — in particular the external flag is NEVER written onto an ordinary
  * account, because there is no way back from it — and the name from the file
  * only fills a gap, never overwrites what the person already has.
+ *
+ * @param ctx.residue Marked the moment the account exists, BEFORE the role set
+ *   is written: a failure between the two still leaves an account behind, and
+ *   the report has to say so (FR-18).
  */
 async function resolveParticipant(
   row: ParticipantPreviewRow,
-  ctx: { actorId: string; storage: IStorage },
+  ctx: { actorId: string; storage: IStorage; residue: RowResidue },
 ): Promise<{ user: User; created: boolean }> {
   const existing = await ctx.storage.getUserByEmail(row.email);
   if (existing) {
@@ -232,6 +327,7 @@ async function resolveParticipant(
     mustChangePassword: false,
     createdBy: ctx.actorId,
   });
+  ctx.residue.accountCreated = true;
   await ctx.storage.setUserRoles(user.id, ["learner"], ctx.actorId);
   return { user, created: true };
 }
@@ -243,12 +339,13 @@ async function resolveParticipant(
  * Not a password path at all — no token of that kind is minted anywhere in here
  * (FR-15). Entry is the assignment link and nothing else.
  *
- * A row that fails takes only itself down: the reason lands in `failed` and the
- * run carries on, because a half-processed list the operator cannot re-run
- * safely is worse than a complete one with holes marked in it.
+ * A row that fails takes only itself down: the reason lands in `failed`, with
+ * what it left behind ({@link ParticipantFailure}), and the run carries on —
+ * because a half-processed list the operator cannot re-run safely is worse than
+ * a complete one with holes marked in it.
  *
- * @throws Error Before touching anything, when the test is gone or the group
- *   name is taken — the two conditions the operator must resolve first.
+ * @throws {ParticipantsInviteError} Before touching anything: `test_not_found`
+ *   or `group_name_taken` — the two conditions the operator must resolve first.
  */
 export async function runParticipantsInvite(
   opts: RunParticipantsInviteOptions,
@@ -256,42 +353,72 @@ export async function runParticipantsInvite(
   const { testId, rows, actorId, dueDate, linkExpiresAt, groupName, storage } = opts;
 
   const test = await storage.getTest(testId);
-  if (!test) throw new Error("Test not found");
+  if (!test) throw new ParticipantsInviteError("test_not_found", "Test not found");
 
   const expiresAt = resolveAssignmentTokenExpiry(linkExpiresAt, dueDate);
   const assignmentByUser = await collectAssignmentsByUser(testId, storage);
 
-  // ── 1. The group, if asked for, before anything else changes ────────────────
+  // ── 1. The group name, checked before anything else changes ─────────────────
   // A taken name is refused here and not half-way through: adding people to an
   // existing group would give them its other assignments too (раздел 5.1), and
   // the operator must be able to rename and retry against an untouched system.
-  let groupId: string | null = null;
   const wantedGroupName = groupName?.trim() ?? "";
   if (wantedGroupName) {
     const groups = await storage.getGroups();
     if (groups.some((g) => g.name.trim().toLowerCase() === wantedGroupName.toLowerCase())) {
-      throw new Error(`Группа с таким именем уже есть: ${wantedGroupName}`);
+      throw new ParticipantsInviteError(
+        "group_name_taken",
+        `Group name already taken: ${wantedGroupName}`,
+        { groupName: wantedGroupName },
+      );
     }
-    const group = await storage.createGroup({ name: wantedGroupName, createdBy: actorId });
-    groupId = group.id;
   }
 
   const report: ParticipantsReport = {
-    created: 0, reused: 0, assigned: 0, groupId, results: [], failed: [],
+    created: 0, reused: 0, assigned: 0, groupId: null, results: [], failed: [],
+  };
+
+  let groupId: string | null = null;
+  /**
+   * Create the group on the FIRST participant that gets through, and not before.
+   *
+   * Creating it up front took the name even when every row then failed, and the
+   * operator's retry with the same name was refused because of their own failed
+   * attempt — the opposite of "rename and retry against an untouched system".
+   * Deferring beats deleting an empty group afterwards: a cleanup is a second
+   * thing that can fail (and would have to fail silently, mid-report), while a
+   * group that is never created cannot be left behind.
+   */
+  const ensureGroup = async (): Promise<string | null> => {
+    if (!wantedGroupName || groupId) return groupId;
+    const group = await storage.createGroup({ name: wantedGroupName, createdBy: actorId });
+    groupId = group.id;
+    report.groupId = groupId;
+    return groupId;
   };
 
   // ── 2. Accounts, and membership of the new group ────────────────────────────
-  const participants: { row: ParticipantPreviewRow; user: User }[] = [];
+  const participants: {
+    row: ParticipantPreviewRow;
+    user: User;
+    created: boolean;
+    residue: RowResidue;
+  }[] = [];
   for (const row of rows) {
+    // A row the preview marked as an error is not acted on, whatever came back
+    // from the client: the operator could not tick it, and the reason it failed
+    // (no address, a deactivated account) has not gone away since.
     if (row.status === "error") continue;
+    const residue: RowResidue = { accountCreated: false, assignmentCreated: false };
     try {
-      const { user, created } = await resolveParticipant(row, { actorId, storage });
-      if (created) report.created++;
-      else report.reused++;
-      if (groupId) await storage.addUserToGroup(user.id, groupId);
-      participants.push({ row, user });
+      const { user, created } = await resolveParticipant(row, { actorId, storage, residue });
+      const listGroupId = await ensureGroup();
+      if (listGroupId) await storage.addUserToGroup(user.id, listGroupId);
+      participants.push({ row, user, created, residue });
     } catch (e) {
-      report.failed.push({ email: row.email, reason: (e as Error).message });
+      // Counted nowhere yet: `created`/`reused` are tallied once the row is
+      // through, so what this row did leave behind is carried by the flags.
+      report.failed.push({ email: row.email, reason: (e as Error).message, ...residue });
     }
   }
 
@@ -302,10 +429,13 @@ export async function runParticipantsInvite(
       testId, userId: null, groupId, dueDate, linkExpiresAt, assignedBy: actorId,
     });
     groupAssignmentId = assignment.id;
+    // From this moment everyone in the list holds the test; a row that falls
+    // over later still leaves that behind, and the report has to say so.
+    for (const participant of participants) participant.residue.assignmentCreated = true;
   }
 
   // ── 4-5. Assignment per person, then the link and the letter ────────────────
-  for (const { row, user } of participants) {
+  for (const { row, user, created, residue } of participants) {
     try {
       const heldAssignmentIds = assignmentByUser.get(user.id) ?? [];
       // Every link the person already holds for this test goes, not only the
@@ -332,6 +462,7 @@ export async function runParticipantsInvite(
           testId, userId: user.id, groupId: null, dueDate, linkExpiresAt, assignedBy: actorId,
         });
         assignmentId = assignment.id;
+        residue.assignmentCreated = true;
       }
 
       // Whether the recipient may hold a passwordless link at all is decided
@@ -348,6 +479,10 @@ export async function runParticipantsInvite(
         revokeExisting: true,
       });
 
+      // The row is through: only now is the account counted as created or
+      // reused, so every count in the summary stands for a row that finished.
+      if (created) report.created++;
+      else report.reused++;
       report.assigned++;
       report.results.push({
         email: user.email,
@@ -359,7 +494,7 @@ export async function runParticipantsInvite(
         delivered: outcome.delivered,
       });
     } catch (e) {
-      report.failed.push({ email: row.email, reason: (e as Error).message });
+      report.failed.push({ email: row.email, reason: (e as Error).message, ...residue });
     }
   }
 

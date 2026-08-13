@@ -163,7 +163,10 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
       const conflicting = [
         password ? "password" : null,
         Array.isArray(roles) && roles.length > 0 ? "roles" : null,
-        role ? "role" : null,
+        // `role: "learner"` asks for exactly what an external participant gets,
+        // so it contradicts nothing and must not be refused; only a WIDER role
+        // is a conflicting demand.
+        role && role !== "learner" ? "role" : null,
         sendInvite ? "sendInvite" : null,
       ].filter(Boolean);
       if (conflicting.length > 0) {
@@ -214,7 +217,7 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
       // so there is nothing for the flag to point at; raising it would state a
       // pending change to something that does not exist. `promoteExternalUser`
       // raises it at the moment the account gains a password of its own.
-      mustChangePassword: external ? false : true,
+      mustChangePassword: !external,
       createdBy: req.session.userId,
     });
 

@@ -129,6 +129,19 @@ describe("заведение внешнего участника и перево
     }
   });
 
+  it("role: learner конфликтом не считается", async () => {
+    storageMock.getUserByEmail.mockResolvedValue(null);
+    storageMock.createUser.mockResolvedValue({ id: "u9", email: "e@x.ru", isExternal: true });
+
+    const res = await request(app).post("/api/users")
+      .send({ email: "e@x.ru", isExternal: true, role: "learner" });
+
+    // The caller asked for exactly what an external participant gets, so there
+    // is nothing to refuse: only a WIDER role contradicts the flag.
+    expect(res.status).toBe(201);
+    expect(storageMock.setUserRoles).toHaveBeenCalledWith("u9", ["learner"], expect.anything());
+  });
+
   it("сбой письма после перевода не отменяет снятия признака", async () => {
     storageMock.getUser.mockImplementation(getUserById(externalUser));
     storageMock.createPasswordResetToken.mockRejectedValue(new Error("token store down"));

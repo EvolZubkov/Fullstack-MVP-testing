@@ -24,6 +24,7 @@ vi.mock("../server/services/assignment-link", () => ({
 import { addAoaSheet, workbookToBuffer } from "../server/utils/excel";
 import {
   classifyParticipants,
+  ParticipantsInviteError,
   parseParticipantsWorkbook,
   runParticipantsInvite,
   type ParticipantPreviewRow,
@@ -114,6 +115,18 @@ describe("разбор книги участников", () => {
     const buf = await workbookWith([["email", "name"], ["a@x.ru", "А"], ["b@x.ru", "Б"]]);
 
     await expect(parseParticipantsWorkbook(buf, { maxRows: 1 })).rejects.toThrow(/Maximum 1 rows/);
+  });
+
+  it("отказы разбора несут вид, а не только текст", async () => {
+    // The route picks a status code by `kind`; a reworded message must not be
+    // able to change what the operator's browser gets back.
+    const empty = await workbookWith([["email", "name"]]);
+    await expect(parseParticipantsWorkbook(empty, { maxRows: 500 }))
+      .rejects.toMatchObject({ name: "ParticipantsInviteError", kind: "empty_file" });
+
+    const tooMany = await workbookWith([["email", "name"], ["a@x.ru", "А"], ["b@x.ru", "Б"]]);
+    await expect(parseParticipantsWorkbook(tooMany, { maxRows: 1 }))
+      .rejects.toMatchObject({ kind: "too_many_rows", detail: { maxRows: 1 } });
   });
 });
 
@@ -225,17 +238,33 @@ describe("прогон", () => {
       getGroups: vi.fn().mockResolvedValue([{ id: "g1", name: "Набор апреля" }]),
     });
 
+    // The service speaks English and carries the name in `detail`; the Russian
+    // sentence the operator reads is composed by the route.
     await expect(runParticipantsInvite({
       ...runDefaults,
       rows: [previewRow(0, "a@x.ru", "new")],
       groupName: "набор апреля",
       storage,
-    })).rejects.toThrow(/группа с таким именем/i);
+    })).rejects.toMatchObject({
+      kind: "group_name_taken",
+      detail: { groupName: "набор апреля" },
+    });
 
     // Refused BEFORE anything was written: the operator renames and retries on a
     // system that never saw the first attempt.
     expect(storage.createUser).not.toHaveBeenCalled();
+    expect(storage.createGroup).not.toHaveBeenCalled();
     expect(storage.createTestAssignment).not.toHaveBeenCalled();
+  });
+
+  it("исчезнувший тест — типизированный отказ", async () => {
+    const storage = makeStorage({ getTest: vi.fn().mockResolvedValue(undefined) });
+
+    await expect(runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new")],
+      storage,
+    })).rejects.toBeInstanceOf(ParticipantsInviteError);
   });
 
   it("сбой на строке не прерывает прогон", async () => {
@@ -251,8 +280,109 @@ describe("прогон", () => {
     });
 
     expect(report.created).toBe(1);
-    expect(report.failed).toEqual([{ email: "a@x.ru", reason: "boom" }]);
+    // Nothing was written for the failed row, and the report says exactly that.
+    expect(report.failed).toEqual([
+      { email: "a@x.ru", reason: "boom", accountCreated: false, assignmentCreated: false },
+    ]);
     expect(report.results).toHaveLength(1);
+  });
+
+  it("сбой после создания учётки виден в отчёте как осадок", async () => {
+    const storage = makeStorage();
+    // The account is already in the database when the role set fails to write.
+    storage.setUserRoles.mockRejectedValueOnce(new Error("roles down"));
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new")],
+      storage,
+    });
+
+    expect(storage.createUser).toHaveBeenCalledTimes(1);
+    // Without the flags the operator could not tell this from "nothing happened".
+    expect(report.failed).toEqual([
+      { email: "a@x.ru", reason: "roles down", accountCreated: true, assignmentCreated: false },
+    ]);
+    // Counted nowhere: the summary tallies rows that went all the way through.
+    expect(report).toMatchObject({ created: 0, reused: 0, assigned: 0 });
+  });
+
+  it("при полном провале списка пустая группа не остаётся", async () => {
+    const storage = makeStorage();
+    storage.createUser.mockRejectedValue(new Error("boom"));
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new")],
+      groupName: "Поток 12",
+      storage,
+    });
+
+    // The name stays free, so the operator's retry with the same one is not
+    // refused because of their own failed attempt.
+    expect(storage.createGroup).not.toHaveBeenCalled();
+    expect(report.groupId).toBeNull();
+    expect(report.failed).toHaveLength(1);
+  });
+
+  it("строки со статусом error пропускаются, а не падают", async () => {
+    const storage = makeStorage();
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "нет", "error"), previewRow(1, "b@x.ru", "new")],
+      storage,
+    });
+
+    // The row was not selectable in the preview and nothing is attempted for it;
+    // it is not a failure of this run either — its reason is already on screen.
+    expect(storage.createUser).toHaveBeenCalledTimes(1);
+    expect(report.results.map((r) => r.email)).toEqual(["b@x.ru"]);
+    expect(report.failed).toEqual([]);
+    expect(report).toMatchObject({ created: 1, assigned: 1 });
+  });
+
+  it("недоставленное письмо не отменяет выпуск ссылки", async () => {
+    deliverMock.mockResolvedValue({
+      issued: true,
+      magicLink: "https://host/access/abc",
+      delivered: false,
+    });
+    const storage = makeStorage();
+
+    const report = await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "a@x.ru", "new")],
+      storage,
+    });
+
+    // Раздел 6: the link stays valid and goes into the operator's export; the
+    // row is a success with `delivered: false`, not a failure.
+    expect(report.results[0]).toMatchObject({
+      delivered: false, magicLink: "https://host/access/abc",
+    });
+    expect(report.failed).toEqual([]);
+    expect(report).toMatchObject({ created: 1, assigned: 1 });
+  });
+
+  it("в групповом режиме прежние токены тоже отзываются", async () => {
+    const storage = makeStorage({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: "u-done", email: "done@x.ru", name: "Готов" }),
+      getTestAssignments: vi.fn().mockResolvedValue([{ id: "as-old", userId: "u-done", groupId: null }]),
+    });
+
+    await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "done@x.ru", "assigned", { userId: "u-done" })],
+      groupName: "Поток 12",
+      storage,
+    });
+
+    // The person is delivered against the NEW group assignment, so the link of
+    // the assignment they already had would otherwise stay live (FR-16).
+    expect(storage.revokeAssignmentAccessTokensByAssignmentAndUser)
+      .toHaveBeenCalledWith("as-old", "u-done");
+    expect(deliverMock).toHaveBeenCalledWith(expect.objectContaining({ assignmentId: "as-1" }));
   });
 
   it("привилегированному ссылка не выдаётся, но назначение делается", async () => {
