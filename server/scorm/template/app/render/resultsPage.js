@@ -319,13 +319,11 @@ function finishAndClose() {
  * Finish SCORM for adaptive mode
  */
 function finishScormAdaptive(results, passedForLms, resultComputation, scaleComputation) {
-  var objectives = results.topicResults.map(function (tr) {
-    return {
-      id: 'topic_' + tr.topicId,
-      score: Math.round(tr.percent),
-      status: tr.passed ? 'passed' : 'failed'
-    };
-  });
+  // Тот же сборщик, что и в обычном режиме. У адаптивного пути `percent` — это доля
+  // внутри ПОДТВЕРЖДЁННОГО уровня, а баллы (1 вопрос = 1 балл) считаются по всей
+  // лестнице, поэтому `scaled` намеренно берётся от баллов: внутри одной записи
+  // raw/max/scaled обязаны быть согласованы.
+  var objectives = results.topicResults.map(buildTopicObjective);
 
   var percentScore = Math.round(results.percent);
 
@@ -357,14 +355,9 @@ function finishScormAdaptive(results, passedForLms, resultComputation, scaleComp
           var answer = state.answers[qId];
           var isCorrect = checkAnswer(question, answer) === 1;
 
-          interactions.push({
-            id: 'q_' + qId,
-            type: 'other',
-            result: interactionResultFor(question, isCorrect),
-            response: answer !== undefined && answer !== null ? JSON.stringify(answer) : '',
-            correct: '',
-            description: authorTextPlain(question.prompt)
-          });
+          // Тот же сборщик, что и в обычном режиме: адаптивный путь раньше нёс свою
+          // версию и репортил ЛЮБОЙ вопрос как `other` с ответом в виде JSON.
+          interactions.push(buildQuestionInteraction(question, answer, isCorrect));
         });
       });
     });
@@ -722,6 +715,74 @@ function collectFailedTopicCourses(results) {
   return courses;
 }
 
+/** SCORM numbers options from 1; our answers are 0-based indices. */
+function to1(x) {
+  return typeof x === 'number' ? x + 1 : x;
+}
+
+/**
+ * The SCORM 2004 interaction type for a question. Branch on the TYPE TRAIT, never on
+ * a literal, so a new question type does not silently fall through to `other`.
+ */
+function mapScormType(q) {
+  if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
+  if (q.type === 'multiple') return 'choice';
+  if (q.type === 'matching') return 'matching';
+  if (q.type === 'ranking') return 'sequencing';
+  return 'other';
+}
+
+/**
+ * The learner answer as the string `cmi.interactions.n.learner_response` carries.
+ *
+ * An unanswered question yields '' — the same value the caller passes for a missing
+ * reference answer, which is why the null guard comes first.
+ */
+function formatResponse(q, ans) {
+  if (ans == null) return '';
+
+  if (TBQType.isSingleIndexChoice(q.type)) return String(to1(ans));
+  if (q.type === 'multiple') return (Array.isArray(ans) ? ans : []).map(to1).join(',');
+  if (q.type === 'ranking') return (Array.isArray(ans) ? ans : []).map(to1).join(',');
+  if (q.type === 'matching') {
+    return Object.keys(ans)
+      .map(Number)
+      .sort(function (a, b) { return a - b; })
+      .map(function (k) { return to1(k) + '-' + to1(ans[k]); })
+      .join(',');
+  }
+  // PRD-44 FR-54: ответ ВЕКТОРНЫЙ — «индекс[.]балл» через запятую. Тип `numeric` не
+  // подходит (ответ не одно число), `matching` семантически ложен (пар нет), поэтому
+  // взаимодействие пишется как `other`, а строка остаётся разбираемой отчётом LMS.
+  // Нули НЕ выбрасываются: «поставил ноль» и «не дошёл» — разные факты для аналитики.
+  if (TBQType.distributesBudget(q.type)) {
+    return Object.keys(ans)
+      .map(Number)
+      .sort(function (a, b) { return a - b; })
+      .map(function (i) { return i + '[.]' + ans[i]; })
+      .join(',');
+  }
+  return '';
+}
+
+/**
+ * The reference answer in the same shape a learner answer arrives in, so one
+ * formatter serves both. `null` for a measurement question — it has no reference at
+ * all, and the formatter turns that into an empty `correct_responses` pattern.
+ */
+function getCorrectAnswerFor(q) {
+  var c = q.correct || {};
+  if (TBQType.isSingleIndexChoice(q.type)) return c.correctIndex;
+  if (q.type === 'multiple') return c.correctIndices || [];
+  if (q.type === 'ranking') return c.correctOrder || [];
+  if (q.type === 'matching') {
+    var m = {};
+    (c.pairs || []).forEach(function (p) { m[p.left] = p.right; });
+    return m;
+  }
+  return null;
+}
+
 /**
  * The SCORM 2004 outcome of ONE question interaction.
  *
@@ -731,193 +792,95 @@ function collectFailedTopicCourses(results) {
  * to get wrong. SCORM 2004 has a separate outcome for exactly this — `neutral`
  * (PRD-26 FR-08, PRD-44 FR-09). The rule reads the TYPE trait, so it covers both
  * measurement types at once and any future one.
- *
- * Top-level, and called from BOTH finish paths on purpose: the rule used to live in
- * the body of `finishScorm`, which nothing calls any more — the package ships
- * `finishScormLmsOnly`, and it kept reporting `incorrect`.
  */
 function interactionResultFor(question, fullCorrect) {
   var measurementOnly = typeof TBQType !== 'undefined' && TBQType.isMeasurementOnly(question);
   return measurementOnly ? 'neutral' : (fullCorrect ? 'correct' : 'incorrect');
 }
 
-function finishScorm(results, passedForLms, resultComputation, scaleComputation) {
-  var objectives = results.topicResults.map(function (tr) {
-    return {
-      id: 'topic_' + tr.topicId,
-      score: Math.round(tr.percent),
-      status: tr.passed === null ? 'unknown' : (tr.passed ? 'passed' : 'failed')
-    };
-  });
+/**
+ * ONE question interaction for the LMS report, assembled in ONE place.
+ *
+ * Each finish path used to build this object inline from its own private copies of
+ * the helpers above, and the copies drifted twice: the `neutral` outcome landed in a
+ * dead path (229f3d12) and, right after it, so did the allocation response format —
+ * WebTutor showed every ЧИЛ answer as an empty «Полученный ответ» while the unit test,
+ * which extracted the FIRST copy by name, stayed green. A single assembler removes the
+ * place where that can happen: a path can choose WHICH answer it reports (graded vs
+ * raw), never how it is reported.
+ *
+ * @param {object} question baked question — needs `id`, `type`, `prompt`, `correct`
+ * @param {*} answer the learner answer to report, in its per-type shape
+ * @param {boolean} fullCorrect whether that answer scored full marks
+ * @returns {object} interaction record for `SCORM.finish`
+ */
+/**
+ * ONE topic result as a SCORM 2004 objective.
+ *
+ * The score travels in POINTS with its own scale — `raw` alone is unreadable in an LMS
+ * report («18» out of what?), and `scaled` is what most report builders aggregate on.
+ * The topic NAME travels too: `topic_<uuid>` identifies nothing to the person reading
+ * the report.
+ *
+ * Three score states, and the difference between the last two matters:
+ *  - graded topic        -> points out of points;
+ *  - measurement topic   -> NO score block at all. Zero out of zero is «nothing to
+ *    grade», and reporting it as 0 reads as «scored nothing», which is a different
+ *    claim about the learner (PRD-26 FR-08);
+ *  - legacy attempt      -> a record saved by an older package carries only `percent`
+ *    (no points at all), and the best-attempt path replays exactly such records — so
+ *    it degrades to the percent scale rather than losing the result.
+ *
+ * @param {object} tr topic result — `topicId`, `topicName`, points and `passed`
+ * @returns {object} objective record for `SCORM.finish`
+ */
+function buildTopicObjective(tr) {
+  var hasPoints = typeof tr.possiblePoints === 'number';
+  var possible = hasPoints ? tr.possiblePoints : 0;
+  var earned = typeof tr.earnedPoints === 'number' ? tr.earnedPoints : 0;
+  var score = null;
 
-  var interactions = [];
-
-  function to1(x) { return typeof x === 'number' ? x + 1 : x; }
-
-  function mapScormType(q) {
-    if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
-    if (q.type === 'multiple') return 'choice';
-    if (q.type === 'matching') return 'matching';
-    if (q.type === 'ranking') return 'sequencing';
-    return 'other';
+  if (hasPoints) {
+    if (possible > 0) score = { raw: earned, min: 0, max: possible, scaled: ratio(earned / possible) };
+  } else if (typeof tr.percent === 'number') {
+    score = { raw: Math.round(tr.percent), min: 0, max: 100, scaled: ratio(tr.percent / 100) };
   }
 
-  function formatResponse(q, ans) {
-    if (ans == null) return '';
-
-    if (TBQType.isSingleIndexChoice(q.type)) return String(to1(ans));
-    if (q.type === 'multiple') return ans.map(to1).join(',');
-    if (q.type === 'ranking') return ans.map(to1).join(',');
-    if (q.type === 'matching') {
-      return Object.keys(ans)
-        .sort((a, b) => a - b)
-        .map(k => to1(+k) + '-' + to1(ans[k]))
-        .join(',');
-    }
-    // PRD-44 FR-54: ответ ВЕКТОРНЫЙ — «индекс[.]балл» через запятую. Тип `numeric` не
-    // подходит (ответ не одно число), `matching` семантически ложен (пар нет), поэтому
-    // взаимодействие пишется как `other`, а строка остаётся разбираемой отчётом LMS.
-    if (TBQType.distributesBudget(q.type)) {
-      return Object.keys(ans)
-        .map(Number)
-        .sort(function (a, b) { return a - b; })
-        .map(function (i) { return i + '[.]' + ans[i]; })
-        .join(',');
-    }
-    return '';
-  }
-
-  function getCorrectAnswerFor(q) {
-    var c = q.correct || {};
-    if (TBQType.isSingleIndexChoice(q.type)) return c.correctIndex;
-    if (q.type === 'multiple') return c.correctIndices || [];
-    if (q.type === 'ranking') return c.correctOrder || [];
-    if (q.type === 'matching') {
-      var m = {};
-      (c.pairs || []).forEach(function (p) { m[p.left] = p.right; });
-      return m;
-    }
-    return null;
-  }
-
-  state.flatQuestions.forEach(function (fq) {
-    var q = fq.question;
-    // PRD-19 Block E (FR-14): the LMS interaction must reflect the GRADED answer
-    // (status-aware), so a surviving draft / skipped / unanswered question reports
-    // 'incorrect' with an empty response — consistent with the score (calculateResults
-    // uses the same gradedAnswerFor). Strict mode is unchanged (gradedAnswerFor → raw).
-    var ans = gradedAnswerFor(q);
-    var fullCorrect = checkAnswer(q, ans) === 1;
-
-    interactions.push({
-      id: 'q_' + q.id,
-      type: mapScormType(q),
-      result: interactionResultFor(q, fullCorrect),
-      response: formatResponse(q, ans),
-      correct: formatResponse(q, getCorrectAnswerFor(q)),
-      description: authorTextPlain(q.prompt)
-    });
-  });
-
-  // --- Рекомендации для проваленных тем: передаём object_id курса ---
-  results.topicResults.forEach(function (tr) {
-    if (tr.passed === false && tr.recommendedCourses && tr.recommendedCourses.length > 0) {
-      tr.recommendedCourses.forEach(function (course, i) {
-        var objectId = '';
-        try {
-          var match = course.url.match(/object_id=([^&]+)/);
-          if (match) objectId = match[1];
-        } catch (e) {}
-        if (!objectId) return;
-
-        interactions.push({
-          id: 'topic_' + tr.topicId + '_course_' + i,
-          type: 'other',
-          result: 'neutral',
-          response: objectId,
-          correct: '',
-          description: tr.topicName + ': рекомендованный курс'
-        });
-      });
-    }
-  });
-
-  var percentScore = Math.round(results.percent);
-
-  var failedTopicCourses = collectFailedTopicCourses(results);
-
-  Telemetry.finish({
-    percent: results.percent,
-    passed: results.passed,
-    earnedPoints: results.earnedPoints,
-    possiblePoints: results.possiblePoints,
-    totalQuestions: results.totalQuestions,
-    correct: results.correct,
-    achievedLevels: results.achievedLevels || null,
-    failedTopicCourses: failedTopicCourses
-  });
-
-  // PRD-5 (B5): append scale_{key}[_level] pseudo-interactions for published scales.
-  pushAll(interactions, buildScaleInteractions(scaleComputation));
-  // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
-  pushAll(interactions, buildResultVarInteractions(resultComputation));
-
-  SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
+  return {
+    id: 'topic_' + tr.topicId,
+    description: tr.topicName || '',
+    score: score,
+    // FR-09: a topic with nothing to grade has no verdict either — `failed` would
+    // claim the learner fell short of a threshold that was never applied.
+    success: (tr.passed === null || tr.passed === undefined)
+      ? 'unknown'
+      : (tr.passed ? 'passed' : 'failed'),
+    completion: 'completed'
+  };
 }
 
-// Версия finishScorm БЕЗ отправки телеметрии (используется когда телеметрия уже отправлена)
+/** `score.scaled` is a real in -1..1; four decimals is as fine as any report reads. */
+function ratio(value) {
+  return Math.round(value * 10000) / 10000;
+}
+
+function buildQuestionInteraction(question, answer, fullCorrect) {
+  return {
+    id: 'q_' + question.id,
+    type: mapScormType(question),
+    result: interactionResultFor(question, fullCorrect),
+    response: formatResponse(question, answer),
+    correct: formatResponse(question, getCorrectAnswerFor(question)),
+    description: authorTextPlain(question.prompt)
+  };
+}
+
+// Отправка результата в LMS. Телеметрия к этому моменту уже отправлена вызывающим —
+// `finishAndClose` шлёт её один раз для ТЕКУЩЕЙ попытки, тогда как в LMS уезжает лучшая.
 function finishScormLmsOnly(results, passedForLms, resultComputation, scaleComputation) {
-  var objectives = results.topicResults.map(function (tr) {
-    return {
-      id: 'topic_' + tr.topicId,
-      score: Math.round(tr.percent),
-      status: tr.passed === null ? 'unknown' : (tr.passed ? 'passed' : 'failed')
-    };
-  });
+  var objectives = results.topicResults.map(buildTopicObjective);
 
   var interactions = [];
-
-  function mapScormType(q) {
-    if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
-    if (q.type === 'multiple') return 'choice';
-    if (q.type === 'matching') return 'matching';
-    if (q.type === 'ranking') return 'sequencing';
-    return 'other';
-  }
-
-  function formatResponse(q, answer) {
-    if (TBQType.isSingleIndexChoice(q.type)) {
-      return answer !== undefined && answer !== null ? String(answer + 1) : '';
-    }
-    if (q.type === 'multiple') {
-      var arr = Array.isArray(answer) ? answer : [];
-      return arr.map(function (i) { return i + 1; }).join(',');
-    }
-    if (q.type === 'matching') {
-      var pairs = answer || {};
-      return Object.keys(pairs).map(function (l) {
-        return (parseInt(l, 10) + 1) + '-' + (pairs[l] + 1);
-      }).join(',');
-    }
-    if (q.type === 'ranking') {
-      var order = Array.isArray(answer) ? answer : [];
-      return order.map(function (i) { return i + 1; }).join(',');
-    }
-    return '';
-  }
-
-  function getCorrectAnswerFor(q) {
-    var c = q.correct;
-    if (TBQType.isSingleIndexChoice(q.type)) return c.correctIndex;
-    if (q.type === 'multiple') return c.correctIndices;
-    if (q.type === 'ranking') return c.correctOrder;
-    if (q.type === 'matching') {
-      var m = {};
-      (c.pairs || []).forEach(function (p) { m[p.left] = p.right; });
-      return m;
-    }
-    return null;
-  }
 
   state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
@@ -928,14 +891,7 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
     var ans = gradedAnswerFor(q);
     var fullCorrect = checkAnswer(q, ans) === 1;
 
-    interactions.push({
-      id: 'q_' + q.id,
-      type: mapScormType(q),
-      result: interactionResultFor(q, fullCorrect),
-      response: formatResponse(q, ans),
-      correct: formatResponse(q, getCorrectAnswerFor(q)),
-      description: authorTextPlain(q.prompt)
-    });
+    interactions.push(buildQuestionInteraction(q, ans, fullCorrect));
   });
 
   // --- Рекомендации для проваленных тем: передаём object_id курса ---

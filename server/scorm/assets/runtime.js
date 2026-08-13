@@ -98,11 +98,35 @@ var SCORM = (function() {
       this.setValue('cmi.success_status', status);
     },
 
-    setObjective: function(index, id, scoreRaw, successStatus) {
-      this.setValue('cmi.objectives.' + index + '.id', id);
-      this.setValue('cmi.objectives.' + index + '.score.raw', scoreRaw);
-      this.setValue('cmi.objectives.' + index + '.success_status', successStatus);
-      this.setValue('cmi.objectives.' + index + '.completion_status', 'completed');
+    /**
+     * Write ONE objective, built by `buildTopicObjective`.
+     *
+     * The id goes first: until it is set the objective does not exist for the LMS, and
+     * writing any other element of it is an error. Absent parts are SKIPPED rather than
+     * written empty — a measurement topic must report «no score», which is not the same
+     * as a score of zero.
+     *
+     * @param {number} index position in `cmi.objectives`
+     * @param {{id: string, description: string, score: ?{raw: number, min: number, max: number, scaled: number}, success: string, completion: string}} objective
+     */
+    setObjective: function(index, objective) {
+      var base = 'cmi.objectives.' + index + '.';
+      this.setValue(base + 'id', objective.id);
+
+      // description is a localized_string_type — SPM 250 characters.
+      if (objective.description) {
+        this.setValue(base + 'description', String(objective.description).slice(0, 250));
+      }
+
+      if (objective.score) {
+        this.setValue(base + 'score.raw', objective.score.raw);
+        this.setValue(base + 'score.min', objective.score.min);
+        this.setValue(base + 'score.max', objective.score.max);
+        this.setValue(base + 'score.scaled', objective.score.scaled);
+      }
+
+      this.setValue(base + 'success_status', objective.success);
+      this.setValue(base + 'completion_status', objective.completion || 'completed');
     },
 
     setInteraction: function(index, id, type, result, learnerResponse, correctPattern, description) {
@@ -138,8 +162,7 @@ var SCORM = (function() {
 
 
       for (var i = 0; i < objectives.length; i++) {
-        var obj = objectives[i];
-        this.setObjective(i, obj.id, obj.score, obj.status);
+        this.setObjective(i, objectives[i]);
       }
 
       for (var j = 0; j < interactions.length; j++) {
