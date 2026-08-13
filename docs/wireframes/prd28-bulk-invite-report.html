@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-28 — диалог назначения теста, вкладка «Списком из файла».
+    Состояние 4 из 4: ОТЧЁТ (спека docs/specs/prd-28/external-participant.md,
+    §5 п.4, §6, §7; FR-18, FR-19, FR-20).
+
+    Числа согласованы с эскизом предпросмотра: 7 выбранных строк из 9,
+    2 пропущены как ошибочные, одно письмо не доставлено.
+
+    Пояснения и DS Mapping — ПОД холстом, в блоке .wf-doc.
+    -->
+    <title>PRD-28 — Списком из файла: отчёт</title>
+    <!-- Порядок подключения важен и отличается от соседних эскизов.
+         wf-utils.css несёт каркас эскиза, но вместе с ним — устаревшие shim'ы
+         для ou-tag / ou-banner / ou-input с токенами, которых в дизайн-системе
+         давно нет (`--ou-success-bg` -> прозрачный фон вместо зелёного).
+         Загруженный последним, он гасит настоящие тона ДС, поэтому
+         дизайн-система подключается ПОСЛЕ него. prd7-shared.css идёт первым:
+         он даёт токены --wf-*, которыми пользуется wf-utils, но при этом
+         перекрасил бы полосу переключателя состояний в свой тёмный вариант. -->
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { display: none; }
+
+      /* В продукте диалог — фиксированный слой на весь экран. В эскизе он
+         встроен в поток страницы: иначе он накрыл бы блок пояснений под
+         холстом. Раскладка и размеры самого диалога не меняются. */
+      .wf-state > .ou-modal-root { position: relative; inset: auto; }
+      .wf-state > .ou-modal-root > .ou-modal { max-height: none; }
+
+      .tb-bulk-actions { display: flex; justify-content: flex-end; gap: var(--ou-space-2); }
+      /* Плитка сводки: содержимое по центру, как в отчёте существующего импорта. */
+      .tb-bulk-stat { text-align: center; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-4) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="i-users-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0" /><circle cx="10" cy="8" r="5" /><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" /></symbol>
+      <symbol id="i-sheet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M8 13h8" /><path d="M8 17h8" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-9.6 9.6" /><circle cx="7.5" cy="15.5" r="5.5" /><path d="m15.5 7.5 3 3" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">PRD-28 · Отчёт прогона:</span>
+      <button type="button" class="active">4 · Отчёт</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd28-bulk-invite-upload.html">&larr; 1 · Загрузка</a>
+      <a class="wf-nav-link" href="prd28-bulk-invite-preview.html">&larr; 2 · Предпросмотр</a>
+      <a class="wf-nav-link" href="prd28-users-external.html">&rarr; Пользователи</a>
+    </nav>
+
+    <div class="wf-state active" data-state="report">
+      <div class="ou-modal-root">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title">Управление назначениями</h2>
+              <p class="ou-modal__desc">Основы информационной безопасности</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg>
+            </button>
+          </header>
+
+          <div class="ou-modal__body">
+            <div class="ou-tabs ou-tabs--segment ou-tabs--m ou-tabs--stretch">
+              <div class="ou-tabs__list" role="tablist" aria-label="Способ назначения">
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__label">Назначено (11)</span></button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users" /></svg></span><span class="ou-tabs__label">Пользователи</span></button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users-round" /></svg></span><span class="ou-tabs__label">Группы</span></button>
+                <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-sheet" /></svg></span><span class="ou-tabs__label">Списком из файла</span></button>
+              </div>
+
+              <div class="ou-tabs__panel" role="tabpanel" aria-label="Списком из файла">
+                <div class="ou-stack ou-stack--gap-5">
+
+                  <!-- Сводка -->
+                  <div class="ou-lgrid ou-lgrid--cols-3 ou-lgrid--gap-3">
+                    <div class="ou-box ou-box--border ou-box--radius-l ou-box--pad-4 tb-bulk-stat">
+                      <div class="ou-text ou-text--display-s ou-text--w-bold ou-text--tone-success">3</div>
+                      <div class="ou-text ou-text--body-s ou-text--tone-muted">Создано учётных записей</div>
+                    </div>
+                    <div class="ou-box ou-box--border ou-box--radius-l ou-box--pad-4 tb-bulk-stat">
+                      <div class="ou-text ou-text--display-s ou-text--w-bold ou-text--tone-info">4</div>
+                      <div class="ou-text ou-text--body-s ou-text--tone-muted">Переиспользовано</div>
+                    </div>
+                    <div class="ou-box ou-box--border ou-box--radius-l ou-box--pad-4 tb-bulk-stat">
+                      <div class="ou-text ou-text--display-s ou-text--w-bold ou-text--tone-accent">7</div>
+                      <div class="ou-text ou-text--body-s ou-text--tone-muted">Назначено</div>
+                    </div>
+                    <div class="ou-box ou-box--border ou-box--radius-l ou-box--pad-4 tb-bulk-stat">
+                      <div class="ou-text ou-text--display-s ou-text--w-bold ou-text--tone-success">6</div>
+                      <div class="ou-text ou-text--body-s ou-text--tone-muted">Писем отправлено</div>
+                    </div>
+                    <div class="ou-box ou-box--border ou-box--radius-l ou-box--pad-4 tb-bulk-stat">
+                      <div class="ou-text ou-text--display-s ou-text--w-bold ou-text--tone-error">1</div>
+                      <div class="ou-text ou-text--body-s ou-text--tone-muted">Письмо не ушло</div>
+                    </div>
+                    <div class="ou-box ou-box--border ou-box--radius-l ou-box--pad-4 tb-bulk-stat">
+                      <div class="ou-text ou-text--display-s ou-text--w-bold ou-text--tone-muted">2</div>
+                      <div class="ou-text ou-text--body-s ou-text--tone-muted">Пропущено</div>
+                    </div>
+                  </div>
+
+                  <!-- Проблемные адреса -->
+                  <div class="ou-stack ou-stack--gap-2">
+                    <div class="ou-text ou-text--heading-s">Требуют внимания</div>
+                    <div class="ou-tbl ou-tbl--normal">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th><span class="ou-tbl__th-inner">Адрес</span></th>
+                            <th><span class="ou-tbl__th-inner">Исход</span></th>
+                            <th><span class="ou-tbl__th-inner">Причина</span></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td><span class="ou-text ou-text--mono-s">e.volkova@partner.ru</span></td>
+                            <td><span class="ou-tag ou-tag--warning ou-tag--s">Письмо не доставлено</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Почтовый сервер отклонил адрес. Назначение создано, ссылка выпущена и действует — заберите её из выгрузки</span></td>
+                          </tr>
+                          <tr>
+                            <td><span class="ou-text ou-text--mono-s">old.account@partner.ru</span></td>
+                            <td><span class="ou-tag ou-tag--error ou-tag--s">Пропущен</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Учётная запись деактивирована</span></td>
+                          </tr>
+                          <tr>
+                            <td><span class="ou-text ou-text--mono-s">ivanov.partner.ru</span></td>
+                            <td><span class="ou-tag ou-tag--error ou-tag--s">Пропущен</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Адрес не похож на почтовый</span></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Выгрузка ссылок -->
+                  <div class="ou-banner ou-banner--subtle ou-banner--warning ou-banner--stacked">
+                    <div class="ou-banner__head">
+                      <span class="ou-banner__ico">
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><use href="#i-key" /></svg>
+                      </span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Файл со ссылками содержит действующие ключи доступа</div>
+                        <div class="ou-banner__desc">Каждая ссылка открывает тест без пароля — храните файл как список паролей. Выгрузка возможна, только пока открыт этот отчёт: сырые ссылки нигде не хранятся, и после закрытия диалога восстановить их нельзя. Позже останется лишь перевыпустить ссылки, а это отзовёт прежние, включая уже доставленные письмами.</div>
+                      </div>
+                    </div>
+                    <div class="ou-banner__actions">
+                      <button type="button" class="ou-banner__cta ou-banner__cta--primary">
+                        <svg width="14" height="14" aria-hidden="true"><use href="#i-download" /></svg>
+                        Выгрузить ссылки (7)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="tb-bulk-actions">
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m">К назначениям</button>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ ВНЕ ХОЛСТА: пояснения ░░░ -->
+    <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — состояние «Отчёт»</h3>
+        <table>
+          <thead><tr><th>Элемент</th><th>Требование</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Сводка из шести чисел</td><td>FR-18, §5 п.4</td><td>Создано, переиспользовано, назначено, писем ушло, не ушло, пропущено. Плитки — как в отчёте существующего импорта пользователей</td></tr>
+            <tr><td>«Требуют внимания»</td><td>FR-18</td><td>Один перечень на две разные беды: пропущенные строки и недоставленные письма. Колонка «Исход» разводит их тоном тега</td></tr>
+            <tr><td>Недоставка не отменяет ссылку</td><td>§6</td><td>Назначение создано, ссылка действует и попадает в выгрузку. Это сказано прямо в причине, иначе организатор решит, что человека надо заводить заново</td></tr>
+            <tr><td>Предупреждение о ключах</td><td>§7, FR-19</td><td>Названы обе причины срочности: файл равносилен списку паролей, и выгрузка живёт только пока открыт отчёт. Сырых токенов в базе нет — хранится только SHA-256</td></tr>
+            <tr><td>Кнопка выгрузки</td><td>решение эскиза</td><td>Стоит ВНУТРИ предупреждения (<code>ou-banner__cta</code>), а не в общем ряду действий: условие выгрузки и сама выгрузка не должны разъезжаться по экрану. В счётчике на кнопке — число выпущенных ссылок</td></tr>
+            <tr><td>«К назначениям»</td><td>§5 п.4</td><td>Возврат на вкладку «Назначено», где работают привычные отзыв и переотправка. Счётчик вкладки в этом состоянии уже 11</td></tr>
+            <tr><td>Не показано</td><td>FR-20</td><td>Журнал: факт прогона и факт выгрузки пишутся на сервере, интерфейса не имеют. Сырые ссылки в журнал не попадают</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Холст собран из DS-компонентов (<code>ou-*</code>). Классы <code>tb-*</code>/<code>wf-*</code> — каркас ТОЛЬКО эскиза.</p>
+        <table>
+          <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+          <tbody>
+            <tr><td>Сетка сводки</td><td><code>Grid</code> (<code>ou-lgrid--cols-3</code>), <code>Box</code> (<code>ou-box--border</code>)</td><td>существующие примитивы</td></tr>
+            <tr><td>Числа и подписи</td><td><code>Text</code> (<code>ou-text--display-s</code>, тона <code>success/info/accent/error/muted</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Перечень проблем</td><td><code>Table</code> (<code>ou-tbl</code>), <code>Tag</code></td><td>существующие компоненты</td></tr>
+            <tr><td>Предупреждение с действием</td><td><code>Banner</code> (<code>ou-banner--subtle ou-banner--warning ou-banner--stacked</code>)</td><td>существующий компонент</td></tr>
+            <tr><td><code>tb-bulk-stat</code>, <code>tb-bulk-actions</code></td><td>—</td><td>каркас эскиза: выключка плитки по центру и прижим ряда действий; в коде это <code>Stack align</code> / <code>Cluster justify</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

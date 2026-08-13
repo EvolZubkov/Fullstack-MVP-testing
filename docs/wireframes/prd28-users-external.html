@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-28 — страница «Пользователи», признак «внешний участник».
+    Спека docs/specs/prd-28/external-participant.md, §4 и §8; FR-01, FR-05,
+    FR-06, FR-07, FR-08.
+
+    Основа — client/src/pages/author/users.tsx как есть. Дельта ровно в четырёх
+    местах: отметка в строке списка, фильтр по виду учётной записи, пункт
+    «Сделать штатным» в меню строки (только у внешних) и признак «внешний
+    участник» в форме создания. Всё остальное — существующий экран.
+
+    Пояснения и DS Mapping — ПОД холстом, в блоке .wf-doc.
+    -->
+    <title>PRD-28 — Пользователи: внешние участники</title>
+    <!-- Порядок подключения важен и отличается от соседних эскизов.
+         wf-utils.css несёт каркас эскиза, но вместе с ним — устаревшие shim'ы
+         для ou-tag / ou-banner / ou-input с токенами, которых в дизайн-системе
+         давно нет (`--ou-success-bg` -> прозрачный фон вместо зелёного).
+         Загруженный последним, он гасит настоящие тона ДС, поэтому
+         дизайн-система подключается ПОСЛЕ него. prd7-shared.css идёт первым:
+         он даёт токены --wf-*, которыми пользуется wf-utils, но при этом
+         перекрасил бы полосу переключателя состояний в свой тёмный вариант. -->
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { display: none; }
+
+      /* Шапка страницы и ряд фильтров — раскладка существующего экрана
+         (Cluster justify="between" / Cluster gap align="end"). */
+      .tb-page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--ou-space-4); }
+      .tb-page-head__act { display: flex; gap: var(--ou-space-2); flex-shrink: 0; }
+      .tb-filters { display: flex; gap: var(--ou-space-4); align-items: flex-end; flex-wrap: wrap; }
+      .tb-filters__search { flex: 1; min-width: var(--wf-size-240); }
+      .tb-cell-stack { display: flex; align-items: center; gap: var(--ou-space-2); }
+
+      /* Меню строки. В продукте MenuTrigger кладёт меню отдельным слоем над
+         страницей; в эскизе оно живёт в ячейке, поэтому таблице возвращается
+         видимое переполнение — иначе overflow:hidden срезал бы меню. */
+      .tb-menu-open .ou-tbl { overflow: visible; }
+      .tb-menu-cell { position: relative; overflow: visible; }
+      .tb-menu-cell .ou-menu { position: absolute; top: 100%; right: 0; z-index: 20; }
+
+      /* Погашенный блок формы: поле есть, но задавать нечего. */
+      .tb-form-off { opacity: 0.55; }
+
+      /* В продукте панель создания — фиксированный слой на весь экран. В эскизе
+         она заперта внутри своего состояния: иначе подложка накрыла бы блок
+         пояснений под холстом. Ширина, раскладка и содержимое панели не
+         меняются. */
+      .wf-state[data-state="create"] { position: relative; min-height: var(--wf-size-960); }
+      .wf-state > .ou-drawer-root { position: absolute; top: var(--wf-nav-offset); bottom: 0; }
+      .wf-state > .ou-drawer-root > .ou-drawer { height: 100%; max-height: none; }
+
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-4) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.17 2.83a2.83 2.83 0 0 0-4 0L3 17v4h4L21.17 6.83a2.83 2.83 0 0 0 0-4Z" /></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-9.6 9.6" /><circle cx="7.5" cy="15.5" r="5.5" /><path d="m15.5 7.5 3 3" /></symbol>
+      <symbol id="i-user-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><polyline points="16 11 18 13 22 9" /></symbol>
+      <symbol id="i-user-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="17" y1="8" x2="22" y2="13" /><line x1="22" y1="8" x2="17" y2="13" /></symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">PRD-28 · Пользователи:</span>
+      <button type="button" class="active" onclick="showState(this, 'list')">список и фильтр</button>
+      <button type="button" onclick="showState(this, 'menu')">меню строки</button>
+      <button type="button" onclick="showState(this, 'create')">форма создания</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd28-bulk-invite-upload.html">&rarr; Списком из файла</a>
+    </nav>
+
+    <!-- ░░░ СОСТОЯНИЕ: список с отметкой и фильтром ░░░ -->
+    <div class="wf-state active" data-state="list">
+      <div class="wf-page">
+        <div class="ou-stack ou-stack--gap-6">
+
+          <div class="tb-page-head">
+            <div class="ou-stack ou-stack--gap-1">
+              <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+              <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+            </div>
+            <div class="tb-page-head__act">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-upload" /></svg></span>
+                Загрузить CSV
+              </button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span>
+                Создать пользователя
+              </button>
+            </div>
+          </div>
+
+          <div class="tb-filters">
+            <div class="ou-field ou-field--m ou-field--full tb-filters__search">
+              <div class="ou-field__box">
+                <span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span>
+                <input class="ou-field__input" type="text" placeholder="Поиск по email или имени..." aria-label="Поиск по email или имени" />
+              </div>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все роли|Администратор|Разработчик|Автор|Менеджер по обучению|Обычный пользователь">
+              <button type="button" class="ou-select__trigger" aria-label="Роль"><span class="ou-select__value">Все роли</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все статусы|Активен|Заблокирован|Ожидает">
+              <button type="button" class="ou-select__trigger" aria-label="Статус"><span class="ou-select__value">Все статусы</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <!-- ДЕЛЬТА PRD-28: фильтр по виду учётной записи -->
+            <div class="ou-select ou-field--m" data-ou-options="Все виды|Штатные|Внешние участники">
+              <button type="button" class="ou-select__trigger" aria-label="Вид учётной записи"><span class="ou-select__value">Все виды</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+          </div>
+
+          <div class="ou-tbl ou-tbl--normal">
+            <table>
+              <thead>
+                <tr>
+                  <th><span class="ou-tbl__th-inner">Email</span></th>
+                  <th><span class="ou-tbl__th-inner">Имя</span></th>
+                  <th><span class="ou-tbl__th-inner">Роль</span></th>
+                  <th><span class="ou-tbl__th-inner">Статус</span></th>
+                  <th><span class="ou-tbl__th-inner">Последний вход</span></th>
+                  <th><span class="ou-tbl__th-inner">Создан</span></th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <span class="tb-cell-stack">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">i.petrov@company.ru</span>
+                    </span>
+                  </td>
+                  <td><span class="ou-text ou-text--body-s">Петров Иван</span></td>
+                  <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                  <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">12.08.2026, 09:41</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">03.02.2026, 11:02</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="tb-cell-stack">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">anna.frolova@partner.ru</span>
+                      <!-- ДЕЛЬТА PRD-28: отметка «внешний» -->
+                      <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                    </span>
+                  </td>
+                  <td><span class="ou-text ou-text--body-s">Фролова Анна</span></td>
+                  <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                  <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">11.08.2026, 14:20</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">10.08.2026, 10:15</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="tb-cell-stack">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">a.sokolova@partner.ru</span>
+                      <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                    </span>
+                  </td>
+                  <td><span class="ou-text ou-text--body-s">Соколова Анастасия</span></td>
+                  <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                  <td><span class="ou-tag ou-tag--neutral">Ожидает</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">12.08.2026, 16:04</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="tb-cell-stack">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">s.orlova@company.ru</span>
+                    </span>
+                  </td>
+                  <td><span class="ou-text ou-text--body-s">Орлова Светлана</span></td>
+                  <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Автор</span></td>
+                  <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">12.08.2026, 08:55</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">14.01.2026, 09:30</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: меню строки внешнего участника ░░░ -->
+    <div class="wf-state" data-state="menu">
+      <div class="wf-page">
+        <div class="ou-stack ou-stack--gap-6">
+
+          <div class="tb-page-head">
+            <div class="ou-stack ou-stack--gap-1">
+              <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+              <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+            </div>
+            <div class="tb-page-head__act">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-upload" /></svg></span>
+                Загрузить CSV
+              </button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span>
+                Создать пользователя
+              </button>
+            </div>
+          </div>
+
+          <div class="tb-filters">
+            <div class="ou-field ou-field--m ou-field--full tb-filters__search">
+              <div class="ou-field__box">
+                <span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span>
+                <input class="ou-field__input" type="text" placeholder="Поиск по email или имени..." aria-label="Поиск по email или имени" />
+              </div>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все роли|Администратор|Разработчик|Автор|Менеджер по обучению|Обычный пользователь">
+              <button type="button" class="ou-select__trigger" aria-label="Роль"><span class="ou-select__value">Все роли</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все статусы|Активен|Заблокирован|Ожидает">
+              <button type="button" class="ou-select__trigger" aria-label="Статус"><span class="ou-select__value">Все статусы</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m" data-ou-options="Все виды|Штатные|Внешние участники">
+              <button type="button" class="ou-select__trigger" aria-label="Вид учётной записи"><span class="ou-select__value">Внешние участники</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+          </div>
+
+          <div class="tb-menu-open">
+            <div class="ou-tbl ou-tbl--normal">
+              <table>
+                <thead>
+                  <tr>
+                    <th><span class="ou-tbl__th-inner">Email</span></th>
+                    <th><span class="ou-tbl__th-inner">Имя</span></th>
+                    <th><span class="ou-tbl__th-inner">Роль</span></th>
+                    <th><span class="ou-tbl__th-inner">Статус</span></th>
+                    <th><span class="ou-tbl__th-inner">Последний вход</span></th>
+                    <th><span class="ou-tbl__th-inner">Создан</span></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <span class="tb-cell-stack">
+                        <span class="ou-text ou-text--body-s ou-text--w-medium">anna.frolova@partner.ru</span>
+                        <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                      </span>
+                    </td>
+                    <td><span class="ou-text ou-text--body-s">Фролова Анна</span></td>
+                    <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                    <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">11.08.2026, 14:20</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">10.08.2026, 10:15</span></td>
+                    <td class="tb-menu-cell">
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия" aria-expanded="true"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button>
+                      <div class="ou-menu" role="menu">
+                        <button type="button" role="menuitem" class="ou-menu__item">
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-pencil" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Редактировать</span></span>
+                        </button>
+                        <button type="button" role="menuitem" class="ou-menu__item is-disabled" aria-disabled="true" disabled>
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-key" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Сбросить пароль</span><span class="ou-menu__item-meta">У внешнего участника пароля нет</span></span>
+                        </button>
+                        <button type="button" role="menuitem" class="ou-menu__item">
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-rotate" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Сбросить попытки</span></span>
+                        </button>
+                        <div class="ou-menu__divider" role="separator"></div>
+                        <!-- ДЕЛЬТА PRD-28: только у внешних, обратного действия нет -->
+                        <button type="button" role="menuitem" class="ou-menu__item">
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-user-check" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Сделать штатным</span><span class="ou-menu__item-meta">Уйдёт приглашение задать пароль</span></span>
+                        </button>
+                        <div class="ou-menu__divider" role="separator"></div>
+                        <button type="button" role="menuitem" class="ou-menu__item ou-menu__item--danger">
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-user-x" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Заблокировать</span></span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <span class="tb-cell-stack">
+                        <span class="ou-text ou-text--body-s ou-text--w-medium">a.sokolova@partner.ru</span>
+                        <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                      </span>
+                    </td>
+                    <td><span class="ou-text ou-text--body-s">Соколова Анастасия</span></td>
+                    <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                    <td><span class="ou-tag ou-tag--neutral">Ожидает</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">12.08.2026, 16:04</span></td>
+                    <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: форма создания, признак «внешний участник» включён ░░░ -->
+    <div class="wf-state" data-state="create">
+      <div class="wf-page">
+        <div class="ou-stack ou-stack--gap-6">
+          <div class="tb-page-head">
+            <div class="ou-stack ou-stack--gap-1">
+              <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+              <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ou-drawer-root ou-drawer-root--right">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h2 class="ou-drawer__title">Создать пользователя</h2>
+              <p class="ou-drawer__desc">Заполните данные для создания нового пользователя.</p>
+            </div>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+
+          <div class="ou-drawer__body">
+            <div class="ou-stack ou-stack--gap-4">
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="wf-u-email">Email<span class="ou-field__lbl-req"> *</span></label>
+                <div class="ou-field__box"><input class="ou-field__input" id="wf-u-email" type="email" value="d.morozov@partner.ru" /></div>
+              </div>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="wf-u-name">Имя</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="wf-u-name" type="text" value="Морозов Дмитрий" /></div>
+              </div>
+
+              <!-- ДЕЛЬТА PRD-28: признак учётной записи -->
+              <label class="ou-check" for="wf-u-external">
+                <input class="ou-check__input" id="wf-u-external" type="checkbox" checked />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text">
+                  <span class="ou-check__lbl">Внешний участник</span>
+                  <span class="ou-check__desc">Без пароля и без кабинета: единственный путь внутрь — ссылка-приглашение на назначенный тест. Признак можно только снять позже, вернуть нельзя.</span>
+                </span>
+              </label>
+
+              <!-- Пароль: погашен, задавать нечего -->
+              <div class="ou-stack ou-stack--gap-2 tb-form-off">
+                <label class="ou-field__lbl" for="wf-u-pass">Пароль</label>
+                <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-stretch">
+                  <div class="ou-field ou-field--m ou-field--full ou-grow">
+                    <div class="ou-field__box"><input class="ou-field__input" id="wf-u-pass" type="text" placeholder="У внешнего участника пароля нет" disabled /></div>
+                  </div>
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" disabled>Сгенерировать</button>
+                </div>
+              </div>
+
+              <!-- Роли: у внешнего участника всегда одна -->
+              <div class="ou-stack ou-stack--gap-2">
+                <span class="ou-field__lbl">Роли<span class="ou-field__lbl-req"> *</span></span>
+                <div class="ou-stack ou-stack--gap-3" role="group" aria-label="Роли пользователя">
+                  <label class="ou-check is-disabled" for="wf-r-learner">
+                    <input class="ou-check__input" id="wf-r-learner" type="checkbox" checked disabled />
+                    <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                    <span class="ou-check__text">
+                      <span class="ou-check__lbl">Обычный пользователь</span>
+                      <span class="ou-check__desc">Прохождение назначенных тестов. У внешнего участника — единственная возможная роль.</span>
+                    </span>
+                  </label>
+                  <label class="ou-check is-disabled" for="wf-r-author">
+                    <input class="ou-check__input" id="wf-r-author" type="checkbox" disabled />
+                    <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                    <span class="ou-check__text">
+                      <span class="ou-check__lbl">Автор</span>
+                      <span class="ou-check__desc">Темы, вопросы, тесты и назначения</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <label class="ou-check is-disabled" for="wf-u-mcp">
+                <input class="ou-check__input" id="wf-u-mcp" type="checkbox" disabled />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Требовать смену пароля при входе</span></span>
+              </label>
+
+              <label class="ou-check is-disabled" for="wf-u-invite">
+                <input class="ou-check__input" id="wf-u-invite" type="checkbox" disabled />
+                <span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span>
+                <span class="ou-check__text">
+                  <span class="ou-check__lbl">Отправить приглашение</span>
+                  <span class="ou-check__desc">Письмо с ключом задания пароля внешнему участнику не выпускается.</span>
+                </span>
+              </label>
+
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl" for="wf-u-exp">Срок действия</label>
+                <div class="ou-field__box"><input class="ou-field__input" id="wf-u-exp" type="date" /></div>
+              </div>
+
+            </div>
+          </div>
+
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Создать</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ░░░ ВНЕ ХОЛСТА: пояснения ░░░ -->
+    <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — «Пользователи»</h3>
+        <table>
+          <thead><tr><th>Дельта</th><th>Требование</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Отметка «Внешний»</td><td>FR-07, §8</td><td>Тег рядом с адресом, тон <code>info</code>. Отдельной колонки нет: признак есть у меньшинства записей, пустая колонка съела бы ширину. Внешние показаны в общем списке наравне со штатными</td></tr>
+            <tr><td>Фильтр по виду</td><td>FR-07, §8</td><td>Четвёртый селектор в существующем ряду фильтров: «Все виды / Штатные / Внешние участники». Порядок и поведение остальных фильтров не меняются</td></tr>
+            <tr><td>«Сделать штатным»</td><td>FR-05, FR-06, §3</td><td>Пункт есть ТОЛЬКО у внешней записи. Обратного пункта нет ни у кого: обратный перевод — это блокировка под видом смены вида, для неё есть «Заблокировать»</td></tr>
+            <tr><td>«Сбросить пароль» у внешнего</td><td>FR-02, §4</td><td>Погашен: пароля нет. Пункт оставлен видимым, чтобы меню внешней и штатной записи не разъезжались по составу</td></tr>
+            <tr><td>«Отправить приглашение» в меню</td><td>FR-04</td><td>Не показан: в существующем коде он есть только у записи со статусом «Ожидает», а для внешней записи приглашение отклоняется сервером. У внешних этот пункт не появляется вовсе</td></tr>
+            <tr><td>Признак в форме создания</td><td>FR-08, §8</td><td>Чек-бокс «Внешний участник». При включённом признаке погашены пароль, «Сгенерировать», «Требовать смену пароля» и «Отправить приглашение» — задавать нечего</td></tr>
+            <tr><td>Роли в форме</td><td>FR-01</td><td>При включённом признаке роль зафиксирована: «Обычный пользователь», выбор погашен. Это следствие FR-01, а не отдельное решение</td></tr>
+            <tr><td>Ярлык роли</td><td>—</td><td>Спека называет роль «Ученик», интерфейс — «Обычный пользователь» (<code>ROLE_LABELS.learner</code>). В эскизах взят ярлык интерфейса; расхождение терминов стоит закрыть в спеке</td></tr>
+            <tr><td>Статус новой записи</td><td>§4</td><td>Обычный «Ожидает». Активной запись становится по факту первого прохождения по ссылке — отдельного статуса не заводится</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Холст собран из DS-компонентов (<code>ou-*</code>). Классы <code>tb-*</code>/<code>wf-*</code> — каркас ТОЛЬКО эскиза.</p>
+        <table>
+          <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+          <tbody>
+            <tr><td>Список</td><td><code>Table</code> (<code>ou-tbl</code>)</td><td>существующий экран</td></tr>
+            <tr><td>Отметка и роли</td><td><code>Tag</code> (<code>ou-tag--info</code>, <code>ou-tag--outline</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Фильтры</td><td><code>Input</code> (<code>ou-field</code>), <code>Select</code> (<code>ou-select</code>)</td><td>существующий экран</td></tr>
+            <tr><td>Меню строки</td><td><code>MenuTrigger</code> / <code>MenuItem</code> (<code>ou-menu</code>)</td><td>существующий экран</td></tr>
+            <tr><td>Форма создания</td><td><code>Drawer</code> (<code>ou-drawer--narrow</code>), <code>Checkbox</code> (<code>ou-check</code>)</td><td>существующий экран</td></tr>
+            <tr><td><code>tb-page-head</code>, <code>tb-filters</code>, <code>tb-cell-stack</code></td><td>—</td><td>каркас эскиза: в коде это <code>Cluster</code>/<code>Stack</code></td></tr>
+            <tr><td><code>tb-menu-open</code>, <code>tb-menu-cell</code></td><td>—</td><td>каркас эскиза: в продукте меню кладётся отдельным слоем над страницей, в статичном эскизе — в ячейке</td></tr>
+            <tr><td><code>tb-form-off</code></td><td>—</td><td>каркас эскиза: групповое гашение блока. DS даёт <code>is-disabled</code> на отдельный элемент управления, группового аналога нет</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

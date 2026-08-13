@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-28 — диалог назначения теста, вкладка «Списком из файла».
+    Состояние 2 из 4: ПРЕДПРОСМОТР (спека docs/specs/prd-28/external-participant.md,
+    §5 п.2, §5.1, §5.2; FR-11, FR-12, FR-14).
+
+    Данные строк взяты из критерия приёмки §11 п.1: файл на 10 строк, один адрес
+    повторяется дважды (схлопнут), один записан без «собаки», среди известных
+    адресов — штатный учащийся, аккаунт с правами и деактивированный.
+
+    Пояснения и DS Mapping — ПОД холстом, в блоке .wf-doc.
+    -->
+    <title>PRD-28 — Списком из файла: предпросмотр</title>
+    <!-- Порядок подключения важен и отличается от соседних эскизов.
+         wf-utils.css несёт каркас эскиза, но вместе с ним — устаревшие shim'ы
+         для ou-tag / ou-banner / ou-input с токенами, которых в дизайн-системе
+         давно нет (`--ou-success-bg` -> прозрачный фон вместо зелёного).
+         Загруженный последним, он гасит настоящие тона ДС, поэтому
+         дизайн-система подключается ПОСЛЕ него. prd7-shared.css идёт первым:
+         он даёт токены --wf-*, которыми пользуется wf-utils, но при этом
+         перекрасил бы полосу переключателя состояний в свой тёмный вариант. -->
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { display: none; }
+
+      /* В продукте диалог — фиксированный слой на весь экран. В эскизе он
+         встроен в поток страницы: иначе он накрыл бы блок пояснений под
+         холстом. Раскладка и размеры самого диалога не меняются. */
+      .wf-state > .ou-modal-root { position: relative; inset: auto; }
+      .wf-state > .ou-modal-root > .ou-modal { max-height: none; }
+
+      .tb-bulk-actions { display: flex; justify-content: flex-end; gap: var(--ou-space-2); }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-4) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="i-users-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0" /><circle cx="10" cy="8" r="5" /><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" /></symbol>
+      <symbol id="i-sheet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M8 13h8" /><path d="M8 17h8" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">PRD-28 · Предпросмотр:</span>
+      <button type="button" class="active" onclick="showState(this, 'rows')">разбор прошёл</button>
+      <button type="button" onclick="showState(this, 'group-taken')">имя группы занято</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd28-bulk-invite-upload.html">&larr; 1 · Загрузка</a>
+      <a class="wf-nav-link" href="prd28-bulk-invite-report.html">&rarr; 3 · Отчёт</a>
+    </nav>
+
+    <!-- ░░░ СОСТОЯНИЕ: разбор прошёл ░░░ -->
+    <div class="wf-state active" data-state="rows">
+      <div class="ou-modal-root">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title">Управление назначениями</h2>
+              <p class="ou-modal__desc">Основы информационной безопасности</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg>
+            </button>
+          </header>
+
+          <div class="ou-modal__body">
+            <div class="ou-tabs ou-tabs--segment ou-tabs--m ou-tabs--stretch">
+              <div class="ou-tabs__list" role="tablist" aria-label="Способ назначения">
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__label">Назначено (4)</span></button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users" /></svg></span><span class="ou-tabs__label">Пользователи</span></button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users-round" /></svg></span><span class="ou-tabs__label">Группы</span></button>
+                <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-sheet" /></svg></span><span class="ou-tabs__label">Списком из файла</span></button>
+              </div>
+
+              <div class="ou-tabs__panel" role="tabpanel" aria-label="Списком из файла">
+                <div class="ou-stack ou-stack--gap-4">
+
+                  <div class="ou-stack ou-stack--row ou-stack--wrap ou-stack--gap-3 ou-stack--ai-center">
+                    <span class="ou-tag ou-tag--success ou-tag--s"><span class="ou-tag__dot"></span>Новых: 3</span>
+                    <span class="ou-tag ou-tag--info ou-tag--s"><span class="ou-tag__dot"></span>Переиспользуется: 4</span>
+                    <span class="ou-tag ou-tag--error ou-tag--s"><span class="ou-tag__dot"></span>Ошибок: 2</span>
+                    <span class="ou-text ou-text--body-s ou-text--tone-muted">10 строк файла · 9 после схлопывания повторов</span>
+                  </div>
+
+                  <!-- В коде таблица лежит в ScrollArea maxH="md", как на соседних
+                       вкладках. В эскизе ограничение высоты снято, чтобы все девять
+                       строк и все статусы были видны разом. -->
+                  <div class="ou-scroll ou-scroll--vertical">
+                    <div class="ou-tbl ou-tbl--normal">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th class="ou-tbl__sel">
+                              <input type="checkbox" aria-label="Выбрать все" checked />
+                            </th>
+                            <th><span class="ou-tbl__th-inner">Адрес</span></th>
+                            <th><span class="ou-tbl__th-inner">Имя</span></th>
+                            <th><span class="ou-tbl__th-inner">Статус</span></th>
+                            <th><span class="ou-tbl__th-inner">Что произойдёт</span></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 1" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">a.sokolova@partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Соколова Анастасия</span></td>
+                            <td><span class="ou-tag ou-tag--success ou-tag--s">Новый</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Создаётся внешняя учётная запись без пароля, роль «Обычный пользователь»</span></td>
+                          </tr>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 2" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">d.morozov@partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Морозов Дмитрий</span></td>
+                            <td><span class="ou-tag ou-tag--success ou-tag--s">Новый</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Создаётся внешняя учётная запись без пароля, роль «Обычный пользователь»</span></td>
+                          </tr>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 3" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">e.volkova@partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Волкова Екатерина</span></td>
+                            <td><span class="ou-tag ou-tag--success ou-tag--s">Новый</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Создаётся внешняя учётная запись без пароля, роль «Обычный пользователь»</span></td>
+                          </tr>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 4" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">anna.frolova@partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Фролова Анна</span></td>
+                            <td><span class="ou-tag ou-tag--info ou-tag--s">Внешний участник</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Учётная запись переиспользуется. В файле дважды — строки схлопнуты</span></td>
+                          </tr>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 5" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">i.petrov@company.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Петров Иван</span></td>
+                            <td><span class="ou-tag ou-tag--neutral ou-tag--s">Штатный учащийся</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Учётная запись переиспользуется как есть; признак «внешний» не навешивается</span></td>
+                          </tr>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 6" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">s.orlova@company.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Орлова Светлана</span></td>
+                            <td><span class="ou-tag ou-tag--accent ou-tag--s">Аккаунт с правами</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Учётная запись не изменяется. Уведомление уйдёт без разовой ссылки — адрес в письме ведёт на тест</span></td>
+                          </tr>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 7" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">m.kuznetsov@company.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Кузнецов Максим</span></td>
+                            <td><span class="ou-tag ou-tag--warning ou-tag--s">Уже назначен</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Второе назначение не создаётся: ссылка перевыпускается, прежняя отзывается</span></td>
+                          </tr>
+                          <tr class="tb-row--error">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Строка 8 недоступна для выбора" disabled /></td>
+                            <td><span class="ou-text ou-text--mono-s">old.account@partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Тихонов Олег</span></td>
+                            <td><span class="ou-tag ou-tag--error ou-tag--s">Деактивирован</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-error">Учётная запись деактивирована — строка не обрабатывается</span></td>
+                          </tr>
+                          <tr class="tb-row--error">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Строка 9 недоступна для выбора" disabled /></td>
+                            <td><span class="ou-text ou-text--mono-s">ivanov.partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Иванов Пётр</span></td>
+                            <td><span class="ou-tag ou-tag--error ou-tag--s">Некорректный адрес</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-error">Адрес не похож на почтовый — строка не обрабатывается</span></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="tb-bulk-actions">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Назад</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Пригласить (7)</button>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: имя группы занято (§5.1) ░░░ -->
+    <div class="wf-state" data-state="group-taken">
+      <div class="ou-modal-root">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title">Управление назначениями</h2>
+              <p class="ou-modal__desc">Основы информационной безопасности</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg>
+            </button>
+          </header>
+
+          <div class="ou-modal__body">
+            <div class="ou-tabs ou-tabs--segment ou-tabs--m ou-tabs--stretch">
+              <div class="ou-tabs__list" role="tablist" aria-label="Способ назначения">
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__label">Назначено (4)</span></button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users" /></svg></span><span class="ou-tabs__label">Пользователи</span></button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users-round" /></svg></span><span class="ou-tabs__label">Группы</span></button>
+                <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button"><span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-sheet" /></svg></span><span class="ou-tabs__label">Списком из файла</span></button>
+              </div>
+
+              <div class="ou-tabs__panel" role="tabpanel" aria-label="Списком из файла">
+                <div class="ou-stack ou-stack--gap-4">
+
+                  <div class="ou-banner ou-banner--subtle ou-banner--error ou-banner--stacked">
+                    <div class="ou-banner__head">
+                      <span class="ou-banner__ico">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
+                      </span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Группа «Аудит ИБ» уже существует</div>
+                        <div class="ou-banner__desc">Участников нельзя дописать в существующую группу: у неё могут быть другие назначения, и люди из этого списка получат чужие тесты. Задайте другое имя.</div>
+                      </div>
+                    </div>
+                    <div class="ou-banner__actions">
+                      <button type="button" class="ou-banner__cta ou-banner__cta--primary">Изменить имя</button>
+                    </div>
+                  </div>
+
+                  <div class="ou-field ou-field--m ou-field--full ou-field--error">
+                    <label class="ou-field__lbl" for="wf-group-2">Создать группу из списка</label>
+                    <div class="ou-field__box">
+                      <input class="ou-field__input" id="wf-group-2" type="text" value="Аудит ИБ" />
+                    </div>
+                    <div class="ou-field__msg ou-field__msg--error">Имя занято</div>
+                  </div>
+
+                  <div class="ou-scroll ou-scroll--vertical ou-scroll--mh-sm">
+                    <div class="ou-tbl ou-tbl--normal">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать все" checked /></th>
+                            <th><span class="ou-tbl__th-inner">Адрес</span></th>
+                            <th><span class="ou-tbl__th-inner">Имя</span></th>
+                            <th><span class="ou-tbl__th-inner">Статус</span></th>
+                            <th><span class="ou-tbl__th-inner">Что произойдёт</span></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 1" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">a.sokolova@partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Соколова Анастасия</span></td>
+                            <td><span class="ou-tag ou-tag--success ou-tag--s">Новый</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Создаётся внешняя учётная запись без пароля, роль «Обычный пользователь»</span></td>
+                          </tr>
+                          <tr class="is-selected">
+                            <td class="ou-tbl__sel"><input type="checkbox" aria-label="Выбрать строку 2" checked /></td>
+                            <td><span class="ou-text ou-text--mono-s">d.morozov@partner.ru</span></td>
+                            <td><span class="ou-text ou-text--body-s">Морозов Дмитрий</span></td>
+                            <td><span class="ou-tag ou-tag--success ou-tag--s">Новый</span></td>
+                            <td><span class="ou-text ou-text--body-s ou-text--tone-muted">Создаётся внешняя учётная запись без пароля, роль «Обычный пользователь»</span></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div class="tb-bulk-actions">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Назад</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Пригласить (7)</button>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ ВНЕ ХОЛСТА: пояснения ░░░ -->
+    <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — состояние «Предпросмотр»</h3>
+        <table>
+          <thead><tr><th>Элемент</th><th>Требование</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Сводка над таблицей</td><td>FR-11</td><td>Три счётчика тегами с точкой — как в существующем импорте пользователей. Рядом — число строк файла и число после схлопывания повторов (§5.2)</td></tr>
+            <tr><td>Колонка выбора</td><td>FR-12</td><td>Все строки, кроме ошибочных, выбраны по умолчанию и снимаются вручную. Ошибочные строки — <code>disabled</code>, снять/поставить галочку нельзя</td></tr>
+            <tr><td>Колонка «Что произойдёт»</td><td>FR-11, §5.2</td><td>Причина ошибки И действие для нормальной строки живут в одной колонке: у ошибки причина, у остальных — правило прохода. Отдельная колонка «Причина», пустая у семи строк из девяти, читается хуже</td></tr>
+            <tr><td>Схлопывание повторов</td><td>§5.2</td><td>Не отдельная строка со статусом «дубль»: один адрес — одна строка, факт повтора отмечен в её описании</td></tr>
+            <tr><td>«Аккаунт с правами» выбирается</td><td>§5.2, FR-17</td><td>Это НЕ ошибка: тест назначается, письмо уходит без разовой ссылки. Причина отсутствия быстрой ссылки в письме не раскрывается (§6)</td></tr>
+            <tr><td>Занятое имя группы</td><td>FR-14, §5.1</td><td>Второе состояние переключателя. Ошибка ловится на предпросмотре; поле имени вынесено сюда же, чтобы переименовать не возвращаясь на шаг загрузки. «Пригласить» недоступна, пока имя занято</td></tr>
+            <tr><td>«Пригласить (N)»</td><td>§5 п.2</td><td>N — число выбранных строк. Кнопка внизу панели, рядом с «Назад». Подвал диалога общий на все вкладки и остаётся «Отмена»</td></tr>
+            <tr><td>Данные</td><td>§11 п.1</td><td>Ровно тот файл, что описан в критерии приёмки: 10 строк, 9 после схлопывания, две не выбираются</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Тона статусов</h3>
+        <table>
+          <thead><tr><th>Статус</th><th>Тон тега</th><th>Выбирается</th></tr></thead>
+          <tbody>
+            <tr><td>Новый</td><td><code>success</code></td><td>да</td></tr>
+            <tr><td>Внешний участник</td><td><code>info</code></td><td>да</td></tr>
+            <tr><td>Штатный учащийся</td><td><code>neutral</code></td><td>да</td></tr>
+            <tr><td>Аккаунт с правами</td><td><code>accent</code></td><td>да</td></tr>
+            <tr><td>Уже назначен</td><td><code>warning</code></td><td>да</td></tr>
+            <tr><td>Деактивирован</td><td><code>error</code></td><td>нет</td></tr>
+            <tr><td>Некорректный адрес</td><td><code>error</code></td><td>нет</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Холст собран из DS-компонентов (<code>ou-*</code>). Классы <code>tb-*</code>/<code>wf-*</code> — каркас ТОЛЬКО эскиза.</p>
+        <table>
+          <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+          <tbody>
+            <tr><td>Таблица с выбором</td><td><code>Table selectable</code> (<code>ou-tbl</code>, <code>ou-tbl__sel</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Прокрутка таблицы</td><td><code>ScrollArea</code> (<code>ou-scroll--mh-md</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Статусы и счётчики</td><td><code>Tag</code> (<code>ou-tag</code>, <code>ou-tag__dot</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Ошибка имени группы</td><td><code>Banner</code> (<code>ou-banner--subtle ou-banner--error</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Подсветка ошибочной строки</td><td><code>tb-row--error</code></td><td>существующий класс продукта (client/src/styles/tb-components.css)</td></tr>
+            <tr><td>Текст в ячейках</td><td><code>Text</code> (<code>ou-text--mono-s</code>, <code>ou-text--body-s</code>)</td><td>существующий компонент</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>
