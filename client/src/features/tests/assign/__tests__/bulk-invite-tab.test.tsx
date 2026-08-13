@@ -211,13 +211,15 @@ describe("<BulkInviteTab /> — отчёт", () => {
     fireEvent.click(screen.getByRole("button", { name: "Пригласить (5)" }));
     fireEvent.click(await screen.findByRole("button", { name: /Выгрузить ссылки/ }));
 
-    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    // The export pulls ExcelJS in on demand; the first such import in a loaded
+    // parallel run takes longer than the default one-second patience.
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled(), { timeout: 20000 });
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([u]) => String(u).endsWith("/participants/links-exported"));
       expect(call).toBeTruthy();
       expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({ count: 2 });
-    });
-  });
+    }, { timeout: 20000 });
+  }, 30000);
 
   it("«К назначениям» возвращает на вкладку назначений", async () => {
     const { container, onGoToAssignments } = renderTab();
