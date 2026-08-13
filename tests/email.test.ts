@@ -7,7 +7,7 @@
  * returns false), a successful send (returns true) and a send failure (caught,
  * link logged, returns false).
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const m = vi.hoisted(() => ({
   sendMail: vi.fn(),
@@ -195,6 +195,68 @@ describe("sendAssignmentEmail", () => {
     expect(call.html).toContain("Ссылка персональная — не передавайте её другим людям.");
     expect(call.text).toContain("Для прохождения перейдите по ссылке (пароль не требуется):");
     expect(call.text).toContain("Ссылка персональная — не передавайте её другим.");
+  });
+});
+
+// PRD-28 FR-20: a letter that did not go out still leaves a WORKING key behind
+// (недоставка не отменяет выпуск ссылки), so the fallback logging is the one
+// place where a bulk run against a broken transport could drop hundreds of live
+// passwordless links into a file, each next to its recipient's address.
+describe("недоставленное письмо с разовой ссылкой не пишет её в журнал", () => {
+  const savedEnv = process.env.NODE_ENV;
+  const withLink = {
+    to: "u@x.test",
+    testId: "t1",
+    testTitle: "Quiz",
+    magicLink: "https://app.test/access/deadbeefdeadbeef",
+  };
+
+  /** Every line the logger was handed, joined for substring checks. */
+  function loggedLines(): string {
+    const calls = [logger.info, logger.warn, logger.error, logger.debug]
+      .flatMap((fn) => (fn as any).mock.calls as unknown[][]);
+    return calls.map((c) => String(c[0])).join("\n");
+  }
+
+  afterEach(() => {
+    process.env.NODE_ENV = savedEnv;
+  });
+
+  it("в рабочем окружении: SMTP выключен — ни токена, ни /access/", async () => {
+    process.env.NODE_ENV = "production";
+    disableSmtp();
+
+    expect(await sendAssignmentEmail(withLink)).toBe(false);
+
+    const lines = loggedLines();
+    expect(lines).not.toContain("/access/");
+    expect(lines).not.toContain("deadbeefdeadbeef");
+    // What is left is what makes the failure actionable, and nothing more.
+    expect(lines).toContain("To: u@x.test");
+    expect(lines).toContain("Test: Quiz");
+  });
+
+  it("в рабочем окружении: транспорт упал — ни токена, ни /access/", async () => {
+    process.env.NODE_ENV = "production";
+    m.sendMail.mockRejectedValueOnce(new Error("smtp down"));
+
+    expect(await sendAssignmentEmail(withLink)).toBe(false);
+
+    const lines = loggedLines();
+    expect(lines).not.toContain("/access/");
+    expect(lines).not.toContain("deadbeefdeadbeef");
+    expect(lines).toContain("To: u@x.test");
+  });
+
+  it("в окружении разработки строка со ссылкой остаётся", async () => {
+    // With SMTP off in development, the log is the only way to get the link by
+    // hand — removing it there would take the local scenario away entirely.
+    process.env.NODE_ENV = "development";
+    disableSmtp();
+
+    expect(await sendAssignmentEmail(withLink)).toBe(false);
+
+    expect(loggedLines()).toContain(`Link: ${withLink.magicLink}`);
   });
 });
 

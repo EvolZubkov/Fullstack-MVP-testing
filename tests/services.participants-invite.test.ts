@@ -293,6 +293,37 @@ describe("прогон", () => {
     }));
   });
 
+  it("два назначения одного теста — отзываются токены обоих", async () => {
+    const storage = makeStorage({
+      getUserByEmail: vi.fn().mockResolvedValue({ id: "u-x", email: "x@x.ru", name: "Икс" }),
+      // The test reached the person twice over: personally, and through a group
+      // they belong to. Each assignment carries its own live token.
+      getTestAssignments: vi.fn().mockResolvedValue([
+        { id: "as-group", userId: null, groupId: "g1" },
+        { id: "as-personal", userId: "u-x", groupId: null },
+      ]),
+      getGroupUsers: vi.fn().mockResolvedValue([{ id: "u-x" }]),
+    });
+
+    await runParticipantsInvite({
+      ...runDefaults,
+      rows: [previewRow(0, "x@x.ru", "assigned", { userId: "u-x" })],
+      storage,
+    });
+
+    // FR-16: after the run exactly one link works — the new one. Revoking only
+    // the assignment the run delivers against would leave the other one live.
+    expect(storage.revokeAssignmentAccessTokensByAssignmentAndUser.mock.calls).toEqual(
+      expect.arrayContaining([["as-personal", "u-x"], ["as-group", "u-x"]]),
+    );
+    // One new link, on the personal record — no second assignment is made.
+    expect(storage.createTestAssignment).not.toHaveBeenCalled();
+    expect(deliverMock).toHaveBeenCalledTimes(1);
+    expect(deliverMock).toHaveBeenCalledWith(expect.objectContaining({
+      assignmentId: "as-personal", revokeExisting: true,
+    }));
+  });
+
   it("имя из файла не затирает уже заполненное, признак не навешивается", async () => {
     const storage = makeStorage({
       getUserByEmail: vi.fn().mockResolvedValue({ id: "u-staff", email: "staff@x.ru", name: "Своё имя" }),

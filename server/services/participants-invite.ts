@@ -75,8 +75,8 @@ export interface ParticipantPreviewRow extends ParticipantRow {
 }
 
 /**
- * Map every user who already holds this test to the assignment that gives it to
- * them — directly, or through a group they belong to.
+ * Map every user who already holds this test to ALL the assignments that give
+ * it to them — directly, or through a group they belong to.
  *
  * Group membership counts: a member of an assigned group holds the test just as
  * a personally assigned user does (`server/routes/assignments.ts` enumerates the
@@ -85,23 +85,36 @@ export interface ParticipantPreviewRow extends ParticipantRow {
  * while the "already assigned" branch — which reissues and revokes the old one —
  * never fires.
  *
- * A personal assignment wins over a group one for the same person: it is the
- * narrower record, and it is the one the "current assignments" tab lets the
- * operator revoke by hand.
+ * Every assignment is kept, not just one, because a person can hold the same
+ * test twice over: once through a group, once in person. Each of those carries
+ * its own access tokens, and FR-16 promises ONE working link per person per
+ * test — so the run has to be able to revoke all of them, not the newest one it
+ * happened to see last.
+ *
+ * A personal assignment comes FIRST in the list: it is the narrower record, it
+ * is the one the "current assignments" tab lets the operator revoke by hand, and
+ * the head of the list is what the run delivers against.
  */
 async function collectAssignmentsByUser(
   testId: string,
   storage: IStorage,
-): Promise<Map<string, string>> {
+): Promise<Map<string, string[]>> {
   const assignments = await storage.getTestAssignments(testId);
-  const byUser = new Map<string, string>();
+  const byUser = new Map<string, string[]>();
+  const add = (userId: string, assignmentId: string, personal: boolean) => {
+    const held = byUser.get(userId) ?? [];
+    if (held.includes(assignmentId)) return;
+    if (personal) held.unshift(assignmentId);
+    else held.push(assignmentId);
+    byUser.set(userId, held);
+  };
   for (const assignment of assignments) {
     if (!assignment.groupId) continue;
     const members = await storage.getGroupUsers(assignment.groupId);
-    for (const member of members) byUser.set(member.id, assignment.id);
+    for (const member of members) add(member.id, assignment.id, false);
   }
   for (const assignment of assignments) {
-    if (assignment.userId) byUser.set(assignment.userId, assignment.id);
+    if (assignment.userId) add(assignment.userId, assignment.id, true);
   }
   return byUser;
 }
@@ -294,20 +307,26 @@ export async function runParticipantsInvite(
   // ── 4-5. Assignment per person, then the link and the letter ────────────────
   for (const { row, user } of participants) {
     try {
-      const existingAssignmentId = assignmentByUser.get(user.id) ?? null;
+      const heldAssignmentIds = assignmentByUser.get(user.id) ?? [];
+      // Every link the person already holds for this test goes, not only the
+      // one of the assignment they are delivered against (FR-16: one working
+      // link per person per test). A test given both to a group and in person
+      // leaves TWO live tokens, and revoking one of them while minting a third
+      // would leave the person with two working ways in — the very thing the
+      // run is supposed to prevent. The delivery seam revokes again for the
+      // assignment it mints on (`revokeExisting`); a second revoke of an
+      // already-revoked token changes nothing.
+      for (const heldId of heldAssignmentIds) {
+        await storage.revokeAssignmentAccessTokensByAssignmentAndUser(heldId, user.id);
+      }
+
       let assignmentId: string;
       if (groupAssignmentId) {
         assignmentId = groupAssignmentId;
-        // The person is delivered against the group assignment, so a link they
-        // hold from an earlier one would be a second live way in. Revoke it:
-        // FR-16 promises one working link per person per test.
-        if (existingAssignmentId) {
-          await storage.revokeAssignmentAccessTokensByAssignmentAndUser(existingAssignmentId, user.id);
-        }
-      } else if (existingAssignmentId) {
+      } else if (heldAssignmentIds.length > 0) {
         // Already assigned: no second assignment, the link is reissued on the
-        // existing one and the previous one is revoked by `revokeExisting`.
-        assignmentId = existingAssignmentId;
+        // one they hold — the personal record when there is one.
+        assignmentId = heldAssignmentIds[0];
       } else {
         const assignment = await storage.createTestAssignment({
           testId, userId: user.id, groupId: null, dueDate, linkExpiresAt, assignedBy: actorId,

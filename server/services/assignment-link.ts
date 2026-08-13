@@ -76,9 +76,12 @@ export interface DeliverAssignmentLinkResult {
    * bulk run can offer the operator a one-time export (PRD-28 раздел 7) — the
    * raw token is never stored, so this is the only moment it exists.
    *
-   * It is handed to the CALLER and to nobody else: the raw token must never
-   * reach the log, so the log lines below deliberately name the user and the
-   * test but not the link.
+   * The log lines below deliberately name the user and the test but not the
+   * link. That is a statement about THIS module only: the letter itself is
+   * written by `server/email.ts`, and when the transport refuses it, that
+   * module logs the undelivered letter — including the link, but in a
+   * development environment only (`mayLogEntryLink`). In production a raw
+   * token reaches no log on any path.
    */
   magicLink?: string;
   /** Whether the notification letter was actually accepted by the transport. */

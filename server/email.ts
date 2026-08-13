@@ -38,6 +38,26 @@ function fromAddress(): string {
 }
 
 /**
+ * Whether a one-time entry link (`/access/<token>`) may be written to the log.
+ *
+ * Never outside development. Such a link is a passwordless way into the account
+ * it was minted for, and the log is exactly where the contents of an
+ * undelivered letter end up: a bulk participant run (PRD-28) against a broken
+ * transport would drop hundreds of WORKING keys into the file, each one next to
+ * its recipient's address. The token stays valid on purpose (недоставка не
+ * отменяет выпуск, раздел 6) — which is what makes the logged copy dangerous.
+ *
+ * Development is the exception on purpose: with SMTP switched off, the log is
+ * the only way to lay hands on a link by hand. The check names development
+ * explicitly rather than negating production — the same shape as the reset
+ * `devLink` in `server/routes/auth.ts` — so an environment that forgot to
+ * declare itself is treated as the strict one.
+ */
+function mayLogEntryLink(): boolean {
+  return process.env.NODE_ENV === "development";
+}
+
+/**
  * Box of the call-to-action button (everything but its text colour), shared by
  * the `<style>` rule and the inline `style` attribute below.
  */
@@ -212,13 +232,29 @@ export async function sendAssignmentEmail(opts: {
   const hasMagicLink = Boolean(opts.magicLink);
   const ctaHref = opts.magicLink ?? `${appBaseUrl()}/learner/test/${opts.testId}`;
 
-  if (!transport) {
+  /**
+   * Record a letter that did not go out, in the two ways it can fail to.
+   *
+   * The recipient and the test are always written — that is what makes the
+   * failure actionable. The destination is written only when it is not a
+   * one-time key: the fallback `/learner/test/<id>` address is public, while a
+   * `/access/<token>` link is written in development only
+   * ({@link mayLogEntryLink}).
+   *
+   * @param why Short reason, printed in the header line.
+   */
+  const logUndelivered = (why: string): void => {
     logger.info("===========================================");
-    logger.info("ASSIGNMENT MAGIC LINK (SMTP not configured):");
+    logger.info(`ASSIGNMENT MAGIC LINK (${why}):`);
     logger.info(`Test: ${opts.testTitle}`);
     logger.info(`To: ${opts.to}`);
-    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login required: ${ctaHref}`);
+    if (!hasMagicLink) logger.info(`Login required: ${ctaHref}`);
+    else if (mayLogEntryLink()) logger.info(`Link: ${ctaHref}`);
     logger.info("===========================================");
+  };
+
+  if (!transport) {
+    logUndelivered("SMTP not configured");
     return false;
   }
 
@@ -320,12 +356,7 @@ ${ctaTextBlock}
     return true;
   } catch (error) {
     logger.error("Failed to send assignment email: " + (error as Error).message);
-    logger.info("===========================================");
-    logger.info("ASSIGNMENT MAGIC LINK (email send failed):");
-    logger.info(`Test: ${opts.testTitle}`);
-    logger.info(`To: ${opts.to}`);
-    logger.info(hasMagicLink ? `Link: ${ctaHref}` : `Login required: ${ctaHref}`);
-    logger.info("===========================================");
+    logUndelivered("email send failed");
     return false;
   }
 }
