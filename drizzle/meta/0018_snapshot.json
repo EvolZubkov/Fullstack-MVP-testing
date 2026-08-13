@@ -1,6 +1,6 @@
 {
-  "id": "79dd41c8-9c62-4b28-804c-4cb2396e925b",
-  "prevId": "8268de0e-020c-45ea-a3eb-aa0d7a55f9d0",
+  "id": "d7bf44f4-a05b-4495-a70e-4a6c181cd9b4",
+  "prevId": "6647c30a-93bb-4a4a-98b7-a15fde0d35b5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2756,6 +2756,13 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
+        },
+        "pass_decision_policy": {
+          "name": "pass_decision_policy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'overall_only'"
         },
         "webhook_url": {
           "name": "webhook_url",
