@@ -23,6 +23,7 @@ import { countUnmappedPages } from "../services/page-variant-audit";
 import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
+import { DEFAULT_TEMPLATE_ID } from "../services/template-rebind";
 import { logger } from "../logger";
 import { appBaseUrl } from "../config";
 import {
@@ -785,7 +786,16 @@ router.get("/:id/design", requireUserContext, requireTestScope("read"), async (r
 
     const settings = test.designSettingsJson as Record<string, unknown> | null;
     if (!settings || Object.keys(settings).length === 0) {
-      return res.json({ templateId: "default" });
+      return res.json({ templateId: DEFAULT_TEMPLATE_ID });
+    }
+    // Settings WITHOUT a `templateId` are not "no template": every delivery path falls
+    // back to «default» (GET /:id/screen, the attempt renderer, the SCORM bake), and such
+    // rows do exist — a transferred package or an out-of-band write can carry `params`
+    // alone. Answering them literally left the editor with no manifest at all, so the
+    // «Оформление» panes reported the template declares no params and no labels while the
+    // learner was being served the standard template all along.
+    if (typeof settings.templateId !== "string" || settings.templateId.length === 0) {
+      return res.json({ ...settings, templateId: DEFAULT_TEMPLATE_ID });
     }
     res.json(settings);
   } catch (error) {

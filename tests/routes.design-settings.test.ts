@@ -124,6 +124,22 @@ describe("GET /api/tests/:id/design", () => {
     expect(res.body).toEqual({ templateId: "default" });
   });
 
+  // A row that carries params but no `templateId` (transferred package, out-of-band
+  // write) must resolve the same template every delivery path falls back to, or the
+  // «Оформление» tab loads no manifest and reports the template declares nothing.
+  it("fills in the default templateId when the saved settings carry none", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...baseTest,
+      designSettingsJson: { params: { scaleRenderKind: "gradient_bar" } },
+    });
+    const res = await request(makeApp()).get("/api/tests/test-1/design");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      templateId: "default",
+      params: { scaleRenderKind: "gradient_bar" },
+    });
+  });
+
   it("returns saved design settings", async () => {
     const settings = {
       templateId: "corporate",
