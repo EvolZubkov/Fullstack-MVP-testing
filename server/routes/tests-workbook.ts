@@ -17,7 +17,7 @@ import { addAoaSheet, addJsonSheet, readWorkbookFromBuffer, workbookToBuffer } f
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
-import { memoryUpload } from "../middleware/upload";
+import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
 import { importWorkbook } from "../services/workbook-import";
 import { serializeQuestionRow, QUESTION_HEADERS, QUESTION_WIDTHS } from "../services/questions-export";
 import {
@@ -31,6 +31,9 @@ import {
   SCALE_HEADERS,
   SCALE_WIDTHS,
   RESULT_VAR_HEADERS,
+  OUTCOME_HEADERS,
+  OUTCOME_WIDTHS,
+  serializeOutcomeRows,
   RESULT_VAR_WIDTHS,
   MEASUREMENT_HEADERS,
   MEASUREMENT_WIDTHS,
@@ -134,7 +137,7 @@ router.post(
   "/:id/workbook/import",
   requirePermission("tests.edit"),
   requireTestScope("edit"),
-  memoryUpload.single("file"),
+  workbookUploadSingle("file"),
   async (req: Request, res: Response) => {
     try {
       const testId = req.params.id;
@@ -154,6 +157,7 @@ router.post(
       res.json(result);
     } catch (error) {
       logger.error("Workbook import error: " + (error as Error).message, "tests-workbook");
+      if (respondWorkbookReadError(res, error)) return;
       res.status(500).json({ error: "Failed to import workbook" });
     }
   },
@@ -219,6 +223,7 @@ router.get(
       const scaleRows = scales.map((s) => serializeScaleRow(s));
       const scaleKeyById = new Map(scales.map((s) => [s.id, s.key]));
       const rvRows = resultVars.map((v) => serializeResultVariableRow(v));
+      const outcomeRows = resultVars.flatMap((v) => serializeOutcomeRows(v));
       const measRows = measurements
         .filter((m) => aliasByQuestionId.has(m.questionId) && scaleKeyById.has(m.scaleId))
         .map((m) => serializeMeasurementRow(m, aliasByQuestionId.get(m.questionId)!, scaleKeyById.get(m.scaleId)!));
@@ -401,6 +406,9 @@ router.get(
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);
+      // PRD-48: тексты, которые ученик читает на итогах. Без них перенесённый книгой
+      // тест печатал сырой ключ шкалы вместо названия стиля.
+      addSheet(wb, "Исходы показателей", outcomeRows, OUTCOME_HEADERS, OUTCOME_WIDTHS);
       addSheet(wb, "Вклады вопросов", measRows, MEASUREMENT_HEADERS, MEASUREMENT_WIDTHS);
 
       const buffer = await workbookToBuffer(wb);

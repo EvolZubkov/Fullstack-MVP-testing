@@ -25,6 +25,26 @@ import { sendAssignmentEmail } from "../email";
 import { mayReceiveAssignmentLink } from "./access";
 import type { User } from "@shared/schema";
 
+/** Default lifetime of an assignment access token when nothing else says otherwise. */
+const DEFAULT_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * When a freshly minted assignment link stops working: the operator's explicit
+ * choice, else the due date of the assignment, else 30 days from now.
+ *
+ * Lives next to the minting itself rather than at the call sites, so the senders
+ * — the assignment routes and the bulk participant run (PRD-28) — cannot come to
+ * disagree about how long a link lasts.
+ */
+export function resolveAssignmentTokenExpiry(
+  linkExpiresAt?: Date | null,
+  dueDate?: Date | null,
+): Date {
+  if (linkExpiresAt) return linkExpiresAt;
+  if (dueDate) return dueDate;
+  return new Date(Date.now() + DEFAULT_TOKEN_TTL_MS);
+}
+
 /** Input to {@link deliverAssignmentLink}. */
 export interface DeliverAssignmentLinkOptions {
   /** The recipient, already resolved (used for the role check and the greeting). */
@@ -51,6 +71,21 @@ export interface DeliverAssignmentLinkOptions {
 export interface DeliverAssignmentLinkResult {
   /** `true` when a token was minted and the letter carries a magic link; `false` when withheld. */
   issued: boolean;
+  /**
+   * The freshly minted link, present only when `issued` is true. Returned so a
+   * bulk run can offer the operator a one-time export (PRD-28 раздел 7) — the
+   * raw token is never stored, so this is the only moment it exists.
+   *
+   * The log lines below deliberately name the user and the test but not the
+   * link. That is a statement about THIS module only: the letter itself is
+   * written by `server/email.ts`, and when the transport refuses it, that
+   * module logs the undelivered letter — including the link, but in a
+   * development environment only (`mayLogEntryLink`). In production a raw
+   * token reaches no log on any path.
+   */
+  magicLink?: string;
+  /** Whether the notification letter was actually accepted by the transport. */
+  delivered: boolean;
 }
 
 /**
@@ -65,6 +100,11 @@ export interface DeliverAssignmentLinkResult {
  * never thrown. Callers only need to resolve the recipient and their e-mail
  * beforehand (decrypt errors are handled by the caller, since the desired
  * response — 400, skip, silent return — differs by call site).
+ *
+ * The result reports what happened per recipient: whether a link was issued,
+ * the link itself (see {@link DeliverAssignmentLinkResult.magicLink}) and
+ * whether the transport accepted the letter, so a bulk run can tally failures
+ * and offer the operator a one-time export of the links it just minted.
  */
 export async function deliverAssignmentLink(
   opts: DeliverAssignmentLinkOptions,
@@ -79,15 +119,16 @@ export async function deliverAssignmentLink(
       `Assignment link withheld (privileged account) for user ${user.id}, test "${testTitle}"`,
       "assignments",
     );
-    await sendAssignmentEmail({
+    const delivered = await sendAssignmentEmail({
       to: email,
       userName: user.name || undefined,
+      testId,
       testTitle,
       testDescription,
       dueDate,
     });
     logger.info(`Assignment email sent to ${email} for test "${testTitle}"`, "assignments");
-    return { issued: false };
+    return { issued: false, delivered };
   }
 
   if (revokeExisting) {
@@ -110,9 +151,10 @@ export async function deliverAssignmentLink(
     "assignments",
   );
 
-  await sendAssignmentEmail({
+  const delivered = await sendAssignmentEmail({
     to: email,
     userName: user.name || undefined,
+    testId,
     testTitle,
     testDescription,
     dueDate,
@@ -120,5 +162,5 @@ export async function deliverAssignmentLink(
   });
   logger.info(`Assignment email sent to ${email} for test "${testTitle}"`, "assignments");
 
-  return { issued: true };
+  return { issued: true, magicLink, delivered };
 }

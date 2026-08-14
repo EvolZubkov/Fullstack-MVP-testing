@@ -25,7 +25,7 @@ import { logger } from "../../logger";
 import { duplicateNameGroups } from "../topic-access";
 import { buildAssigned, buildRecentResults } from "./assigned";
 import { buildAttention } from "./attention";
-import { buildMaterials } from "./materials";
+import { buildMaterials, MATERIAL_CAPABILITIES } from "./materials";
 import { buildMyTests } from "./my-tests";
 import { buildMyTopics } from "./my-topics";
 import { buildPeople } from "./people";
@@ -107,9 +107,11 @@ export async function buildHome(userId: string, roles: readonly Role[]): Promise
       }),
     );
   }
-  if (can("adminTemplates.manage")) {
+  // «Материалы» — общая полка руководств: показывается всякому, кому доступен
+  // хотя бы один документ, а не только управляющему шаблонами.
+  if (MATERIAL_CAPABILITIES.some(can)) {
     jobs.push(
-      guard("materials", () => buildMaterials()).then((section) => {
+      guard("materials", () => buildMaterials(roles)).then((section) => {
         payload.materials = section;
       }),
     );

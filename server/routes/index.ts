@@ -18,11 +18,13 @@ import contentPagesRouter from "./content-pages";
 import resultVariablesRouter from "./result-variables";
 import scalesRouter from "./scales";
 import testsWorkbookRouter from "./tests-workbook";
+import testTransferRouter from "./test-transfer";
 import workbookRouter from "./workbook";
 import debugPlayerRouter from "./debug-player";
 import homeRouter from "./home";
 import reportRouter from "./report";
 import mediaRouter from "./media";
+import docsRouter from "./docs";
 
 export {
   foldersRouter,
@@ -45,6 +47,7 @@ export {
   resultVariablesRouter,
   scalesRouter,
   testsWorkbookRouter,
+  testTransferRouter,
   workbookRouter,
   debugPlayerRouter,
   homeRouter,
@@ -61,6 +64,7 @@ export const routerConfig = [
   { path: "/api/tests", router: resultVariablesRouter },
   { path: "/api/tests", router: scalesRouter },
   { path: "/api/tests", router: testsWorkbookRouter },
+  { path: "/api/tests", router: testTransferRouter }, // перенос теста между инсталляциями (.tbtest)
   { path: "/api/tests", router: debugPlayerRouter }, // PRD-18 debug player (session/play/delete)
   { path: "/api/workbook", router: workbookRouter },
   { path: "/api/folders", router: foldersRouter },
@@ -75,6 +79,9 @@ export const routerConfig = [
   { path: "/api/report", router: reportRouter },
   // Медиатека: префиксное монтирование до общих "/api", чтобы путь не перехватывался.
   { path: "/api/media", router: mediaRouter },
+  // Скачивание руководств («Материалы» на главной); право проверяется на каждый
+  // документ отдельно. Префиксно — до общих "/api".
+  { path: "/api/docs", router: docsRouter },
   { path: "/api/users", router: usersRouter },
   { path: "/api/groups", router: groupsRouter },
   { path: "/api/questions", router: questionsRouter },

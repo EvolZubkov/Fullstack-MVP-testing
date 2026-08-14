@@ -70,6 +70,11 @@ function toConfigJson(v: ResultVariableModel): Record<string, unknown> {
   if (bands.length > 0) config.bands = bands;
   const outcomes = outcomesToPayload(v.outcomes);
   if (outcomes.length > 0) config.outcomes = outcomes;
+  // PRD-49 §6: card slots. Written ONLY when switched off — «show» is the absence of
+  // the flag everywhere downstream (`showName !== false`), so an indicator nobody
+  // touched keeps the exact config it had and never shows up as a change.
+  if (v.showName === false) config.showName = false;
+  if (v.showLevel === false) config.showLevel = false;
   return config;
 }
 

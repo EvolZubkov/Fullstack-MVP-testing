@@ -11,8 +11,12 @@ export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
   email: text("email").notNull(), // Зашифрованный email
   emailHash: varchar("email_hash", { length: 64 }).unique(), // SHA-256 хеш для поиска
-  passwordHash: text("password_hash").notNull(), // scrypt hash (PRD-9); legacy bcrypt during migration
+  passwordHash: text("password_hash"), // scrypt hash (PRD-9); NULL for an external participant (PRD-28)
   name: text("name"), // заполняется при первом входе
+  // PRD-28: an external participant is a FLAG on the account, never a role. Such an
+  // account has no password at all: password login, recovery and the invite letter
+  // are refused, and the only way in is the assignment link.
+  isExternal: boolean("is_external").notNull().default(false),
   // PRD-13 (T-10): the legacy single `role` column was dropped — roles live in
   // `user_roles` (many-to-many) plus the configuration-derived superadmin.
   status: text("status", { enum: ["pending", "active", "inactive"] }).notNull().default("pending"),
@@ -426,6 +430,13 @@ export const reportSettingsSchema = z.object({
    * существующего теста.
    */
   enabled: z.boolean().optional(),
+  /**
+   * PRD-49: переопределения надписей ИМЕННО для отчёта. Слой лежит вне ветвей режима по
+   * той же причине, что и `enabled`: формулировка принадлежит документу, а не способу
+   * его выдачи. Отсутствие ключа = документ говорит теми же словами, что экран итогов.
+   * Форма та же, что у `design_settings_json.labels` (см. `shared/template/labels`).
+   */
+  labels: z.record(z.string(), z.object({ on: z.boolean().optional(), text: z.string().optional() })).optional(),
   standard: reportModeSettingsSchema.nullish(),
   adaptive: reportModeSettingsSchema.nullish(),
 });
@@ -456,6 +467,26 @@ export const tests = pgTable("tests", {
   mode: text("mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
   showDifficultyLevel: boolean("show_difficulty_level").notNull().default(true),
   overallPassRuleJson: jsonb("overall_pass_rule_json").notNull(),
+  /**
+   * How the overall threshold and the per-topic gates combine into the verdict
+   * (`docs/architecture/test-settings-parameter-structure.md` §3.4, PRD-4 §5.2).
+   * The editor radio group «Тест пройден, если» writes exactly this column.
+   *
+   * The backfill migration derives it for existing tests from their topic rules
+   * (`overall_and_required_topics` when any topic carries an own rule, otherwise
+   * `overall_only`) — the same derivation the editor used to display while the
+   * column did not exist, so no author sees their setting change under them.
+   */
+  passDecisionPolicy: text("pass_decision_policy", {
+    enum: [
+      "overall_only",
+      "overall_and_required_topics",
+      "required_topics_only",
+      "all_topics_passed",
+    ],
+  })
+    .notNull()
+    .default("overall_only"),
   webhookUrl: text("webhook_url"),
   /** @deprecated PRD-7: superseded by `status`. Kept for transitional backward compatibility; remove in a later release. */
   published: boolean("published").default(false),
@@ -1916,6 +1947,14 @@ export const designSettingsSchema = z.object({
   paramsByTheme: z
     .record(z.enum(["light", "dark"]), z.record(z.string(), z.unknown()))
     .optional(),
+  /**
+   * PRD-49: the test's own wording of the results-screen labels. Absent = the template's
+   * own texts. A value is a record, not a bare string: «switched off» and «never touched»
+   * must stay distinguishable (see `shared/template/labels`).
+   */
+  labels: z.record(z.string(), z.object({ on: z.boolean().optional(), text: z.string().optional() })).optional(),
+  /** PRD-49: the author's order of the four sub-blocks under the results umbrella. */
+  resultsBlockOrder: z.array(z.enum(["summary", "scales", "indicators", "topics"])).optional(),
 });
 
 export type DesignSettings = z.infer<typeof designSettingsSchema>;

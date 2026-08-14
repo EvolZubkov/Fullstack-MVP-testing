@@ -50,6 +50,33 @@ interface DesignSettingsExport {
    * отчёт собирается канонической деградацией, как до этого PRD (FR-28).
    */
   report?: ReportBake;
+  /**
+   * PRD-49 §8: the ALREADY RESOLVED interface labels, BY SCREEN — `{ results: {…},
+   * "results.adaptive": {…}, "section-results": {…} }`, each a flat «key → text» map
+   * where an empty string means «do not print this label».
+   *
+   * Resolved by the assembler (`build-export-data`) because the manifest that declares
+   * the defaults does not travel into an LMS — and resolved per SCREEN because those
+   * defaults are per screen (`defaults.<screen>`): one map for all three would print the
+   * results screen's wording on the adaptive screen while the web host printed the
+   * screen's own, which is the host drift this PRD exists to remove. The runtime picks
+   * its screen's map and hands it over unchanged; the shared builder alone turns it into
+   * the `labels.*` tree.
+   *
+   * Absent for a template that declares no labels — its layouts print their own strings,
+   * as before this PRD. Packages baked before the split carry a FLAT map here instead;
+   * the runtime tells the two shapes apart (`vrScreenLabels`, viewResults.js).
+   */
+  labels?: Record<string, Record<string, string>>;
+  /** PRD-49: the author's order of the results sub-blocks (`design_settings_json`). */
+  resultsBlockOrder?: string[];
+  /**
+   * PRD-49: what each results SCREEN of this template prints, and in what order — the
+   * list the author's order is cleaned against. Per screen, because composition differs:
+   * the adaptive results screen has no score summary. Resolved from the manifest at bake
+   * for the same reason the labels are.
+   */
+  templateBlockOrder?: Record<string, readonly string[]>;
 }
 
 interface ExportData {
@@ -189,6 +216,10 @@ export function buildTestJson(data: ExportData): string {
       : {}),
     showDifficultyLevel: data.test.showDifficultyLevel ?? true,
     overallPassRule: overallPassRule,
+    // «Тест пройден, если»: HOW the overall rule and the topic gates combine into the
+    // verdict. Baked so the package decides exactly like the web host; a package built
+    // before this shipped carries none and the shared engine then keeps the old rule.
+    passDecisionPolicy: data.test.passDecisionPolicy ?? null,
     webhookUrl: data.test.webhookUrl,
     testFeedback: data.test.feedback || null,
     // PRD-29 §7.1: the test's OWN feedback block (`tests.feedback_json`) is one of the
@@ -474,6 +505,17 @@ export function buildTestJson(data: ExportData): string {
       // PRD-27: включается только когда шаблон вид отчёта объявил — пакет теста на
       // шаблоне без отчёта сохраняет прежнюю форму TEST_DATA (FR-28).
       ...(data.designSettings.report ? { report: data.designSettings.report } : {}),
+      // PRD-49: в пакет едут УЖЕ РАЗРЕШЁННЫЕ надписи и разрешённые по экранам списки
+      // подблоков — манифеста в LMS нет, и второго источника умолчаний у рантайма быть не
+      // может (так же устроен признак выдачи отчёта). Ни одно из трёх полей не появляется
+      // у шаблона, который надписей не объявлял: форма TEST_DATA остаётся прежней.
+      ...(data.designSettings.labels ? { labels: data.designSettings.labels } : {}),
+      ...(data.designSettings.resultsBlockOrder
+        ? { resultsBlockOrder: data.designSettings.resultsBlockOrder }
+        : {}),
+      ...(data.designSettings.templateBlockOrder
+        ? { templateBlockOrder: data.designSettings.templateBlockOrder }
+        : {}),
     };
   }
 
@@ -586,6 +628,13 @@ export function buildTestJson(data: ExportData): string {
         learnerVisibility: s.learnerVisibility,
         scormTarget: s.scormTarget,
         sortOrder: s.sortOrder,
+        // PRD-49 §6: the card's name/level slot toggles, RESOLVED to a plain boolean here
+        // (not the raw `config_json`) — the runtime only ever needs the answer, and the
+        // author's config object is not something the package is meant to leak. `!== false`
+        // because an absent key means "show"; every scale baked before this PRD carries
+        // neither key and keeps both slots.
+        showName: (s.configJson as Record<string, unknown>).showName !== false,
+        showLevel: (s.configJson as Record<string, unknown>).showLevel !== false,
       };
     });
 

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-28 — диалог назначения теста, вкладка «Списком из файла».
+    Состояние 1 из 4: ЗАГРУЗКА (спека docs/specs/prd-28/external-participant.md, §5).
+
+    Каркас диалога взят как есть из client/src/components/assign-test-dialog.tsx:
+    ModalDialog size="xl" (ou-modal--xl) + Tabs variant="segment" align="stretch".
+    Существующие вкладки «Назначено (N)», «Пользователи», «Группы» показаны в том
+    виде, в каком они есть сейчас; их механика не меняется. Новая вкладка —
+    четвёртая, справа.
+
+    Пояснения и DS Mapping — ПОД холстом, в блоке .wf-doc.
+    -->
+    <title>PRD-28 — Списком из файла: загрузка</title>
+    <!-- Порядок подключения важен и отличается от соседних эскизов.
+         wf-utils.css несёт каркас эскиза, но вместе с ним — устаревшие shim'ы
+         для ou-tag / ou-banner / ou-input с токенами, которых в дизайн-системе
+         давно нет (`--ou-success-bg` -> прозрачный фон вместо зелёного).
+         Загруженный последним, он гасит настоящие тона ДС, поэтому
+         дизайн-система подключается ПОСЛЕ него. prd7-shared.css идёт первым:
+         он даёт токены --wf-*, которыми пользуется wf-utils, но при этом
+         перекрасил бы полосу переключателя состояний в свой тёмный вариант. -->
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/university-rt.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { display: none; }
+
+      /* В продукте диалог — фиксированный слой на весь экран. В эскизе он
+         встроен в поток страницы: иначе он накрыл бы блок пояснений под
+         холстом и обрезал бы длинные состояния. Подложка и сам диалог,
+         их раскладка и размеры не меняются. */
+      .wf-state > .ou-modal-root { position: relative; inset: auto; }
+      .wf-state > .ou-modal-root > .ou-modal { max-height: none; }
+
+      /* Ряд «панель действий вкладки»: как в usersPanel/groupsPanel —
+         кнопка прижата к правому краю панели. */
+      .tb-bulk-actions { display: flex; justify-content: flex-end; gap: var(--ou-space-2); }
+      /* Ссылка на шаблон стоит под зоной выбора файла, слева. */
+      .tb-bulk-tpl { display: flex; justify-content: flex-start; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-4) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="i-users-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0" /><circle cx="10" cy="8" r="5" /><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" /></symbol>
+      <symbol id="i-sheet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M8 13h8" /><path d="M8 17h8" /></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">PRD-28 · Списком из файла:</span>
+      <button type="button" class="active">1 · Загрузка</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd28-bulk-invite-preview.html">&rarr; 2 · Предпросмотр</a>
+      <a class="wf-nav-link" href="prd28-bulk-invite-report.html">&rarr; 3 · Отчёт</a>
+      <a class="wf-nav-link" href="prd28-users-external.html">&rarr; Пользователи</a>
+    </nav>
+
+    <div class="wf-state active" data-state="upload">
+      <!-- ░░░ ХОЛСТ: диалог назначения теста ░░░ -->
+      <div class="ou-modal-root">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title">Управление назначениями</h2>
+              <p class="ou-modal__desc">Основы информационной безопасности</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg>
+            </button>
+          </header>
+
+          <div class="ou-modal__body">
+            <div class="ou-tabs ou-tabs--segment ou-tabs--m ou-tabs--stretch">
+              <div class="ou-tabs__list" role="tablist" aria-label="Способ назначения">
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">
+                  <span class="ou-tabs__label">Назначено (4)</span>
+                </button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">
+                  <span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users" /></svg></span>
+                  <span class="ou-tabs__label">Пользователи</span>
+                </button>
+                <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">
+                  <span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-users-round" /></svg></span>
+                  <span class="ou-tabs__label">Группы</span>
+                </button>
+                <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">
+                  <span class="ou-tabs__icon"><svg width="16" height="16" aria-hidden="true"><use href="#i-sheet" /></svg></span>
+                  <span class="ou-tabs__label">Списком из файла</span>
+                </button>
+              </div>
+
+              <div class="ou-tabs__panel" role="tabpanel" aria-label="Списком из файла">
+                <div class="ou-stack ou-stack--gap-5">
+
+                  <!-- Выбор файла: файл ещё не выбран -->
+                  <div class="ou-uploader" role="button" tabindex="0">
+                    <span class="ou-uploader__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-upload" /></svg></span>
+                    <span class="ou-uploader__title">Перетащите книгу или нажмите, чтобы выбрать</span>
+                    <span class="ou-uploader__sub">Только .xlsx. Колонки: email, name. До 500 строк.</span>
+                    <span class="ou-uploader__cta" aria-hidden="true">Выбрать файл</span>
+                  </div>
+
+                  <div class="tb-bulk-tpl">
+                    <a class="ou-btn ou-btn--ghost ou-btn--s" href="/api/tests/1/participants-template" download>
+                      <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-download" /></svg></span>
+                      Скачать шаблон .xlsx
+                    </a>
+                  </div>
+
+                  <!-- Выбранный файл (состояние после выбора) -->
+                  <div class="ou-file">
+                    <div class="ou-file__thumb ou-file__thumb--xls">XLS</div>
+                    <div class="ou-file__main">
+                      <div class="ou-file__name">uchastniki-audit-ib.xlsx</div>
+                      <div class="ou-file__meta">10 строк · 18 КБ</div>
+                    </div>
+                    <div class="ou-file__actions">
+                      <button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл">
+                        <svg width="16" height="16" aria-hidden="true"><use href="#i-trash" /></svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Сроки: те же два поля и та же связка, что на «Пользователях» и «Группах» -->
+                  <div class="ou-stack ou-stack--row ou-stack--gap-4">
+                    <div class="ou-field ou-field--m ou-field--full ou-grow">
+                      <label class="ou-field__lbl" for="wf-due">Срок выполнения</label>
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="wf-due" type="date" value="2026-09-15" />
+                      </div>
+                    </div>
+                    <div class="ou-field ou-field--m ou-field--full ou-grow">
+                      <label class="ou-field__lbl" for="wf-link">Ссылка активна до</label>
+                      <div class="ou-field__box">
+                        <input class="ou-field__input" id="wf-link" type="date" value="2026-09-15" />
+                      </div>
+                      <div class="ou-field__msg">По умолчанию: +30 дней</div>
+                    </div>
+                  </div>
+
+                  <!-- Необязательная группа -->
+                  <div class="ou-field ou-field--m ou-field--full">
+                    <label class="ou-field__lbl" for="wf-group">Создать группу из списка</label>
+                    <div class="ou-field__box">
+                      <input class="ou-field__input" id="wf-group" type="text" placeholder="Например: Аудит ИБ, сентябрь 2026" />
+                    </div>
+                    <div class="ou-field__msg">Пусто — каждый участник получит поимённое назначение. Имя задано — создаётся новая группа, тест назначается на неё одним назначением.</div>
+                  </div>
+
+                  <div class="tb-bulk-actions">
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Проверить список</button>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ ВНЕ ХОЛСТА: пояснения ░░░ -->
+    <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — состояние «Загрузка»</h3>
+        <table>
+          <thead><tr><th>Элемент</th><th>Требование</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>Вкладка «Списком из файла»</td><td>FR-09, §5</td><td>Четвёртая вкладка того же диалога. Соседние вкладки и каркас показаны как сейчас (assign-test-dialog.tsx). Ярлык первой вкладки в коде — «Назначено (N)», не «Текущие»</td></tr>
+            <tr><td>Зона выбора файла</td><td>FR-10, §5</td><td>DS <code>FileUploader</code>. Принимается ТОЛЬКО .xlsx: читатель книг отвергает csv (§5). Существующий импорт пользователей предлагает <code>.csv,.xlsx,.xls</code> — это известный дефект, в охват не входит</td></tr>
+            <tr><td>Выбранный файл</td><td>—</td><td>DS <code>FileItem</code>. Показан вместе с пустой зоной только ради эскиза: в интерфейсе одновременно видно одно из двух</td></tr>
+            <tr><td>Ссылка на шаблон</td><td>FR-10</td><td>Кнопка-ссылка (ghost). Отдельного DS-примитива «ссылка» нет — используется <code>ou-btn--ghost</code>, как единственный DS-эквивалент</td></tr>
+            <tr><td>Срок выполнения / Ссылка активна до</td><td>FR-13, §5</td><td>Те же два поля и та же автоподстановка, что на вкладках «Пользователи» и «Группы» (<code>dateFields</code>). Действуют на весь прогон</td></tr>
+            <tr><td>Создать группу из списка</td><td>FR-14, §5.1</td><td>Необязательное текстовое поле. Пусто — поимённые назначения. Занятое имя отклоняется на ПРЕДПРОСМОТРЕ, не здесь</td></tr>
+            <tr><td>«Проверить список»</td><td>решение эскиза</td><td>Разбор запускается кнопкой, а не фактом выбора файла: сроки и имя группы задаются до предпросмотра. В существующем импорте пользователей разбор стартует сразу по выбору файла — здесь так нельзя</td></tr>
+            <tr><td>Подвал диалога</td><td>—</td><td>Общий на все вкладки, остаётся «Отмена». Действие вкладки живёт внутри панели, как «Назначить (N)» на соседних вкладках</td></tr>
+            <tr><td>Не показано</td><td>§5 п.3</td><td>Состояние «Выполнение»: один запрос, один ответ, единицы секунд. Отдельного экрана не имеет — кнопка переходит в состояние загрузки (<code>ou-btn__spin</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Холст собран из DS-компонентов (<code>ou-*</code>). Классы <code>tb-*</code>/<code>wf-*</code> — каркас ТОЛЬКО эскиза.</p>
+        <table>
+          <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+          <tbody>
+            <tr><td>Диалог</td><td><code>ModalDialog</code> (<code>ou-modal--xl</code>)</td><td>существующий диалог назначения</td></tr>
+            <tr><td>Вкладки</td><td><code>Tabs</code> (<code>ou-tabs--segment ou-tabs--stretch</code>)</td><td>существующий диалог назначения</td></tr>
+            <tr><td>Зона выбора файла</td><td><code>FileUploader</code> (<code>ou-uploader</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Строка файла</td><td><code>FileItem</code> (<code>ou-file</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Поля</td><td><code>Input</code> (<code>ou-field</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Раскладка</td><td><code>Stack</code> (<code>ou-stack</code>), <code>ou-grow</code></td><td>существующие примитивы</td></tr>
+            <tr><td>Кнопки</td><td><code>Button</code> (<code>ou-btn</code>)</td><td>существующий компонент</td></tr>
+            <tr><td><code>tb-bulk-actions</code>, <code>tb-bulk-tpl</code></td><td>—</td><td>каркас эскиза: прижим ряда действий; в коде это <code>Cluster justify</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>

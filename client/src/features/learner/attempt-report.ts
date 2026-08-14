@@ -13,6 +13,7 @@
 
 import type { ReportInput, AdaptiveReportInput } from "@shared/report/report-html";
 import type { MeasuresInput } from "@shared/template/result-context";
+import type { ResolvedLabels } from "@shared/template/labels";
 import { buildReportContext, buildAdaptiveReportContext } from "@shared/report/report-context";
 import { exportReportPdf, inlineReportImageValues } from "@shared/report/export-pdf";
 import { buildReportMeasures } from "@shared/report/report-measures";
@@ -91,6 +92,12 @@ export interface AttemptReportRender {
   cssVars?: Record<string, string>;
   themeCss?: string;
   design?: Record<string, string>;
+  /**
+   * PRD-49: УЖЕ РАЗРЕШЁННЫЕ надписи документа (`readReportRenderPayload` на сервере) —
+   * общая формулировка теста со слоем переопределений отчёта поверх. Отсутствует у
+   * шаблона, который `labels[]` не объявил: макет тогда печатает свои жёсткие строки.
+   */
+  labels?: ResolvedLabels;
 }
 
 /**
@@ -122,6 +129,9 @@ export async function downloadAttemptReport(
     values,
     design: render.design,
     ...(measures ? { measures: buildReportMeasures(measures, values) } : {}),
+    // PRD-49: словарь надписей, уже разрешённый сервером против манифеста — ядру
+    // остаётся только собрать из него дерево `labels.*`, которое читает макет.
+    ...(render.labels ? { labels: render.labels } : {}),
   };
   // The server flags the mode (`adaptive`) — the page differs, the input shape follows.
   const context = report.adaptive

@@ -252,7 +252,10 @@ describe("Analytics test-details route", () => {
     const res = await asAuthor(request(app).get("/api/analytics/test1"));
     expect(res.status).toBe(200);
     expect(res.body.summary.totalAttempts).toBe(0);
-    expect(res.body.summary.passRate).toBe(0);
+    // `null`, not `0`: there is no average of an empty set, and «0 % сдали» over
+    // nobody reads as a failed test rather than an unused one (PRD-29 §6.7 gave the
+    // grade-shaped metrics an explicit «неприменимо»; `avgDuration` always had one).
+    expect(res.body.summary.passRate).toBeNull();
     expect(res.body.summary.avgDuration).toBeNull();
     expect(res.body.questionStats).toHaveLength(0);
   });

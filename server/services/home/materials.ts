@@ -1,9 +1,15 @@
 /**
  * @module server/services/home/materials
  *
- * PRD-25 FR-13: the active design templates plus the documentation downloads. The
- * lowest-priority section — it exists so an administrator does not have to
- * remember where the guide lives.
+ * PRD-25 FR-13: the «Материалы» block — the service's documentation shelf plus,
+ * for whoever manages them, the design templates currently in the `active`
+ * lifecycle state. The lowest-priority section: it exists so nobody has to
+ * remember where the guides live.
+ *
+ * ALL guides are listed here, filtered by the reader's rights: the document
+ * registry (`server/services/doc-downloads`) carries the capability next to the
+ * file, so the list and the download route can never disagree about who may read
+ * what. Links point at `/api/docs/:id` — plain downloads, not SPA routes.
  *
  * Templates are NOT part of `IStorage`: the template routers read the table
  * directly through `db`, and this module follows that established pattern rather
@@ -18,33 +24,50 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../db";
 import { templates } from "@shared/schema";
+import { hasPermission, type Capability, type Role } from "@shared/access";
+import { DOC_DOWNLOADS } from "../doc-downloads";
 
 /**
- * Template-authoring documents offered on the home page. The ids are exactly the
- * ones `/api/admin/templates/docs/:doc` accepts (`server/routes/admin-templates.ts`).
+ * The capabilities that make the section worth building. Derived from the
+ * registry so adding a document with a new capability cannot leave its intended
+ * readers without the block.
  */
-const DOCS: ReadonlyArray<{ id: string; label: string; href: string }> = [
-  { id: "guide", label: "Руководство по разработке шаблонов", href: "/api/admin/templates/docs/guide" },
-  { id: "spec", label: "Спецификация платформы шаблонов", href: "/api/admin/templates/docs/spec" },
+export const MATERIAL_CAPABILITIES: readonly Capability[] = [
+  ...new Set<Capability>([...DOC_DOWNLOADS.map((doc) => doc.capability), "adminTemplates.manage"]),
 ];
+
+/** Shape of the section payload (mirrors `shared/home/contract`). */
+export interface MaterialsSection {
+  /** Whether the reader manages templates — decides if the template list is shown at all. */
+  showTemplates: boolean;
+  activeTemplates: string[];
+  docs: Array<{ id: string; label: string; href: string }>;
+}
 
 /**
  * The «Материалы» section.
  *
- * @returns the names of every template in the `active` lifecycle state and the
- *   document download links.
+ * @param roles - the reader's effective roles; decides which documents are
+ *   listed and whether the active-template list is built at all.
+ * @returns the documents the reader may download and, for a template manager,
+ *   the names of every template in the `active` lifecycle state.
  */
-export async function buildMaterials(): Promise<{
-  activeTemplates: string[];
-  docs: Array<{ id: string; label: string; href: string }>;
-}> {
-  const rows = await db
-    .select({ name: templates.name })
-    .from(templates)
-    .where(eq(templates.status, "active"));
+export async function buildMaterials(roles: readonly Role[] = []): Promise<MaterialsSection> {
+  const showTemplates = hasPermission(roles, "adminTemplates.manage");
+
+  // A reader who does not manage templates never sees the list, so do not pay
+  // for the query either.
+  const rows = showTemplates
+    ? await db.select({ name: templates.name }).from(templates).where(eq(templates.status, "active"))
+    : [];
 
   return {
+    showTemplates,
     activeTemplates: rows.map((r) => r.name),
-    docs: DOCS.map((doc) => ({ ...doc })),
+    docs: DOC_DOWNLOADS.filter((doc) => hasPermission(roles, doc.capability)).map((doc) => ({
+      id: doc.id,
+      label: doc.label,
+      href: `/api/docs/${doc.id}`,
+    })),
   };
 }

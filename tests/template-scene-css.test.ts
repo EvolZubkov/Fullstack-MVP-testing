@@ -43,6 +43,23 @@ describe("scene layer (theme.css)", () => {
     expect(declarations).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*[\d.]/);
   });
 
+  /**
+   * The illustration of the start cover and of an info page fills its panel instead of
+   * SIZING it. Both panels get their height from the layout (the cover row / the 4:3
+   * frame), which is not a definite height a percentage can resolve against — an image
+   * left in flow fell back to its natural ratio, grew the panel past the field and ran
+   * under the footer. Taking it out of flow is what makes `object-fit: cover` work, so
+   * the pairing «panel positioned + image absolute» is guarded here.
+   */
+  it("keeps the cover / content illustration out of flow so it cannot outgrow its panel", () => {
+    for (const panel of [".tb-cover__media", ".tb-content__media"]) {
+      const panelRule = new RegExp(`\\${panel}\\s*\\{[^}]*position:\\s*relative`);
+      const imgRule = new RegExp(`\\${panel}\\s+img\\s*\\{[^}]*position:\\s*absolute[^}]*inset:\\s*0`);
+      expect(declarations, `${panel} must position its panel`).toMatch(panelRule);
+      expect(declarations, `${panel} img must be absolute inside it`).toMatch(imgRule);
+    }
+  });
+
   it("is the SINGLE default stylesheet — base.css is gone and its live chrome moved here", () => {
     // Consolidation: the default template ships only theme.css now; the legacy
     // base.css was removed and every class the runtime still emits was folded in.

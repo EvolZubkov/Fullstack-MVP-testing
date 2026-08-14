@@ -147,6 +147,16 @@ export interface TestPayload {
   title?: string;
   description?: string | null;
   overallPassRuleJson?: unknown;
+  /**
+   * «Тест пройден, если» — how the overall rule and the topic gates combine
+   * (`tests.pass_decision_policy`). Absent = keep the stored value on save; on
+   * create the column default (`overall_only`) applies.
+   */
+  passDecisionPolicy?:
+    | "overall_only"
+    | "overall_and_required_topics"
+    | "required_topics_only"
+    | "all_topics_passed";
   webhookUrl?: string | null;
   /** PRD-7 §4.1: primary status field. */
   status?: "draft" | "published" | "archived";
@@ -254,6 +264,9 @@ export class TestSettingsService {
         title: payload.test.title ?? "",
         description: payload.test.description ?? null,
         overallPassRuleJson: payload.test.overallPassRuleJson ?? { type: "percent", value: 70 },
+        // «Тест пройден, если»: новый тест решает итог по общему порогу — правил по
+        // темам у него ещё нет (рекомендация §3.4 test-settings-parameter-structure).
+        passDecisionPolicy: payload.test.passDecisionPolicy ?? "overall_only",
         webhookUrl: payload.test.webhookUrl ?? null,
         status,
         published,

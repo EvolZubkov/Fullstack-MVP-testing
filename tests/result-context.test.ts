@@ -314,6 +314,15 @@ describe("adaptive results + measures → render real results.adaptive.html (e2e
     variableValues: { profile: "ok" },
     blockSettings: {},
     hasPassThreshold: false,
+    // PRD-49: заголовки блоков больше не зашиты в макет — их объявляет шаблон, а маршрут
+    // разрешает и передаёт вместе с остальным материалом экрана. Без объявлений блоки
+    // печатаются без надписей, поэтому e2e-проверка порядка их обязана передавать.
+    labelDeclarations: [
+      { key: "results.scales", group: "Второй уровень", label: "Подзаголовок шкал", default: "По шкалам" },
+      { key: "results.indicators", group: "Второй уровень", label: "Подзаголовок показателей", default: "По показателям" },
+      { key: "results.topics", group: "Второй уровень", label: "Подзаголовок тем", default: "По темам" },
+    ],
+    templateBlockOrder: { "results.adaptive": ["topics", "scales", "indicators"] },
   };
 
   const ctx = buildAdaptiveResultContext(adaptiveResult, "Адаптивный тест", material);
@@ -321,18 +330,19 @@ describe("adaptive results + measures → render real results.adaptive.html (e2e
   renderScreenInto(root, { layout: adaptiveLayout, context: ctx });
 
   it("рисует блок показателей и блок шкал", () => {
-    expect(root.textContent).toContain("Ваш результат");
+    expect(root.textContent).toContain("По показателям");
     expect(root.textContent).toContain("Устойчивый");
     expect(root.textContent).toContain("По шкалам");
     expect(root.textContent).toContain("Коммуникация");
     expect(root.textContent).toContain("Высокий");
   });
 
-  it("уровни тем остаются на месте и выше измерений", () => {
+  it("уровни тем остаются на месте и выше измерений, шкалы идут перед показателями", () => {
     const text = root.textContent ?? "";
-    expect(text.indexOf("Результаты по темам")).toBeGreaterThan(-1);
-    expect(text.indexOf("Результаты по темам")).toBeLessThan(text.indexOf("Ваш результат"));
-    expect(text.indexOf("Ваш результат")).toBeLessThan(text.indexOf("По шкалам"));
+    expect(text.indexOf("По темам")).toBeGreaterThan(-1);
+    expect(text.indexOf("По темам")).toBeLessThan(text.indexOf("По шкалам"));
+    // Шкала — измерение, показатель — вывод из измерений: сначала то, из чего сделан вывод.
+    expect(text.indexOf("По шкалам")).toBeLessThan(text.indexOf("По показателям"));
   });
 
   it("шкала рисуется линейкой с зонами, как на обычном экране", () => {

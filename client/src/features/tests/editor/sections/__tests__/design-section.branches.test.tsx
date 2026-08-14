@@ -67,6 +67,8 @@ function makeDesign(over: Partial<UseDesignSettingsResult> = {}): UseDesignSetti
     themeParams: {},
     setThemeParam: vi.fn(),
     clearThemeParam: vi.fn(),
+    setLabels: vi.fn(),
+    setResultsBlockOrder: vi.fn(),
     resetToDefaults: vi.fn(),
     setTemplate: vi.fn(),
     applyDefaultTemplate: vi.fn(),

@@ -124,7 +124,7 @@ CardDivider.displayName = 'CardDivider';
 
 // ── KPI preset ───────────────────────────────────────────────────────────
 
-export interface CardKpiProps extends Omit<CardProps, 'variant'> {
+export interface CardKpiProps extends CardProps {
   label: React.ReactNode;
   value: React.ReactNode;
   delta?: React.ReactNode;
@@ -132,10 +132,11 @@ export interface CardKpiProps extends Omit<CardProps, 'variant'> {
 }
 
 export const CardKpi = forwardRef<HTMLDivElement, CardKpiProps>(
-  ({ label, value, delta, deltaTrend = 'flat', size = 'md', className, ...rest }, ref) => (
+  ({ label, value, delta, deltaTrend = 'flat', size = 'md', variant, className, ...rest }, ref) => (
     <Card
       ref={ref}
       size={size}
+      variant={variant}
       className={cn('ou-card--kpi', className)}
       {...rest}
     >

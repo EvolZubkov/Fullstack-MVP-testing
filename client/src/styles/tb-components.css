@@ -527,6 +527,14 @@
 .tb-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
 .tb-rte__area ul,
 .tb-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
+/* preflight.css (@layer base) drops list markers from every ul/ol, and nothing
+   in the cascade puts them back: the rule above only restores the indent. The
+   RTE shows the RESULT, so the author must see the same bullets and numbers the
+   learner gets. Values mirror the browser defaults used on the render side. */
+.tb-rte__area ul { list-style: disc outside; }
+.tb-rte__area ul ul { list-style-type: circle; }
+.tb-rte__area ul ul ul { list-style-type: square; }
+.tb-rte__area ol { list-style: decimal outside; }
 
 /* Inline status dot for tabs / list rows (per prd7-editor-drawer.html
    и prd7-structure-*.html wireframes). Smaller than .tb-status-dot —
@@ -838,6 +846,13 @@
 .tb-feedback-preview__rich p:last-child { margin-bottom: 0; }
 .tb-feedback-preview__rich ul,
 .tb-feedback-preview__rich ol { margin: 0; padding-left: 1.25em; }
+/* Same preflight reset as in .tb-rte__area: the preview shows authored HTML, so
+   it needs the markers back or the card disagrees with both the editor and the
+   published text. */
+.tb-feedback-preview__rich ul { list-style: disc outside; }
+.tb-feedback-preview__rich ul ul { list-style-type: circle; }
+.tb-feedback-preview__rich ul ul ul { list-style-type: square; }
+.tb-feedback-preview__rich ol { list-style: decimal outside; }
 .tb-feedback-preview__edit-hint {
   display: flex; justify-content: flex-end; margin-top: var(--ou-space-1);
   color: var(--ou-fg-muted);

@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, questionScoringSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, questionScoringSchema, designSettingsSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
@@ -23,6 +23,7 @@ import { countUnmappedPages } from "../services/page-variant-audit";
 import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
+import { DEFAULT_TEMPLATE_ID } from "../services/template-rebind";
 import { logger } from "../logger";
 import { appBaseUrl } from "../config";
 import {
@@ -85,6 +86,18 @@ const testBodyBaseSchema = z.object({
   title: z.string().min(1, "Title is required").optional(),
   description: z.string().nullable().optional(),
   overallPassRuleJson: passRuleSchema.optional(),
+  // «Тест пройден, если» — how the overall rule and the topic gates combine into
+  // the verdict (docs/architecture/test-settings-parameter-structure.md §3.4).
+  // MUST be listed here: an unlisted key is stripped by zod and silently lost,
+  // which is exactly how this setting used to vanish on every save.
+  passDecisionPolicy: z
+    .enum([
+      "overall_only",
+      "overall_and_required_topics",
+      "required_topics_only",
+      "all_topics_passed",
+    ])
+    .optional(),
   webhookUrl: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
   sections: z.array(sectionBodySchema).optional(),
   showCorrectAnswers: z.boolean().optional(),
@@ -600,6 +613,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       title,
       description,
       overallPassRuleJson,
+      passDecisionPolicy,
       webhookUrl,
       sections,
       showCorrectAnswers,
@@ -659,6 +673,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         title: title!,
         description,
         overallPassRuleJson: overallPassRuleJson ?? { type: "percent" as const, value: 70 },
+        passDecisionPolicy,
         webhookUrl: webhookUrl || null,
         status,
         published,
@@ -771,7 +786,16 @@ router.get("/:id/design", requireUserContext, requireTestScope("read"), async (r
 
     const settings = test.designSettingsJson as Record<string, unknown> | null;
     if (!settings || Object.keys(settings).length === 0) {
-      return res.json({ templateId: "default" });
+      return res.json({ templateId: DEFAULT_TEMPLATE_ID });
+    }
+    // Settings WITHOUT a `templateId` are not "no template": every delivery path falls
+    // back to «default» (GET /:id/screen, the attempt renderer, the SCORM bake), and such
+    // rows do exist — a transferred package or an out-of-band write can carry `params`
+    // alone. Answering them literally left the editor with no manifest at all, so the
+    // «Оформление» panes reported the template declares no params and no labels while the
+    // learner was being served the standard template all along.
+    if (typeof settings.templateId !== "string" || settings.templateId.length === 0) {
+      return res.json({ ...settings, templateId: DEFAULT_TEMPLATE_ID });
     }
     res.json(settings);
   } catch (error) {
@@ -811,6 +835,8 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       params = {},
       theme,
       paramsByTheme = {},
+      labels,
+      resultsBlockOrder,
     } = body as {
       templateId?: string;
       templateVersion?: string;
@@ -820,6 +846,10 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       theme?: unknown;
       /** PRD-23: colour overrides per declared theme. */
       paramsByTheme?: Record<string, Record<string, unknown>>;
+      /** PRD-49: the test's own wording of the results-screen labels; validated below. */
+      labels?: unknown;
+      /** PRD-49: the author's order of the four results sub-blocks; validated below. */
+      resultsBlockOrder?: unknown;
     };
 
     if (!templateId) {
@@ -910,6 +940,41 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
       }
     }
 
+    // ── PRD-49: results labels and sub-block order ──────────────────────────
+    // Rejected rather than dropped, for the same reason as theme/paramsByTheme above: a
+    // silently ignored field would let the editor believe a wording change was saved.
+    const labelsResult = designSettingsSchema.shape.labels.safeParse(labels);
+    if (!labelsResult.success) {
+      // A record schema reports each malformed entry with the entry's own key as
+      // issue.path[0] — naming the offending label, same as `extraKeys` does for params.
+      const badKeys = Array.from(
+        new Set(labelsResult.error.issues.map((issue) => String(issue.path[0] ?? ""))),
+      );
+      return res.status(422).json({
+        error: `Invalid labels: ${badKeys.join(", ")}`,
+        field: "labels",
+        badKeys,
+      });
+    }
+    const resultsBlockOrderResult = designSettingsSchema.shape.resultsBlockOrder.safeParse(resultsBlockOrder);
+    if (!resultsBlockOrderResult.success) {
+      // An array schema reports the malformed INDEX, not the value — read the value back
+      // out of the submitted array so the error names what was actually sent.
+      const submitted = Array.isArray(resultsBlockOrder) ? resultsBlockOrder : [];
+      const badKeys = Array.from(
+        new Set(
+          resultsBlockOrderResult.error.issues.map((issue) =>
+            String(submitted[issue.path[0] as number] ?? issue.path[0]),
+          ),
+        ),
+      );
+      return res.status(422).json({
+        error: `Invalid resultsBlockOrder: ${badKeys.join(", ")}`,
+        field: "resultsBlockOrder",
+        badKeys,
+      });
+    }
+
     const designSettings: Record<string, unknown> = {
       templateId,
       templateVersion: templateVersion ?? template.version,
@@ -921,6 +986,14 @@ router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edi
     if (themed) {
       designSettings.theme = theme ?? "auto";
       if (Object.keys(byTheme).length > 0) designSettings.paramsByTheme = byTheme;
+    }
+    // Same "only when meaningful" convention as theme/paramsByTheme: an empty
+    // labels/order payload keeps the exact JSON shape a pre-PRD-49 test had.
+    if (labelsResult.data && Object.keys(labelsResult.data).length > 0) {
+      designSettings.labels = labelsResult.data;
+    }
+    if (resultsBlockOrderResult.data && resultsBlockOrderResult.data.length > 0) {
+      designSettings.resultsBlockOrder = resultsBlockOrderResult.data;
     }
 
     await storage.updateTest(testId, { designSettingsJson: designSettings });
@@ -964,6 +1037,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       title,
       description,
       overallPassRuleJson,
+      passDecisionPolicy,
       webhookUrl,
       sections,
       showCorrectAnswers,
@@ -1028,6 +1102,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         title,
         description,
         overallPassRuleJson,
+        passDecisionPolicy,
         webhookUrl: webhookUrl ?? undefined,
         showCorrectAnswers,
         allowReturnToUnanswered,

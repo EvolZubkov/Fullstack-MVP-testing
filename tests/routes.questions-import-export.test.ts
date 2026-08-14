@@ -208,6 +208,14 @@ describe("POST /import — автосоздание темы", () => {
     app = makeApp();
   });
 
+  it("нечитаемый файл → 400 с кодом причины, а не 500", async () => {
+    const notAZip = Buffer.from("Тема;Текст вопроса\nJS;Вопрос\n", "utf8");
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", notAZip, "q.xlsx"));
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("not_a_zip");
+  });
+
   it("создаёт тему если она не найдена", async () => {
     storageMock.getTopics.mockResolvedValue([]);
     storageMock.createTopic.mockResolvedValue({ ...dbTopic, name: "Новая тема" });

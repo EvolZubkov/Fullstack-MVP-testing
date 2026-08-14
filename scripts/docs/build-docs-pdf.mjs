@@ -14,11 +14,12 @@
  * needing Chrome at runtime).
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import MarkdownIt from "markdown-it";
+import { findChrome, fileUrl } from "./chrome.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT_DIR = path.join(REPO_ROOT, "docs", "dist");
@@ -39,6 +40,11 @@ const DOCS = [
     src: path.join(REPO_ROOT, "docs", "guides", "import-workbook-guide.md"),
     out: path.join(OUT_DIR, "import-workbook-guide.pdf"),
     title: "Как заполнить шаблон импорта",
+  },
+  {
+    src: path.join(REPO_ROOT, "docs", "guides", "test-authoring-guide.md"),
+    out: path.join(OUT_DIR, "test-authoring-guide.pdf"),
+    title: "Как создать тест. Руководство автора",
   },
 ];
 
@@ -73,11 +79,35 @@ const PRINT_CSS = `
     background: #f6f7fb; color: #333a4d;
   }
   hr { border: none; border-top: 1px solid #d8dbe6; margin: 14pt 0; }
+  /* Screenshots: fit the text column and never claim more than half a page, so a
+     tall capture does not push the paragraph that explains it onto the next one. */
+  img {
+    display: block; margin: 10pt auto; width: auto; height: auto;
+    max-width: 100%; max-height: 120mm;
+    border: 1px solid #d4d8e4; border-radius: 6px; page-break-inside: avoid;
+  }
 `;
 
-/** Render one Markdown file into a full, self-contained HTML document string. */
-function renderHtml(markdown, title) {
+/**
+ * Render one Markdown file into a full, self-contained HTML document string.
+ *
+ * Relative image paths are rewritten to absolute `file://` URLs against
+ * `baseDir` (the directory of the source Markdown). The temporary HTML lives
+ * next to the PDF output, not next to the guide, so `images/…` would otherwise
+ * resolve into `docs/dist` and every screenshot would come out broken. Only
+ * image sources are touched — a document-wide `<base>` would also rewrite the
+ * links, turning cross-document references into paths of the build machine.
+ */
+function renderHtml(markdown, title, baseDir) {
   const md = new MarkdownIt({ html: true, linkify: true, typographer: true });
+  const renderImage = md.renderer.rules.image;
+  md.renderer.rules.image = (tokens, idx, options, env, self) => {
+    const src = tokens[idx].attrGet("src");
+    if (src && !/^[a-z]+:/i.test(src)) {
+      tokens[idx].attrSet("src", fileUrl(path.resolve(baseDir, src)));
+    }
+    return renderImage(tokens, idx, options, env, self);
+  };
   const body = md.render(markdown);
   return `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
@@ -87,54 +117,6 @@ function renderHtml(markdown, title) {
 
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** file:// URL for a local absolute path (Windows-safe). */
-function fileUrl(absPath) {
-  return "file:///" + absPath.replace(/\\/g, "/").replace(/^\/+/, "");
-}
-
-/** Newest `chrome.exe` under a puppeteer-style cache dir, or null. */
-function newestChromeIn(cacheDir, exeName) {
-  if (!existsSync(cacheDir)) return null;
-  const found = [];
-  for (const entry of readdirSync(cacheDir)) {
-    const dir = path.join(cacheDir, entry);
-    try {
-      if (!statSync(dir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    // puppeteer layout: <cache>/<version>/<platform>/<exe>
-    for (const sub of readdirSync(dir)) {
-      const exe = path.join(dir, sub, exeName);
-      if (existsSync(exe)) found.push(exe);
-    }
-  }
-  found.sort();
-  return found.length ? found[found.length - 1] : null;
-}
-
-/** Locate a Chrome/Chromium binary able to `--print-to-pdf`. */
-function findChrome() {
-  const override = process.env.DOCS_PDF_CHROME || process.env.CHROME_BIN;
-  if (override && existsSync(override)) return override;
-  const home = os.homedir();
-  const candidates = [
-    newestChromeIn(path.join(home, ".cache", "puppeteer", "chrome"), "chrome.exe"),
-    newestChromeIn(path.join(home, ".cache", "puppeteer", "chrome-headless-shell"), "chrome-headless-shell.exe"),
-    path.join(home, ".codeium", "ws-browser", "chromium-1155", "chrome-win", "chrome.exe"),
-    "C:/Program Files/Google/Chrome/Application/chrome.exe",
-    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-  ].filter(Boolean);
-  for (const c of candidates) {
-    if (c && existsSync(c)) return c;
-  }
-  return null;
 }
 
 function main() {
@@ -154,7 +136,10 @@ function main() {
       process.exitCode = 1;
       continue;
     }
-    const html = renderHtml(readFileSync(doc.src, "utf8"), doc.title);
+    // Timestamp of the previous build, if any: the only reliable proof that this
+    // run actually replaced the file (see the check after Chrome exits).
+    const mtimeBefore = existsSync(doc.out) ? statSync(doc.out).mtimeMs : 0;
+    const html = renderHtml(readFileSync(doc.src, "utf8"), doc.title, path.dirname(doc.src));
     const tmpHtml = doc.out.replace(/\.pdf$/, ".tmp.html");
     writeFileSync(tmpHtml, html, "utf8");
     // A throwaway profile dir avoids clobbering the user's Chrome session.
@@ -181,6 +166,19 @@ function main() {
     }
     if (res.status !== 0 || !existsSync(doc.out)) {
       console.error("Не удалось собрать PDF:", doc.out, res.error || "exit " + res.status);
+      process.exitCode = 1;
+      continue;
+    }
+    // Chrome exits 0 even when `--print-to-pdf` cannot write the target (the file
+    // is open in a PDF viewer, read-only, on a full disk). Existence alone then
+    // "passes" on the PREVIOUS build's file and the run reports OK for a document
+    // that was never rebuilt — the exact failure that shipped a stale guide. A
+    // newer mtime is what actually proves the write happened.
+    if (statSync(doc.out).mtimeMs <= mtimeBefore) {
+      console.error(
+        "PDF не перезаписан (файл занят другой программой, только для чтения или диск полон):",
+        doc.out,
+      );
       process.exitCode = 1;
       continue;
     }

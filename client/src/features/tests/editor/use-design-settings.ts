@@ -28,6 +28,8 @@ import {
   type TestTheme,
   type ThemeId,
 } from "@shared/template/themes";
+import type { LabelDeclaration, LabelValues } from "@shared/template/labels";
+import type { ResultsBlockKey, TemplateBlockOrder } from "@shared/template/results-order";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -127,6 +129,14 @@ export type TemplateRow = {
     assets?: { preview?: string | null } | null;
     /** PRD-23: palettes the template ships. Absent/short = no choice of theme. */
     themes?: TemplateThemeDef[];
+    /**
+     * PRD-49 §4.1: the interface labels of the results screens this template declares.
+     * Absent (or empty) = the template prints its own hard-coded strings and the
+     * «Итоги» pane is not offered — there is nothing for the author to reword.
+     */
+    labels?: LabelDeclaration[];
+    /** PRD-49 §3: composition and order of the results sub-blocks, per screen. */
+    resultsBlockOrder?: TemplateBlockOrder | ResultsBlockKey[];
   };
   /**
    * NOT the thumbnail: the `templates.preview_path` column is never populated by
@@ -134,6 +144,15 @@ export type TemplateRow = {
    * `manifest.assets.preview`.
    */
   previewPath: string | null;
+  /**
+   * PRD-49: which of the declared labels the REPORT prints. NOT part of the manifest —
+   * the route computes it from the report layouts of this template (or of «Стандартный»,
+   * when this one declares no report variant), because only a layout knows what it
+   * prints. The «Отчёт» pane offers exactly these rows; absent (an older server, a
+   * template that could not be read) means «offer them all», the behaviour before this
+   * field existed.
+   */
+  reportLabelKeys?: string[];
 };
 
 export type DesignSettings = {
@@ -145,6 +164,14 @@ export type DesignSettings = {
   theme?: TestTheme;
   /** PRD-23: colour overrides per palette. Only for a template with themes. */
   paramsByTheme?: Partial<Record<ThemeId, Record<string, unknown>>>;
+  /**
+   * PRD-49 §4.2: the test's own wording of the labels the template declares — only the
+   * DEVIATIONS. A key that is absent means «the template's text stands», so the settings
+   * of a test nobody reworded keep exactly the shape they had before the PRD.
+   */
+  labels?: LabelValues;
+  /** PRD-49 §3: the author's order of the four sub-blocks under the results umbrella. */
+  resultsBlockOrder?: ResultsBlockKey[];
 };
 
 export type UseDesignSettingsResult = {
@@ -197,6 +224,14 @@ export type UseDesignSettingsResult = {
   setThemeParam: (theme: ThemeId, key: string, value: unknown) => void;
   /** Drop one colour of one palette; the other palettes keep theirs. */
   clearThemeParam: (theme: ThemeId, key: string) => void;
+  /**
+   * PRD-49: replace the whole label layer of the draft. Whole layer, not one key: the
+   * «Итоги» pane owns the map and decides when a key is dropped back to the template's
+   * text, and a per-key setter would put that rule in two places.
+   */
+  setLabels: (labels: LabelValues) => void;
+  /** PRD-49: the author's order of the results sub-blocks. */
+  setResultsBlockOrder: (order: ResultsBlockKey[]) => void;
   /** Reset the draft to the manifest's defaults (clearing all params). */
   resetToDefaults: () => void;
   /**
@@ -322,6 +357,19 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     });
   };
 
+  /**
+   * PRD-49. An EMPTY map is stored as `undefined`: the save route drops an empty
+   * `labels` object anyway, and keeping `{}` in the draft would leave the tab dirty
+   * after the author undid their last rewording.
+   */
+  const setLabels = (labels: LabelValues) => {
+    setDraft((d) => ({ ...d, labels: Object.keys(labels).length > 0 ? labels : undefined }));
+  };
+
+  const setResultsBlockOrder = (order: ResultsBlockKey[]) => {
+    setDraft((d) => ({ ...d, resultsBlockOrder: order.length > 0 ? order : undefined }));
+  };
+
   const resetToDefaults = () => {
     setDraft((d) => ({ ...d, params: {}, paramsByTheme: undefined }));
   };
@@ -408,6 +456,11 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
         templateVersion: tpl.version,
         templateApiVersion: tpl.templateApiVersion,
         params: kept,
+        // PRD-49: the author's wording survives a re-upload of the same template.
+        // Unlike params, a label the new manifest no longer declares costs nothing —
+        // `resolveLabels` drops unknown keys — so nothing has to be filtered here.
+        labels: d.labels,
+        resultsBlockOrder: d.resultsBlockOrder,
       };
     });
   };
@@ -462,6 +515,8 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     themeParams: resolvedThemes.byTheme,
     setThemeParam,
     clearThemeParam,
+    setLabels,
+    setResultsBlockOrder,
     resetToDefaults,
     setTemplate,
     applyDefaultTemplate,

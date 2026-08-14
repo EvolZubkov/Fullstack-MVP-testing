@@ -17,6 +17,12 @@
  * себе (длинное толкование показателя): её незачем переносить, ей всё равно не хватит
  * места, поэтому она отдаётся как есть, и конвейер режет её растр по высоте страницы.
  *
+ * ПРИНУДИТЕЛЬНЫЙ РАЗРЫВ отменяет всё вышесказанное там, где он стоит: верстальщик шаблона
+ * объявляет в макете отчёта узел `[data-page-break]`, и лист обязан кончиться на нём,
+ * сколько бы места ни осталось. Машина знает, что помещается на лист, но не знает, что
+ * документ читается разделами, — это знает автор шаблона (спека
+ * `docs/specs/2026-08-13-report-page-break-design.md`).
+ *
  * Чистый модуль: ни DOM, ни Node.
  */
 
@@ -74,6 +80,15 @@ export interface SliceOptions {
    * строки. Хост собирает их тем же обходом, что и безопасные линии.
    */
   blockLines?: number[];
+  /**
+   * ПРИНУДИТЕЛЬНЫЕ разрывы: ординаты, по которым лист обязан кончиться, — верхние границы
+   * узлов `[data-page-break]`, объявленных в макете отчёта.
+   *
+   * Это приказ верстальщика шаблона, а не подсказка: он сильнее и правила «карточку не
+   * рвём», и правила висячей строки, и предпочтения крупных границ. Линия у самого верха
+   * или у самого низа содержимого молча отбрасывается — пустых листов механика не даёт.
+   */
+  forcedLines?: number[];
 }
 
 /**
@@ -109,6 +124,10 @@ function lineStep(safeLines: number[]): number {
  * страницы, или среда не считает раскладку), режется по высоте листа: напечатать
  * что-нибудь лучше, чем не напечатать ничего.
  *
+ * ПРИНУДИТЕЛЬНЫЙ РАЗРЫВ (`SliceOptions.forcedLines`) старше высоты листа: содержимое сперва
+ * делится по нему на разделы, и уже каждый раздел режется по строкам. Поэтому короткий блок
+ * с разрывом внутри тоже делится, хотя по высоте делить его было бы не за чем.
+ *
  * @param safeLines Ординаты безопасных линий от верха блока, в любом порядке.
  * @param contentHeight Полная высота блока.
  * @param pageHeight Высота листа в тех же единицах.
@@ -119,19 +138,51 @@ export function sliceBySafeLines(
   pageHeight: number,
   opts: SliceOptions = {},
 ): ReportSlice[] {
-  if (!(pageHeight > 0) || contentHeight <= pageHeight) {
+  if (!(pageHeight > 0)) return [{ top: 0, height: contentHeight }];
+  // ПРИНУДИТЕЛЬНЫЕ РАЗРЫВЫ делят содержимое на разделы, и уже каждый раздел режется по
+  // высоте листа. Линия у самого верха или у самого низа содержимого отбрасывается: за ней
+  // нечего печатать, а лист получился бы пустым.
+  const forced = [...new Set(opts.forcedLines ?? [])]
+    .filter((line) => line > MIN_SLICE_PX && line < contentHeight - MIN_SLICE_PX)
+    .sort((a, b) => a - b);
+  if (!forced.length && contentHeight <= pageHeight) {
     return [{ top: 0, height: contentHeight }];
   }
-  const blockLines = opts.blockLines ?? [];
-  const zone = pageHeight * BLOCK_PREFERENCE_ZONE;
   // Хвост обязан нести И не меньше двух строк (иначе строка висит одна), И заметную долю
   // листа (иначе страница выходит почти пустой). Оба порога — про одно и то же: последний
   // лист документа должен выглядеть страницей, а не обрезком.
   const minTail = Math.max(2 * lineStep(safeLines), pageHeight * MIN_TAIL_SHARE);
 
   const slices: ReportSlice[] = [];
-  let top = 0;
-  while (contentHeight - top > pageHeight) {
+  let from = 0;
+  for (const to of [...forced, contentHeight]) {
+    if (to - from <= MIN_SLICE_PX) continue;
+    slices.push(...sliceSection(safeLines, from, to, pageHeight, opts, minTail));
+    from = to;
+  }
+  return slices.length ? slices : [{ top: 0, height: contentHeight }];
+}
+
+/**
+ * Разрезать ОДИН раздел — участок содержимого между принудительными разрывами (а без них —
+ * весь блок целиком) — по безопасным линиям и высоте листа.
+ *
+ * Правило висячей строки применяется В ПРЕДЕЛАХ раздела: следующий раздел начинается с
+ * нового листа по требованию верстальщика, поэтому дотягивать до него хвост нельзя.
+ */
+function sliceSection(
+  safeLines: number[],
+  from: number,
+  to: number,
+  pageHeight: number,
+  opts: SliceOptions,
+  minTail: number,
+): ReportSlice[] {
+  const blockLines = opts.blockLines ?? [];
+  const zone = pageHeight * BLOCK_PREFERENCE_ZONE;
+  const slices: ReportSlice[] = [];
+  let top = from;
+  while (to - top > pageHeight) {
     const limit = top + pageHeight;
     let cut = 0;
     for (const line of safeLines) {
@@ -157,11 +208,11 @@ export function sliceBySafeLines(
   // меньше двух строк, последний разрез отступает назад по безопасной линии, отдавая
   // хвосту достаточно текста. Отступать некуда (нет подходящей линии) — печатаем как
   // есть: напечатать что-нибудь лучше, чем не напечатать ничего.
-  const tail = contentHeight - top;
+  const tail = to - top;
   if (slices.length && minTail > 0 && tail < minTail) {
     let moved = 0;
     for (const line of safeLines) {
-      if (line > slices[slices.length - 1].top + MIN_SLICE_PX && contentHeight - line >= minTail && line > moved) {
+      if (line > slices[slices.length - 1].top + MIN_SLICE_PX && to - line >= minTail && line > moved) {
         moved = line;
       }
     }
@@ -171,7 +222,7 @@ export function sliceBySafeLines(
       top = moved;
     }
   }
-  slices.push({ top, height: contentHeight - top });
+  slices.push({ top, height: to - top });
   return slices;
 }
 
@@ -202,9 +253,14 @@ export function paginateBlocks(boxes: ReportBlockBox[], usableHeight: number): R
   };
 
   boxes.forEach((box, i) => {
+    // Переносится только та карточка, которой новый лист ПОМОЖЕТ, — та, что целиком на
+    // лист помещается. Карточке выше листа он не поможет ничем: разрез внутри неё всё
+    // равно неизбежен, а перенос стоил остатка текущего листа — шапка отчёта и семь сотен
+    // пикселей пустой бумаги. Поэтому переросток начинается там, где стоит.
+    const fitsOnPage = box.bottom - box.top <= usableHeight;
     // Первый блок страницы кладётся безусловно: переносить его некуда, а если он выше
     // страницы — это и есть переросток, который дальше режет конвейер.
-    if (current.length > 0 && box.bottom - offset > usableHeight) {
+    if (current.length > 0 && box.bottom - offset > usableHeight && fitsOnPage) {
       flush(boxes[current[current.length - 1]].bottom);
       current = [];
       offset = box.top;

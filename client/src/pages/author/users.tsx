@@ -62,6 +62,12 @@ interface User {
   name: string | null;
   /** Effective stored roles (PRD-13 multi-role). */
   roles?: string[];
+  /**
+   * PRD-28: an external participant — a FLAG on the account, never a role. Such
+   * an account has no password at all, and the only way in is the assignment
+   * link. Absent on legacy responses, which is the same as `false`.
+   */
+  isExternal?: boolean;
   status: "pending" | "active" | "inactive";
   mustChangePassword: boolean;
   gdprConsent: boolean;
@@ -88,6 +94,8 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  /** PRD-28: kind of account — `all` | `staff` | `external`. */
+  const [kindFilter, setKindFilter] = useState<string>("all");
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -105,6 +113,13 @@ export default function UsersPage() {
     roles: ["learner"] as string[],
     mustChangePassword: true,
     expiresAt: "",
+    /**
+     * PRD-28 FR-08: create the account as an external participant. The three
+     * things such an account cannot have — a password, a wider role set and an
+     * invitation letter — are put out in the form and left out of the request:
+     * the server refuses a body that asks for both (`POST /api/users`).
+     */
+    isExternal: false,
     /**
      * Ask the server for an invitation letter (password-setup link) once the
      * account is created. On by default, as in the bulk-import wizard: a person
@@ -143,11 +158,22 @@ export default function UsersPage() {
   // Create user mutation
   const createUserMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      // An external participant is created by what the request LEAVES OUT: the
+      // server refuses a body that asks for a password, a wider role set or an
+      // invitation letter alongside the flag, rather than dropping them quietly.
+      const payload = data.isExternal
+        ? {
+          email: data.email,
+          name: data.name,
+          expiresAt: data.expiresAt,
+          isExternal: true,
+        }
+        : data;
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const error = await res.json();
@@ -363,6 +389,36 @@ export default function UsersPage() {
     },
   });
 
+  // Promote an external participant to an ordinary account (PRD-28 FR-05).
+  // One direction only: the reverse would strip an employee of their password
+  // and cabinet — a block dressed up as a change of kind.
+  const promoteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/users/${id}/promote`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed to promote");
+      return res.json() as Promise<{ success: boolean; sent: boolean }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      if (data.sent) {
+        toast({ title: "Учётная запись штатная", description: "Приглашение задать пароль отправлено." });
+      } else {
+        // The account has changed kind either way; only the letter is missing.
+        toast({
+          variant: "warning",
+          title: "Учётная запись штатная",
+          description: t.users.inviteNotSentDescription,
+        });
+      }
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось перевести в штатные" });
+    },
+  });
+
   // Reset attempts mutation
   const resetAttemptsMutation = useMutation({
     mutationFn: async ({ userId, testId }: { userId: string; testId: string }) => {
@@ -393,6 +449,7 @@ export default function UsersPage() {
       roles: ["learner"],
       mustChangePassword: true,
       expiresAt: "",
+      isExternal: false,
       sendInvite: true,
     });
   };
@@ -415,6 +472,9 @@ export default function UsersPage() {
       roles: user.roles ?? [],
       mustChangePassword: user.mustChangePassword,
       expiresAt: user.expiresAt ? user.expiresAt.split("T")[0] : "",
+      // Read-only here: the kind of an account is decided at creation, and the
+      // only change of it is «Сделать штатным» in the row menu (PRD-28 FR-05).
+      isExternal: user.isExternal ?? false,
       // Editing never mails anything: the invitation is a create-time choice,
       // and an existing pending account is re-invited from the row menu.
       sendInvite: false,
@@ -446,7 +506,9 @@ export default function UsersPage() {
       (user.name && user.name.toLowerCase().includes(search.toLowerCase()));
     const matchesRole = roleFilter === "all" || (user.roles ?? []).includes(roleFilter);
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
-    return matchesSearch && matchesRole && matchesStatus;
+    const matchesKind =
+      kindFilter === "all" || (kindFilter === "external") === Boolean(user.isExternal);
+    return matchesSearch && matchesRole && matchesStatus && matchesKind;
   });
 
   const getStatusBadge = (status: string) => {
@@ -488,7 +550,19 @@ export default function UsersPage() {
 
   // ── Table columns ──
   const userColumns: TableColumn<User>[] = [
-    { key: "email", header: t.users.email, render: (u) => <Text variant="body-s" weight="medium">{u.email}</Text> },
+    {
+      key: "email",
+      header: t.users.email,
+      // PRD-28 FR-07: the mark rides next to the address instead of claiming a
+      // column of its own — the flag belongs to a minority of the rows, and an
+      // almost-empty column would eat width the list needs elsewhere.
+      render: (u) => (
+        <Cluster gap={2} wrap={false}>
+          <Text variant="body-s" weight="medium">{u.email}</Text>
+          {u.isExternal && <Tag tone="info" size="s">Внешний</Tag>}
+        </Cluster>
+      ),
+    },
     { key: "name", header: t.users.name, render: (u) => <Text variant="body-s">{u.name || "—"}</Text> },
     { key: "roles", header: t.users.role, render: (u) => renderRoleBadges(u.roles) },
     { key: "status", header: t.users.status, render: (u) => getStatusBadge(u.status) },
@@ -504,9 +578,19 @@ export default function UsersPage() {
           trigger={<IconButton variant="ghost" size="s" aria-label="Действия" icon={<MoreHorizontal size={16} />} />}
         >
           <MenuItem icon={<Pencil size={16} />} onClick={() => openEditDialog(u)}>{t.common.edit}</MenuItem>
-          <MenuItem icon={<KeyRound size={16} />} onClick={() => openResetPasswordDialog(u)}>{t.users.resetPassword}</MenuItem>
-          {/* Only a never-signed-in account: the letter carries a password-setup link. */}
-          {u.status === "pending" && (
+          {/* PRD-28: an external participant has no password to reset. The item
+              stays visible but dead, so the menu of the two kinds of account
+              does not shift under the pointer from row to row. */}
+          <MenuItem
+            icon={<KeyRound size={16} />}
+            title={t.users.resetPassword}
+            meta={u.isExternal ? "У внешнего участника пароля нет" : undefined}
+            disabled={u.isExternal}
+            onClick={() => openResetPasswordDialog(u)}
+          />
+          {/* Only a never-signed-in account: the letter carries a password-setup
+              link, and an external participant is never issued one (FR-04). */}
+          {u.status === "pending" && !u.isExternal && (
             <MenuItem
               icon={<MailPlus size={16} />}
               onClick={() => inviteUserMutation.mutate(u.id)}
@@ -516,6 +600,20 @@ export default function UsersPage() {
           )}
           {(u.roles ?? []).includes("learner") && (
             <MenuItem icon={<RotateCcw size={16} />} onClick={() => openResetAttemptsDialog(u)}>Сбросить попытки</MenuItem>
+          )}
+          {/* PRD-28 FR-05: external rows only, and there is no item for the
+              other direction — that would be a block dressed up as a change of
+              kind, and «Заблокировать» already says it plainly. */}
+          {u.isExternal && (
+            <>
+              <MenuDivider />
+              <MenuItem
+                icon={<UserCheck size={16} />}
+                title="Сделать штатным"
+                meta="Уйдёт приглашение задать пароль"
+                onClick={() => promoteUserMutation.mutate(u.id)}
+              />
+            </>
           )}
           <MenuDivider />
           {u.status === "inactive" ? (
@@ -672,6 +770,17 @@ export default function UsersPage() {
             { value: "pending", label: t.users.pending },
           ]}
         />
+        {/* PRD-28: вид учётной записи — четвёртый фильтр существующего ряда. */}
+        <Select
+          value={kindFilter}
+          onChange={setKindFilter}
+          aria-label="Вид учётной записи"
+          options={[
+            { value: "all", label: "Все виды" },
+            { value: "staff", label: "Штатные" },
+            { value: "external", label: "Внешние участники" },
+          ]}
+        />
       </Cluster>
 
       {/* Users Table */}
@@ -699,7 +808,12 @@ export default function UsersPage() {
             <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>{t.common.cancel}</Button>
             <Button
               onClick={() => createUserMutation.mutate(formData)}
-              disabled={!formData.email || !formData.password || formData.roles.length === 0}
+              disabled={
+                !formData.email ||
+                // An external participant needs neither: no password exists and
+                // the role set is fixed to `learner` by the server.
+                (!formData.isExternal && (!formData.password || formData.roles.length === 0))
+              }
               loading={createUserMutation.isPending}
             >
               {t.common.create}
@@ -724,6 +838,26 @@ export default function UsersPage() {
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="Иван Иванов"
           />
+          {/* PRD-28 FR-08: the kind of the account. Ticking it puts out
+              everything an account without a password cannot have — the DS has
+              no group-disable, so each control carries its own `disabled`. */}
+          <Checkbox
+            label="Внешний участник"
+            description="Без пароля и без кабинета: единственный путь внутрь — ссылка-приглашение на назначенный тест. Признак можно только снять позже, вернуть нельзя."
+            checked={formData.isExternal}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                isExternal: e.target.checked,
+                // Anything the flag forbids is cleared, not merely greyed out:
+                // a value left in the state would travel with the request the
+                // moment the operator unticks and re-ticks the box.
+                ...(e.target.checked
+                  ? { password: "", roles: ["learner"], mustChangePassword: false, sendInvite: false }
+                  : { mustChangePassword: true, sendInvite: true }),
+              })
+            }
+          />
           <Stack gap={2}>
             <Label required>{t.users.password}</Label>
             <Cluster gap={2} align="stretch">
@@ -732,33 +866,47 @@ export default function UsersPage() {
                   fullWidth
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Минимум 8 символов"
+                  placeholder={formData.isExternal ? "У внешнего участника пароля нет" : "Минимум 8 символов"}
+                  disabled={formData.isExternal}
                 />
               </Stack>
-              <Button variant="secondary" onClick={() => setFormData({ ...formData, password: generatePassword() })}>
+              <Button
+                variant="secondary"
+                onClick={() => setFormData({ ...formData, password: generatePassword() })}
+                disabled={formData.isExternal}
+              >
                 {t.users.generatePassword}
               </Button>
             </Cluster>
           </Stack>
           <Stack gap={2}>
             <Label required>Роли</Label>
+            {/* FR-01: an external participant is always, and only, a learner. */}
             <RolePicker
               value={formData.roles}
               onChange={(roles) => setFormData({ ...formData, roles })}
               actorRoles={actorRoles}
               atCreation
+              disabled={formData.isExternal}
             />
           </Stack>
           <Checkbox
             label={t.users.mustChangePassword}
             checked={formData.mustChangePassword}
+            disabled={formData.isExternal}
             onChange={(e) => setFormData({ ...formData, mustChangePassword: e.target.checked })}
           />
           {/* Invitation letter with a password-setup link (valid 7 days), sent
               by the server right after the account is created. */}
           <Checkbox
             label={t.users.sendInvite}
+            description={
+              formData.isExternal
+                ? "Письмо с ключом задания пароля внешнему участнику не выпускается."
+                : undefined
+            }
             checked={formData.sendInvite}
+            disabled={formData.isExternal}
             onChange={(e) => setFormData({ ...formData, sendInvite: e.target.checked })}
           />
           <Input

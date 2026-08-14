@@ -117,6 +117,9 @@ import {
   parseScaleRow,
   mergeScaleConfig,
   parseResultVariableRow,
+  parseOutcomeRow,
+  mergeOutcomes,
+  type ParsedOutcomeRow,
   parseMeasurementRow,
   validateSourceKey,
   parseSettingsSheet,
@@ -1438,6 +1441,47 @@ export async function importWorkbook(
     // does not carry indicator feedback today, but it does CREATE indicators, and the
     // rule must not depend on which fields a sheet happens to have a column for.
     if (!dryRun) await syncVariableFeedbackUsages(testId);
+  }
+
+  // ── Pass 3b: «Исходы показателей» (PRD-48). ──
+  //
+  // The texts the learner reads live in `config_json.outcomes` and had no column until
+  // now, so a test carried by the book arrived printing the raw scale key. Only the
+  // indicators the sheet MENTIONS are touched: an author who exported one indicator's
+  // outcomes to edit them must not thereby erase another's.
+  const outcomesSheet = findSheet(workbook, "Исходы показателей");
+  if (outcomesSheet) {
+    const rows = sheetToObjects(outcomesSheet);
+    const headers = sheetHeaders(outcomesSheet);
+    const byVariable = new Map<string, ParsedOutcomeRow[]>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const where = `Лист «Исходы показателей», строка ${i + 2}`;
+      const parsed = parseOutcomeRow(rows[i], headers);
+      if (!parsed.ok) {
+        result.errors.push(`${where}: ${parsed.error}`);
+        continue;
+      }
+      const list = byVariable.get(parsed.value.variableName) ?? [];
+      list.push(parsed.value);
+      byVariable.set(parsed.value.variableName, list);
+    }
+
+    for (const [name, outcomeRows] of byVariable) {
+      const variable = varByName.get(name);
+      if (!variable) {
+        result.errors.push(`Лист «Исходы показателей»: показатель «${name}» не найден`);
+        continue;
+      }
+      // Only `outcomes` is replaced; bands, domain and valence of the same config are
+      // fields the sheet has no column for and must survive untouched.
+      const configJson = {
+        ...((variable.configJson ?? {}) as Record<string, unknown>),
+        outcomes: mergeOutcomes(variable.configJson, outcomeRows),
+      };
+      if (!dryRun) await storage.updateResultVariable(variable.id, { configJson } as never);
+      result.resultVariables.updated++;
+    }
   }
 
   // Resolve a «Вопрос» cell → ResolvedQuestion: alias first, then ID. Shared by

@@ -54,6 +54,13 @@ export interface AppConfig {
   session: { secret: string };
   encryption: { password: string; salt: string };
   access: { superadminEmails: readonly string[] };
+  /** Operational ceilings that an installation may tune without a code change. */
+  limits: {
+    /** Maximum rows accepted from one uploaded workbook (participants and users import). */
+    participantsImportMaxRows: number;
+    /** Password-setup letters per person per hour, shared by recovery and invitation. */
+    passwordEmailsPerHour: number;
+  };
 }
 
 // ─── Normalizers ──────────────────────────────────────────────────────────────
@@ -125,6 +132,7 @@ function shape(raw: Record<string, unknown>): AppConfig {
   const session = asRecord(raw.session);
   const encryption = asRecord(raw.encryption);
   const access = asRecord(raw.access);
+  const limits = asRecord(raw.limits);
 
   return {
     log: {
@@ -156,6 +164,10 @@ function shape(raw: Record<string, unknown>): AppConfig {
       salt: asString(encryption.salt, ""),
     },
     access: { superadminEmails: normalizeEmails(access.superadminEmails) },
+    limits: {
+      participantsImportMaxRows: asNumber(limits.participantsImportMaxRows, 500),
+      passwordEmailsPerHour: asNumber(limits.passwordEmailsPerHour, 3),
+    },
   };
 }
 

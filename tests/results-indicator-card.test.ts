@@ -76,6 +76,9 @@ function render(layout: string, indicators: unknown[]): HTMLElement {
         possiblePoints: 0,
         hideScoreSummary: true,
         topicResults: [],
+        // PRD-49: the indicators sub-block renders from `result.blocks`, the list the Core
+        // resolved — here it is the only visible one (no summary, no topics, no scales).
+        blocks: [{ key: "indicators", heading: "По показателям", isIndicators: true }],
         indicators,
       },
     },

@@ -21,7 +21,18 @@ const resultsLayout = fs.readFileSync(
 
 const context = {
   course: { title: "Демо-тест" },
+  // PRD-49: the sub-blocks of the results screen and their headings come from the Core,
+  // not from the layout — a context without them renders an empty umbrella.
+  labels: {
+    results: { heading: "Ваш результат", topics: "Результаты по темам" },
+    facts: { questions: "вопросов", correct: "верно", points: "баллов" },
+    topic: { correct: "Правильно", points: "Баллов" },
+  },
   result: {
+    blocks: [
+      { key: "summary", heading: "Общий балл", isSummary: true },
+      { key: "topics", heading: "Результаты по темам", isTopics: true },
+    ],
     passed: false,
     ringDashoffset: 120,
     passClass: "is-fail",
@@ -42,7 +53,7 @@ describe("renderScreenInto — unified renderer on the real results layout", () 
   renderScreenInto(root, { layout: resultsLayout, context });
 
   it("resolves {{#if}} / {{#unless}} branches", () => {
-    // {{#if result.topicResults}} (true) renders the per-topic section…
+    // {{#if isTopics}} (the topics sub-block is visible) renders the per-topic section…
     expect(root.textContent).toContain("Результаты по темам");
     // …and {{#unless result.backAction}} (true — the context sets none) renders the
     // default restart button. The failed-verdict copy is now the bound statusLabel.

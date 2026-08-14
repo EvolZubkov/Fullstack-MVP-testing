@@ -1,7 +1,7 @@
 {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "themes": [
@@ -238,6 +238,27 @@
       "description": "Применяется там, где выполним; иначе откатывается на ближайший доступный."
     }
   ],
+  "labels": [
+    { "key": "results.heading", "group": "Первый уровень", "label": "Заголовок итогов", "default": "Ваш результат" },
+    { "key": "results.recommendations", "group": "Первый уровень", "label": "Заголовок рекомендаций", "default": "Рекомендации" },
+    { "key": "results.summary", "group": "Второй уровень", "label": "Подзаголовок сводки баллов", "default": "Общий балл" },
+    { "key": "results.scales", "group": "Второй уровень", "label": "Подзаголовок шкал", "default": "По шкалам" },
+    { "key": "results.indicators", "group": "Второй уровень", "label": "Подзаголовок показателей", "default": "По показателям" },
+    { "key": "results.topics", "group": "Второй уровень", "label": "Подзаголовок тем", "default": "По темам", "defaults": { "report": "Результаты по темам" } },
+    { "key": "recommendations.courses", "group": "Группы рекомендаций", "label": "Подпись группы курсов", "default": "Пройти обучение", "defaults": { "report": "Рекомендации по курсам" } },
+    { "key": "recommendations.events", "group": "Группы рекомендаций", "label": "Подпись группы мероприятий", "default": "Мероприятия", "defaults": { "report": "Рекомендуемые мероприятия" } },
+    { "key": "recommendations.assets", "group": "Группы рекомендаций", "label": "Подпись группы материалов", "default": "Материалы" },
+    { "key": "facts.questions", "group": "Числа сводки", "label": "Подпись числа вопросов", "default": "вопросов" },
+    { "key": "facts.correct", "group": "Числа сводки", "label": "Подпись числа верных", "default": "верно" },
+    { "key": "facts.points", "group": "Числа сводки", "label": "Подпись числа баллов", "default": "баллов" },
+    { "key": "topic.correct", "group": "Карточка темы", "label": "Строка «Правильно»", "default": "Правильно" },
+    { "key": "topic.points", "group": "Карточка темы", "label": "Строка «Баллов»", "default": "Баллов" },
+    { "key": "section.eyebrow", "group": "Итоги раздела", "label": "Надпись над итогами раздела", "default": "Итоги раздела" }
+  ],
+  "resultsBlockOrder": {
+    "default": ["summary", "scales", "indicators", "topics"],
+    "results.adaptive": ["topics", "scales", "indicators"]
+  },
   "contentTemplates": [
     {
       "key": "start.standard",

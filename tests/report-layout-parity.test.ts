@@ -17,7 +17,11 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { renderScreenInto } from "../shared/template/render-screen";
-import { buildReportContext, buildAdaptiveReportContext } from "../shared/report/report-context";
+import {
+  buildReportContext as buildReportContextRaw,
+  buildAdaptiveReportContext as buildAdaptiveReportContextRaw,
+  type ReportContextOptions,
+} from "../shared/report/report-context";
 import { LEVEL_SCHEMES } from "../shared/template/level-ramp";
 import type { ReportInput, AdaptiveReportInput } from "../shared/report/report-html";
 
@@ -36,6 +40,31 @@ const REPORT_LAYOUTS: Array<[string, string, string]> = [
     fs.readFileSync(path.join(CERT_DIR, "layouts", "report.adaptive.html"), "utf8"),
   ],
 ];
+
+/**
+ * PRD-49: заголовки разделов документа макет печатает ИЗ СЛОВАРЯ надписей, разрешённого
+ * для экрана `report` (`resolveReportBake`), а не из вёрстки. Эталон переноса от этого не
+ * двигается: словарь несёт ровно те строки, которые макет печатал жёстко, — предметом
+ * проверки здесь остаются состав, порядок и гейты, а не то, откуда пришло слово.
+ */
+const LABELS = {
+  "results.heading": "Ваш результат",
+  "results.topics": "Результаты по темам",
+  "results.scales": "По шкалам",
+  // Отдельного умолчания у отчёта больше нет: зонтик «Ваш результат» печатает сам
+  // документ, и подзаголовок показателей говорит теми же словами, что на экране.
+  "results.indicators": "По показателям",
+  "results.recommendations": "Рекомендации",
+  "recommendations.courses": "Рекомендации по курсам",
+  "recommendations.events": "Рекомендуемые мероприятия",
+};
+
+/** Контекст отчёта, как его собирает хост, научённый надписям. */
+const buildReportContext = (input: ReportInput, opts: ReportContextOptions = {}) =>
+  buildReportContextRaw(input, { labels: LABELS, ...opts });
+
+const buildAdaptiveReportContext = (input: AdaptiveReportInput, opts: ReportContextOptions = {}) =>
+  buildAdaptiveReportContextRaw(input, { labels: LABELS, ...opts });
 
 /** Видимый текст со схлопнутыми пробелами. */
 function visibleText(source: HTMLElement): string {
@@ -582,6 +611,83 @@ describe("макет печатает консолидированный бло�
       }
     });
 
+    // PRD-49: зонтик «Ваш результат» — ОДНА надпись на экран итогов и на документ.
+    // Автор включает её один раз, и она обязана появиться в обоих местах; выключает —
+    // исчезнуть в обоих. Раньше документ не печатал её вовсе, и включённый тумблер не
+    // значил в PDF ничего.
+    it(`${templateId}: печатает зонтик итогов и гасит его выключенной надписью`, () => {
+      for (const [layoutName, on, off] of [
+        [
+          "report.html",
+          renderToRoot(reportLayout, buildReportContext(STANDARD)),
+          renderToRoot(
+            reportLayout,
+            buildReportContextRaw(STANDARD, { labels: { ...LABELS, "results.heading": "" } }),
+          ),
+        ],
+        [
+          "report.adaptive.html",
+          renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE)),
+          renderToRoot(
+            adaptiveLayout,
+            buildAdaptiveReportContextRaw(ADAPTIVE, { labels: { ...LABELS, "results.heading": "" } }),
+          ),
+        ],
+      ] as const) {
+        expect(visibleText(on), layoutName).toContain("Ваш результат");
+        expect(visibleText(off), layoutName).not.toContain("Ваш результат");
+        // Разделы документа выключенный заголовок не уносит.
+        expect(visibleText(off), layoutName).toContain("Результаты по темам");
+      }
+    });
+
+    // PRD-49 §6: тумблеры слотов карточки — настройка УЧЕНИЧЕСКОГО показа, а не экрана
+    // итогов. Документ ученик уносит с собой, и погашенное на экране название вместе с
+    // меткой уровня возвращалось в PDF — та самая пара подписей об одном и том же, ради
+    // которой PRD и затевался. Данные при этом не чистятся: их по-прежнему берут
+    // аналитика и выгрузка, гаснет только печать слота.
+    it(`${templateId}: выключенные слоты карточки не печатаются и в отчёте`, () => {
+      const measures = {
+        ramp: LEVEL_SCHEMES.traffic,
+        scaleKind: "band_ruler" as const,
+        indicatorKind: "label" as const,
+        scales: [
+          {
+            key: "comm", name: "Коммуникация", value: 8, visibility: "level_and_value" as const,
+            showName: false,
+            interpretation: {
+              domainMin: 0, domainMax: 10, valence: "higher_is_better" as const,
+              bands: [
+                { min: 0, max: 5, level: "low", label: "Низкий" },
+                { min: 5.01, max: 10, level: "high", label: "Высокий" },
+              ],
+            },
+          },
+        ],
+        indicators: [
+          {
+            key: "profile", name: "Профиль", value: "ok", visibility: "level" as const,
+            showLevel: false,
+            interpretation: {
+              domainMin: null, domainMax: null, valence: "none" as const, bands: [],
+              outcomes: [{ code: "ok", label: "Устойчивый" }],
+            },
+          },
+        ],
+      };
+      for (const [layoutName, root] of [
+        ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD, { measures }))],
+        ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE, { measures }))],
+      ] as const) {
+        const text = visibleText(root);
+        expect(text, layoutName).not.toContain("Коммуникация");
+        expect(text, layoutName).not.toContain("Устойчивый");
+        // Соседние слоты той же пары карточек живы: гаснет ровно выключенный слот.
+        expect(text, layoutName).toContain("Высокий");
+        expect(text, layoutName).toContain("Профиль");
+      }
+    });
+
     // Сетка «диаграмма слева, список справа» включается модификатором, а не самим
     // блоком: без диаграммы единственный ребёнок — список толкований — падал в колонку
     // 240 px и печатался лентой в половину ширины страницы A4.
@@ -639,12 +745,14 @@ describe("макет печатает консолидированный бло�
     });
 
     // Тест без измерений печатает документ ровно как прежде — карточек не прибавилось.
+    // Проверяется по ПОДЗАГОЛОВКАМ блоков: зонтик «Ваш результат» стоит над всем разделом
+    // результата и печатается независимо от того, есть ли у теста измерения.
     it(`${templateId}: без измерений новых карточек в отчёте нет`, () => {
       for (const [layoutName, root] of [
         ["report.html", renderToRoot(reportLayout, buildReportContext(STANDARD))],
         ["report.adaptive.html", renderToRoot(adaptiveLayout, buildAdaptiveReportContext(ADAPTIVE))],
       ] as const) {
-        expect(visibleText(root), layoutName).not.toContain("Ваш результат");
+        expect(visibleText(root), layoutName).not.toContain("По показателям");
         expect(visibleText(root), layoutName).not.toContain("По шкалам");
       }
     });
@@ -667,6 +775,21 @@ describe("макеты отчёта соблюдают контракт сред
     expect(rule, "правило .tb-report__topic-level не найдено").not.toBeNull();
     expect(rule![1]).not.toContain("nowrap");
     expect(rule![1]).toContain("max-width: 100%");
+  });
+
+  it("маркеры авторских списков объявлены сами, в КАЖДОМ поставляемом шаблоне", () => {
+    // Регрессия: список автора приезжал слушателю одними отступами — ни точек, ни
+    // номеров. Отчёт рисуется в документе ПРИЛОЖЕНИЯ, а глобальный сброс веб-хоста
+    // (`preflight.css`: `ol, ul { list-style: none }`) маркеры гасит; браузерных
+    // умолчаний здесь ждать нельзя (§6.3).
+    for (const [templateId, dir] of [["default", DEFAULT_DIR], ["certification", CERT_DIR]] as const) {
+      const css = fs.readFileSync(path.join(dir, "styles", "report.css"), "utf8");
+      expect(css, templateId).toMatch(/\.tb-report ul\s*\{[^}]*list-style:\s*disc/);
+      expect(css, templateId).toMatch(/\.tb-report ol\s*\{[^}]*list-style:\s*decimal/);
+      // Маркер стоит СНАРУЖИ строки, поэтому отступ обязателен: без него точка ушла бы
+      // за левый край карточки.
+      expect(css, templateId).toMatch(/\.tb-report ul,\s*\.tb-report ol\s*\{[^}]*padding-left/);
+    }
   });
 
   it("таблица стилей отчёта скоуплена и не адресует документ", () => {

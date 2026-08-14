@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { logger, audit } from "../logger";
-import { appBaseUrl } from "../config";
+import { config, appBaseUrl } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
+import { respondWorkbookReadError } from "../middleware/upload";
 import { getEffectiveRoles, isSuperadmin } from "../services/access";
 import { validateRoleChange, isStoredRole, type StoredRole } from "@shared/access";
 import { sendInviteEmail } from "../email";
@@ -24,6 +25,71 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
  * later), and shared by both senders: bulk import and the single re-send.
  */
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Thrown by {@link issuePasswordSetupInvite} when the recipient has already had
+ * `limits.passwordEmailsPerHour` letters within the hour. A dedicated type, not a
+ * plain `Error`, so the caller can turn it into `429` instead of the `500` its
+ * outer handler would give: being over budget is an answer, not a fault.
+ */
+class PasswordEmailBudgetExceeded extends Error {
+  constructor() {
+    super("Password-setup letter budget exceeded");
+    this.name = "PasswordEmailBudgetExceeded";
+  }
+}
+
+/**
+ * Mint a password-setup token and send the invitation letter carrying it — the
+ * one place in this file where that pair happens.
+ *
+ * Four senders share it: creating an account with the invite box ticked, the
+ * re-send from the row menu, the conversion of an external participant into an
+ * ordinary account, and bulk import. They had drifted apart as four copies (one
+ * lost the inviter's name, another the hourly budget), which is why every
+ * difference that remains is now an argument at the call site rather than an
+ * omission in a copy.
+ *
+ * @param user Recipient; only the identity and the greeting are read.
+ * @param opts.reason Stored on the token row, telling the four senders apart.
+ * @param opts.inviterName Name shown as the sender, when the path has an operator.
+ * @param opts.rateLimit Whether the shared hourly budget applies (it does not on
+ *   the conversion path: the letter is a consequence of an operator's one-off
+ *   action on one account, not something the account holder can trigger).
+ * @returns Whether the transport accepted the letter.
+ * @throws PasswordEmailBudgetExceeded When `rateLimit` is on and the budget is spent.
+ */
+async function issuePasswordSetupInvite(
+  user: { id: string; email: string; name?: string | null },
+  opts: { reason: string; inviterName?: string; rateLimit: boolean },
+): Promise<boolean> {
+  if (opts.rateLimit) {
+    // Same anti-mail-bomb budget as POST /api/auth/forgot-password: both paths
+    // mint rows in `password_reset_tokens`, so one shared counter covers both.
+    const recentTokens = await storage.getRecentTokensCount(user.id, 1);
+    if (recentTokens >= config.limits.passwordEmailsPerHour) {
+      throw new PasswordEmailBudgetExceeded();
+    }
+  }
+
+  const rawToken = randomBytes(32).toString("hex");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  await storage.createPasswordResetToken(user.id, tokenHash, opts.reason, INVITE_TTL_MS);
+
+  return sendInviteEmail({
+    to: user.email,
+    userName: user.name || undefined,
+    inviteLink: `${appBaseUrl()}/reset-password?token=${rawToken}`,
+    inviterName: opts.inviterName,
+  });
+}
+
+/** Resolve the acting operator's name for the letter's "invited by" line. */
+async function inviterNameOf(userId: string | undefined): Promise<string | undefined> {
+  if (!userId) return undefined;
+  const inviter = await storage.getUser(userId);
+  return inviter?.name || undefined;
+}
 
 const router = Router();
 
@@ -77,16 +143,49 @@ router.get("/:id", requirePermission("users.read"), async (req, res) => {
 // POST /api/users - Создать пользователя
 router.post("/", requirePermission("users.create"), async (req, res) => {
   try {
-    const { email, password, name, role, roles, groupIds, sendInvite } = req.body;
+    const { email, password, name, role, roles, groupIds, sendInvite, isExternal } = req.body;
 
-    if (!email || !password) {
+    // PRD-28: an external participant has no password and no invitation letter;
+    // the role set is fixed to `learner`, so the caller cannot widen it. The flag is
+    // compared to `true` rather than tested for truthiness: a JSON body carrying the
+    // STRING "false" is truthy, and reading it loosely would silently create a
+    // passwordless account where an ordinary one was asked for.
+    const external = isExternal === true;
+    if (external) {
+      if (!email) return res.status(400).json({ error: "Email required" });
+      // The three things an external participant cannot have used to be dropped
+      // in silence: the caller asked for a password, a wider role set or an
+      // invitation letter and got an account with none of them, with nothing in
+      // the answer to say so. Refuse instead — a request that means two opposite
+      // things is a mistake on the caller's side, not something to guess through.
+      // Only fields that actually carry a request count: `sendInvite: false` and
+      // an empty password are the absence of one, not a conflicting demand.
+      const conflicting = [
+        password ? "password" : null,
+        Array.isArray(roles) && roles.length > 0 ? "roles" : null,
+        // `role: "learner"` asks for exactly what an external participant gets,
+        // so it contradicts nothing and must not be refused; only a WIDER role
+        // is a conflicting demand.
+        role && role !== "learner" ? "role" : null,
+        sendInvite ? "sendInvite" : null,
+      ].filter(Boolean);
+      if (conflicting.length > 0) {
+        return res.status(400).json({
+          error:
+            "An external participant has no password, no invitation letter and always the learner role; " +
+            `remove: ${conflicting.join(", ")}`,
+        });
+      }
+    } else if (!email || !password) {
       return res.status(400).json({ error: "Email and password required" });
     }
 
     // Requested role set: new `roles[]`, else legacy single `role` (default learner).
-    const requestedRoles: string[] = Array.isArray(roles) && roles.length > 0
-      ? roles.map((r: unknown) => String(r))
-      : [String(role || "learner")];
+    const requestedRoles: string[] = external
+      ? ["learner"]
+      : Array.isArray(roles) && roles.length > 0
+        ? roles.map((r: unknown) => String(r))
+        : [String(role || "learner")];
     if (!requestedRoles.every(isStoredRole)) {
       return res.status(400).json({ error: "Invalid role in request" });
     }
@@ -109,10 +208,16 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
 
     const user = await storage.createUser({
       email,
-      passwordHash: password,
+      passwordHash: external ? null : password,
+      isExternal: external,
       name: name || null,
       status: "pending",
-      mustChangePassword: true,
+      // The flag means "the password this account has must be replaced on the
+      // next sign-in". An external participant has no password at all (PRD-28),
+      // so there is nothing for the flag to point at; raising it would state a
+      // pending change to something that does not exist. `promoteExternalUser`
+      // raises it at the moment the account gains a password of its own.
+      mustChangePassword: !external,
       createdBy: req.session.userId,
     });
 
@@ -131,18 +236,14 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
     // reported as `inviteSent: false` and the operator can re-send from the row
     // menu (POST /:id/invite), which mints exactly the same kind of token.
     let inviteSent = false;
-    if (sendInvite) {
+    if (sendInvite && !external) {
       try {
-        const rawToken = randomBytes(32).toString("hex");
-        const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-        await storage.createPasswordResetToken(user.id, tokenHash, "invite", INVITE_TTL_MS);
-
-        const inviter = req.session.userId ? await storage.getUser(req.session.userId) : undefined;
-        inviteSent = await sendInviteEmail({
-          to: user.email,
-          userName: user.name || undefined,
-          inviteLink: `${appBaseUrl()}/reset-password?token=${rawToken}`,
-          inviterName: inviter?.name || undefined,
+        inviteSent = await issuePasswordSetupInvite(user, {
+          reason: "invite",
+          inviterName: await inviterNameOf(req.session.userId),
+          // No budget check here: the account was created one line ago, so it
+          // cannot have spent one — the ceiling guards the re-send, not this.
+          rateLimit: false,
         });
         audit.userInvite(user.id);
       } catch (e) {
@@ -303,6 +404,12 @@ router.post("/:id/invite", requirePermission("users.manage"), async (req, res) =
       return res.status(404).json({ error: "User not found" });
     }
 
+    // PRD-28: the invitation letter carries a password-setup link, and an external
+    // participant must never get one — their only way in is the assignment link.
+    if (user.isExternal) {
+      return res.status(400).json({ error: "An external participant cannot be invited to set a password" });
+    }
+
     if (user.status !== "pending") {
       return res.status(400).json({
         error: "Only a pending account can be invited",
@@ -310,31 +417,67 @@ router.post("/:id/invite", requirePermission("users.manage"), async (req, res) =
       });
     }
 
-    // Same anti-mail-bomb budget as POST /api/auth/forgot-password: both paths
-    // mint rows in `password_reset_tokens`, so one shared counter covers both.
-    const recentTokens = await storage.getRecentTokensCount(user.id, 1);
-    if (recentTokens >= 3) {
-      return res.status(429).json({ error: "Too many invites. Please try again later." });
-    }
-
-    const rawToken = randomBytes(32).toString("hex");
-    const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-    await storage.createPasswordResetToken(user.id, tokenHash, "invite", INVITE_TTL_MS);
-
-    const inviter = req.session.userId ? await storage.getUser(req.session.userId) : undefined;
-    const sent = await sendInviteEmail({
-      to: user.email,
-      userName: user.name || undefined,
-      inviteLink: `${appBaseUrl()}/reset-password?token=${rawToken}`,
-      inviterName: inviter?.name || undefined,
+    // The re-send is the path a person can make repeat, so it is the one the
+    // hourly ceiling (`limits.passwordEmailsPerHour`) guards.
+    const sent = await issuePasswordSetupInvite(user, {
+      reason: "invite",
+      inviterName: await inviterNameOf(req.session.userId),
+      rateLimit: true,
     });
 
     audit.userInvite(user.id);
     logger.info(`Invite e-mail re-sent for user ${user.id} (delivered=${sent})`, "users");
     res.json({ success: true, sent });
   } catch (error) {
+    if (error instanceof PasswordEmailBudgetExceeded) {
+      return res.status(429).json({ error: "Too many invites. Please try again later." });
+    }
     logger.error("Invite user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to send invite" });
+  }
+});
+
+// POST /api/users/:id/promote — сделать внешнего участника штатным (PRD-28 FR-05)
+router.post("/:id/promote", requirePermission("users.manage"), async (req, res) => {
+  try {
+    const user = await storage.getUser(req.params.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    if (!user.isExternal) {
+      return res.status(400).json({ error: "Account is not an external participant" });
+    }
+
+    await storage.promoteExternalUser(user.id);
+    audit.userPromote(user.id);
+
+    // The kind of the account has changed by now, and that change is one-way:
+    // a failure further down must not be reported as "nothing happened", or the
+    // operator retries and gets "Account is not an external participant" on an
+    // account they were just told had not been converted. Same rule POST /
+    // follows for its letter — the letter is the recoverable part (re-send it
+    // from the row menu), the flag is not.
+    let sent = false;
+    try {
+      sent = await issuePasswordSetupInvite(user, {
+        reason: "promote",
+        inviterName: await inviterNameOf(req.session.userId),
+        // Deliberately unlimited: an operator converting one account is not the
+        // repeatable path the hourly budget exists to cap, and refusing here
+        // would leave the account converted with no way in at all.
+        rateLimit: false,
+      });
+      audit.userInvite(user.id);
+    } catch (e) {
+      logger.error(
+        `Password-setup invite after promote failed for user ${user.id}: ${(e as Error).message}`,
+        "users",
+      );
+    }
+    logger.info(`Invite e-mail after promote for user ${user.id} (delivered=${sent})`, "users");
+
+    res.json({ success: true, sent });
+  } catch (error) {
+    logger.error("Promote external user error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to promote user" });
   }
 });
 
@@ -469,7 +612,10 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
     const rows: any[] = sheetToObjects(ws, { defval: "" });
 
     if (rows.length === 0) return res.status(400).json({ error: "File is empty" });
-    if (rows.length > 500) return res.status(400).json({ error: "Maximum 500 rows per upload" });
+    const maxRows = config.limits.participantsImportMaxRows;
+    if (rows.length > maxRows) {
+      return res.status(400).json({ error: `Maximum ${maxRows} rows per upload` });
+    }
 
     const allGroups = await storage.getGroups();
 
@@ -509,6 +655,7 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
     res.json(preview);
   } catch (error) {
     logger.error("Bulk preview error: " + (error as Error).message);
+    if (respondWorkbookReadError(res, error)) return;
     res.status(500).json({ error: "Failed to parse file" });
   }
 });
@@ -541,8 +688,6 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: "No rows provided" });
     }
-
-    const baseUrl = appBaseUrl();
 
     // Cache auto-created groups within this import to avoid duplicates
     const groupNameToId = new Map<string, string>();
@@ -616,11 +761,13 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
 
         // Send invite (password-reset link)
         if (sendInvites) {
-          const rawToken = randomBytes(32).toString("hex");
-          const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-          await storage.createPasswordResetToken(user.id, tokenHash, "bulk-import", INVITE_TTL_MS);
-          const inviteLink = `${baseUrl}/reset-password?token=${rawToken}`;
-          const sent = await sendInviteEmail({ to: user.email, userName: user.name || undefined, inviteLink });
+          // No inviter name and no budget check, as before: the letters go to
+          // freshly created accounts, one each, so none of them can be over the
+          // hourly ceiling.
+          const sent = await issuePasswordSetupInvite(user, {
+            reason: "bulk-import",
+            rateLimit: false,
+          });
           if (sent) invitesSent++;
         }
 

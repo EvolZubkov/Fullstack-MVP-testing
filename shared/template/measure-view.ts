@@ -51,6 +51,32 @@ export interface CtxMeasureView {
   name: string;
   renderKind: RenderKind;
   showValue: boolean;
+  /**
+   * PRD-49. INVERTED on purpose, like `hideScoreSummary` in `result-context.ts`: the
+   * absent key has to mean «show», because not every `CtxMeasureView` is built by
+   * `buildMeasureView` — the admin template preview
+   * ({@link module:shared/template/preview-context}) and hand-written test fixtures
+   * assemble a card by hand and never mention these fields. A positive `showName`
+   * would leave those contexts with the field `undefined`, which a `{{#if showName}}`
+   * gate reads as false — the name would vanish from every context this PRD did not
+   * touch. `buildMeasureView` sets `hideName`/`hideLevel` ONLY to `true`, and only when
+   * the author's `showName`/`showLevel` input said `false`; the label itself is NOT
+   * cleared — the analytics and the export read the data, not the card. Every
+   * LEARNER-FACING surface honours the flag: the results screens and the report layouts
+   * alike (the report builds from the same context, so its layouts gate on the same two
+   * fields).
+   */
+  hideName?: boolean;
+  hideLevel?: boolean;
+  /**
+   * PRD-49: true when the banner has NOTHING to print — no visible level label and no
+   * explanation. INVERTED for the same reason as `hideName`/`hideLevel` above: a
+   * hand-built context that never sets it must still show a banner that has content.
+   * Before this field `{{#if levelLabel}}` gated both the label AND the explanation,
+   * so «text without a heading» was inexpressible, and clearing the label silently took
+   * the text with it. The DSL has no boolean expressions, so the core computes the OR.
+   */
+  hideBanner?: boolean;
   valueText: string;
   maxText: string;
   valueLabel: string;
@@ -122,6 +148,13 @@ export interface MeasureViewInput {
    * «Оформление шкал» — карта по ключу ШКАЛЫ, у показателей своих записей в ней нет.
    */
   color?: HslTriple;
+  /**
+   * PRD-49. Show the card's name / level slots. Absent = show, so every measure built
+   * before this PRD keeps its card. The label itself is NOT cleared: it is needed by the
+   * report, the analytics and the export — only the SCREEN slot is switched off.
+   */
+  showName?: boolean;
+  showLevel?: boolean;
 }
 
 /**
@@ -184,6 +217,17 @@ function round1(n: number): number {
 
 function outcomesOf(i: ScaleInterpretation | IndicatorInterpretation) {
   return (i as IndicatorInterpretation).outcomes ?? [];
+}
+
+/**
+ * PRD-49: whether the banner has anything to print — a level label that is actually
+ * shown, OR an explanation (which prints regardless of `showLevel`: the explanation is
+ * its own slot, not a caption for the level slot). Returns the POSITIVE fact; callers
+ * invert it into `hideBanner` only when it is `false`, per the module's inverted-flag
+ * convention.
+ */
+function hasBannerContent(showLevel: boolean, levelLabel: string, text: string | undefined): boolean {
+  return (showLevel && !!levelLabel) || !!text;
 }
 
 /** Zone geometry: each band runs to the NEXT band's start, so zones are contiguous. */
@@ -269,12 +313,18 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   // rule but the same rule: its value IS the outcome label the level slot already prints,
   // so a value slot would print the code twice.
   const showValue = input.visibility === "level_and_value" && isNumeric;
+  // PRD-49: effective show state from the author's input, used only to decide whether
+  // to emit the INVERTED flags below — never exposed on the view itself.
+  const showName = input.showName !== false;
+  const showLevel = input.showLevel !== false;
 
   const base: CtxMeasureView = {
     key: input.key,
     name: input.name,
     renderKind,
     showValue,
+    ...(showName ? {} : { hideName: true }),
+    ...(showLevel ? {} : { hideLevel: true }),
     valueText: "",
     maxText: "",
     valueLabel: "",
@@ -292,15 +342,24 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
     // No dictionary entry for this code (or none configured at all): the tone stays
     // neutral, but the raw value still prints — an empty title is indistinguishable
     // from a broken render, while the value itself is always known.
-    if (!outcome) return { ...base, levelLabel: String(input.value ?? "") };
+    if (!outcome) {
+      const levelLabel = String(input.value ?? "");
+      return {
+        ...base,
+        levelLabel,
+        ...(hasBannerContent(showLevel, levelLabel, undefined) ? {} : { hideBanner: true }),
+      };
+    }
     const tone = outcome.tone ?? "neutral";
+    const text = outcome.text;
     return {
       ...base,
       levelLabel: outcome.label,
       tone,
       toneClass: `tb-tone--${tone}`,
       bannerVariant: BANNER_BY_TONE[tone],
-      ...(outcome.text ? { text: outcome.text, textHtml: richTextToHtml(outcome.text) } : {}),
+      ...(text ? { text, textHtml: richTextToHtml(text) } : {}),
+      ...(hasBannerContent(showLevel, outcome.label, text) ? {} : { hideBanner: true }),
     };
   }
 
@@ -311,16 +370,19 @@ export function buildMeasureView(input: MeasureViewInput): CtxMeasureView {
   const bandIndex = band ? interpretation.bands.indexOf(band) : -1;
 
   const tone = toneOf(input, band?.tone, bandIndex, interpretation.bands.length);
+  const levelLabel = band ? band.label ?? band.level : "";
+  const text = band?.text;
   const view: CtxMeasureView = {
     ...base,
     valueText: String(round1(value)),
     maxText: hasDomain ? String(round1(domainMax)) : "",
     valueLabel: hasDomain ? `${round1(value)} из ${round1(domainMax)}` : String(round1(value)),
-    levelLabel: band ? band.label ?? band.level : "",
+    levelLabel,
     tone,
     toneClass: `tb-tone--${tone}`,
     bannerVariant: BANNER_BY_TONE[tone],
-    ...(band?.text ? { text: band.text, textHtml: richTextToHtml(band.text) } : {}),
+    ...(text ? { text, textHtml: richTextToHtml(text) } : {}),
+    ...(hasBannerContent(showLevel, levelLabel, text) ? {} : { hideBanner: true }),
   };
 
   if (!hasDomain) return view;

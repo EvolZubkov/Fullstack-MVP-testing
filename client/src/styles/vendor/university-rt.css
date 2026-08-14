@@ -7738,6 +7738,14 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-rte__area p { margin: 0 0 var(--ou-space-2); }
 .ou-rte__area p:last-child { margin-bottom: 0; }
 .ou-rte__area ul, .ou-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
+/* Host pages normally ship a Tailwind-style reset that drops list markers from
+   every ul/ol. The formatted mode shows the RESULT, so the markers are restored
+   here — without this the author sees an indent with no bullet or number while
+   the published text has them. Values mirror the browser defaults. */
+.ou-rte__area ul { list-style: disc outside; }
+.ou-rte__area ul ul { list-style-type: circle; }
+.ou-rte__area ul ul ul { list-style-type: square; }
+.ou-rte__area ol { list-style: decimal outside; }
 .ou-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
 .ou-rte__input {
   display: block; width: 100%; resize: vertical;

@@ -308,10 +308,33 @@ export const audit = {
     writeAudit("user.deactivate", { targetUserId }),
   userActivate:   (targetUserId: string) =>
     writeAudit("user.activate", { targetUserId }),
+  /**
+   * PRD-28: an external participant became an ordinary account. Recorded on its
+   * own because the change is one-way — there is no endpoint back — so the audit
+   * trail is the only place the previous kind of the account survives.
+   */
+  userPromote:    (targetUserId: string) =>
+    writeAudit("user.promote", { targetUserId }),
   userInvite:     (targetUserId: string) =>
     writeAudit("user.invite", { targetUserId }),
   bulkImport:     (created: number, updated: number, skipped: number) =>
     writeAudit("user.bulkImport", { created, updated, skipped }),
+  /**
+   * PRD-28 FR-20: a bulk participant run happened. Counts only — the run creates
+   * accounts and hands out entry links, so it is the operator's most powerful
+   * single action, but the links themselves must never reach the trail
+   * (`server/services/assignment-link.ts` keeps only their SHA-256).
+   */
+  participantsInvite: (testId: string, created: number, assigned: number) =>
+    writeAudit("participants.invite", { testId, created, assigned }),
+  /**
+   * PRD-28 FR-20 / раздел 7: the operator saved a run's links to a file. The
+   * file is assembled on the client from the report it already holds, so what is
+   * recorded is the fact and the count — who took how many keys out of the
+   * system — and nothing that could be used to enter with.
+   */
+  participantLinksExported: (testId: string, count: number) =>
+    writeAudit("participants.linksExported", { testId, count }),
   attemptsReset:  (targetUserId: string, testId: string | null) =>
     writeAudit("attempts.reset", { targetUserId, testId }),
 };

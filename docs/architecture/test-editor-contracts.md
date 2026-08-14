@@ -127,10 +127,18 @@ type PassDecisionPolicy =
   | "all_topics_passed";
 ```
 
-Default-логика:
+Хранится в колонке `tests.pass_decision_policy` (NOT NULL, default `overall_only`) и ездит
+в теле `POST`/`PUT /api/tests/:id` под тем же именем. Значение применяется движком подсчёта
+`shared/scoring/aggregate.ts` — одинаково в вебе и в SCORM-пакете; семантика вариантов —
+`test-settings-parameter-structure.md` §3.4.
+
+Default-логика (применяется, только когда явного значения в ответе API нет, — легаси-данные):
 
 - если `passRules.byTopic` пуст или все темы используют `inherit_overall` без custom правил → `"overall_only"`;
 - если есть хотя бы одна тема с `custom` или `none` → `"overall_and_required_topics"`.
+
+Тем же правилом миграция `0017_prd_pass_decision_policy_backfill` заполнила существующие тесты,
+чтобы автор увидел ровно то значение, которое редактор показывал ему до появления колонки.
 
 ### 2.5 `passRules.overall.type`
 

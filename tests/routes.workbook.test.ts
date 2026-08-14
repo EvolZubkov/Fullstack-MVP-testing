@@ -10,7 +10,9 @@ import request from "supertest";
 import express from "express";
 import session from "express-session";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { addJsonSheet, workbookToBuffer, readWorkbookFromBuffer } from "../server/utils/excel";
+import { WORKBOOK_UPLOAD_LIMIT_BYTES } from "../server/middleware/upload";
 import { VARIANT_THRESHOLD_HEADERS } from "../server/utils/workbook-sheets";
 import { QUESTION_HEADERS } from "../server/services/questions-export";
 
@@ -142,6 +144,33 @@ describe("POST /api/workbook/inspect", () => {
   it("без файла → 400", async () => {
     const res = await request(makeApp()).post("/api/workbook/inspect");
     expect(res.status).toBe(400);
+  });
+
+  it("не .xlsx-пакет → 400 с кодом not_a_zip", async () => {
+    const notAZip = Buffer.from("Ключ строки;Текст вопроса\nQ1;Первый\n", "utf8");
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", notAZip, "wb.xlsx");
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("not_a_zip");
+  });
+
+  it("книга больше лимита → 413 с кодом too_large", async () => {
+    const tooBig = Buffer.alloc(WORKBOOK_UPLOAD_LIMIT_BYTES + 1024, 0x41);
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", tooBig, "wb.xlsx");
+
+    expect(res.status).toBe(413);
+    expect(res.body.code).toBe("too_large");
+  });
+
+  it("zip с испорченной частью книги → 400 с кодом unparsable", async () => {
+    const zip = new JSZip();
+    zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types/>');
+    zip.file("xl/workbook.xml", "это не xml вовсе");
+    const buf = await zip.generateAsync({ type: "nodebuffer" });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("unparsable");
   });
 });
 
@@ -284,6 +313,19 @@ describe("POST /api/workbook/import-new", () => {
       .attach("file", buf, "wb.xlsx");
     expect(res.status).toBe(400);
   });
+
+  it("нечитаемый файл → 400 с кодом причины, а не 500", async () => {
+    const notAZip = Buffer.from("Ключ строки;Тема\nq1;JS\n", "utf8");
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Сертификация")
+      .attach("file", notAZip, "wb.xlsx");
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("not_a_zip");
+    // Ничего не создано: файл не прочитан, значит и оболочки теста быть не должно.
+    expect(testSettingsMock.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/workbook/template", () => {
@@ -343,6 +385,9 @@ describe("GET /api/workbook/template", () => {
       "Оценка",
       "Шкалы",
       "Показатели",
+      // PRD-48: тексты исходов показателя — то, что ученик читает на итогах и что
+      // книга до сих пор не несла вовсе.
+      "Исходы показателей",
       "Вклады вопросов",
       // Documentation sheets close the book; neither is a role name, so the
       // importer ignores them and the filled example can never be imported.

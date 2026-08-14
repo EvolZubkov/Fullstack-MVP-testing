@@ -31,6 +31,14 @@ export interface WizardStepsProps extends Omit<React.HTMLAttributes<HTMLDivEleme
   narrow?: boolean;
   /** Кнопки навигации (rendered в footer). По умолчанию — auto. */
   footer?: React.ReactNode;
+  /**
+   * Только полоса шагов, без панели и кнопок навигации.
+   *
+   * Для мастеров, чьи панели живут снаружи компонента (например в модальном окне,
+   * где кнопки принадлежат футеру диалога): полоса шагов остаётся общей, а
+   * содержимое и навигацию ведёт вызывающий.
+   */
+  navOnly?: boolean;
   /** Колбэки навигации. */
   onBack?: () => void;
   onNext?: () => void;
@@ -63,7 +71,7 @@ function resolveStatus(
 export const WizardSteps = forwardRef<HTMLDivElement, WizardStepsProps>(
   ({
     steps, current, defaultCurrent, onChange, statuses,
-    horizontal, narrow, footer,
+    horizontal, narrow, footer, navOnly,
     onBack, onNext, onFinish,
     backLabel = 'Назад', nextLabel = 'Далее', finishLabel = 'Готово',
     className, ...rest
@@ -128,6 +136,7 @@ export const WizardSteps = forwardRef<HTMLDivElement, WizardStepsProps>(
           })}
         </div>
 
+        {!navOnly && (
         <div className="ou-wiz__body">
           {(step?.counter || step?.heading || step?.bodyDescription) && (
             <div className="ou-wiz__head">
@@ -162,6 +171,7 @@ export const WizardSteps = forwardRef<HTMLDivElement, WizardStepsProps>(
             </div>
           )}
         </div>
+        )}
       </div>
     );
   },

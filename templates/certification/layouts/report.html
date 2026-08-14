@@ -19,6 +19,12 @@
        специалисту. Пусто = блока нет. -->
   {{#if result.introHtml}}<section class="tb-report__card tb-report__intro">{{& result.introHtml }}</section>{{/if}}
 
+  <!-- ЗОНТИК «Ваш результат» — та же надпись и то же место в иерархии, что на экране
+       итогов: он покрывает сводку, темы, шкалы и показатели. Формулировку и сам показ
+       задаёт автор одним тумблером на оба экрана; выключен — заголовка нет, разделы
+       остаются. -->
+  {{#if labels.results.heading}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.heading }}</div>{{/if}}
+
   <!-- Сводка баллов гейтится ТЕМ ЖЕ признаком, что на экране итогов (PRD-29 §6.7):
        измерительная методика не приносит баллов, и «0 вопросов / 0.0 баллов / 0 %» —
        утверждение, которого экран не делает. Гейт стоит на ВСЕЙ карточке: с переездом
@@ -59,9 +65,13 @@
   </section>
   {{/unless}}
 
+  <!-- ЗАГОЛОВКИ РАЗДЕЛОВ приходят словарём надписей (PRD-49): формулировку задаёт автор
+       теста, а отчёт вправе сказать иначе, чем экран итогов. Пустая надпись означает «не
+       печатать» — раздел остаётся, заголовка у него нет. Умолчания, в том числе отдельные
+       умолчания отчёта, объявляет манифест шаблона. -->
   {{#if report.hasTopics}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Результаты по темам</div>
+    {{#if labels.results.topics}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.topics }}</div>{{/if}}
     <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
       {{#each result.topicResults}}
       <div class="tb-report__topic {{ passClass }}">
@@ -88,14 +98,17 @@
        плотно. Заголовок несёт первая — иначе он остался бы карточкой из одной строки. -->
   {{#each result.indicators}}
   <section class="tb-report__card">
-    {{#if @first}}<div class="tb-report__title tb-report__title--tight">Ваш результат</div>{{/if}}
+    {{#if @first}}{{#if @root.labels.results.indicators}}<div class="tb-report__title tb-report__title--tight">{{ @root.labels.results.indicators }}</div>{{/if}}{{/if}}
     <div class="tb-report__scales">
       <div class="tb-report__scale-list">
         <div class="tb-report__scale">
-          <div class="tb-report__scale-name">{{name}}</div>
+          <!-- PRD-49: тумблеры слотов карточки гасят показ и в документе — ученик уносит
+               его с собой. Признаки инвертированы, поэтому проверка через unless: контекст,
+               собранный вручную (превью шаблонов, фикстуры), их не ставит вовсе. -->
+          {{#unless hideName}}<div class="tb-report__scale-name">{{name}}</div>{{/unless}}
           <div class="tb-report__scale-meta">
             {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
-            {{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}
+            {{#unless hideLevel}}{{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}{{/unless}}
           </div>
           {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
         </div>
@@ -106,7 +119,7 @@
 
   {{#if result.scales}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">По шкалам</div>
+    {{#if labels.results.scales}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.scales }}</div>{{/if}}
     <!-- Колонки «диаграмма слева, список справа» включает МОДИФИКАТОР, и ставится он по
          тому же признаку, каким гейтится сама фигура. Без него единственный ребёнок —
          список толкований — занимал колонку под диаграмму, 240 px из 545 доступных, и
@@ -151,10 +164,13 @@
       <div class="tb-report__scale-list">
         {{#each result.scales}}
         <div class="tb-report__scale">
-          <div class="tb-report__scale-name">{{name}}</div>
+          <!-- PRD-49: тумблеры слотов карточки гасят показ и в документе — ученик уносит
+               его с собой. Признаки инвертированы, поэтому проверка через unless: контекст,
+               собранный вручную (превью шаблонов, фикстуры), их не ставит вовсе. -->
+          {{#unless hideName}}<div class="tb-report__scale-name">{{name}}</div>{{/unless}}
           <div class="tb-report__scale-meta">
             {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
-            <span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>
+            {{#unless hideLevel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/unless}}
           </div>
           <!-- Линейка — та же фигура, что на экране итогов: вид измерения задаёт ОДНА
                настройка «Вид шкал», и документ обязан показать ученику то же, что показал
@@ -178,7 +194,7 @@
   {{/if}}
   {{#if result.recommendations.hasAny}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Рекомендации</div>
+    {{#if labels.results.recommendations}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.recommendations }}</div>{{/if}}
     <!-- Текст рекомендации печатается РАЗМЕТКОЙ: автор выбирает формат («Обычный»,
          «Форматированный», «HTML») в редакторе обратной связи, и его выбор доезжает сюда
          полем `textsHtml`. Обычный текст ядро экранирует само, а переводы строк отдаёт
@@ -217,7 +233,7 @@
 
   {{#if report.hasCourses}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Рекомендации по курсам</div>
+    {{#if labels.recommendations.courses}}<div class="tb-report__title tb-report__title--tight">{{ labels.recommendations.courses }}</div>{{/if}}
     <div class="tb-report__lead">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>
     {{#each report.courses}}
     <div class="tb-report__rec">
@@ -229,7 +245,7 @@
 
   {{#if report.hasEvents}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Рекомендуемые мероприятия</div>
+    {{#if labels.recommendations.events}}<div class="tb-report__title tb-report__title--tight">{{ labels.recommendations.events }}</div>{{/if}}
     <div class="tb-report__lead">Посетите очные мероприятия для углублённого изучения материала.</div>
     {{#each report.events}}
     <div class="tb-report__rec tb-report__rec--plain">

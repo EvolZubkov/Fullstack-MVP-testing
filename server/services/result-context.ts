@@ -26,8 +26,20 @@ import { withResolvedScaleIcons } from "./scale-icons";
 import { parseIndicatorInterpretation, parseScaleInterpretation } from "@shared/scales/interpretation";
 import type { RenderKind } from "@shared/template/measure-view";
 import type { ResultsBlockSettings } from "@shared/template/results-blocks";
+import {
+  resolveLabels,
+  type LabelDeclaration,
+  type LabelScreen,
+  type LabelValues,
+  type ResolvedLabels,
+} from "@shared/template/labels";
+import {
+  templateBlockOrder as templateOrderForScreen,
+  type ResultsBlockKey,
+  type TemplateBlockOrder,
+} from "@shared/template/results-order";
 import { resolveReportIntro } from "@shared/schema";
-import type { FeedbackContent, ResultVariable, Scale, TestIntro } from "@shared/schema";
+import type { DesignSettings, FeedbackContent, ResultVariable, Scale, TestIntro } from "@shared/schema";
 import type { ScaleResult } from "@shared/formula/types";
 
 export type { ResultRenderContext };
@@ -84,6 +96,73 @@ export interface MeasuresSource {
    * the same.
    */
   testFeedback?: Partial<FeedbackContent> | null;
+  /**
+   * PRD-49: `manifest.labels[]` of the ACTIVE design template — the declarations the
+   * author's wording is resolved against. Absent/empty = a template that declares no
+   * labels, whose layouts print their own hard-coded strings (spec §9); the builders then
+   * pass NO `labels` option at all, so the context keeps the shape it had before this PRD.
+   */
+  labelDeclarations?: readonly LabelDeclaration[] | null;
+  /**
+   * PRD-49: `manifest.resultsBlockOrder` of the ACTIVE design template — the per-screen
+   * composition and order of the results sub-blocks. Read as declared, because the SCREEN
+   * is chosen here: the standard and the adaptive builder resolve different lists out of
+   * the one declaration.
+   */
+  templateBlockOrder?: TemplateBlockOrder | ResultsBlockKey[] | null;
+  /**
+   * PRD-49: design settings of the DELIVERED test (`design_settings_json`) — the author's
+   * own label wording and their saved sub-block order. From the delivered version, like
+   * every other field here, so a finished attempt shows the content it was taken on.
+   */
+  design?: DesignSettings | null;
+}
+
+/**
+ * PRD-49. Effective labels of ONE screen for a delivered test: the manifest declarations
+ * of the ACTIVE template, the test's own values on top. The report layer is applied by the
+ * report builder, which knows its own overrides.
+ *
+ * An EMPTY map is returned for a template that declares nothing, and the callers treat it
+ * as «this template has no labels»: it must not reach the context builder, or a screen
+ * that had no `labels` key at all would gain an empty tree.
+ */
+export function resolveScreenLabels(
+  declarations: readonly LabelDeclaration[] | undefined | null,
+  design: DesignSettings | null | undefined,
+  screen: LabelScreen,
+  overrides: LabelValues = {},
+): ResolvedLabels {
+  if (!declarations?.length) return {};
+  return resolveLabels({ declarations, values: design?.labels ?? {}, overrides, screen });
+}
+
+/**
+ * PRD-49 options both results builders assemble the same way: the resolved labels of the
+ * screen being built, the author's saved order and the template's own list for that
+ * screen.
+ *
+ * ONE helper rather than two copies — the standard and the adaptive screen differ only in
+ * WHICH screen they name, and a second copy of the resolution is exactly the drift this
+ * PRD exists to remove. `labels` is spread in only when the template declares any (see
+ * {@link resolveScreenLabels}); the other two are inert when nothing is declared, since
+ * `templateBlockOrder` answers a silent manifest with the shipped order.
+ */
+function labelOptions(
+  measures: MeasuresSource | undefined,
+  screen: LabelScreen,
+): {
+  labels?: ResolvedLabels;
+  blockOrder?: ResultsBlockKey[];
+  templateBlockOrder?: readonly ResultsBlockKey[];
+} {
+  if (!measures) return {};
+  const labels = resolveScreenLabels(measures.labelDeclarations, measures.design, screen);
+  return {
+    ...(Object.keys(labels).length ? { labels } : {}),
+    ...(measures.design?.resultsBlockOrder ? { blockOrder: measures.design.resultsBlockOrder } : {}),
+    templateBlockOrder: templateOrderForScreen(measures.templateBlockOrder, screen),
+  };
 }
 
 /**
@@ -115,6 +194,11 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
       value: scaleResults[s.key]?.raw ?? null,
       visibility: s.learnerVisibility,
       interpretation: parseScaleInterpretation(s.configJson),
+      // PRD-49 §6: per-slot toggles saved by the scale editor. `!== false` is load-bearing —
+      // an absent key means "show" (legacy scales carry no key at all), so any other reading
+      // would silently hide the name/level slot of every scale saved before this PRD.
+      showName: (s.configJson as Record<string, unknown>)?.showName !== false,
+      showLevel: (s.configJson as Record<string, unknown>)?.showLevel !== false,
     }));
 
   const indicators: MeasureInput[] = source.variables
@@ -126,6 +210,9 @@ export function buildMeasuresInput(source: MeasuresSource): MeasuresInput {
       value: variableValues[v.name] as number | string | boolean | null,
       visibility: v.learnerVisibility,
       interpretation: parseIndicatorInterpretation(v.configJson),
+      // PRD-49 §6: same toggle pair, saved by the result-variable editor.
+      showName: (v.configJson as Record<string, unknown>)?.showName !== false,
+      showLevel: (v.configJson as Record<string, unknown>)?.showLevel !== false,
     }));
 
   return {
@@ -259,6 +346,10 @@ export function buildResultContext(
       // Вводный блок ЭКРАНА: у отчёта свой текст, и путать их нельзя — адресаты разные.
       ...(measures?.intro?.results ? { intro: measures.intro.results } : {}),
       ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
+      // PRD-49. Headings and sub-block order travel OUTSIDE `measures`, like the test's
+      // own feedback: they belong to the SCREEN, and a control test — which never reaches
+      // the measures branch — has the same four headings to print.
+      ...labelOptions(measures, "results"),
     },
   );
 }
@@ -427,6 +518,10 @@ export function buildAdaptiveResultContext(
     {
       ...(testFeedback ? { testFeedback } : {}),
       ...(hasMeasures ? { measures: buildMeasuresInput(measures as MeasuresSource) } : {}),
+      // PRD-49. Same wording, its OWN screen: the adaptive results screen may carry
+      // per-screen defaults and, in the shipped manifest, a different sub-block list
+      // (topics first, no score summary) — which is why the screen name is not shared.
+      ...labelOptions(measures, "results.adaptive"),
     },
   );
 }

@@ -106,5 +106,19 @@
   // removing an address (and restarting) ends that account's privileges.
   "access": {
     "superadminEmails": { "env": "SUPERADMIN_EMAILS" }
+  },
+
+  // Operational ceilings. These are not policy decisions — they exist so an
+  // installation can tune throughput/abuse limits without a code change. The
+  // values below are the ones the code used to hard-code.
+  "limits": {
+    // Maximum rows accepted from one uploaded workbook (participants import and
+    // the user import that shares its reader). A larger book is rejected whole,
+    // so raise this only together with the operator's patience for one request.
+    "participantsImportMaxRows": 500,
+    // Password-setup letters per person per hour. ONE budget shared by password
+    // recovery and the "set your password" invitation, so the two paths cannot
+    // be combined to exceed it.
+    "passwordEmailsPerHour": 3
   }
 }

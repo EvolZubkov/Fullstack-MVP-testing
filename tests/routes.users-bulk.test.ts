@@ -164,6 +164,16 @@ describe("POST /api/users/bulk-preview", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 with a reason code for an unreadable file, not 500", async () => {
+    const notAZip = Buffer.from("email;name\na@a.com;Тест\n", "utf8");
+    const res = await asAuthor(
+      request(makeApp()).post("/api/users/bulk-preview").attach("file", notAZip, "users.xlsx"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("not_a_zip");
+  });
+
   it("returns preview rows for new users", async () => {
     storageMock.getGroups.mockResolvedValue([groupA]);
     storageMock.getUserByEmail.mockResolvedValue(undefined); // all new

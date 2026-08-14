@@ -185,23 +185,53 @@ describe("buildMaterials", () => {
   it("returns the names of templates in the active lifecycle state", async () => {
     dbMock.rows = [{ name: "Стандартный" }, { name: "Сертификация (РТК)" }];
 
-    const result = await buildMaterials();
+    const result = await buildMaterials(["administrator"]);
 
     expect(result.activeTemplates).toEqual(["Стандартный", "Сертификация (РТК)"]);
+    expect(result.showTemplates).toBe(true);
   });
 
   it("reports an empty list rather than failing when nothing is active", async () => {
     dbMock.rows = [];
 
-    const result = await buildMaterials();
+    const result = await buildMaterials(["administrator"]);
 
     expect(result.activeTemplates).toEqual([]);
   });
 
-  it("always offers both documentation downloads on the routes the API accepts", async () => {
-    const result = await buildMaterials();
+  it("offers every document on the consolidated download route", async () => {
+    const result = await buildMaterials(["administrator"]);
 
-    expect(result.docs.map((d) => d.id)).toEqual(["guide", "spec"]);
-    expect(result.docs.every((d) => d.href.startsWith("/api/admin/templates/docs/"))).toBe(true);
+    expect(result.docs.map((d) => d.id)).toEqual([
+      "test-authoring",
+      "import-workbook",
+      "template-development",
+      "template-spec",
+    ]);
+    expect(result.docs.every((d) => d.href === `/api/docs/${d.id}`)).toBe(true);
+  });
+
+  it("shows an author only the documents their rights cover", async () => {
+    const result = await buildMaterials(["author"]);
+
+    // An author holds tests.read and questions.importExport but not
+    // adminTemplates.manage, so the two template documents are withheld.
+    expect(result.docs.map((d) => d.id)).toEqual(["test-authoring", "import-workbook"]);
+  });
+
+  it("does not query templates for a reader who does not manage them", async () => {
+    dbMock.rows = [{ name: "Стандартный" }];
+
+    const result = await buildMaterials(["author"]);
+
+    expect(result.showTemplates).toBe(false);
+    expect(result.activeTemplates).toEqual([]);
+    expect(dbMock.where).not.toHaveBeenCalled();
+  });
+
+  it("gives a pure learner nothing to download", async () => {
+    const result = await buildMaterials(["learner"]);
+
+    expect(result.docs).toEqual([]);
   });
 });

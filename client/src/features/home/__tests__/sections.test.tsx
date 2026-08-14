@@ -236,28 +236,46 @@ describe("SummaryStrip", () => {
 });
 
 describe("MaterialsSection", () => {
-  it("lists every active template and both documents as plain anchors", () => {
+  it("lists every active template and every document as plain anchors", () => {
     render(
       <MaterialsSection
         data={{
+          showTemplates: true,
           activeTemplates: ["Стандартный", "Сертификация (РТК)"],
           docs: [
-            { id: "guide", label: "Руководство", href: "/api/admin/templates/docs/guide" },
-            { id: "spec", label: "Спецификация", href: "/api/admin/templates/docs/spec" },
+            { id: "test-authoring", label: "Руководство автора", href: "/api/docs/test-authoring" },
+            { id: "template-spec", label: "Спецификация", href: "/api/docs/template-spec" },
           ],
         }}
       />,
     );
     expect(screen.getByTestId("home-material-template-Стандартный")).toBeInTheDocument();
     expect(screen.getByTestId("home-material-template-Сертификация (РТК)")).toBeInTheDocument();
-    const guide = screen.getByTestId("home-material-doc-guide");
+    const guide = screen.getByTestId("home-material-doc-test-authoring");
     expect(guide.tagName).toBe("A");
-    expect(guide).toHaveAttribute("href", "/api/admin/templates/docs/guide");
+    expect(guide).toHaveAttribute("href", "/api/docs/test-authoring");
   });
 
   it("says so when no template is active", () => {
-    render(<MaterialsSection data={{ activeTemplates: [], docs: [] }} />);
+    render(<MaterialsSection data={{ showTemplates: true, activeTemplates: [], docs: [] }} />);
     expect(screen.getByText("Активных шаблонов нет")).toBeInTheDocument();
+  });
+
+  it("hides the template block from a reader who does not manage templates", () => {
+    render(
+      <MaterialsSection
+        data={{
+          showTemplates: false,
+          activeTemplates: [],
+          docs: [{ id: "test-authoring", label: "Руководство автора", href: "/api/docs/test-authoring" }],
+        }}
+      />,
+    );
+
+    // An author is not told anything about the state of the template registry —
+    // «Активных шаблонов нет» would be a claim about a thing they cannot see.
+    expect(screen.queryByText("Активных шаблонов нет")).not.toBeInTheDocument();
+    expect(screen.getByTestId("home-material-doc-test-authoring")).toBeInTheDocument();
   });
 });
 

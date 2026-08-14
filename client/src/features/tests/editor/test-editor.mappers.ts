@@ -606,6 +606,7 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
       outcomes: buildOutcomes(r.configJson),
       ...buildScaleDomain(r.configJson),
       valence: buildScaleValence(r.configJson),
+      ...buildSlotToggles(r.configJson),
       sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
     });
   });
@@ -670,6 +671,17 @@ function buildScaleDisplayMax(configJson: unknown): number | null {
   const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
   const raw = config.displayMax;
   return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
+}
+
+/**
+ * PRD-49 §6: the card's slot switches stored in `config_json`. Absence means «show» —
+ * the flag is written only when the author switches a slot off — so anything that is
+ * not an explicit `false` reads as shown. The pair is shared by scales and indicators:
+ * both render the same four-slot card.
+ */
+function buildSlotToggles(configJson: unknown): { showName: boolean; showLevel: boolean } {
+  const config = isPlainObject(configJson) ? (configJson as Record<string, unknown>) : {};
+  return { showName: config.showName !== false, showLevel: config.showLevel !== false };
 }
 
 /** PRD-29: the favourable direction stored in `config_json`; unknown degrades to "none". */
@@ -787,6 +799,7 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
       // number and stands on its own.
       displayMax: buildScaleDisplayMax(r.configJson),
       valence: buildScaleValence(r.configJson),
+      ...buildSlotToggles(r.configJson),
       learnerVisibility: toLearnerVisibility(r.learnerVisibility),
       scormTarget: SCALE_TARGETS.has(r.scormTarget as string)
         ? (r.scormTarget as ScaleModel["scormTarget"])
@@ -912,6 +925,12 @@ function readReportSettingsFromApi(api: ApiTestResponse): ReportSettings {
     // шаблона там, где настройка есть и работает.
     if (!key && Object.keys(values).length === 0) continue;
     out[mode] = { ...(key ? { variantKey: key } : {}), values };
+  }
+  // PRD-49 §4.2: слой переопределений надписей ОТЧЁТА. Общий на оба режима — документ
+  // говорит одними словами независимо от того, каким режимом собран тест.
+  const labels = (raw as Record<string, unknown>).labels;
+  if (isPlainObject(labels)) {
+    (out as { labels?: unknown }).labels = labels;
   }
   return out;
 }
@@ -1209,8 +1228,15 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     retakePolicyJson: model.retakePolicy.enabled ? model.retakePolicy : null,
     // PRD-27: пустой выбор персистится как `null` — тест без настройки берёт вариант
     // с `isDefault`, и колонка не заполняется бессмысленным `{}`.
+    // PRD-49: переопределения надписей — такая же «настройка отчёта», как выбор вида,
+    // поэтому ветка режима перестала быть единственным основанием сохранить колонку.
     reportSettingsJson:
-      model.report && (model.report.standard || model.report.adaptive) ? model.report : null,
+      model.report &&
+      (model.report.standard ||
+        model.report.adaptive ||
+        Object.keys((model.report as { labels?: Record<string, unknown> }).labels ?? {}).length > 0)
+        ? model.report
+        : null,
     // Вводные блоки: пустой набор персистится как `null` — колонка не заполняется
     // бессмысленным `{}`, а «текст стёрт» и «блока не было» для выдачи одно и то же.
     introJson:

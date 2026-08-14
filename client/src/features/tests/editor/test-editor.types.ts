@@ -292,6 +292,13 @@ export type ResultVariableModel = {
    * type flip during editing does not lose it.
    */
   valence: Valence;
+  /**
+   * PRD-49 §6: show the card's NAME slot. Same convention as
+   * {@link ScaleModel.showName} — absent = shown, stored only when switched off.
+   */
+  showName?: boolean;
+  /** PRD-49 §6: show the card's LEVEL slot (the outcome label). */
+  showLevel?: boolean;
   sortOrder: number;
 };
 
@@ -393,6 +400,16 @@ export type ScaleModel = {
   /** PRD-29: what the learner sees — nothing, the level only, or level + value. */
   learnerVisibility: LearnerVisibility;
   scormTarget: ScaleScormTarget;
+  /**
+   * PRD-49 §6: show the card's NAME slot. Absent (or `true`) = shown, which is why
+   * every read goes through `!== false`: the flag is written to `config_json` only
+   * when the author switches the slot OFF, so a scale nobody touched keeps the exact
+   * config it had. Switching it off hides the slot only — the label itself stays in
+   * the data, because the report, the analytics and the export all read it.
+   */
+  showName?: boolean;
+  /** PRD-49 §6: show the card's LEVEL slot (the banner's verdict line). */
+  showLevel?: boolean;
   sortOrder: number;
 };
 

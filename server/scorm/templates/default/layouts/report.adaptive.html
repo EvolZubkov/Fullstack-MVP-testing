@@ -15,9 +15,17 @@
     <div class="tb-report__title tb-report__title--solid" data-path="course.title"></div>
   </section>
 
+  <!-- ЗОНТИК «Ваш результат» — та же надпись и то же место в иерархии, что на адаптивных
+       итогах: он покрывает темы, шкалы и показатели. Формулировку и показ задаёт автор
+       одним тумблером на все экраны; выключен — заголовка нет, разделы остаются. -->
+  {{#if labels.results.heading}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.heading }}</div>{{/if}}
+
+  <!-- ЗАГОЛОВКИ РАЗДЕЛОВ приходят словарём надписей (PRD-49) — те же ключи, что у обычного
+       отчёта и у экрана итогов: формулировка принадлежит тесту, а не режиму выдачи. Пустая
+       надпись означает «не печатать»: раздел остаётся, заголовка у него нет. -->
   {{#if report.hasTopics}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Результаты по темам</div>
+    {{#if labels.results.topics}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.topics }}</div>{{/if}}
     <div class="tb-report__topics" style="grid-template-columns: repeat({{ report.gridColumns }}, 1fr);">
       {{#each result.topicResults}}
       <div class="tb-report__topic tb-report__topic--level {{ achievedClass }}">
@@ -39,29 +47,11 @@
   </section>
   {{/if}}
 
-  {{#if result.indicators}}
-  <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Ваш результат</div>
-    <div class="tb-report__scales">
-      <div class="tb-report__scale-list">
-        {{#each result.indicators}}
-        <div class="tb-report__scale">
-          <div class="tb-report__scale-name">{{name}}</div>
-          <div class="tb-report__scale-meta">
-            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
-            {{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}
-          </div>
-          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
-        </div>
-        {{/each}}
-      </div>
-    </div>
-  </section>
-  {{/if}}
-
+  <!-- ШКАЛЫ идут ПЕРЕД показателями — тот же порядок, что на экране итогов и в обычном
+       отчёте: шкала — измерение, показатель — вывод из измерений. -->
   {{#if result.scales}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">По шкалам</div>
+    {{#if labels.results.scales}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.scales }}</div>{{/if}}
     <!-- Колонки «диаграмма слева, список справа» включает МОДИФИКАТОР, и ставится он по
          тому же признаку, каким гейтится сама фигура. Без него единственный ребёнок —
          список толкований — занимал колонку под диаграмму, 240 px из 545 доступных, и
@@ -106,10 +96,13 @@
       <div class="tb-report__scale-list">
         {{#each result.scales}}
         <div class="tb-report__scale">
-          <div class="tb-report__scale-name">{{name}}</div>
+          <!-- PRD-49: тумблеры слотов карточки гасят показ и в документе — ученик уносит
+               его с собой. Признаки инвертированы, поэтому проверка через unless: контекст,
+               собранный вручную (превью шаблонов, фикстуры), их не ставит вовсе. -->
+          {{#unless hideName}}<div class="tb-report__scale-name">{{name}}</div>{{/unless}}
           <div class="tb-report__scale-meta">
             {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
-            <span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>
+            {{#unless hideLevel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/unless}}
           </div>
           <!-- Линейка шкалы — см. `report.html`: тот же гейт и тот же источник чисел. -->
           {{#if zones}}
@@ -126,9 +119,33 @@
     </div>
   </section>
   {{/if}}
+
+  {{#if result.indicators}}
+  <section class="tb-report__card">
+    {{#if labels.results.indicators}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.indicators }}</div>{{/if}}
+    <div class="tb-report__scales">
+      <div class="tb-report__scale-list">
+        {{#each result.indicators}}
+        <div class="tb-report__scale">
+          <!-- PRD-49: тумблеры слотов карточки гасят показ и в документе — ученик уносит
+               его с собой. Признаки инвертированы, поэтому проверка через unless: контекст,
+               собранный вручную (превью шаблонов, фикстуры), их не ставит вовсе. -->
+          {{#unless hideName}}<div class="tb-report__scale-name">{{name}}</div>{{/unless}}
+          <div class="tb-report__scale-meta">
+            {{#if showValue}}<span class="tb-report__scale-val">{{valueLabel}}</span>{{/if}}
+            {{#unless hideLevel}}{{#if levelLabel}}<span class="tb-report__scale-lvl {{toneClass}}">{{levelLabel}}</span>{{/if}}{{/unless}}
+          </div>
+          {{#if text}}<div class="tb-report__scale-text">{{& textHtml }}</div>{{/if}}
+        </div>
+        {{/each}}
+      </div>
+    </div>
+  </section>
+  {{/if}}
+
   {{#if result.recommendations.hasAny}}
   <section class="tb-report__card">
-    <div class="tb-report__title tb-report__title--tight">Рекомендации</div>
+    {{#if labels.results.recommendations}}<div class="tb-report__title tb-report__title--tight">{{ labels.results.recommendations }}</div>{{/if}}
     <!-- Текст рекомендации печатается РАЗМЕТКОЙ: автор выбирает формат («Обычный»,
          «Форматированный», «HTML») в редакторе обратной связи, и его выбор доезжает сюда
          полем `textsHtml`. Обычный текст ядро экранирует само, а переводы строк отдаёт

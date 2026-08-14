@@ -18,18 +18,24 @@
 import type {
   CtxCourse,
   CtxResult,
+  CtxResultBlock,
   CtxSectionResult,
   CtxSectionIntro,
   CtxTopicResultView,
   CtxAdaptiveTopicView,
   CtxRecommendation,
 } from "./context";
+import { resolveBlockOrder, DEFAULT_BLOCK_ORDER, type ResultsBlockKey } from "./results-order";
+import { labelsTree } from "./labels";
 import { buildMeasureView, type RenderKind } from "./measure-view";
 import { richTextToHtml, type RichTextFormat } from "./rich-text";
 import { buildScalesChart, type ChartKindSettings } from "./scales-chart";
 import { parseScaleAppearance } from "./scale-appearance";
 import { collectRecommendations } from "./recommendations";
 import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
+// PRD-29 §6.7 lives in the scoring layer, not here: the results screen was its first
+// reader, not its owner (see the two gates in `buildResultContext`).
+import { hasGradedScore as isGradedRun, hasPronouncedVerdict } from "../scoring/pass-rule";
 import type {
   FeedbackBlock,
   IndicatorInterpretation,
@@ -38,6 +44,21 @@ import type {
   ScaleInterpretation,
 } from "../scales/interpretation";
 import type { LevelRamp } from "./level-ramp";
+
+/**
+ * Layout-facing flag per sub-block: the DSL has no equality test, only truthiness.
+ *
+ * Typed against `CtxResultBlock` and not `string`: a misspelt flag («isScale») is a block
+ * that silently disappears from the screen — the layout's `{{#if isScales}}` simply never
+ * fires, no host throws, and no existing test looks at the flag of a block it does not
+ * render. The compiler is the only thing that can catch it early.
+ */
+const BLOCK_FLAG: Record<ResultsBlockKey, keyof CtxResultBlock> = {
+  summary: "isSummary",
+  scales: "isScales",
+  indicators: "isIndicators",
+  topics: "isTopics",
+};
 
 /** Ring geometry from `layouts/results.html` (`<circle r="63">`). */
 const RING_RADIUS = 63;
@@ -166,6 +187,16 @@ export interface MeasureInput {
   value: number | string | boolean | null | undefined;
   visibility: LearnerVisibility;
   interpretation: ScaleInterpretation | IndicatorInterpretation;
+  /**
+   * PRD-49 §6. Show the card's name / level slots — read by the host from
+   * `config_json.showName` / `config_json.showLevel` of the scale or result-variable row.
+   * Absent = show, so a measure whose row carries neither key (every measure saved before
+   * this PRD) keeps its card exactly as it was. Spread straight through to
+   * {@link module:shared/template/measure-view.MeasureViewInput} by {@link buildMeasureView}
+   * callers below — this is the ONE place both hosts read the toggle from.
+   */
+  showName?: boolean;
+  showLevel?: boolean;
 }
 
 /** PRD-29 measurement input: the visible measures plus the design-param choices. */
@@ -524,12 +555,33 @@ export interface ResultContextOptions {
    * Пустой текст блока не даёт (см. {@link CtxResult.introHtml}).
    */
   intro?: { text?: string | null; format?: RichTextFormat | null } | null;
+  /**
+   * PRD-49: resolved labels of THIS screen, flat map from `shared/template/labels`
+   * (`{"results.scales": "По шкалам"}`). Absent = the caller has not been taught the
+   * labels yet, and the context stays exactly as it was before this PRD.
+   */
+  labels?: Record<string, string>;
+  /** PRD-49: the author's order of the sub-blocks; absent = the template's order. */
+  blockOrder?: ResultsBlockKey[];
+  /**
+   * PRD-49: what THIS screen of THIS template prints, and in what order — the list the
+   * author's order is cleaned against, and the composition it cannot exceed (the adaptive
+   * results screen has no score summary at all).
+   *
+   * The builder takes a READY list rather than the manifest: resolving «manifest → this
+   * screen» is the caller's job ({@link templateBlockOrder}), exactly as it is for the
+   * labels. Absent = the shipped order, so a host not yet taught to pass it renders what
+   * it always did.
+   */
+  templateBlockOrder?: readonly ResultsBlockKey[];
 }
 
 /** Built `{ course, result }` for the results layouts. */
 export interface ResultRenderContext {
   course: CtxCourse;
   result: CtxResult;
+  /** PRD-49: resolved interface labels as a nested tree (`labels.results.scales`). */
+  labels?: Record<string, unknown>;
 }
 
 /**
@@ -600,6 +652,70 @@ function topicView(t: TopicInput, withPoints: boolean): CtxTopicResultView {
   return view;
 }
 
+/** PRD-49 input {@link attachBlocksAndLabels} takes from either results builder's `opts`. */
+interface BlockLabelOptions {
+  labels?: Record<string, string>;
+  blockOrder?: ResultsBlockKey[];
+  templateBlockOrder?: readonly ResultsBlockKey[];
+}
+
+/**
+ * PRD-49. Attach the umbrella's ordered, labelled sub-blocks (`result.blocks`) and resolve
+ * the labels tree — ONE rule for BOTH the standard and the adaptive results screen.
+ *
+ * A second copy of «which sub-blocks are visible, and in what order» is exactly the drift
+ * PRD-49 exists to prevent. Scales/indicators/topics are read off the SAME fields the two
+ * layouts already gate their own rendering on (`{{#if result.scales}}` /
+ * `{{#if result.indicators}}` / `{{#if result.topicResults}}` in `results.html` and
+ * `results.adaptive.html`), so this function cannot disagree with what the screen actually
+ * prints — it is reading the layout's own gate, not recomputing a second one.
+ *
+ * The score summary is the one exception: the adaptive screen has none, so its visibility
+ * cannot be read off any `result` field (nothing there means «no summary block exists»,
+ * same as «summary is hidden»). The caller states the fact directly via `hasSummary` — the
+ * standard builder passes `!result.hideScoreSummary` (the flag the screen's own ring/strip
+ * reads), the adaptive builder always passes `false`.
+ *
+ * Even with `hasSummary: true` by mistake, a `summary` sub-block could still only appear if
+ * `summary` were present in the resolved order — and for the adaptive screen it never is:
+ * `templateBlockOrder` there leaves it out, so `resolveBlockOrder` drops it from the merged
+ * order however the author's saved `blockOrder` asks for it (`results-order.ts`'s own
+ * mechanism, not a second check here). `hasSummary` is still explicit rather than derived,
+ * so a reader of either call site sees the answer without following the order resolution.
+ *
+ * Mutates `result.blocks` in place, matching every other Core-prepared field this builder
+ * sets, and returns the labels TREE for the caller's `{ ..., labels }` spread — `undefined`
+ * when the caller passed no `labels` at all, so a host not yet taught PRD-49 gets a
+ * byte-identical context (no `labels` key at all, not an empty one).
+ */
+function attachBlocksAndLabels(
+  result: CtxResult,
+  opts: BlockLabelOptions,
+  hasSummary: boolean,
+): Record<string, unknown> | undefined {
+  // `topics` has no `auto/show/hide` setting of its own — it is visible exactly when there
+  // is a topic card to show, which is what both layouts gated on before this PRD.
+  const visible: Record<ResultsBlockKey, boolean> = {
+    summary: hasSummary,
+    scales: !!result.scales?.length,
+    indicators: !!result.indicators?.length,
+    topics: !!result.topicResults?.length,
+  };
+  const labels = opts.labels ?? {};
+  const order = resolveBlockOrder(opts.blockOrder, opts.templateBlockOrder ?? DEFAULT_BLOCK_ORDER);
+  // Named `subBlocks` and not `blocks`: in the standard builder's scope `blocks` already
+  // holds the PRD-29 show/hide answers of the measurement blocks, a different thing entirely.
+  const subBlocks = order
+    .filter((key) => visible[key])
+    .map((key) => ({
+      key,
+      heading: labels[`results.${key}`] ?? "",
+      [BLOCK_FLAG[key]]: true,
+    })) as CtxResultBlock[];
+  if (subBlocks.length) result.blocks = subBlocks;
+  return opts.labels ? labelsTree(labels) : undefined;
+}
+
 /**
  * Build the STANDARD results context. `result.*` carries both raw numbers and
  * Core-prepared presentational fields (the layout/DSL computes no logic). The
@@ -636,11 +752,12 @@ export function buildResultContext(
   // Computed BEFORE `result` so the block-visibility flags below can gate the per-topic
   // «Баллов» row the same way they gate the summary itself (issue #30).
   const thresholdDeclared = opts.hasPassThreshold ?? opts.measures?.hasPassThreshold;
-  // «Nothing to grade» stands on its own because the verdict rule below needs it WITHOUT
-  // the threshold flag: it is read off the run itself, so it holds for every host — taught
-  // to send the flag or not — and for attempts finished before any of this existed.
-  const nothingToGrade = round1(input.possiblePoints) <= 0;
-  const hasGradedScore = thresholdDeclared === true && !nothingToGrade;
+  // Both gates come from `@shared/scoring/pass-rule`, which owns the rule itself. They
+  // live there and not here because the LEARNER's screen is no longer their only reader:
+  // the author-facing analytics asks the very same question about the very same run, and
+  // two implementations of «оценивает ли этот прогон» would drift exactly as the two
+  // copies of the verdict gate drifted before 2026-08-06 (see below).
+  const hasGradedScore = isGradedRun(thresholdDeclared, input.possiblePoints);
   // THE VERDICT TAG, for every test — measurement or control alike. Same question as
   // `hasGradedScore` («does this test grade at all»), with ONE deliberate difference: an
   // ABSENT threshold flag does not silence it. `hasGradedScore` may read unknown as «no»
@@ -654,7 +771,7 @@ export function buildResultContext(
   // in the product — kept printing a green «Пройден» while the feedback block, gated by
   // the very same question a few lines down, printed underneath it: the header claimed a
   // success and the block below handed out work on the mistakes.
-  const noVerdict = nothingToGrade || thresholdDeclared === false;
+  const noVerdict = !hasPronouncedVerdict(thresholdDeclared, input.possiblePoints);
   // Visible scales/indicators and the resolved block visibility, gathered ONCE so the
   // scales/indicators sections further below reuse the SAME values instead of refiltering.
   // The SAME resolver the adaptive builder runs (issue #33).
@@ -753,7 +870,12 @@ export function buildResultContext(
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
-  return { course: { title }, result };
+  // PRD-49. The umbrella's sub-blocks + resolved labels, via the ONE rule shared with the
+  // adaptive builder (see `attachBlocksAndLabels`). `summary` reads the INVERTED flag the
+  // screen itself reads, so the list says «visible» exactly where the summary prints —
+  // including a control test, which never reaches the toggle and has always shown it.
+  const labelsTreeOut = attachBlocksAndLabels(result, opts, !result.hideScoreSummary);
+  return { course: { title }, result, ...(labelsTreeOut ? { labels: labelsTreeOut } : {}) };
 }
 
 /** Normalized input for the staged section-results screen (PRD-19 FR-05a). */
@@ -777,6 +899,20 @@ export interface SectionResultInput {
   sectionsTotal?: number;
 }
 
+/** PRD-49: optional resolved labels for the section-results screen. */
+export interface SectionResultContextOptions {
+  /**
+   * Resolved labels of THIS screen (`section.eyebrow`, `facts.*`), same flat map the
+   * results builders take. Absent = no `labels` key on the returned context — a caller
+   * not yet taught PRD-49 gets a byte-identical result.
+   *
+   * The section-results screen has no sub-blocks of its own (it is one fixed card, not
+   * an umbrella with children), so this builder attaches ONLY the labels tree — there is
+   * no `attachBlocksAndLabels` call here, and none is needed.
+   */
+  labels?: Record<string, string>;
+}
+
 /**
  * Build the COMPUTED section-results context (`{ course, sectionResult }`, PRD-19
  * FR-05a). Reuses the same ring geometry as the test results screen; the verdict
@@ -784,9 +920,14 @@ export interface SectionResultInput {
  * shows the score without a pass/fail label. Pure — both hosts call it on their
  * own normalized section result so the numbers/markup cannot drift.
  */
-export function buildSectionResultContext(input: SectionResultInput): {
+export function buildSectionResultContext(
+  input: SectionResultInput,
+  opts: SectionResultContextOptions = {},
+): {
   course: CtxCourse;
   sectionResult: CtxSectionResult;
+  /** PRD-49: resolved interface labels as a nested tree (`labels.section.eyebrow`). */
+  labels?: Record<string, unknown>;
 } {
   const percent = Math.round(input.percent || 0);
   const hasVerdict = input.passed === true || input.passed === false;
@@ -810,6 +951,7 @@ export function buildSectionResultContext(input: SectionResultInput): {
   return {
     course: { title: input.courseTitle || input.topicName || "", subtitle: input.subtitle },
     sectionResult,
+    ...(opts.labels ? { labels: labelsTree(opts.labels) } : {}),
   };
 }
 
@@ -942,6 +1084,22 @@ export interface AdaptiveResultContextOptions {
   measures?: MeasuresInput;
   /** Вводный блок этой выдачи — тот же, что у стандартного экрана (см. там же). */
   intro?: { text?: string | null; format?: RichTextFormat | null } | null;
+  /**
+   * PRD-49: resolved labels of THIS screen, same flat map the standard builder takes
+   * ({@link ResultContextOptions.labels}). Absent = no `labels` key on the returned
+   * context, so a caller not yet taught PRD-49 gets a byte-identical result.
+   */
+  labels?: Record<string, string>;
+  /** PRD-49: the author's order of the sub-blocks; absent = the template's order. */
+  blockOrder?: ResultsBlockKey[];
+  /**
+   * PRD-49: what THIS screen of THIS template prints, and in what order
+   * ({@link ResultContextOptions.templateBlockOrder}). The adaptive results screen has
+   * never carried a score summary, so its declared list has no `summary` key — and that
+   * is what keeps the sub-block list from ever growing one, whatever the author's saved
+   * `blockOrder` asks for (see `attachBlocksAndLabels`).
+   */
+  templateBlockOrder?: readonly ResultsBlockKey[];
 }
 
 /**
@@ -1077,5 +1235,9 @@ export function buildAdaptiveResultContext(
   }
   const recommendations = collectRecommendations(recommendationSources);
   if (recommendations.hasAny) result.recommendations = recommendations;
-  return { course: { title }, result };
+  // PRD-49. Same rule as the standard screen (see `attachBlocksAndLabels`), with
+  // `hasSummary: false` fixed — this screen has never carried a score summary, so no
+  // caller-supplied order can ever bring one back onto it.
+  const labelsTreeOut = attachBlocksAndLabels(result, opts, false);
+  return { course: { title }, result, ...(labelsTreeOut ? { labels: labelsTreeOut } : {}) };
 }

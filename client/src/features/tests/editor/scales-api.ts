@@ -91,6 +91,11 @@ function toConfigJson(s: ScaleModel): Record<string, unknown> {
   // PRD-46 §6: written only when set, so a scale nobody rescaled keeps the config it had
   // and the radar keeps drawing to the domain.
   if (s.displayMax !== null) config.displayMax = s.displayMax;
+  // PRD-49 §6: card slots. Written ONLY when switched off — «show» is the absence of
+  // the flag everywhere downstream (`showName !== false`), so a scale nobody touched
+  // keeps the exact config it had.
+  if (s.showName === false) config.showName = false;
+  if (s.showLevel === false) config.showLevel = false;
   return config;
 }
 

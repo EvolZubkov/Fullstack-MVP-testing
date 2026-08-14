@@ -132,6 +132,76 @@ function vrReportEnabled() {
 }
 
 /**
+ * Карта надписей ОДНОГО экрана из того, что несёт пакет.
+ *
+ * Форм две, и различать их приходится по значениям, а не по версии пакета:
+ *
+ * - по экранам — `{ "results": { … }, "results.adaptive": { … } }`, значения ОБЪЕКТЫ;
+ *   так печёт сборка сегодня, потому что умолчание объявляется по экранам
+ *   (`defaults.<экран>`) и разрешать его надо для каждого экрана отдельно;
+ * - плоская — `{ "results.scales": "По шкалам" }`, значения СТРОКИ; так печатали первые
+ *   пакеты PRD-49, и они продолжают ходить в LMS. Для них одна карта отвечает за все
+ *   экраны — ровно то, чем она и была на момент сборки.
+ *
+ * Признак — тип ПЕРВОГО собственного значения: у плоской карты это строка, у карты по
+ * экранам — объект. Сверять по имени ключа было бы хуже: ключ `results.adaptive` законен
+ * в обеих формах (в плоской он был бы надписью, в карте по экранам — экраном).
+ *
+ * @param {object|null} labels `designSettings.labels` как есть.
+ * @param {string} screen Экран (`results` / `results.adaptive` / `section-results`).
+ * @returns {object|null} Плоская карта «ключ → текст» этого экрана.
+ */
+function vrScreenLabels(labels, screen) {
+  if (!labels || typeof labels !== 'object') return null;
+  for (var key in labels) {
+    if (!Object.prototype.hasOwnProperty.call(labels, key)) continue;
+    var value = labels[key];
+    // Старая плоская форма: карта одна на все экраны, отдаём её как есть.
+    if (typeof value === 'string') return labels;
+    // Новая форма: у экрана либо есть своя карта, либо этот экран надписей не печатает.
+    var own = labels[screen];
+    return (own && typeof own === 'object') ? own : null;
+  }
+  return null;
+}
+
+/**
+ * PRD-49: надписи блоков итогов и порядок подблоков — как их несёт пакет.
+ *
+ * Приезжают УЖЕ РАЗРЕШЁННЫМИ (`build-export-data`): манифеста с умолчаниями в LMS нет, и
+ * второго источника этого факта у рантайма быть не может — так же устроен признак выдачи
+ * отчёта. Рантайм НИЧЕГО не разворачивает: плоская карта «ключ → текст» уходит в ядро как
+ * есть, и дерево `labels.*` строит только оно (`shared/template/labels`). Второе место,
+ * где строится дерево, означало бы второй шанс разойтись с веб-хостом.
+ *
+ * Пакет, собранный до этого PRD (или на шаблоне без раздела `labels`), не несёт ни одного
+ * из трёх полей — и опции остаются пустыми, то есть экран собирается ровно как прежде.
+ *
+ * @param {string} screen Экран, чьи надписи и список подблоков нужны.
+ * @returns {object} Опции для `TBTemplate.buildResultContext`.
+ */
+function vrLabelOptions(screen) {
+  var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || {};
+  var opts = {};
+  var labels = vrScreenLabels(ds.labels, screen);
+  if (labels) opts.labels = labels;
+  if (ds.resultsBlockOrder) opts.blockOrder = ds.resultsBlockOrder;
+  if (ds.templateBlockOrder && ds.templateBlockOrder[screen]) {
+    opts.templateBlockOrder = ds.templateBlockOrder[screen];
+  }
+  return opts;
+}
+
+/** Домешать надписи и порядок подблоков в уже собранные опции построителя. */
+function vrApplyLabelOptions(opts, screen) {
+  var extra = vrLabelOptions(screen);
+  for (var key in extra) {
+    if (Object.prototype.hasOwnProperty.call(extra, key)) opts[key] = extra[key];
+  }
+  return opts;
+}
+
+/**
  * Whether the TEST declares a pass threshold at all (`tests.overall_pass_rule_json`,
  * baked as `TEST_DATA.overallPassRule`). It is the one fact that tells an explicit
  * «Пройден» from a test that pronounces no verdict. The shared builder reads it twice:
@@ -269,17 +339,28 @@ function buildResultsMeasures(scaleComputation, varComputation) {
       // The BAKED scale carries its interpretation flat (domainMin/domainMax/valence/
       // bands) and the shared parser reads exactly those keys, so the package ends up
       // with the identical interpretation object the web host parses from config_json.
-      interpretation: TB.parseScaleInterpretation(s)
+      interpretation: TB.parseScaleInterpretation(s),
+      // PRD-49 §6: per-slot toggles. Baked as RESOLVED booleans straight onto the scale
+      // row (`test-json.ts`), not as a nested `config_json` — the package never carries
+      // the author's raw config for a scale, only the parsed interpretation and this
+      // answer. `!== false` because an absent key means "show", so a scale baked before
+      // this field existed keeps printing both slots.
+      showName: s.showName !== false,
+      showLevel: s.showLevel !== false
     };
   });
 
   var indicators = measuresBySortOrder(rawVars).map(function (v) {
+    // PRD-49 §6: same toggle pair, baked raw onto the result-variable row's `configJson`.
+    var varConfig = v.configJson || {};
     return {
       key: v.name,
       name: v.label || v.name,
       value: varValues[v.name],
       visibility: v.learnerVisibility || 'hidden',
-      interpretation: TB.parseIndicatorInterpretation(v.configJson)
+      interpretation: TB.parseIndicatorInterpretation(v.configJson),
+      showName: varConfig.showName !== false,
+      showLevel: varConfig.showLevel !== false
     };
   });
 
@@ -384,6 +465,8 @@ function renderViewResultsTemplated(app, results) {
   if (measures) opts.measures = measures;
   var screenIntro = vrScreenIntro();
   if (screenIntro) opts.intro = screenIntro;
+  // PRD-49: заголовки блоков и порядок подблоков — из пакета, разрешёнными.
+  vrApplyLabelOptions(opts, 'results');
   var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
   // NB: no attempt counter in the header — the scene header names the test, run
@@ -473,6 +556,8 @@ function renderResultsTemplated(app, results) {
   if (measures) opts.measures = measures;
   var screenIntro = vrScreenIntro();
   if (screenIntro) opts.intro = screenIntro;
+  // PRD-49: тот же экран, те же надписи — финиш и «Мой результат» рисуют один макет.
+  vrApplyLabelOptions(opts, 'results');
   var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', opts);
   ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
 

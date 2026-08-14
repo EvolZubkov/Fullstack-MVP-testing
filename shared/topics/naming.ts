@@ -22,3 +22,26 @@ export function normalizeTopicName(name: string): string {
     .toLowerCase()
     .replace(/ё/g, "е");
 }
+
+/**
+ * Finds a free variant of a topic name for an owner who already uses it.
+ *
+ * `(owner_id, name_normalized)` is unique, so an importer who owns «Лидерство» cannot receive
+ * a second one. Renaming keeps the import whole and is reported; joining the existing topic
+ * silently would attach the incoming questions to content the author did not choose, which is
+ * the more expensive mistake to discover later.
+ *
+ * One rule in one place: the import plan SHOWS the name it is about to create, and the writer
+ * CREATES it — a second, drifting rule would make the plan lie.
+ *
+ * @param name - the wanted name.
+ * @param taken - normalized names already used by the owner.
+ * @returns `name` itself when it is free, otherwise the first free «name (импорт N)».
+ */
+export function freeTopicName(name: string, taken: ReadonlySet<string>): string {
+  if (!taken.has(normalizeTopicName(name))) return name;
+  for (let n = 2; ; n++) {
+    const candidate = `${name} (импорт ${n})`;
+    if (!taken.has(normalizeTopicName(candidate))) return candidate;
+  }
+}

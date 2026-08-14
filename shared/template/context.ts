@@ -180,6 +180,13 @@ export interface CtxResult {
    */
   hideScoreSummary?: boolean;
   /**
+   * PRD-49. The visible sub-blocks of the results umbrella, already ordered and already
+   * carrying their heading. The layout walks this ONE array instead of printing four
+   * fixed sections, so the author's order is expressed in DATA — the print pipeline of
+   * the PDF report reads the real DOM order and a CSS-only reorder would lie to it.
+   */
+  blocks?: CtxResultBlock[];
+  /**
    * ВВОДНЫЙ БЛОК — авторский текст, который идёт ПЕРВЫМ, до сводки, тем, измерений и
    * рекомендаций: он объясняет слушателю, что он сейчас читает.
    *
@@ -193,6 +200,22 @@ export interface CtxResult {
    */
   introHtml?: string;
   [key: string]: unknown;
+}
+
+/**
+ * One sub-block of the results umbrella (PRD-49).
+ *
+ * The per-key boolean flags exist because the DSL has no equality test: a layout cannot
+ * ask `{{#if key == "scales"}}`, only whether a path is truthy.
+ */
+export interface CtxResultBlock {
+  key: "summary" | "scales" | "indicators" | "topics";
+  /** Effective heading; an empty string means the author switched the heading off. */
+  heading: string;
+  isSummary?: boolean;
+  isScales?: boolean;
+  isIndicators?: boolean;
+  isTopics?: boolean;
 }
 
 /** What the results layout binds its footer against (`result.nav`). */

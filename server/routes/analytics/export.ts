@@ -13,11 +13,27 @@ import { stripMarkdown } from "@shared/text";
 import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import {
   analyticsScope,
+  declaresPassThreshold,
   formatQuestionType,
   formatAllOptions,
   formatCorrectAnswerText,
   formatUserAnswerText,
+  formatContributions,
+  gradingOf,
+  hasMeasures,
+  loadMeasureCatalogue,
+  measureCells,
+  measureHeaders,
+  NOT_APPLICABLE,
+  type MeasureCatalogue,
 } from "./helpers";
+import { isMeasurementOnly } from "@shared/questions/question-type";
+import { loadScoringConfig } from "../../services/scoring-config";
+import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
+
+/** Scale key -> label, for the per-answer contribution cell. */
+const scaleLabelsOf = (measures: MeasureCatalogue) =>
+  new Map(measures.scales.map((s) => [s.key, s.label]));
 
 const router = Router();
 
@@ -71,6 +87,15 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 
     // PRD-15 block D (FR-32): recompute with the test-effective price/config.
     const scoring = await loadTestScoringContext(testId, storage);
+    // PRD-5/PRD-2: what this test measures, and whether it grades at all (PRD-29 §6.7).
+    const measures = await loadMeasureCatalogue(testId);
+    const thresholdDeclared = declaresPassThreshold(test);
+    // Loaded only when there is a scale to attribute an answer to — a control test
+    // makes no extra queries and grows no extra column.
+    const scoringConfig = measures.scales.length > 0
+      ? await loadScoringConfig(testId, storage)
+      : { measurements: [] };
+    const scaleLabels = scaleLabelsOf(measures);
 
     // ЛИСТ 1: Сводка
     const summaryData: any[][] = [
@@ -86,22 +111,25 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
       ["Уникальных пользователей", new Set(completedAttempts.map(a => a.userId)).size],
     ];
 
-    if (completedAttempts.length > 0) {
-      const avgPercent = completedAttempts.reduce((sum, a) => {
-        const result = a.resultJson as any;
-        return sum + (result?.overallPercent || 0);
-      }, 0) / completedAttempts.length;
+    // PRD-29 §6.7: average and pass rate only over the runs those numbers apply to.
+    // Averaging a questionnaire's runs printed «Средний результат 0.0%» beside
+    // «Процент прохождения 100.0%» — two false statements about a method that grades
+    // nothing. The dash says «неприменимо»; the counts above still say what happened.
+    const scoredAttempts = completedAttempts.filter(a => gradingOf(a.resultJson as any, thresholdDeclared).scored);
+    const judgedAttempts = completedAttempts.filter(a => gradingOf(a.resultJson as any, thresholdDeclared).verdictPronounced);
 
-      const passedCount = completedAttempts.filter(a => {
-        const result = a.resultJson as any;
-        return result?.overallPassed;
-      }).length;
-
-      summaryData.push(
-        ["Средний результат", `${avgPercent.toFixed(1)}%`],
-        ["Процент прохождения", `${((passedCount / completedAttempts.length) * 100).toFixed(1)}%`]
-      );
-    }
+    summaryData.push([
+      "Средний результат",
+      scoredAttempts.length > 0
+        ? `${(scoredAttempts.reduce((sum, a) => sum + ((a.resultJson as any)?.overallPercent || 0), 0) / scoredAttempts.length).toFixed(1)}%`
+        : NOT_APPLICABLE,
+    ]);
+    summaryData.push([
+      "Процент прохождения",
+      judgedAttempts.length > 0
+        ? `${((judgedAttempts.filter(a => (a.resultJson as any)?.overallPassed).length / judgedAttempts.length) * 100).toFixed(1)}%`
+        : NOT_APPLICABLE,
+    ]);
 
     // ЛИСТ 2: Попытки
     const attemptsHeaders = [
@@ -112,6 +140,9 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
     if (test.mode === "adaptive") {
       attemptsHeaders.push("Достигнутые уровни");
     }
+    // PRD-5/PRD-2: one column per scale (and its level) and per indicator — what a
+    // measurement run actually produced. Absent for a test that measures nothing.
+    attemptsHeaders.push(...measureHeaders(measures));
 
     const attemptsData: any[][] = [attemptsHeaders];
 
@@ -120,6 +151,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
       const duration = attempt.startedAt && attempt.finishedAt
         ? Math.round((new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000)
         : null;
+      const { scored, verdictPronounced } = gradingOf(result, thresholdDeclared);
 
       const row: any[] = [
         attempt.id,
@@ -127,10 +159,14 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         attempt.startedAt ? new Date(attempt.startedAt).toLocaleString("ru-RU") : "",
         attempt.finishedAt ? new Date(attempt.finishedAt).toLocaleString("ru-RU") : "",
         duration ?? "",
-        result?.overallPercent?.toFixed(1) ?? "",
-        result?.totalEarnedPoints ?? "",
-        result?.totalPossiblePoints ?? "",
-        result ? (result.overallPassed ? "Сдан" : "Не сдан") : "В процессе",
+        // PRD-29 §6.7: a run that graded nothing has no percent, no points and no
+        // verdict — the dash, not «0.0» and a green «Сдан».
+        result && scored ? result.overallPercent?.toFixed(1) ?? "" : result ? NOT_APPLICABLE : "",
+        result && scored ? result.totalEarnedPoints ?? "" : result ? NOT_APPLICABLE : "",
+        result && scored ? result.totalPossiblePoints ?? "" : result ? NOT_APPLICABLE : "",
+        result
+          ? verdictPronounced ? (result.overallPassed ? "Сдан" : "Не сдан") : NOT_APPLICABLE
+          : "В процессе",
       ];
 
       if (test.mode === "adaptive" && result?.topicResults) {
@@ -139,6 +175,8 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
           .join("; ");
         row.push(levels);
       }
+
+      row.push(...measureCells(measures, result));
 
       attemptsData.push(row);
     }
@@ -152,6 +190,12 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 
     if (test.mode === "adaptive") {
       answersHeaders.push("Уровень");
+    }
+    // PRD-5: what this answer DID — the only outcome a measurement answer has. Without
+    // it the sheet showed a questionnaire's answers with nothing but «Неверно» beside
+    // them: the whole point of the question is invisible in its own answer row.
+    if (measures.scales.length > 0) {
+      answersHeaders.push("Вклад в шкалы");
     }
 
     const answersData: any[][] = [answersHeaders];
@@ -181,6 +225,9 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         const isCorrect = checkAnswer(question, userAnswer, effective.scoring) === 1;
         const dataJson = question.dataJson as any;
         const correctJson = question.correctJson as any;
+        // PRD-26 FR-08 / PRD-44 FR-09: never checked, earns no points — «Верно/Неверно»
+        // is not a weak answer here but a wrong KIND of answer.
+        const measurementOnly = isMeasurementOnly(question);
 
         let levelName = "";
         if (variant?.topics) {
@@ -205,12 +252,19 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
           formatAllOptions(question.type, dataJson),
           formatCorrectAnswerText(question.type, dataJson, correctJson),
           formatUserAnswerText(question.type, dataJson, userAnswer),
-          isCorrect ? "Верно" : "Неверно",
-          isCorrect ? effective.points : 0,
+          measurementOnly ? NOT_APPLICABLE : isCorrect ? "Верно" : "Неверно",
+          measurementOnly ? NOT_APPLICABLE : isCorrect ? effective.points : 0,
         ];
 
         if (test.mode === "adaptive") {
           row.push(levelName);
+        }
+
+        if (measures.scales.length > 0) {
+          row.push(formatContributions(
+            computeAnswerContributions(scoringConfig.measurements, qId, userAnswer as Answer, question.type as QuestionType),
+            scaleLabels,
+          ));
         }
 
         answersData.push(row);
@@ -245,6 +299,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 
       const dataJson = question.dataJson as any;
       const correctJson = question.correctJson as any;
+      const measurementOnly = isMeasurementOnly(question);
 
       questionStatsData.push([
         stripMarkdown(question.prompt),
@@ -254,16 +309,23 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         formatAllOptions(question.type, dataJson),
         formatCorrectAnswerText(question.type, dataJson, correctJson),
         stats.total,
-        stats.correct,
-        stats.total > 0 ? `${((stats.correct / stats.total) * 100).toFixed(1)}%` : "0%",
+        // A measurement question is never checked, so «правильных: 0 (0.0%)» ranked the
+        // whole questionnaire at the top of the «hardest questions» list. The count of
+        // ANSWERS stays — that one is real and is what an item analysis starts from.
+        measurementOnly ? NOT_APPLICABLE : stats.correct,
+        measurementOnly
+          ? NOT_APPLICABLE
+          : stats.total > 0 ? `${((stats.correct / stats.total) * 100).toFixed(1)}%` : "0%",
       ]);
     }
 
     const header = questionStatsData.shift();
     questionStatsData.sort((a, b) => {
-      const pctA = parseFloat(String(a[8]).replace("%", "")) || 0;
-      const pctB = parseFloat(String(b[8]).replace("%", "")) || 0;
-      return pctA - pctB;
+      // Unchecked questions have no place on a «worst first» axis: they sort last
+      // rather than tying with a genuinely failed question at 0%.
+      const pct = (v: unknown) =>
+        String(v) === NOT_APPLICABLE ? Number.POSITIVE_INFINITY : parseFloat(String(v).replace("%", "")) || 0;
+      return pct(a[8]) - pct(b[8]);
     });
     questionStatsData.unshift(header!);
 
@@ -271,7 +333,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
     const workbook = new ExcelJS.Workbook();
     addAoaSheet(workbook, "Сводка", summaryData);
     addAoaSheet(workbook, "Попытки", attemptsData, [36, 20, 18, 18, 12, 12, 10, 12, 12, 40]);
-    addAoaSheet(workbook, "Ответы", answersData, [36, 15, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8, 15]);
+    addAoaSheet(workbook, "Ответы", answersData, [36, 15, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8, 15, 30]);
     addAoaSheet(workbook, "Статистика вопросов", questionStatsData, [50, 20, 15, 10, 50, 30, 12, 12, 12]);
 
     const buffer = await workbookToBuffer(workbook);
@@ -537,6 +599,15 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       scoringByTest.set(t.id, await loadTestScoringContext(t.id, storage));
     }
 
+    // PRD-5/PRD-2/PRD-29: the measurement vocabulary and the threshold flag of EACH
+    // selected test — this report spans several, and neither is a property of the report.
+    const measuresByTest = new Map<string, MeasureCatalogue>();
+    const thresholdByTest = new Map<string, boolean | undefined>();
+    for (const t of selectedTests) {
+      measuresByTest.set(t.id, await loadMeasureCatalogue(t.id));
+      thresholdByTest.set(t.id, declaresPassThreshold(t));
+    }
+
     const wb = new ExcelJS.Workbook();
 
     // Sheet: Summary
@@ -575,6 +646,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         const dur = a.startedAt && a.finishedAt
           ? Math.round((new Date(a.finishedAt).getTime() - new Date(a.startedAt).getTime()) / 1000)
           : "";
+        // PRD-29 §6.7, per TEST: this report spans several, so the threshold is read
+        // per row rather than once.
+        const { scored, verdictPronounced } = gradingOf(r, thresholdByTest.get(a.testId));
 
         rows.push([
           testTitleMap.get(a.testId) || a.testId,
@@ -583,10 +657,10 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           a.startedAt ? new Date(a.startedAt).toLocaleString("ru-RU") : "",
           a.finishedAt ? new Date(a.finishedAt).toLocaleString("ru-RU") : "",
           dur,
-          r?.overallPercent?.toFixed(1) ?? "",
-          r?.totalEarnedPoints ?? "",
-          r?.totalPossiblePoints ?? "",
-          r ? (r.overallPassed ? "Сдан" : "Не сдан") : "—",
+          scored ? r?.overallPercent?.toFixed(1) ?? "" : NOT_APPLICABLE,
+          scored ? r?.totalEarnedPoints ?? "" : NOT_APPLICABLE,
+          scored ? r?.totalPossiblePoints ?? "" : NOT_APPLICABLE,
+          verdictPronounced ? (r?.overallPassed ? "Сдан" : "Не сдан") : NOT_APPLICABLE,
         ]);
       }
 
@@ -614,6 +688,8 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           const isCorrect = checkAnswer(q, userAnswer, effective?.scoring) === 1;
           const dataJson = q.dataJson as any;
           const correctJson = q.correctJson as any;
+          // PRD-26 FR-08 / PRD-44 FR-09: never checked — see the per-test export.
+          const measurementOnly = isMeasurementOnly(q);
 
           rows.push([
             testTitleMap.get(attempt.testId) || attempt.testId,
@@ -627,15 +703,65 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
             formatAllOptions(q.type, dataJson),
             formatCorrectAnswerText(q.type, dataJson, correctJson),
             formatUserAnswerText(q.type, dataJson, userAnswer),
-            isCorrect ? "Верно" : "Неверно",
+            measurementOnly ? NOT_APPLICABLE : isCorrect ? "Верно" : "Неверно",
             // T-40: points come from the effective chain; the `?? 1` is the
             // system default for the defensive case of a missing scoring context.
-            isCorrect ? (effective?.points ?? 1) : 0,
+            measurementOnly ? NOT_APPLICABLE : isCorrect ? (effective?.points ?? 1) : 0,
           ]);
         }
       }
 
       addAoaSheet(wb, "Ответы", rows, [24, 36, 15, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8]);
+    }
+
+    // Sheet: Измерения — PRD-5 scales and PRD-2 indicators, per run.
+    //
+    // LONG format here and WIDE in the per-test export, on purpose: this report spans
+    // several tests, whose scales have nothing in common, so a column per scale would
+    // be a sparse matrix where most cells cannot apply. One row per (run, measure)
+    // pivots cleanly and stays readable however many tests were selected.
+    if (includeSheets.attempts) {
+      const rows: any[][] = [[
+        "Тест", "ID попытки", "Пользователь", "Дата завершения",
+        "Вид", "Ключ", "Название", "Значение", "Уровень",
+      ]];
+
+      for (const a of completed) {
+        const catalogue = measuresByTest.get(a.testId);
+        if (!catalogue || !hasMeasures(catalogue)) continue;
+
+        const r = (a.resultJson ?? {}) as {
+          scaleResults?: Record<string, { raw?: number; label?: string; level?: string } | undefined>;
+          resultVariables?: Record<string, unknown>;
+        };
+        const head = [
+          testTitleMap.get(a.testId) || a.testId,
+          a.id,
+          userMap.get(a.userId) || "Unknown",
+          a.finishedAt ? new Date(a.finishedAt).toLocaleString("ru-RU") : "",
+        ];
+
+        for (const s of catalogue.scales) {
+          const v = r.scaleResults?.[s.key];
+          rows.push([
+            ...head, "Шкала", s.key, s.label,
+            typeof v?.raw === "number" ? v.raw : NOT_APPLICABLE,
+            v?.label || v?.level || NOT_APPLICABLE,
+          ]);
+        }
+        for (const i of catalogue.indicators) {
+          const v = r.resultVariables?.[i.name];
+          rows.push([
+            ...head, "Показатель", i.name, i.label,
+            v === undefined || v === null || v === "" ? NOT_APPLICABLE : String(v),
+            NOT_APPLICABLE,
+          ]);
+        }
+      }
+
+      if (rows.length > 1) {
+        addAoaSheet(wb, "Измерения", rows, [24, 36, 18, 18, 12, 16, 24, 12, 16]);
+      }
     }
 
     // Sheet: Question stats
@@ -652,7 +778,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           const key = `${attempt.testId}:${qId}`;
           const s = stat.get(key) || { total: 0, correct: 0, testId: attempt.testId };
           s.total++;
-          if (checkAnswer(q, ans, scoring?.resolve(q).scoring) === 1) s.correct++;
+          if (!isMeasurementOnly(q) && checkAnswer(q, ans, scoring?.resolve(q).scoring) === 1) s.correct++;
           stat.set(key, s);
         }
       }
@@ -671,8 +797,12 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           formatQuestionType(q.type),
           (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
           s.total,
-          s.correct,
-          s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",
+          // A measurement question is never checked — «0 правильных» was a verdict on
+          // a question that has none (see the per-test export).
+          isMeasurementOnly(q) ? NOT_APPLICABLE : s.correct,
+          isMeasurementOnly(q)
+            ? NOT_APPLICABLE
+            : s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",
         ]);
       }
 

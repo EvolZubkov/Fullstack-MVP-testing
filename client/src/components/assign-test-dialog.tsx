@@ -11,6 +11,7 @@ import {
   Ban,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   Box,
@@ -29,6 +30,7 @@ import {
 } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
+import { BulkInviteTab } from "@/features/tests/assign/bulk-invite-tab";
 
 interface User {
   id: string;
@@ -68,7 +70,7 @@ interface GroupUser {
   tokenStatus: "active" | "revoked" | "none";
 }
 
-type AssignTab = "current" | "users" | "groups";
+type AssignTab = "current" | "users" | "groups" | "bulk";
 
 /** Status badge for an access-link token (DS Tag tones). */
 function tokenStatusTag(status?: string) {
@@ -656,6 +658,18 @@ export function AssignTestDialog({
           { id: "current", label: `${t.assignments.assignedTo} (${assignments.length})`, content: currentPanel },
           { id: "users", label: t.assignments.users, icon: <Users size={16} />, content: usersPanel },
           { id: "groups", label: t.assignments.groups, icon: <UsersRound size={16} />, content: groupsPanel },
+          {
+            id: "bulk",
+            label: "Списком из файла",
+            icon: <FileSpreadsheet size={16} />,
+            content: (
+              <BulkInviteTab
+                testId={testId}
+                testTitle={testTitle}
+                onGoToAssignments={() => setActiveTab("current")}
+              />
+            ),
+          },
         ]}
       />
     </ModalDialog>

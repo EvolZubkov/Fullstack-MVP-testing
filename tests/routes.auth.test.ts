@@ -160,29 +160,18 @@ describe("GET /api/auth/me", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHECK EMAIL
+// ACCOUNT ENUMERATION — the removed check-email probe
 // ─────────────────────────────────────────────────────────────────────────────
-describe("POST /api/auth/check-email", () => {
+describe("POST /api/auth/check-email (removed)", () => {
   let app: express.Express;
   beforeEach(() => { vi.clearAllMocks(); app = makeApp(); });
 
-  it("returns 400 when no email provided", async () => {
-    const res = await request(app).post("/api/auth/check-email").send({});
-    expect(res.status).toBe(400);
-  });
-
-  it("returns exists: true when user found", async () => {
+  it("is gone: the router no longer answers whether an address exists", async () => {
     storageMock.getUserByEmail.mockResolvedValue(baseUser);
     const res = await request(app).post("/api/auth/check-email").send({ email: "kate@test.com" });
-    expect(res.status).toBe(200);
-    expect(res.body.exists).toBe(true);
-  });
-
-  it("returns exists: false when user not found", async () => {
-    storageMock.getUserByEmail.mockResolvedValue(undefined);
-    const res = await request(app).post("/api/auth/check-email").send({ email: "nobody@test.com" });
-    expect(res.status).toBe(200);
-    expect(res.body.exists).toBe(false);
+    expect(res.status).toBe(404);
+    expect(res.body.exists).toBeUndefined();
+    expect(storageMock.getUserByEmail).not.toHaveBeenCalled();
   });
 });
 
@@ -221,6 +210,24 @@ describe("POST /api/auth/forgot-password", () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(storageMock.createPasswordResetToken).toHaveBeenCalled();
+  });
+
+  it("answers a known and an unknown address byte for byte the same", async () => {
+    // Now that check-email is gone this is the only public door left, so the two
+    // replies must be indistinguishable — a masked-address hint present for one
+    // of them would restore the enumeration oracle on its own.
+    storageMock.getUserByEmail.mockResolvedValue(baseUser);
+    storageMock.getRecentTokensCount.mockResolvedValue(0);
+    storageMock.createPasswordResetToken.mockResolvedValue({});
+    emailMock.sendPasswordResetEmail.mockResolvedValue(true);
+    const known = await request(app).post("/api/auth/forgot-password").send({ email: "kate@test.com" });
+
+    storageMock.getUserByEmail.mockResolvedValue(undefined);
+    const unknown = await request(app).post("/api/auth/forgot-password").send({ email: "nobody@test.com" });
+
+    expect(known.status).toBe(unknown.status);
+    expect(known.body).toEqual(unknown.body);
+    expect(known.body.hint).toBeUndefined();
   });
 });
 

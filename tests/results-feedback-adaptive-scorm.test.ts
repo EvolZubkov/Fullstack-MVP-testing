@@ -91,10 +91,18 @@ function makeRuntime(sections: unknown[], testFeedbackJson?: unknown) {
   return { rt, app };
 }
 
-/** Ссылки группы «Материалы» консолидированного блока. */
+/**
+ * Ссылки группы «Материалы» консолидированного блока.
+ *
+ * PRD-49 task 8: caption берётся из `labels.recommendations.assets`, а надписи в пакет
+ * ещё не проведены (это задача 10 плана) — рантайм зовёт `buildAdaptiveResultContext`
+ * без `labels`, поэтому подпись группы пуста. Ни один из тестов этого файла не заводит
+ * группу «курсы» (`recommendedCourses`/`links` везде пустые), поэтому единственная
+ * реально рендерящаяся группа ссылок здесь и есть материалы — фильтр по подписи убран,
+ * проверяется структура (`a.tb-rec` внутри `.tb-recs-group`), а не текст заголовка.
+ */
 function materials(app: HTMLElement): Array<{ title: string; href: string }> {
   return Array.from(app.querySelectorAll(".tb-recs-group"))
-    .filter((g) => (g.querySelector(".tb-eyebrow")?.textContent ?? "").trim() === "Материалы")
     .flatMap((g) => Array.from(g.querySelectorAll("a.tb-rec")))
     .map((a) => ({ title: a.textContent?.trim() ?? "", href: a.getAttribute("href") ?? "" }));
 }

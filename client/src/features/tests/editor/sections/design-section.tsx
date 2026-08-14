@@ -41,6 +41,9 @@ import {
 import {
   Banner,
   Button,
+  Card,
+  CardBody,
+  CardHeader,
   ColorPicker,
   Combobox,
   IconButton,
@@ -65,6 +68,9 @@ import { fromHex, manifestColorFormat, toHex, type ColorFormat } from "./color-f
 import { extractThemeTokens } from "@shared/template/theme-tokens";
 import { useTemplateBundle } from "./use-template-bundle";
 import { DEFAULT_PARAM_CSS_VARS } from "@shared/template/params-css";
+import { resolveLabels, type LabelDeclaration, type LabelValues } from "@shared/template/labels";
+import { templateBlockOrder } from "@shared/template/results-order";
+import { ResultsLabelsPane } from "./results-labels-pane";
 import { TemplatePreviewModal } from "./template-preview-modal";
 import { TemplateGalleryModal } from "./template-gallery-modal";
 import { TemplateThumb } from "./template-thumb";
@@ -96,7 +102,14 @@ export type DesignSectionProps = {
   updateModel?: (updater: (m: TestEditorModel) => TestEditorModel) => void;
 };
 
-type DesignRailKey = "template" | "branding" | "colors" | "layout" | "progress" | "report";
+type DesignRailKey =
+  | "template"
+  | "branding"
+  | "colors"
+  | "layout"
+  | "progress"
+  | "results"
+  | "report";
 
 const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "template", label: "Шаблон" },
@@ -107,6 +120,9 @@ const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
   { key: "colors", label: "Цвета" },
   { key: "layout", label: "Макет" },
   { key: "progress", label: "Прогресс и шапка" },
+  // PRD-49 §7: заголовки блоков итогов и порядок подблоков. Надписи объявляет шаблон, и
+  // пункт есть только у шаблона, который их объявил, — ровно как у секций параметров.
+  { key: "results", label: "Итоги" },
   // PRD-47 §6.2: отчёт — часть шаблона, его поля объявляет манифест ровно как параметры
   // оформления. Место им здесь, а не в общих настройках теста. Хранение при этом НЕ
   // переезжает: поля отчёта остаются своей колонкой (PRD-27 §4.2).
@@ -156,12 +172,27 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
     return RAIL_ITEMS.filter(
       (item) =>
         item.key === "template" ||
+        // PRD-49 §9: шаблон без `labels[]` печатает свои жёсткие строки — настраивать
+        // нечего, и подраздел ему не показывается.
+        (item.key === "results" && (design.template?.manifest.labels?.length ?? 0) > 0) ||
         // PRD-47 §6.2: отчёт есть у любого теста. Даже когда шаблон не объявил видов,
         // карточка объясняет, что отчёт соберётся видом «Стандартный», — спрятать пункт
         // значит спрятать это объяснение. Остальные пункты без параметров бессмысленны.
         item.key === "report" ||
         paramsForRail(params, item.key).length > 0,
     );
+  }, [design.template]);
+
+  // PRD-49: строки панели «Заголовки и подписи отчёта». Документ печатает НЕ все
+  // объявленные надписи — структура у него своя и фиксированная, — поэтому перечень
+  // приходит с сервера, посчитанный по макетам отчёта (`reportLabelKeys`). Поля нет
+  // (старый сервер, шаблон не прочитался) — показываются все объявления, как раньше.
+  const reportLabelDeclarations = useMemo(() => {
+    const declared = design.template?.manifest.labels ?? [];
+    const printed = design.template?.reportLabelKeys;
+    if (!printed) return declared;
+    const allowed = new Set(printed);
+    return declared.filter((d) => allowed.has(d.key));
   }, [design.template]);
 
   const effectiveActive: DesignRailKey = design.templateMissing
@@ -234,11 +265,30 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
             />
           ) : effectiveActive === "colors" ? (
             <ColorsPane design={design} onPreview={() => setPreviewOpen(true)} />
+          ) : effectiveActive === "results" ? (
+            <div data-testid="design-results-pane">
+              <ResultsLabelsPane
+                declarations={design.template?.manifest.labels ?? []}
+                labels={design.draft.labels ?? {}}
+                onChange={design.setLabels}
+                order={design.draft.resultsBlockOrder}
+                // Состав и порядок объявляет ШАБЛОН, и берётся объявление ЭКРАНА ИТОГОВ:
+                // настройка одна на все экраны, а адаптивные итоги, например, сводки
+                // баллов не печатают вовсе.
+                templateOrder={templateBlockOrder(
+                  design.template?.manifest.resultsBlockOrder,
+                  "results",
+                )}
+                onOrderChange={design.setResultsBlockOrder}
+              />
+              <DesignSaveError design={design} />
+            </div>
           ) : effectiveActive === "report" ? (
             // PRD-47 §6.2: переезд, а не переработка — состав карточки тот же, что стоял
             // в «Настройки → Основное». Черновые шаблон и брендинг теперь СВОИ, этой же
             // вкладки, а не пришедшие из соседней.
             model && updateModel ? (
+              <>
               <ReportSettingsCard
                 // Здесь только облик документа: что в нём показывать, автор задаёт в
                 // «Настройках», рядом с обратной связью (PRD-27 §7.1).
@@ -264,6 +314,21 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
                     : undefined
                 }
               />
+              {/* PRD-49 §7: тот же перечень надписей, но слоем ПЕРЕОПРЕДЕЛЕНИЙ. Пустая
+                  строка значит «как на экране итогов», поэтому подсказкой поля стоит уже
+                  разрешённый текст итогов, а не умолчание шаблона. Перечень — только те
+                  надписи, которые печатает ДОКУМЕНТ (`reportLabelKeys`): у него своя
+                  фиксированная структура, и строка про заголовок, которого в нём нет,
+                  включалась бы вхолостую. */}
+              {reportLabelDeclarations.length > 0 && (
+                <ReportLabelsCard
+                  declarations={reportLabelDeclarations}
+                  sharedLabels={design.draft.labels ?? {}}
+                  report={model.report ?? {}}
+                  onChange={(next) => updateModel((m) => ({ ...m, report: next }))}
+                />
+              )}
+              </>
             ) : null
           ) : effectiveActive === "layout" ? (
             <SectionPane
@@ -504,6 +569,59 @@ function TemplatePane({
   );
 }
 
+
+/**
+ * PRD-49 §7: слой переопределений надписей для ОТЧЁТА.
+ *
+ * Отдельная карточка рядом с «Оформлением отчёта», а не поля внутри неё: у надписей своя
+ * природа — их объявляет `manifest.labels[]`, а не `settings[]` выбранного вида, и живут
+ * они на всех экранах сразу. Значения кладутся в `report_settings_json.labels`.
+ */
+function ReportLabelsCard({
+  declarations,
+  sharedLabels,
+  report,
+  onChange,
+}: {
+  declarations: LabelDeclaration[];
+  /** Общие значения теста: относительно них автор задаёт отступление для отчёта. */
+  sharedLabels: LabelValues;
+  report: TestEditorModel["report"] & object;
+  onChange: (next: NonNullable<TestEditorModel["report"]>) => void;
+}) {
+  // Что напечатает отчёт БЕЗ переопределения: умолчание экрана `report` под значениями
+  // теста. Это и есть состояние «как на экране итогов», в котором строка открывается.
+  const base = useMemo(
+    () => resolveLabels({ declarations, values: sharedLabels, screen: "report" }),
+    [declarations, sharedLabels],
+  );
+  const overrides = (report as { labels?: LabelValues }).labels ?? {};
+  return (
+    <div data-testid="design-report-labels">
+      {/* Карточка, а не `FormSection`: пане внутри сама разложена секциями, а секция в
+          секции — это две колонки заголовков подряд (280px + 280px), от которых полю
+          формулировки остаётся полоска, а вкладке достаётся горизонтальная прокрутка.
+          Карточка ещё и ставит надписи рядом с «Оформлением отчёта» — соседом по экрану. */}
+      <Card variant="outlined" size="sm">
+        <CardHeader
+          title="Заголовки и подписи отчёта"
+          subtitle="По умолчанию отчёт говорит теми же словами, что экран итогов. Здесь задаётся отступление — только для документа."
+        />
+        <CardBody>
+          <ResultsLabelsPane
+            declarations={declarations}
+            labels={overrides}
+            screen="report"
+            baseLabels={base}
+            onChange={(next) =>
+              onChange({ ...report, labels: next } as NonNullable<TestEditorModel["report"]>)
+            }
+          />
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
 
 /**
  * Generic pane that renders template params for a given `ParamSection`.

@@ -7,7 +7,7 @@
  * returns false), a successful send (returns true) and a send failure (caught,
  * link logged, returns false).
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const m = vi.hoisted(() => ({
   sendMail: vi.fn(),
@@ -99,7 +99,7 @@ describe("sendPasswordResetEmail", () => {
 });
 
 describe("sendAssignmentEmail", () => {
-  const base = { to: "u@x.test", testTitle: "Quiz", magicLink: "https://go" };
+  const base = { to: "u@x.test", testId: "t1", testTitle: "Quiz", magicLink: "https://go" };
 
   it("returns false and logs when SMTP is not configured", async () => {
     disableSmtp();
@@ -130,19 +130,21 @@ describe("sendAssignmentEmail", () => {
   });
 
   // D-3 (PLAN_MAGIC_LINK_SCOPE.md, Этап 3): withheld for privileged recipients —
-  // `magicLink` is omitted and the letter falls back to a plain login link.
+  // `magicLink` is omitted and the letter falls back to a plain link that needs
+  // an ordinary sign-in. Since PRD-28 раздел 6 that fallback addresses the test
+  // itself (`/learner/test/<id>`), not the general login page.
   describe("without a magicLink (withheld for a privileged recipient)", () => {
-    const withheld = { to: "u@x.test", testTitle: "Quiz" };
+    const withheld = { to: "u@x.test", testId: "t1", testTitle: "Quiz" };
 
-    it("renders a login call-to-action instead of a magic link", async () => {
+    it("renders a sign-in call-to-action instead of a magic link", async () => {
       const ok = await sendAssignmentEmail(withheld);
       expect(ok).toBe(true);
       const call = m.sendMail.mock.calls[0][0];
-      expect(call.html).toContain("/login");
+      expect(call.html).toContain("/learner/test/t1");
       expect(call.html).toContain("Войти и пройти тест");
-      expect(call.html).toContain("После входа тест будет в списке назначенных.");
-      expect(call.text).toContain("/login");
-      expect(call.text).toContain("После входа тест будет в списке назначенных.");
+      expect(call.html).toContain("После входа откроется страница теста.");
+      expect(call.text).toContain("/learner/test/t1");
+      expect(call.text).toContain("После входа откроется страница теста.");
     });
 
     it("mentions no token, access link or the reason it is absent", async () => {
@@ -157,26 +159,26 @@ describe("sendAssignmentEmail", () => {
       expect(call.text).not.toMatch(/роль|прав/i);
     });
 
-    it("logs the login URL (and no token) when SMTP is not configured", async () => {
+    it("logs the fallback URL (and no token) when SMTP is not configured", async () => {
       disableSmtp();
       expect(await sendAssignmentEmail(withheld)).toBe(false);
       const loggedLoginLine = (logger.info as any).mock.calls
         .map((c: unknown[]) => String(c[0]))
-        .find((line: string) => line.startsWith("Login: "));
-      expect(loggedLoginLine).toContain("/login");
+        .find((line: string) => line.startsWith("Login required: "));
+      expect(loggedLoginLine).toContain("/learner/test/t1");
       const loggedLinkLine = (logger.info as any).mock.calls
         .map((c: unknown[]) => String(c[0]))
         .find((line: string) => line.startsWith("Link: "));
       expect(loggedLinkLine).toBeUndefined();
     });
 
-    it("logs the login URL (and no token) when the transport throws", async () => {
+    it("logs the fallback URL (and no token) when the transport throws", async () => {
       m.sendMail.mockRejectedValueOnce(new Error("boom"));
       expect(await sendAssignmentEmail(withheld)).toBe(false);
       const loggedLoginLine = (logger.info as any).mock.calls
         .map((c: unknown[]) => String(c[0]))
-        .find((line: string) => line.startsWith("Login: "));
-      expect(loggedLoginLine).toContain("/login");
+        .find((line: string) => line.startsWith("Login required: "));
+      expect(loggedLoginLine).toContain("/learner/test/t1");
     });
   });
 
@@ -193,6 +195,68 @@ describe("sendAssignmentEmail", () => {
     expect(call.html).toContain("Ссылка персональная — не передавайте её другим людям.");
     expect(call.text).toContain("Для прохождения перейдите по ссылке (пароль не требуется):");
     expect(call.text).toContain("Ссылка персональная — не передавайте её другим.");
+  });
+});
+
+// PRD-28 FR-20: a letter that did not go out still leaves a WORKING key behind
+// (недоставка не отменяет выпуск ссылки), so the fallback logging is the one
+// place where a bulk run against a broken transport could drop hundreds of live
+// passwordless links into a file, each next to its recipient's address.
+describe("недоставленное письмо с разовой ссылкой не пишет её в журнал", () => {
+  const savedEnv = process.env.NODE_ENV;
+  const withLink = {
+    to: "u@x.test",
+    testId: "t1",
+    testTitle: "Quiz",
+    magicLink: "https://app.test/access/deadbeefdeadbeef",
+  };
+
+  /** Every line the logger was handed, joined for substring checks. */
+  function loggedLines(): string {
+    const calls = [logger.info, logger.warn, logger.error, logger.debug]
+      .flatMap((fn) => (fn as any).mock.calls as unknown[][]);
+    return calls.map((c) => String(c[0])).join("\n");
+  }
+
+  afterEach(() => {
+    process.env.NODE_ENV = savedEnv;
+  });
+
+  it("в рабочем окружении: SMTP выключен — ни токена, ни /access/", async () => {
+    process.env.NODE_ENV = "production";
+    disableSmtp();
+
+    expect(await sendAssignmentEmail(withLink)).toBe(false);
+
+    const lines = loggedLines();
+    expect(lines).not.toContain("/access/");
+    expect(lines).not.toContain("deadbeefdeadbeef");
+    // What is left is what makes the failure actionable, and nothing more.
+    expect(lines).toContain("To: u@x.test");
+    expect(lines).toContain("Test: Quiz");
+  });
+
+  it("в рабочем окружении: транспорт упал — ни токена, ни /access/", async () => {
+    process.env.NODE_ENV = "production";
+    m.sendMail.mockRejectedValueOnce(new Error("smtp down"));
+
+    expect(await sendAssignmentEmail(withLink)).toBe(false);
+
+    const lines = loggedLines();
+    expect(lines).not.toContain("/access/");
+    expect(lines).not.toContain("deadbeefdeadbeef");
+    expect(lines).toContain("To: u@x.test");
+  });
+
+  it("в окружении разработки строка со ссылкой остаётся", async () => {
+    // With SMTP off in development, the log is the only way to get the link by
+    // hand — removing it there would take the local scenario away entirely.
+    process.env.NODE_ENV = "development";
+    disableSmtp();
+
+    expect(await sendAssignmentEmail(withLink)).toBe(false);
+
+    expect(loggedLines()).toContain(`Link: ${withLink.magicLink}`);
   });
 });
 
@@ -227,8 +291,8 @@ describe("sendInviteEmail", () => {
 describe("call-to-action button contrast", () => {
   const cases: Array<[string, () => Promise<unknown>]> = [
     ["password reset", () => sendPasswordResetEmail("u@x.test", "https://reset")],
-    ["assignment (magic link)", () => sendAssignmentEmail({ to: "u@x.test", testTitle: "Q", magicLink: "https://go" })],
-    ["assignment (login fallback)", () => sendAssignmentEmail({ to: "u@x.test", testTitle: "Q" })],
+    ["assignment (magic link)", () => sendAssignmentEmail({ to: "u@x.test", testId: "t1", testTitle: "Q", magicLink: "https://go" })],
+    ["assignment (sign-in fallback)", () => sendAssignmentEmail({ to: "u@x.test", testId: "t1", testTitle: "Q" })],
     ["invite", () => sendInviteEmail({ to: "u@x.test", inviteLink: "https://invite" })],
   ];
 

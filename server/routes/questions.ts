@@ -11,7 +11,7 @@ import {
 } from "../utils/excel";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
-import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
+import { rejectBase64MediaUrl, respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
 import { syncEntityUsages, canonicalizeEntityMedia, clearCascadedUsages } from "../services/media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { normalizeAuthorText } from "@shared/text";
@@ -643,7 +643,7 @@ router.get(
 router.post(
   "/import",
   requirePermission("questions.importExport"),
-  memoryUpload.single("file"),
+  workbookUploadSingle("file"),
   async (req: Request, res: Response) => {
     try {
       if (!req.file) {
@@ -678,6 +678,7 @@ router.post(
       });
     } catch (error) {
       logger.error("Import questions error: " + (error as Error).message);
+      if (respondWorkbookReadError(res, error)) return;
       res.status(500).json({ error: "Failed to import questions" });
     }
   }

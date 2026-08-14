@@ -28,12 +28,14 @@ import {
   readResultsRenderPayload,
   readReportRenderPayload,
   completeMeasuresSource,
+  readResultsDeclarations,
 } from "../services/template-render";
-import { reportKindForMode } from "@shared/report/report-variants";
+import { reportKindForMode, type ReportLabelLayers } from "@shared/report/report-variants";
 import {
   buildReportInput,
   buildAdaptiveReportInput,
   buildMeasuresInput,
+  resolveScreenLabels,
   type MeasuresSource,
 } from "../services/result-context";
 import type { MeasuresInput } from "@shared/template/result-context";
@@ -68,6 +70,7 @@ import type {
   PassRule,
   RetakePolicy,
   ReportSettings,
+  DesignSettings,
   TestIntro,
   FeedbackContent,
   QuestionScoring,
@@ -242,10 +245,26 @@ async function resultsMaterialForAttempt(
         ? deliveredTest?.reportSettingsJson?.adaptive
         : deliveredTest?.reportSettingsJson?.standard;
     const reportChartSettings = (reportBranch?.values ?? {}) as ChartKindSettings;
+    // PRD-49: надписи и порядок подблоков — свойство ТЕСТА (`design_settings_json`), а не
+    // страницы итогов: одна формулировка обслуживает экран итогов, адаптивные итоги, итоги
+    // раздела и отчёт. Берутся из ВЫДАННОЙ версии, как и всё остальное здесь: снапшот
+    // замораживает ряд теста вместе с настройками дизайна (спека §8), поэтому завершённая
+    // попытка печатает те заголовки, с которыми её проходили.
+    const design = (deliveredTest?.designSettingsJson as DesignSettings | null) ?? null;
+    // Объявления — из манифеста АКТИВНОГО шаблона: против них автор и правил формулировки,
+    // и против них же их разрешает сборка пакета SCORM (`build-export-data`), поэтому оба
+    // хоста печатают одно и то же. Шаблон, не объявивший надписей, отдаёт пустой список —
+    // и его макеты печатают свои жёсткие строки, как до этого PRD (спека §9).
+    const declarations = readResultsDeclarations(
+      await resolveTemplateDir(design?.templateId, { activeOnly: true }),
+    );
     return {
       scales,
       variables,
       blockSettings,
+      design,
+      labelDeclarations: declarations.labels,
+      templateBlockOrder: declarations.blockOrder,
       // PRD-46 §5: read from the SAME delivered source as the scales, so a finished attempt
       // is judged on the content it was taken on. Costs nothing unless the author left the
       // choice of the diagram to the system — on the screen or in the report.
@@ -1334,6 +1353,17 @@ router.post("/attempts/:attemptId/section-result", requirePermission("attempts.t
     // resolves its verdict identically (resolveTopicRule -> overall).
     const agg = aggregateStandardResult({ sections: [aggSection], overallPassRule: test.overallPassRuleJson });
     const tr = agg.topicResults[0];
+    // PRD-49: надписи ЭТОГО экрана (`section.eyebrow`, `facts.*`). Разрешает СЕРВЕР — тем
+    // же адаптером и против того же манифеста, что и надписи экрана итогов, — а браузер
+    // отдаёт готовую плоскую карту ядру: дерево строит только оно. Настройки берутся из
+    // ВЫДАННОЙ версии теста (`src`), на которой попытка и идёт. Пустая карта (шаблон
+    // надписей не объявлял) в ответ не кладётся: экран тогда печатает свои строки, как до
+    // этого PRD.
+    const design = (test.designSettingsJson as DesignSettings | null) ?? null;
+    const declarations = readResultsDeclarations(
+      await resolveTemplateDir(design?.templateId, { activeOnly: true }),
+    );
+    const labels = resolveScreenLabels(declarations.labels, design, "section-results");
     res.json({
       topicId: tr.topicId,
       topicName: tr.topicName,
@@ -1343,6 +1373,7 @@ router.post("/attempts/:attemptId/section-result", requirePermission("attempts.t
       passed: tr.passed,
       earnedPoints: tr.earnedPoints,
       possiblePoints: tr.possiblePoints,
+      ...(Object.keys(labels).length ? { labels } : {}),
     });
   } catch (error) {
     logger.error("Section result error: " + (error as Error).message);
@@ -1409,6 +1440,8 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         topicPassRule: section?.topicPassRuleJson ?? null,
         // PRD-24: the variant delivered for this topic decides which threshold gates it.
         formId: variantSection.formId ?? null,
+        // «Тест пройден, если»: the `*_required_topics*` policies gate on this flag.
+        required: section?.required ?? true,
         questions: questions.map((q) => {
           questionTypes[q.id] = q.type as QuestionType;
           const effective = scoring.resolve(q);
@@ -1432,7 +1465,15 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       });
     }
 
-    const agg = aggregateStandardResult({ sections: aggSections, overallPassRule: test.overallPassRuleJson });
+    const agg = aggregateStandardResult({
+      sections: aggSections,
+      overallPassRule: test.overallPassRuleJson,
+      // «Тест пройден, если» — read from the SAME source the attempt is graded
+      // against (snapshot or live), so a pinned attempt keeps the policy it was
+      // published with. A snapshot taken before the column existed carries none,
+      // and the engine then falls back to the pre-policy verdict.
+      passDecisionPolicy: test.passDecisionPolicy,
+    });
     const totalCorrect = agg.correct;
     const totalQuestions = agg.totalQuestions;
     const totalEarnedPoints = agg.earnedPoints;
@@ -1698,6 +1739,15 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         (deliveredTest?.reportSettingsJson as ReportSettings | null)?.[
           resultJson.mode === "adaptive" ? "adaptive" : "standard"
         ] ?? null;
+      // PRD-49: словарь надписей документа. Общий слой — ЖИВЫЕ `design_settings_json` теста
+      // (та же ветка, что несёт брендинг чуть выше), а не снапшот: слова экрана итогов и
+      // отчёта берутся из одного места, а `deliveredTest` фиксирует только выбор ВАРИАНТА и
+      // его поля (FR-24). Слой отчёта — общая настройка теста вне ветки режима, поэтому
+      // читается с того же `deliveredTest`, откуда пришёл `authoredReport`.
+      const reportLabelLayers: ReportLabelLayers = {
+        values: (test?.designSettingsJson as DesignSettings | null)?.labels ?? null,
+        overrides: (deliveredTest?.reportSettingsJson as ReportSettings | null)?.labels ?? null,
+      };
       reportRender = readReportRenderPayload(
         activeDir,
         reportKind,
@@ -1705,6 +1755,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
         test?.designSettingsJson as any,
         activeDir,
         templateId,
+        reportLabelLayers,
       );
       if (!reportRender) {
         const fallbackDir = await resolveTemplateDir("default", { activeOnly: false });
@@ -1719,6 +1770,7 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
             test?.designSettingsJson as any,
             activeDir,
             "default",
+            reportLabelLayers,
           );
         }
       }

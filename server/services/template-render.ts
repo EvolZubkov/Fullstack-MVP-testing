@@ -24,11 +24,15 @@ import { baseParams, buildTemplateThemeCss, sceneThemeAttribute } from "@shared/
 import { resolveThemeParams } from "@shared/template/theme-params";
 import { supportsThemes } from "@shared/template/themes";
 import type { StoredDesignSettings } from "@shared/template/theme-params";
+import { resolveLabels, type LabelDeclaration, type LabelValues, type ResolvedLabels } from "@shared/template/labels";
+import type { TemplateBlockOrder, ResultsBlockKey } from "@shared/template/results-order";
 import type { AttemptResult } from "@shared/schema";
 import {
+  reportVariants,
   resolveReportVariant,
   resolveReportValues,
   type ReportKind,
+  type ReportLabelLayers,
 } from "@shared/report/report-variants";
 import { reportImageKeys, resolveReportImageValues } from "@shared/report/report-assets";
 
@@ -200,6 +204,97 @@ function readBrandingManifest(dir: string): { params?: TemplateParamDef[]; theme
     };
   } catch {
     return {};
+  }
+}
+
+/**
+ * PRD-49 sections of a template manifest: the interface labels the template declares
+ * (`labels[]`) and the per-screen composition/order of the results sub-blocks
+ * (`resultsBlockOrder`).
+ */
+export interface ResultsDeclarations {
+  /** `manifest.labels[]`; EMPTY for a template that declares none (spec §9). */
+  labels: LabelDeclaration[];
+  /** `manifest.resultsBlockOrder`; `null` when the template declares nothing. */
+  blockOrder: TemplateBlockOrder | ResultsBlockKey[] | null;
+}
+
+/**
+ * Read the PRD-49 declarations of ONE template from its manifest.
+ *
+ * Read from the SAME on-disk manifest the report-variant bake reads
+ * (`server/scorm/index.ts`), so the web host and the SCORM package resolve the author's
+ * wording against the very same declarations — the point of PRD-49 §2.5.
+ *
+ * Empty on any read/parse failure, and empty is meaningful: a template that declares no
+ * labels keeps printing the hard-coded strings of its own layouts, so the caller must not
+ * hand an empty map to the context builder (that would replace «no labels key at all»
+ * with an empty tree).
+ */
+export function readResultsDeclarations(dir: string): ResultsDeclarations {
+  try {
+    const raw = readFileSafe(path.join(dir, "manifest.json"));
+    if (!raw) return { labels: [], blockOrder: null };
+    const manifest = JSON.parse(raw) as { labels?: unknown; resultsBlockOrder?: unknown };
+    return {
+      labels: Array.isArray(manifest.labels) ? (manifest.labels as LabelDeclaration[]) : [],
+      blockOrder:
+        (manifest.resultsBlockOrder as TemplateBlockOrder | ResultsBlockKey[] | undefined) ?? null,
+    };
+  } catch {
+    return { labels: [], blockOrder: null };
+  }
+}
+
+/**
+ * PRD-49. Which of the declared labels the REPORT actually prints — the list the
+ * «Заголовки и подписи отчёта» pane is allowed to offer the author.
+ *
+ * Computed from the report layouts rather than declared a second time in the manifest.
+ * A second list would drift from the layouts silently, and the author would go on being
+ * offered a heading the document does not have — which is exactly the defect this closes:
+ * the pane listed all fifteen labels while the document prints six, so switching
+ * «Заголовок итогов» on did nothing (the document has no umbrella heading at all — its
+ * structure is fixed and the indicators heading plays that role through `defaults.report`).
+ *
+ * The layouts are the only place that knows. On the results screen the sub-block headings
+ * travel as DATA (`result.blocks`), so scanning a screen layout would understate it; the
+ * report gets no `blockOrder` on purpose (see `buildReportContext`), so a direct
+ * `labels.<key>` path is the ONLY way a heading can reach the document. That makes the scan
+ * exact here, not merely a good guess.
+ *
+ * @param dir Template directory.
+ * @returns Declared keys the report layouts reference, in MANIFEST order (the pane must
+ *   not reorder its rows), or `null` when the template declares no report variant at all —
+ *   such a template borrows «Стандартный»'s layouts (FR-10), so the caller must borrow its
+ *   list too. An empty ARRAY is a different answer: the variants exist and print nothing.
+ */
+export function readReportLabelKeys(dir: string): string[] | null {
+  try {
+    const raw = readFileSafe(path.join(dir, "manifest.json"));
+    if (!raw) return null;
+    const manifest = JSON.parse(raw) as unknown;
+    const variants = [
+      ...reportVariants(manifest, "report"),
+      ...reportVariants(manifest, "report.adaptive"),
+    ];
+    if (variants.length === 0) return null;
+    const declarations = readResultsDeclarations(dir).labels;
+    if (declarations.length === 0) return [];
+    const layouts = variants
+      .map((v) => (typeof v.layoutFile === "string" ? readFileSafe(path.join(dir, v.layoutFile)) : ""))
+      .filter(Boolean);
+    return declarations
+      .map((d) => d.key)
+      // `\b` after the key, so a longer key starting with this one cannot answer for it.
+      // Mutually prefixed keys are rejected by the manifest validator, so the boundary is
+      // all that is needed. `{{ @root.labels.x }}` matches too — the prefix is not anchored.
+      .filter((key) => {
+        const pattern = new RegExp(`labels\\.${key.replace(/\./g, "\\.")}\\b`);
+        return layouts.some((html) => pattern.test(html));
+      });
+  } catch {
+    return null;
   }
 }
 
@@ -447,6 +542,14 @@ export function readResultsRenderPayload(
  *   `GET /api/templates/:id/assets/*` serves (PRD-27 FR-05). It follows the LAYOUT, so
  *   on a fallback it is `default`, not the active template. Omitted (dev/tests) leaves
  *   template-relative paths unresolved rather than pointing them at the wrong template.
+ * @param labelLayers PRD-49: the test's label wording — the shared layer
+ *   (`design_settings_json.labels`) and the report's own override layer
+ *   (`report_settings_json.labels`). Resolved against THIS directory's manifest, the
+ *   same way {@link module:shared/report/report-variants resolveReportBake} resolves it
+ *   for the SCORM package — a second resolution rule here would let the web host and
+ *   the package disagree on the very same test. Omitted/absent labels on either layer
+ *   leave the template default (or the template's own hard-coded string, for a
+ *   template that declares no `labels[]` at all).
  * @returns Payload, or `null` when this directory offers no such variant.
  */
 export function readReportRenderPayload(
@@ -456,6 +559,7 @@ export function readReportRenderPayload(
   design?: DesignSettingsInput | null,
   paramsDir?: string,
   assetTemplateId?: string,
+  labelLayers?: ReportLabelLayers | null,
 ): {
   layout: string;
   css: string;
@@ -465,6 +569,7 @@ export function readReportRenderPayload(
   cssVars?: Record<string, string>;
   themeCss?: string;
   design?: Record<string, string>;
+  labels?: ResolvedLabels;
 } | null {
   try {
     const raw = readFileSafe(path.join(dir, "manifest.json"));
@@ -487,6 +592,20 @@ export function readReportRenderPayload(
     // ответ с результатом попытки не тащил сотни килобайт base64.
     const imageKeys = reportImageKeys(variant);
     const values = resolveReportValues(variant, authored?.values ?? null);
+    // PRD-49: те же слои, тем же путём, что и в сборщике SCORM-пакета — умолчание
+    // манифеста (с умолчанием ИМЕННО экрана `report`), поверх него общая формулировка
+    // теста, поверх неё слой отчёта. Ключа нет вовсе у шаблона без `labels[]`.
+    const labelDeclarations = Array.isArray((manifest as { labels?: unknown } | null)?.labels)
+      ? ((manifest as { labels?: unknown }).labels as LabelDeclaration[])
+      : [];
+    const labels = labelDeclarations.length
+      ? resolveLabels({
+          declarations: labelDeclarations,
+          values: (labelLayers?.values ?? {}) as LabelValues,
+          overrides: (labelLayers?.overrides ?? {}) as LabelValues,
+          screen: "report",
+        })
+      : {};
     return {
       layout,
       css,
@@ -498,6 +617,7 @@ export function readReportRenderPayload(
       ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
       ...(themeCss ? { themeCss } : {}),
       ...(logoUrl ? { design: { logoUrl } } : {}),
+      ...(Object.keys(labels).length ? { labels } : {}),
     };
   } catch {
     return null;

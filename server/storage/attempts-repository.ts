@@ -10,13 +10,29 @@
  * routes.
  */
 import { randomUUID } from "crypto";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { db } from "../db";
 import { attempts, type Attempt, type InsertAttempt } from "@shared/schema";
 import { pickDefined } from "./shared";
 
 /** Repository for the `attempts` table. */
 export class AttemptsRepository {
+  /**
+   * Question ids that already carry an answer in an attempt of this test.
+   *
+   * Used by the selective import to WARN before deleting a question: the answers live as
+   * keys of `answers_json`, so the question is asked of the jsonb rather than of a join
+   * table — there is none. Rows whose payload is not an object are skipped instead of
+   * failing the query.
+   */
+  async getAnsweredQuestionIds(testId: string): Promise<string[]> {
+    const rows = await db
+      .select({ questionId: sql<string>`jsonb_object_keys(${attempts.answersJson})` })
+      .from(attempts)
+      .where(and(eq(attempts.testId, testId), sql`jsonb_typeof(${attempts.answersJson}) = 'object'`));
+    return [...new Set(rows.map((row) => row.questionId))];
+  }
+
   async createAttempt(attempt: InsertAttempt): Promise<Attempt> {
     const id = randomUUID();
     const [newAttempt] = await db.insert(attempts).values({

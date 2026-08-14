@@ -6,7 +6,7 @@ import { getEffectiveRoles, getUserCapabilities } from "../services/access";
 import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
 import { logger, audit, requestContext } from "../logger";
-import { appBaseUrl } from "../config";
+import { config, appBaseUrl } from "../config";
 import "../middleware/magic-scope";
 
 const router = Router();
@@ -180,22 +180,6 @@ router.get("/me", async (req, res) => {
   }
 });
 
-// POST /api/auth/check-email
-router.post("/check-email", async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: "Email required" });
-    }
-
-    const user = await storage.getUserByEmail(email);
-    res.json({ exists: !!user });
-  } catch (error) {
-    logger.error("Check email error: " + (error as Error).message, "auth")
-    res.status(500).json({ error: "Failed to check email" });
-  }
-});
-
 // POST /api/auth/forgot-password
 router.post("/forgot-password", async (req, res) => {
   try {
@@ -214,9 +198,24 @@ router.post("/forgot-password", async (req, res) => {
       });
     }
 
-    // Проверяем лимит запросов (3 в час)
+    // PRD-28: an external participant has no password to reset. The answer is the
+    // same neutral one the unknown-address branch gives, so the reply does not
+    // disclose that the address exists as an external account. Nothing is
+    // written to the journal either: the unknown-address branch above writes
+    // nothing, and a line of its own — even one naming no address — would, by
+    // its timestamp against the request, confirm that the address exists. The
+    // two refusals must be identical from the outside, answer and record alike.
+    if (user.isExternal) {
+      return res.json({
+        success: true,
+        message: "If this email exists, a reset link has been sent",
+      });
+    }
+
+    // Проверяем почасовой лимит писем (значение из настроек:
+    // limits.passwordEmailsPerHour; бюджет общий с приглашением задать пароль)
     const recentTokens = await storage.getRecentTokensCount(user.id, 1);
-    if (recentTokens >= 3) {
+    if (recentTokens >= config.limits.passwordEmailsPerHour) {
       return res.status(429).json({
         error: "Too many reset requests. Please try again later.",
       });
@@ -238,10 +237,14 @@ router.post("/forgot-password", async (req, res) => {
     const emailSent = await sendPasswordResetEmail(user.email, resetLink);
     logger.info(`Password reset requested: ${maskEmail(user.email)} from ${requestIp}`, "auth");
 
+    // The reply carries no masked-address hint: a field present only for an
+    // existing account tells an unauthenticated caller that the account exists —
+    // the very disclosure the two neutral branches above avoid. The masked
+    // address is still shown where the caller has already proven possession of
+    // the mailbox: GET /verify-reset-token returns it for a valid link.
     res.json({
       success: true,
       message: "If this email exists, a reset link has been sent",
-      hint: maskEmail(user.email),
       ...(process.env.NODE_ENV === "development" && !emailSent && { devLink: resetLink }),
     });
   } catch (error) {

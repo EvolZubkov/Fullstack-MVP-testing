@@ -1,19 +1,26 @@
 import { Router } from "express";
-import { logger } from "../logger";
+import ExcelJS from "exceljs";
+import { audit, logger } from "../logger";
+import { config } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope, requireAssignmentScope } from "../middleware/test-scope";
-import { deliverAssignmentLink } from "../services/assignment-link";
+import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
+import { addAoaSheet, workbookToBuffer } from "../utils/excel";
+import {
+  classifyParticipants,
+  ParticipantsInviteError,
+  parseParticipantsWorkbook,
+  runParticipantsInvite,
+  type ParticipantPreviewRow,
+} from "../services/participants-invite";
+import {
+  deliverAssignmentLink,
+  // Срок жизни magic link считается там же, где ссылка выпускается.
+  resolveAssignmentTokenExpiry as resolveTokenExpiry,
+} from "../services/assignment-link";
 
 const router = Router();
-
-// ─── Вычислить срок жизни magic link ─────────────────────────────────────────
-function resolveTokenExpiry(linkExpiresAt?: Date | null, dueDate?: Date | null): Date {
-  if (linkExpiresAt) return linkExpiresAt;
-  if (dueDate) return dueDate;
-  // Дефолт: 30 дней
-  return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-}
 
 // ─── Отправить письмо пользователю ───────────────────────────────────────────
 async function notifyUser(opts: {
@@ -473,6 +480,164 @@ router.patch("/assignments/:id/revoke-user/:userId", requirePermission("assignme
     res.status(500).json({ error: "Failed to revoke" });
   }
 });
+
+// ─── Рассылка списком из файла (PRD-28) ──────────────────────────────────────
+// The two endpoints that act on accounts — preview and run — carry the full
+// gate of FR-22: the capability to assign, the capability to create accounts
+// (the run brings participants into being), and the object-level `assign` scope
+// on THIS test. Two `requirePermission` in one chain is intended: each is an
+// independent gate that either answers 403 or hands over to the next, and the
+// capability model has no "all of these" form. The template download and the
+// export mark create nothing, so they stop at `assignments.manage` + scope.
+
+/** Multipart field the participants workbook arrives in. */
+const participantsUpload = workbookUploadSingle("file");
+
+/**
+ * The sentence the operator reads for a refusal the pipeline raised.
+ *
+ * The service speaks English — its messages go to the log and to developers —
+ * and the Russian phrasing is composed here, out of `kind` and the values the
+ * refusal carries. That is why the ceiling is named by `detail.maxRows` and not
+ * spliced out of the message: rewording the service must never change what the
+ * operator sees, nor the number in it.
+ */
+function participantsRefusalMessage(error: ParticipantsInviteError): string {
+  switch (error.kind) {
+    case "empty_file":
+      return "В файле нет ни одной строки с участниками.";
+    case "too_many_rows":
+      return `Слишком много строк: за один раз можно загрузить не больше ${error.detail.maxRows}.`;
+    case "group_name_taken":
+      return `Группа с таким именем уже есть: ${error.detail.groupName}`;
+    case "test_not_found":
+      return "Тест не найден.";
+  }
+}
+
+// ─── POST /api/tests/:id/participants/preview — разбор файла (PRD-28 FR-11) ───
+router.post(
+  "/tests/:id/participants/preview",
+  requirePermission("assignments.manage"),
+  requirePermission("users.create"),
+  requireTestScope("assign"),
+  participantsUpload,
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "File required" });
+      const rows = await parseParticipantsWorkbook(req.file.buffer, {
+        maxRows: config.limits.participantsImportMaxRows,
+      });
+      res.json(await classifyParticipants(rows, { testId: req.params.id, storage }));
+    } catch (error) {
+      logger.error("Participants preview error: " + (error as Error).message);
+      if (respondWorkbookReadError(res, error)) return;
+      // What the parser refuses on — an empty book, too many rows — is about the
+      // file the operator picked, so it is their error to fix. Anything else
+      // (the classification reading the database, say) is ours, and calling it
+      // a bad file would send the operator looking in the wrong place.
+      //
+      // The answer carries the Russian sentence for the human and `code` beside
+      // it for the screen: the service message is English by design and must
+      // not reach the operator's toast.
+      if (error instanceof ParticipantsInviteError) {
+        return res.status(400).json({
+          code: error.kind,
+          error: participantsRefusalMessage(error),
+        });
+      }
+      res.status(500).json({ error: "Failed to preview participants" });
+    }
+  },
+);
+
+// ─── POST /api/tests/:id/participants/invite — прогон (PRD-28 FR-13..FR-18) ───
+router.post(
+  "/tests/:id/participants/invite",
+  requirePermission("assignments.manage"),
+  requirePermission("users.create"),
+  requireTestScope("assign"),
+  async (req, res) => {
+    const { rows, dueDate, linkExpiresAt, groupName } = req.body ?? {};
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: "rows is required" });
+    }
+
+    try {
+      const report = await runParticipantsInvite({
+        testId: req.params.id,
+        rows: rows as ParticipantPreviewRow[],
+        actorId: req.session.userId!,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        linkExpiresAt: linkExpiresAt ? new Date(linkExpiresAt) : null,
+        groupName: typeof groupName === "string" ? groupName : null,
+        storage,
+      });
+      // FR-20: the fact of the run, in counts. The report going back to the
+      // operator carries the freshly minted links; the trail carries none.
+      audit.participantsInvite(req.params.id, report.created, report.assigned);
+      res.json(report);
+    } catch (error) {
+      logger.error("Participants invite error: " + (error as Error).message);
+      // The conditions the run refuses on BEFORE changing anything are the
+      // operator's to resolve, and they resolve differently: a missing test is
+      // gone (the scope check saw it a moment ago, so this is the race), while a
+      // taken group name is a rename away. They are told apart by `kind` and
+      // never by the text of the message — the service speaks English, and the
+      // sentence the operator reads is composed here, naming the group that
+      // stands in the way.
+      //
+      // `code` travels beside the sentence so the screen can recognize the
+      // refusal it knows how to resolve without matching Russian prose.
+      if (error instanceof ParticipantsInviteError) {
+        const status = error.kind === "test_not_found" ? 404 : 400;
+        return res.status(status).json({
+          code: error.kind,
+          error: participantsRefusalMessage(error),
+        });
+      }
+      res.status(500).json({ error: "Failed to invite participants" });
+    }
+  },
+);
+
+// ─── POST /api/tests/:id/participants/links-exported — отметка (PRD-28 FR-20) ─
+// Records that the operator saved the run's links to a file, and nothing else.
+// The links do NOT travel here: the file is assembled on the client from the
+// report it already holds (раздел 7), so the server is told only the fact and
+// the count. Answers 204 — there is nothing to give back.
+router.post(
+  "/tests/:id/participants/links-exported",
+  requirePermission("assignments.manage"),
+  requireTestScope("assign"),
+  (req, res) => {
+    const raw = Number(req.body?.count);
+    audit.participantLinksExported(req.params.id, Number.isFinite(raw) ? raw : 0);
+    res.status(204).end();
+  },
+);
+
+// ─── GET /api/tests/:id/participants/template — шаблон книги (PRD-28 FR-10) ───
+// Two columns only, unlike the users-import template: `role` and `group` are
+// ignored in this scenario (the role is always `learner`, the group comes from
+// the form), and offering them would promise behaviour that does not exist.
+router.get(
+  "/tests/:id/participants/template",
+  requirePermission("assignments.manage"),
+  requireTestScope("assign"),
+  async (_req, res) => {
+    const wb = new ExcelJS.Workbook();
+    addAoaSheet(wb, "Участники", [
+      ["email", "name"],
+      ["ivanov@example.com", "Иван Иванов"],
+      ["petrova@example.com", "Анна Петрова"],
+    ]);
+    const buf = await workbookToBuffer(wb);
+    res.setHeader("Content-Disposition", "attachment; filename=participants-template.xlsx");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buf);
+  },
+);
 
 // ─── GET /api/learner/assigned-tests ─────────────────────────────────────────
 router.get("/learner/assigned-tests", requirePermission("attempts.self.read"), async (req, res) => {

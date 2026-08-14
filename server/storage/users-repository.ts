@@ -7,7 +7,10 @@
  * plaintext email is decrypted only on read. Password hashing goes through the
  * `server/utils/crypto` seam (`hashPassword`/`verifyPassword`), keeping this
  * repository crypto-agnostic. `validatePassword` performs a dummy verification
- * on the not-found path to equalize response timing (anti-enumeration); reset
+ * on every path that has no password to check — the address is unknown, the
+ * account is an external participant (PRD-28), or the row simply carries no hash
+ * — so response timing does not tell those apart from a wrong password
+ * (anti-enumeration); reset
  * tokens store only a hash and are consumed by marking `usedAt`, never deleted,
  * so `getRecentTokensCount` can rate-limit requests. Exposed to the rest of the
  * app through the `IStorage` facade, never imported directly by routes.
@@ -53,7 +56,10 @@ export class UsersRepository {
 
   async createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
     const id = randomUUID();
-    const hashedPassword = await hashPassword(insertUser.passwordHash);
+    // PRD-28: `passwordHash` is optional — an external participant is stored with no
+    // password at all (NULL), and the assignment link is the only way in.
+    const hashedPassword =
+      insertUser.passwordHash != null ? await hashPassword(insertUser.passwordHash) : null;
     const emailEncrypted = await encryptEmail(insertUser.email);
     const emailHashValue = hashEmail(insertUser.email);
 
@@ -63,6 +69,7 @@ export class UsersRepository {
       emailHash: emailHashValue,
       passwordHash: hashedPassword,
       name: insertUser.name || null,
+      isExternal: insertUser.isExternal ?? false,
       status: insertUser.status || "pending",
       mustChangePassword: insertUser.mustChangePassword ?? true,
       gdprConsent: false,
@@ -75,9 +82,15 @@ export class UsersRepository {
 
   async validatePassword(email: string, password: string): Promise<User | null> {
     const user = await this.getUserByEmail(email);
-    if (!user) {
-      // Equalize timing with the found-user path so response time does not leak
-      // whether the account exists (anti-enumeration).
+    // No password to check: not found, an external participant (PRD-28) or a legacy
+    // row without a hash. The three branches are not byte-identical in work done
+    // (the not-found one never reaches `decryptEmail`), but they all pay the same
+    // scrypt-profile dummy verification, whose cost dominates that difference — so
+    // the answer time carries no usable signal about which branch was taken. The
+    // flag is checked on its own, not merely the missing hash: an external account
+    // that somehow got a password set (e.g. through `updateUserPassword`) must stay
+    // locked out.
+    if (!user || user.isExternal || !user.passwordHash) {
       await dummyVerifyPassword(password);
       return null;
     }
@@ -154,6 +167,19 @@ export class UsersRepository {
       .where(eq(users.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  /**
+   * PRD-28: turn an external participant into an ordinary account. Only this
+   * direction exists — the reverse would strip an active employee of their
+   * password and cabinet, which is a block dressed up as a kind change.
+   */
+  async promoteExternalUser(userId: string): Promise<User | undefined> {
+    const [user] = await db.update(users)
+      .set({ isExternal: false, mustChangePassword: true })
+      .where(eq(users.id, userId))
+      .returning();
+    return user ? { ...user, email: await decryptEmail(user.email) } : undefined;
   }
 
   // ─── Password reset tokens (part of the user aggregate) ─────────────────────

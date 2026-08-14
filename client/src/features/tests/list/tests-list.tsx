@@ -46,6 +46,7 @@ import {
   Info,
   KeyRound,
   Layers,
+  PackageOpen,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -74,6 +75,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
+import { TransferImportDialog } from "@/features/tests/transfer/import-dialog";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
 import { t } from "@/lib/i18n";
 import {
@@ -336,6 +338,11 @@ export function TestsListPage(): React.JSX.Element {
   const canExportScorm = can("tests.export.scorm");
   const canDebugPlay = can("tests.debug.play");
 
+  // PRD-48: importing a `.tbtest` package creates or updates a test, so the right is the
+  // same one «создать тест» needs.
+  const canImportPackage = can("tests.create");
+  const [transferOpen, setTransferOpen] = useState(false);
+
   // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
   const [publishImpact, setPublishImpact] = useState<{
     testId: string;
@@ -540,10 +547,28 @@ export function TestsListPage(): React.JSX.Element {
         {!isSearchMode && (
           <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
         )}
+        {canImportPackage && (
+          <Button
+            variant="ghost"
+            leadingIcon={<PackageOpen size={16} />}
+            onClick={() => setTransferOpen(true)}
+            data-testid="tests-list-import-package"
+          >
+            Импорт из пакета
+          </Button>
+        )}
         {filterOpen && (
           <TestFilters value={testDraft} onChange={setTestDraft} onApply={applyFilters} onReset={resetFilters} authorOptions={authorOptions} />
         )}
       </div>
+
+      {transferOpen && (
+        <TransferImportDialog
+          open
+          onClose={() => setTransferOpen(false)}
+          onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tests"] })}
+        />
+      )}
 
       {filterChips.length > 0 && (
         <div className="tl-chips">
@@ -944,6 +969,18 @@ export function TestsListPage(): React.JSX.Element {
         >
           <FileSpreadsheet size={14} />
           Экспорт в Excel
+        </a>
+        {/* PRD-48: the package carries the test WHOLE — appearance and result texts
+            included — which the workbook, an authoring format, cannot. */}
+        <a
+          className="dropdown-item"
+          role="menuitem"
+          href={`/api/tests/${test.id}/transfer`}
+          onClick={() => setTestMenu(null)}
+          data-testid={`menu-export-package-${test.id}`}
+        >
+          <PackageOpen size={14} />
+          Экспорт пакета (.tbtest)
         </a>
         <hr className="dropdown-sep" />
         <button
