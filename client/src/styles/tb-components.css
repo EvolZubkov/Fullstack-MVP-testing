@@ -323,6 +323,16 @@
 .tb-profile-scales { display: flex; flex-direction: column; gap: var(--ou-space-1); align-items: flex-start; }
 .tb-cond-row { display: flex; align-items: flex-end; gap: var(--ou-space-2); }
 .tb-cond-row > .tb-cond-row__grow { flex: 1 1 auto; min-width: 0; }
+
+/* Users list: the search keeps its width when the filter row wraps. With seven
+   controls in the row (org-structure plan) a plain `grow` let the selects squeeze
+   it down to «Поиск по email»; the approved wireframe keeps it on the first line. */
+.tb-users-search { flex: 1 1 auto; min-width: var(--tb-input-w-md); }
+
+/* Users bulk preview: linking keys are long unbreakable ids (`accept_c_1790…`).
+   Without a break point they widen the column until the DS table clips «Действие»,
+   the one column a duplicate row is acted on from. */
+.tb-users-key { overflow-wrap: anywhere; }
 .tb-cond-sep { font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap; padding-bottom: var(--ou-space-2); }
 
 /* DSL «Функции» reference (modal): toolbar trigger + grouped function rows. */

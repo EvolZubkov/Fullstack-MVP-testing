@@ -14,7 +14,7 @@ import { readWorkbookFromBuffer, sheetToObjects } from "../utils/excel";
 import { deliverAssignmentLink, resolveAssignmentTokenExpiry } from "./assignment-link";
 import type { IStorage } from "../storage";
 import type { User } from "@shared/schema";
-import { ORG_FIELDS } from "@shared/org-fields";
+import { ORG_FIELDS, normalizeOrgValue } from "@shared/org-fields";
 import { readOrgColumns } from "../utils/org-columns";
 
 /** What the pipeline refused on, told apart without reading the message. */
@@ -345,6 +345,14 @@ async function resolveParticipant(
   row: ParticipantPreviewRow,
   ctx: { actorId: string; storage: IStorage; residue: RowResidue },
 ): Promise<{ user: User; created: boolean }> {
+  // The confirmed rows come back from the browser, so the org values are
+  // normalised again here rather than trusted as the preview left them.
+  const org = {
+    organization: normalizeOrgValue(row.organization),
+    unit: normalizeOrgValue(row.unit),
+    position: normalizeOrgValue(row.position),
+  };
+
   const existing = await ctx.storage.getUserByEmail(row.email);
   if (existing) {
     // The list fills gaps, it never overwrites: the name, and the org fields the
@@ -353,7 +361,8 @@ async function resolveParticipant(
     const gaps: Partial<User> = {};
     if (!existing.name && row.name) gaps.name = row.name;
     for (const field of ORG_FIELDS) {
-      if (!existing[field] && row[field]) gaps[field] = row[field];
+      const value = org[field];
+      if (!existing[field] && value) gaps[field] = value;
     }
     if (Object.keys(gaps).length > 0) {
       const updated = await ctx.storage.updateUser(existing.id, gaps);
@@ -363,9 +372,7 @@ async function resolveParticipant(
   }
 
   const user = await ctx.storage.createUser({
-    organization: row.organization ?? null,
-    unit: row.unit ?? null,
-    position: row.position ?? null,
+    ...org,
     email: row.email,
     passwordHash: null,
     isExternal: true,

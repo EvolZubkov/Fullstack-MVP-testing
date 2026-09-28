@@ -108,6 +108,12 @@ describe("<BulkInviteTab /> — загрузка", () => {
   it("показывает зону выбора файла без числа строк в подписи", () => {
     renderTab();
     expect(screen.getByText("Перетащите книгу или нажмите, чтобы выбрать")).toBeInTheDocument();
+    expect(screen.getByText("Только .xlsx. Колонки: email, name; по желанию organization, unit, position."))
+      .toBeInTheDocument();
+  });
+
+  it("у рецензирования оргколонок в подписи нет: их там не читают", () => {
+    renderTab({ purpose: "review" });
     expect(screen.getByText("Только .xlsx. Колонки: email, name.")).toBeInTheDocument();
   });
 
@@ -373,5 +379,25 @@ describe("<BulkInviteTab /> — отчёт", () => {
     expect(await screen.findByText("Приглашено")).toBeInTheDocument();
     expect(screen.queryByText("Назначено")).toBeNull();
     expect(screen.getByRole("button", { name: "К приглашённым" })).toBeInTheDocument();
+  });
+});
+
+describe("<BulkInviteTab /> — оргполя в предпросмотре (план оргструктуры)", () => {
+  it("показывает колонку, когда в файле есть оргполя", async () => {
+    previewResponse = () => jsonRes([
+      { ...previewRows[0], organization: "ООО «Партнёр»", unit: "Логистика", position: "Кладовщик" },
+      previewRows[1],
+    ]);
+    const { container } = renderTab();
+    await goToPreview(container);
+    expect(screen.getByRole("columnheader", { name: "Подразделение и должность" })).toBeInTheDocument();
+    expect(screen.getByText("Логистика")).toBeInTheDocument();
+    expect(screen.getByText("Кладовщик · ООО «Партнёр»")).toBeInTheDocument();
+  });
+
+  it("не показывает колонку, когда в файле их нет", async () => {
+    const { container } = renderTab();
+    await goToPreview(container);
+    expect(screen.queryByRole("columnheader", { name: "Подразделение и должность" })).toBeNull();
   });
 });

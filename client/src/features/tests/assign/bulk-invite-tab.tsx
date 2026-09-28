@@ -60,6 +60,14 @@ export interface ParticipantPreviewRow {
   userId: string | null;
   /** Present only for `status: "error"`. */
   error?: string;
+  /**
+   * Org-structure values from the workbook (org-structure plan, BR-54-29).
+   * Present only when the file has them filled; the run writes them onto a new
+   * participant and into the empty fields of an existing one.
+   */
+  organization?: string;
+  unit?: string;
+  position?: string;
 }
 
 /** What happened to one recipient during the run. */
@@ -494,7 +502,10 @@ export function BulkInviteTab({
           accept=".xlsx"
           disabled={Boolean(emails.trim())}
           title="Перетащите книгу или нажмите, чтобы выбрать"
-          description="Только .xlsx. Колонки: email, name."
+          description={isReview
+            ? "Только .xlsx. Колонки: email, name."
+            // The assignment reads the org columns too (BR-54-29); review does not.
+            : "Только .xlsx. Колонки: email, name; по желанию organization, unit, position."}
           cta="Выбрать файл"
           onFiles={handleFiles}
         />
@@ -560,6 +571,24 @@ export function BulkInviteTab({
   const previewColumns: TableColumn<ParticipantPreviewRow>[] = [
     { key: "email", header: "Адрес", render: (r) => <Text variant="mono-s">{r.email}</Text> },
     { key: "name", header: "Имя", render: (r) => <Text variant="body-s">{r.name || "—"}</Text> },
+    // Org-structure plan: the column appears only when the file carries org
+    // values — a list of addresses keeps the layout it always had.
+    ...(rows.some((r) => r.organization || r.unit || r.position)
+      ? [{
+        key: "org",
+        header: "Подразделение и должность",
+        render: (r: ParticipantPreviewRow) => {
+          const second = [r.position, r.organization].filter(Boolean).join(" · ");
+          if (!r.unit && !second) return <Text variant="body-xs" tone="muted">—</Text>;
+          return (
+            <Stack gap={1}>
+              <Text variant="body-s">{r.unit || "—"}</Text>
+              {second && <Text variant="body-xs" tone="muted">{second}</Text>}
+            </Stack>
+          );
+        },
+      }]
+      : []),
     {
       key: "status",
       header: "Статус",

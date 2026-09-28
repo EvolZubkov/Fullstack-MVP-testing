@@ -10,7 +10,8 @@
 
     Основа — client/src/pages/author/users.tsx как есть (и эскиз PRD-28
     prd28-users-external.html, с которого снята разметка). Дельта:
-      1. список — колонки «Подразделение» (организация второй строкой) и «Должность»;
+      1. список — подразделение и должность серой строкой под именем (решение владельца
+         2026-09-28: две колонки не поместились рядом с боковым меню);
       2. ряд фильтров — три селектора: организация, подразделение, должность;
       3. окно создания — поля «Организация», «Подразделение», «Должность» после имени,
          «Идентификатор в LMS» и «Внешний ключ» в конце;
@@ -129,9 +130,6 @@
                 <tr>
                   <th><span class="ou-tbl__th-inner">Email</span></th>
                   <th><span class="ou-tbl__th-inner">Имя</span></th>
-                  <!-- ДЕЛЬТА: две колонки -->
-                  <th><span class="ou-tbl__th-inner">Подразделение</span></th>
-                  <th><span class="ou-tbl__th-inner">Должность</span></th>
                   <th><span class="ou-tbl__th-inner">Роль</span></th>
                   <th><span class="ou-tbl__th-inner">Статус</span></th>
                   <th><span class="ou-tbl__th-inner">Последний вход</span></th>
@@ -140,16 +138,17 @@
                 </tr>
               </thead>
               <tbody>
+                <!-- ДЕЛЬТА (решение владельца 2026-09-28): подразделение и должность — серой строкой
+                     под именем, а не колонками. Две колонки на живой странице с боковым меню не
+                     поместились: DS-таблица обрезала «Создан» и меню строки. -->
                 <tr>
                   <td><span class="tb-cell-stack"><span class="ou-text ou-text--body-s ou-text--w-medium">i.petrov@severstal-service.ru</span></span></td>
-                  <td><span class="ou-text ou-text--body-s">Петров Иван</span></td>
                   <td>
                     <div class="ou-stack ou-stack--gap-1">
-                      <span class="ou-text ou-text--body-s">Отдел продаж</span>
-                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">АО «Северсталь-Сервис»</span>
+                      <span class="ou-text ou-text--body-s">Петров Иван</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Отдел продаж · Менеджер по продажам</span>
                     </div>
                   </td>
-                  <td><span class="ou-text ou-text--body-s">Менеджер по продажам</span></td>
                   <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
                   <td><span class="ou-tag ou-tag--success">Активен</span></td>
                   <td><span class="ou-text ou-text--body-s ou-text--tone-muted">12.09.2026, 09:41</span></td>
@@ -158,14 +157,12 @@
                 </tr>
                 <tr>
                   <td><span class="tb-cell-stack"><span class="ou-text ou-text--body-s ou-text--w-medium">m.kovaleva@severstal-service.ru</span></span></td>
-                  <td><span class="ou-text ou-text--body-s">Ковалёва Мария</span></td>
                   <td>
                     <div class="ou-stack ou-stack--gap-1">
-                      <span class="ou-text ou-text--body-s">Отдел продаж</span>
-                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">АО «Северсталь-Сервис»</span>
+                      <span class="ou-text ou-text--body-s">Ковалёва Мария</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Отдел продаж · Руководитель отдела</span>
                     </div>
                   </td>
-                  <td><span class="ou-text ou-text--body-s">Руководитель отдела</span></td>
                   <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Менеджер по обучению</span></td>
                   <td><span class="ou-tag ou-tag--success">Активен</span></td>
                   <td><span class="ou-text ou-text--body-s ou-text--tone-muted">11.09.2026, 17:05</span></td>
@@ -179,14 +176,12 @@
                       <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
                     </span>
                   </td>
-                  <td><span class="ou-text ou-text--body-s">Фролова Анна</span></td>
                   <td>
                     <div class="ou-stack ou-stack--gap-1">
-                      <span class="ou-text ou-text--body-s">Отдел продаж</span>
-                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">ООО «Партнёр-Логистик»</span>
+                      <span class="ou-text ou-text--body-s">Фролова Анна</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Отдел продаж</span>
                     </div>
                   </td>
-                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
                   <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
                   <td><span class="ou-tag ou-tag--neutral">Ожидает</span></td>
                   <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
@@ -622,8 +617,8 @@
         <table>
           <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
           <tbody>
-            <tr><td>Колонка «Подразделение»</td><td><code>users.unit</code>, второй строкой <code>users.organization</code></td><td>Организация не получает своей колонки: на большинстве инсталляций она одна на всех, и отдельная колонка повторяла бы одно значение в каждой строке. Пусто — «—»</td></tr>
-            <tr><td>Колонка «Должность»</td><td><code>users.position</code></td><td>Пусто — «—»</td></tr>
+            <tr><td>Строка под именем</td><td><code>users.unit</code> · <code>users.position</code></td><td>Решение владельца 2026-09-28: вместо двух колонок. На живой странице с боковым меню они не поместились в 1440 px — DS-таблица обрезает лишнее, и «Создан» с меню строки уходили за край. Пустые части опускаются; нет ни того, ни другого — строки нет. Организация в списке не показывается: она в фильтре и в карточке, на большинстве инсталляций одна на всех</td></tr>
+            <tr><td>Поле поиска</td><td>класс <code>tb-users-search</code></td><td>Держит минимальную ширину (<code>--tb-input-w-md</code>): иначе семь элементов ряда сжимали его до «Поиск по email», а по эскизу поиск занимает первую строку</td></tr>
             <tr><td>Фильтры оргструктуры</td><td>значения — различные значения профилей в списке</td><td>Сравнение без учёта регистра и лишних пробелов (план, Р-4). Пункт «Не указано» отбирает пустые. Отбор клиентский, как у остальных фильтров списка. Фильтры с поиском — у подразделений бывают сотни</td></tr>
             <tr><td>Поля «Организация» / «Подразделение» / «Должность»</td><td><code>Combobox</code> одиночный; справочник <code>GET /api/users/org-values</code></td><td>Выбор из существующих значений или «+ Создать «…»»; свободного ввода нет (план, Р-3). Образец — поле «Последовательность» PRD-22. В подписи варианта — сколько раз значение встречается в профилях и в прохождениях: вариант «только в прохождениях» — написание, которое уже пришло из LMS</td></tr>
             <tr><td>Порядок полей</td><td>—</td><td>Оргполя идут сразу за именем: они есть у всех. Ключи связывания — в конце формы, как уже стоит «Внешний ключ»: они нужны единицам</td></tr>

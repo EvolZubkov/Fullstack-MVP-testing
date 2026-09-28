@@ -55,6 +55,8 @@ import { RolePicker } from "@/components/role-picker";
 import { useAuth } from "@/lib/auth";
 import { ROLE_LABELS } from "@/lib/roles";
 import { ROLE_PRIORITY, type Role } from "@shared/access";
+import { foldOrgValues, orgValueKey, type OrgField, type OrgValueCount } from "@shared/org-fields";
+import { OrgFieldControl } from "@/features/users/org-field-control";
 
 interface User {
   id: string;
@@ -73,12 +75,49 @@ interface User {
    * отсутствует у тех, кого через выгрузки не опознают.
    */
   externalKey?: string | null;
+  /** PRD-54 BR-54-31: идентификатор в LMS (`cmi.learner_id`), по нему связывается телеметрия. */
+  lmsLearnerId?: string | null;
+  /** План оргструктуры: оргполя профиля — оси срезов аналитики. */
+  organization?: string | null;
+  unit?: string | null;
+  position?: string | null;
   status: "pending" | "active" | "inactive";
   mustChangePassword: boolean;
   gdprConsent: boolean;
   lastLoginAt: string | null;
   expiresAt: string | null;
   createdAt: string;
+}
+
+/**
+ * A linking key another account already holds — the server's 409 with the
+ * field it concerns. Carried as its own type so the drawer shows the message at
+ * that field instead of a generic «failed to save» toast.
+ */
+class LinkingKeyConflict extends Error {
+  constructor(readonly field: "lmsLearnerId" | "externalKey", message: string) {
+    super(message);
+    this.name = "LinkingKeyConflict";
+  }
+}
+
+/** Throw the right error for a refused user save. */
+async function refusalOf(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 409 && (body.field === "lmsLearnerId" || body.field === "externalKey")) {
+    return new LinkingKeyConflict(body.field, body.error ?? fallback);
+  }
+  return new Error(body.error || fallback);
+}
+
+/** Filter value meaning «the field is empty» (the «Не указано» option). */
+const ORG_NONE = "__none__";
+
+/** Does `value` pass an org filter (`all`, {@link ORG_NONE} or a comparison key)? */
+function matchesOrgFilter(filter: string, value: string | null | undefined): boolean {
+  if (filter === "all") return true;
+  const key = orgValueKey(value);
+  return filter === ORG_NONE ? key === null : key === filter;
 }
 
 interface UserAttemptsSummary {
@@ -101,6 +140,15 @@ export default function UsersPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   /** PRD-28: kind of account — `all` | `staff` | `external`. */
   const [kindFilter, setKindFilter] = useState<string>("all");
+  /**
+   * Org-structure filters: `all`, {@link ORG_NONE} or the comparison key of a
+   * value — so «ОТДЕЛ ПРОДАЖ» and «Отдел продаж» are one choice (plan Р-4).
+   */
+  const [orgFilters, setOrgFilters] = useState<Record<OrgField, string>>({
+    organization: "all", unit: "all", position: "all",
+  });
+  /** A linking key the server refused, shown at its field until it is edited. */
+  const [keyConflict, setKeyConflict] = useState<LinkingKeyConflict | null>(null);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -119,11 +167,16 @@ export default function UsersPage() {
     mustChangePassword: true,
     expiresAt: "",
     /**
-     * PRD-54: внешний ключ для связывания импортированных прохождений. Правится только в ящике
-     * РЕДАКТИРОВАНИЯ: заведение пользователя его не принимает, и поле в форме создания молча
-     * ничего бы не делало.
+     * PRD-54: внешний ключ для связывания импортированных прохождений. Заведение принимает его
+     * наравне с правкой (BR-54-28), поэтому поле есть в обоих ящиках.
      */
     externalKey: "",
+    /** PRD-54 BR-54-31: идентификатор в LMS. */
+    lmsLearnerId: "",
+    /** План оргструктуры: выбор из существующих значений или создание (Р-3). */
+    organization: "",
+    unit: "",
+    position: "",
     /**
      * PRD-28 FR-08: create the account as an external participant. The three
      * things such an account cannot have — a password, a wider role set and an
@@ -152,6 +205,10 @@ export default function UsersPage() {
     status: "new" | "duplicate" | "keyUpdate" | "error"; error?: string; existingId?: string;
     duplicateAction?: "skip" | "update";
     externalKey?: string | null;
+    lmsLearnerId?: string | null;
+    organization?: string | null;
+    unit?: string | null;
+    position?: string | null;
   };
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [bulkStep, setBulkStep] = useState<"upload" | "preview" | "done">("upload");
@@ -166,6 +223,13 @@ export default function UsersPage() {
     queryKey: ["/api/users"],
   });
 
+  // Org-structure values in use — the choices of the profile fields (plan Р-3).
+  // Asked for only while a drawer is open: the list itself folds its own values.
+  const { data: orgValues } = useQuery<Record<OrgField, OrgValueCount[]>>({
+    queryKey: ["/api/users/org-values"],
+    enabled: isCreateOpen || isEditOpen,
+  });
+
   // Fetch user attempts summary for reset dialog
   const { data: userAttemptsSummary = [], refetch: refetchAttempts } = useQuery<UserAttemptsSummary[]>({
     queryKey: ["/api/users", selectedUser?.id, "attempts-summary"],
@@ -178,12 +242,19 @@ export default function UsersPage() {
       // An external participant is created by what the request LEAVES OUT: the
       // server refuses a body that asks for a password, a wider role set or an
       // invitation letter alongside the flag, rather than dropping them quietly.
+      // The org fields and linking keys are allowed for both kinds: a contractor
+      // also works in some unit, and may be found by an LMS export.
       const payload = data.isExternal
         ? {
           email: data.email,
           name: data.name,
           expiresAt: data.expiresAt,
           isExternal: true,
+          organization: data.organization,
+          unit: data.unit,
+          position: data.position,
+          lmsLearnerId: data.lmsLearnerId,
+          externalKey: data.externalKey,
         }
         : data;
       const res = await fetch("/api/users", {
@@ -192,10 +263,7 @@ export default function UsersPage() {
         credentials: "include",
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to create user");
-      }
+      if (!res.ok) throw await refusalOf(res, "Failed to create user");
       return res.json() as Promise<{ inviteSent?: boolean }>;
     },
     onSuccess: (data, variables) => {
@@ -215,6 +283,11 @@ export default function UsersPage() {
       }
     },
     onError: (error: Error) => {
+      // A taken key is shown at its field, where it is fixed, not in a toast.
+      if (error instanceof LinkingKeyConflict) {
+        setKeyConflict(error);
+        return;
+      }
       toast({
         variant: "destructive",
         title: t.common.error,
@@ -277,10 +350,7 @@ export default function UsersPage() {
         credentials: "include",
         body: JSON.stringify(data),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to update user");
-      }
+      if (!res.ok) throw await refusalOf(res, "Failed to update user");
       // Roles are managed through a dedicated endpoint (PRD-13, ceiling-checked).
       if (roles) {
         const rolesRes = await fetch(`/api/users/${id}/roles`, {
@@ -304,6 +374,10 @@ export default function UsersPage() {
       toast({ title: t.users.userUpdated, description: t.users.userUpdatedDescription });
     },
     onError: (error: Error) => {
+      if (error instanceof LinkingKeyConflict) {
+        setKeyConflict(error);
+        return;
+      }
       toast({
         variant: "destructive",
         title: t.common.error,
@@ -467,9 +541,14 @@ export default function UsersPage() {
       mustChangePassword: true,
       expiresAt: "",
       externalKey: "",
+      lmsLearnerId: "",
+      organization: "",
+      unit: "",
+      position: "",
       isExternal: false,
       sendInvite: true,
     });
+    setKeyConflict(null);
   };
 
   const generatePassword = () => {
@@ -491,6 +570,10 @@ export default function UsersPage() {
       mustChangePassword: user.mustChangePassword,
       expiresAt: user.expiresAt ? user.expiresAt.split("T")[0] : "",
       externalKey: user.externalKey ?? "",
+      lmsLearnerId: user.lmsLearnerId ?? "",
+      organization: user.organization ?? "",
+      unit: user.unit ?? "",
+      position: user.position ?? "",
       // Read-only here: the kind of an account is decided at creation, and the
       // only change of it is «Сделать штатным» in the row menu (PRD-28 FR-05).
       isExternal: user.isExternal ?? false,
@@ -498,6 +581,7 @@ export default function UsersPage() {
       // and an existing pending account is re-invited from the row menu.
       sendInvite: false,
     });
+    setKeyConflict(null);
     setIsEditOpen(true);
   };
 
@@ -527,8 +611,24 @@ export default function UsersPage() {
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
     const matchesKind =
       kindFilter === "all" || (kindFilter === "external") === Boolean(user.isExternal);
-    return matchesSearch && matchesRole && matchesStatus && matchesKind;
+    const matchesOrg = matchesOrgFilter(orgFilters.organization, user.organization)
+      && matchesOrgFilter(orgFilters.unit, user.unit)
+      && matchesOrgFilter(orgFilters.position, user.position);
+    return matchesSearch && matchesRole && matchesStatus && matchesKind && matchesOrg;
   });
+
+  /**
+   * Options of an org filter: the values the list holds, spellings folded
+   * (plan Р-4), plus «Не указано» for the empty ones. Built from the list itself,
+   * not the dictionary — a filter offering a value no one in the list has would
+   * only ever produce an empty table.
+   */
+  const orgFilterOptions = (field: OrgField, allLabel: string, noneLabel: string) => [
+    { value: "all", label: allLabel },
+    ...foldOrgValues(users.map((u) => ({ value: u[field] ?? "", users: 1, attempts: 0 })))
+      .map((entry) => ({ value: orgValueKey(entry.value) ?? "", label: entry.value, searchText: entry.value })),
+    { value: ORG_NONE, label: noneLabel },
+  ];
 
   const getStatusBadge = (status: string) => {
     const tone: Tone =
@@ -582,7 +682,24 @@ export default function UsersPage() {
         </Cluster>
       ),
     },
-    { key: "name", header: t.users.name, render: (u) => <Text variant="body-s">{u.name || "—"}</Text> },
+    {
+      key: "name",
+      header: t.users.name,
+      // Org-structure plan: unit and position ride under the name as a muted
+      // line instead of columns of their own. Two more columns did not fit next to
+      // the sidebar at 1440 px — the DS table clips, and «Создан» with the row menu
+      // went past the edge (owner's decision 2026-09-28). The organisation is in
+      // the filter and the profile; in most installations it is one for everyone.
+      render: (u) => {
+        const place = [u.unit, u.position].filter(Boolean).join(" · ");
+        return (
+          <Stack gap={1}>
+            <Text variant="body-s">{u.name || "—"}</Text>
+            {place && <Text variant="body-xs" tone="muted">{place}</Text>}
+          </Stack>
+        );
+      },
+    },
     { key: "roles", header: t.users.role, render: (u) => renderRoleBadges(u.roles) },
     { key: "status", header: t.users.status, render: (u) => getStatusBadge(u.status) },
     { key: "lastLogin", header: t.users.lastLogin, render: (u) => <Text variant="body-s" tone="muted">{formatDate(u.lastLoginAt)}</Text> },
@@ -681,6 +798,66 @@ export default function UsersPage() {
       <Button onClick={handleBulkClose}>Закрыть</Button>
     );
 
+  // ── Org-structure fields and linking keys: the same in both drawers ──
+  // Org fields go right after the name (everyone has them); the linking keys
+  // close the form, where «Внешний ключ» already stood — few people need them.
+  const orgFieldControls = (
+    <>
+      <OrgFieldControl
+        label="Организация"
+        value={formData.organization}
+        options={orgValues?.organization ?? []}
+        onChange={(organization) => setFormData((d) => ({ ...d, organization }))}
+        placeholder="Не указана"
+      />
+      <OrgFieldControl
+        label="Подразделение"
+        value={formData.unit}
+        options={orgValues?.unit ?? []}
+        onChange={(unit) => setFormData((d) => ({ ...d, unit }))}
+      />
+      <OrgFieldControl
+        label="Должность"
+        value={formData.position}
+        options={orgValues?.position ?? []}
+        onChange={(position) => setFormData((d) => ({ ...d, position }))}
+        placeholder="Не указана"
+      />
+    </>
+  );
+
+  /** The refusal of a taken key, while the value that caused it is still in the field. */
+  const conflictAt = (field: LinkingKeyConflict["field"]) =>
+    keyConflict?.field === field ? keyConflict.message : undefined;
+
+  const linkingKeyInputs = (
+    <>
+      <Input
+        label="Идентификатор в LMS"
+        hint="По нему прохождения из LMS находят этого человека. Пустое поле — связи нет."
+        error={conflictAt("lmsLearnerId")}
+        fullWidth
+        value={formData.lmsLearnerId}
+        onChange={(e) => {
+          setFormData({ ...formData, lmsLearnerId: e.target.value });
+          if (keyConflict?.field === "lmsLearnerId") setKeyConflict(null);
+        }}
+      />
+      {/* PRD-54: связывание импортированных прохождений. */}
+      <Input
+        label="Внешний ключ"
+        hint="По нему импорт выгрузок LMS находит этого человека. Пустое поле — связи нет."
+        error={conflictAt("externalKey")}
+        fullWidth
+        value={formData.externalKey}
+        onChange={(e) => {
+          setFormData({ ...formData, externalKey: e.target.value });
+          if (keyConflict?.field === "externalKey") setKeyConflict(null);
+        }}
+      />
+    </>
+  );
+
   // ── Bulk preview table columns ──
   const previewColumns: TableColumn<PreviewRow>[] = [
     { key: "email", header: "Email", render: (row) => <Text variant="mono-s">{row.email}</Text> },
@@ -703,14 +880,37 @@ export default function UsersPage() {
         ),
     },
     {
+      // Org-structure plan: one column in two lines — the unit, then position and
+      // organisation. Separate columns made ten, and «Статус» with «Действие»
+      // went past the edge of the dialog.
+      key: "org",
+      header: "Подразделение и должность",
+      render: (row) => {
+        const second = [row.position, row.organization].filter(Boolean).join(" · ");
+        if (!row.unit && !second) return <Text variant="body-xs" tone="muted">—</Text>;
+        return (
+          <Stack gap={1}>
+            <Text variant="body-s">{row.unit || "—"}</Text>
+            {second && <Text variant="body-xs" tone="muted">{second}</Text>}
+          </Stack>
+        );
+      },
+    },
+    {
       // PRD-54: колонка нужна, чтобы до записи было видно, кому проставится ключ. Без неё
       // состояние «Ключ будет обновлён» сообщало бы о факте, не показывая самого значения.
-      key: "externalKey",
-      header: "Внешний ключ",
+      // Оба ключа связывания — в одной колонке, по строке на ключ.
+      key: "keys",
+      header: "Ключи связывания",
       render: (row) =>
-        row.externalKey
-          ? <Text variant="mono-s">{row.externalKey}</Text>
-          : <Text variant="body-xs" tone="muted">—</Text>,
+        row.lmsLearnerId || row.externalKey ? (
+          <Stack gap={1}>
+            {row.lmsLearnerId && <Text variant="mono-s" className="tb-users-key">LMS: {row.lmsLearnerId}</Text>}
+            {row.externalKey && (
+              <Text variant="mono-s" tone="muted" className="tb-users-key">Ключ: {row.externalKey}</Text>
+            )}
+          </Stack>
+        ) : <Text variant="body-xs" tone="muted">—</Text>,
     },
     {
       key: "status",
@@ -771,7 +971,7 @@ export default function UsersPage() {
 
       {/* Filters */}
       <Cluster gap={4} align="end">
-        <Stack grow>
+        <Stack grow className="tb-users-search">
           <Input
             iconLeft={<Search size={16} />}
             placeholder={t.users.searchPlaceholder}
@@ -810,6 +1010,29 @@ export default function UsersPage() {
             { value: "staff", label: "Штатные" },
             { value: "external", label: "Внешние участники" },
           ]}
+        />
+        {/* Org-structure plan: three filters in the same row; searchable — a
+            company may have hundreds of units. */}
+        <Select
+          value={orgFilters.organization}
+          onChange={(value) => setOrgFilters((f) => ({ ...f, organization: value }))}
+          aria-label="Организация"
+          searchable
+          options={orgFilterOptions("organization", "Все организации", "Не указана")}
+        />
+        <Select
+          value={orgFilters.unit}
+          onChange={(value) => setOrgFilters((f) => ({ ...f, unit: value }))}
+          aria-label="Подразделение"
+          searchable
+          options={orgFilterOptions("unit", "Все подразделения", "Не указано")}
+        />
+        <Select
+          value={orgFilters.position}
+          onChange={(value) => setOrgFilters((f) => ({ ...f, position: value }))}
+          aria-label="Должность"
+          searchable
+          options={orgFilterOptions("position", "Все должности", "Не указана")}
         />
       </Cluster>
 
@@ -868,6 +1091,7 @@ export default function UsersPage() {
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="Иван Иванов"
           />
+          {orgFieldControls}
           {/* PRD-28 FR-08: the kind of the account. Ticking it puts out
               everything an account without a password cannot have — the DS has
               no group-disable, so each control carries its own `disabled`. */}
@@ -946,6 +1170,7 @@ export default function UsersPage() {
             value={formData.expiresAt}
             onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
           />
+          {linkingKeyInputs}
         </Stack>
       </Drawer>
 
@@ -969,8 +1194,12 @@ export default function UsersPage() {
                     mustChangePassword: formData.mustChangePassword,
                     expiresAt: formData.expiresAt || undefined,
                     // Always sent, empty included: the server tells «not sent» (keep)
-                    // from «sent empty» (clear), and the form edits it both ways.
+                    // from «sent empty» (clear), and the form edits them both ways.
                     externalKey: formData.externalKey,
+                    lmsLearnerId: formData.lmsLearnerId,
+                    organization: formData.organization,
+                    unit: formData.unit,
+                    position: formData.position,
                   },
                   roles: formData.roles,
                 })
@@ -998,6 +1227,7 @@ export default function UsersPage() {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           />
+          {orgFieldControls}
           <Stack gap={2}>
             <Label required>Роли</Label>
             <RolePicker
@@ -1019,15 +1249,7 @@ export default function UsersPage() {
             value={formData.expiresAt}
             onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
           />
-          {/* PRD-54: связывание импортированных прохождений. Поле последнее в форме намеренно —
-              оно нужно единицам, и подниматься выше почты и ролей ему не за что. */}
-          <Input
-            label="Внешний ключ"
-            hint="По нему импорт выгрузок LMS находит этого человека. Пустое поле — связи нет."
-            fullWidth
-            value={formData.externalKey}
-            onChange={(e) => setFormData({ ...formData, externalKey: e.target.value })}
-          />
+          {linkingKeyInputs}
         </Stack>
       </Drawer>
 
@@ -1161,7 +1383,7 @@ export default function UsersPage() {
               : "Импорт завершён"
         }
         description={
-          bulkStep === "upload" ? "Загрузите файл CSV или Excel. Обязательные колонки: email. Необязательные: name, role (learner/author)."
+          bulkStep === "upload" ? "Загрузите файл CSV или Excel. Обязательная колонка: email. Необязательные: name, role (learner/author), group, external_key, organization, unit, position, lms_learner_id."
             : bulkStep === "preview" ? "Проверьте данные перед импортом. Для дублей выберите действие."
               : undefined
         }
