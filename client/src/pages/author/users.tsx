@@ -968,6 +968,9 @@ export default function UsersPage() {
                     name: formData.name || undefined,
                     mustChangePassword: formData.mustChangePassword,
                     expiresAt: formData.expiresAt || undefined,
+                    // Always sent, empty included: the server tells «not sent» (keep)
+                    // from «sent empty» (clear), and the form edits it both ways.
+                    externalKey: formData.externalKey,
                   },
                   roles: formData.roles,
                 })

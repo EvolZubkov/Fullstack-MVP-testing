@@ -91,6 +91,24 @@ async function inviterNameOf(userId: string | undefined): Promise<string | undef
   return inviter?.name || undefined;
 }
 
+/**
+ * The account as the users API shows it: the stored row without its secrets.
+ *
+ * Every answer of this router used to spread the whole `users` row, so the
+ * password hash and the email hash reached any holder of `users.read`. One
+ * function for all of them, because the leak was four separate spreads and a
+ * fifth one added later would have leaked again.
+ *
+ * @param user Stored account row (or anything shaped like it).
+ * @returns The same fields minus `passwordHash` and `emailHash`.
+ */
+export function toUserResponse<T extends { passwordHash?: unknown; emailHash?: unknown }>(
+  user: T,
+): Omit<T, "passwordHash" | "emailHash"> {
+  const { passwordHash: _passwordHash, emailHash: _emailHash, ...visible } = user;
+  return visible;
+}
+
 const router = Router();
 
 // GET /api/users - Список пользователей
@@ -101,7 +119,7 @@ router.get("/", requirePermission("users.read"), async (req, res) => {
       users.map(async (user) => {
         const groups = await storage.getUserGroups(user.id);
         const roles = await storage.getUserRoles(user.id);
-        return { ...user, roles, groups };
+        return { ...toUserResponse(user), roles, groups };
       })
     );
     res.json(usersWithGroups);
@@ -135,7 +153,7 @@ router.get("/:id", requirePermission("users.read"), async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
     const groups = await storage.getUserGroups(user.id);
-    res.json({ ...user, roles: await storage.getUserRoles(user.id), groups });
+    res.json({ ...toUserResponse(user), roles: await storage.getUserRoles(user.id), groups });
   } catch (error) {
     logger.error("Get user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get user" });
@@ -254,7 +272,7 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
       logger.info(`Invite e-mail on create for user ${user.id} (delivered=${inviteSent})`, "users");
     }
 
-    res.status(201).json({ ...user, roles: requestedRoles, groups, inviteSent });
+    res.status(201).json({ ...toUserResponse(user), roles: requestedRoles, groups, inviteSent });
   } catch (error) {
     logger.error("Create user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create user" });
@@ -339,7 +357,7 @@ router.put("/:id", requirePermission("users.manage"), async (req, res) => {
     }
 
     const groups = await storage.getUserGroups(userId);
-    res.json({ ...updated, roles: await storage.getUserRoles(userId), groups });
+    res.json({ ...(updated ? toUserResponse(updated) : {}), roles: await storage.getUserRoles(userId), groups });
   } catch (error) {
     logger.error("Update user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update user" });
@@ -834,6 +852,9 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
           status: "pending",
           mustChangePassword: true,
           gdprConsent: false,
+          // PRD-54: the preview shows the key of a new row, so the row must be
+          // created with it — without this the key was lost for every new person.
+          externalKey: normalizeExternalKey(row.externalKey),
           createdBy: req.session.userId,
         });
         await storage.setUserRoles(user.id, rowRoles as StoredRole[], req.session.userId ?? null);

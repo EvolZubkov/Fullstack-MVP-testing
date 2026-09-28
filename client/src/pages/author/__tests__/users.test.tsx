@@ -233,6 +233,25 @@ describe("<UsersPage />", () => {
     );
   });
 
+  it("sends the edited external key with the user PUT", async () => {
+    // The field was on the form and never reached the server: the body carried
+    // email, name and two ignored fields, and the server reads the key only when
+    // it is present — so every edit of it was silently lost.
+    renderPage();
+    await screen.findByText("admin@test.dev");
+    fireEvent.click(screen.getAllByLabelText("Действия")[0]);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Редактировать" }));
+    fireEvent.change(await screen.findByLabelText("Внешний ключ"), { target: { value: "TAB-1024" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/users/u-admin", expect.objectContaining({ method: "PUT" })),
+    );
+    const call = fetchMock.mock.calls.find(([url, options]) =>
+      String(url) === "/api/users/u-admin" && (options?.method ?? "").toUpperCase() === "PUT");
+    expect(JSON.parse((call![1] as RequestInit).body as string).externalKey).toBe("TAB-1024");
+  });
+
   it("deactivates an active user through the confirm dialog (POST .../deactivate)", async () => {
     renderPage();
     await screen.findByText("admin@test.dev");
