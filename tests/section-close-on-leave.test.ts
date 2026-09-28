@@ -154,14 +154,13 @@ function makeHarness(opts: {
 }
 
 describe("PRD-67: рантайм пакета", () => {
-  it("первый вопрос раздела открывает его и предупреждает один раз", () => {
+  it("первый вопрос раздела открывает его молча — правило автор пишет на вводной странице", () => {
     const h = makeHarness({});
     expect(h.api.syncSectionLeaveGate()).toBe(false);
     expect(h.stored().sectionGate).toEqual({ open: "A", closed: [] });
     h.state.currentIndex = 1; // следующий вопрос того же раздела
     h.api.syncSectionLeaveGate();
-    expect(h.toast).toHaveBeenCalledTimes(1);
-    expect(h.toast.mock.calls[0][0]).toMatch(/^Выход из раздела закроет его/);
+    expect(h.toast).not.toHaveBeenCalled();
   });
 
   it("переход к следующему разделу закрывает предыдущий навсегда", () => {
@@ -235,7 +234,7 @@ describe("PRD-67: рантайм пакета", () => {
     const h = makeHarness({ flowMode: "linear_flat", testData: { timeLimitMinutes: 30 } });
     h.api.syncSectionLeaveGate();
     expect(h.stored().sectionGate).toEqual({ open: "__test__", closed: [] });
-    expect(h.toast.mock.calls[0][0]).toMatch(/^Выход из теста завершит попытку/);
+    expect(h.toast).not.toHaveBeenCalled();
     h.state.phase = "content"; // страница «После теста» — не выход
     h.api.syncSectionLeaveGate();
     expect(h.stored().sectionGate.open).toBe("__test__");

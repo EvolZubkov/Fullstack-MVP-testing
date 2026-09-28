@@ -616,19 +616,6 @@ function currentLeaveUnit() {
   return null;
 }
 
-/** Warn once per unit, on its first question, that leaving closes it. */
-function warnSectionLeave(unit) {
-  if (!state.leaveWarned) state.leaveWarned = {};
-  if (state.leaveWarned[unit]) return;
-  state.leaveWarned[unit] = true;
-  if (typeof showToast !== 'function') return;
-  if (unit === wholeTestSectionKey()) {
-    showToast('Выход из теста завершит попытку. Если закрыть браузер или перезагрузить страницу, попытка будет завершена с данными ответами.', 'warn', 8000);
-  } else {
-    showToast('Выход из раздела закроет его. Если перейти дальше, вернуться к списку разделов или закрыть браузер, вернуться в этот раздел будет нельзя.', 'warn', 8000);
-  }
-}
-
 /**
  * The learner is on a screen of a closed unit: tell them why and move them on — past the
  * section (linear), back to the hub marked done (router), or hand the attempt in (a test
@@ -681,9 +668,8 @@ function syncSectionLeaveGate() {
   }
   if (!unit || !leaveGuarded(unit)) return false;
   if (gate.closed.indexOf(unit) >= 0) return redirectFromClosedSection(unit);
-  if (gate.open !== unit) {
-    writeSectionGate(sectionBudgetApi().openSection(gate, unit), null);
-    warnSectionLeave(unit);
-  }
+  // Entering a unit is silent: the rule is the author's to state on an intro page, once,
+  // not a notice over every section's first question.
+  if (gate.open !== unit) writeSectionGate(sectionBudgetApi().openSection(gate, unit), null);
   return false;
 }

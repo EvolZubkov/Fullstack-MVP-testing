@@ -63,7 +63,7 @@ import {
   forceAdvanceTarget,
   type SectionStopReason,
 } from "./use-section-timer";
-import { closesOnLeave, testClosesOnLeave, WHOLE_TEST_SECTION } from "@shared/flow/section-budget";
+import { testClosesOnLeave } from "@shared/flow/section-budget";
 import { t } from "@/lib/i18n";
 import { reportClientError } from "@/lib/report-error";
 import { useAuth } from "@/lib/auth";
@@ -690,7 +690,6 @@ export default function TakeTestPage() {
     feedback?: string;
   } | null>(null);
   // Timer state
-  const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -749,7 +748,6 @@ export default function TakeTestPage() {
     sectionRemainingSeconds,
     lockedTopics,
     closedTopics,
-    synced: sectionTimerSynced,
   } = useSectionTimer({
     attemptId: attempt?.id ?? null,
     questions: flatQuestions,
@@ -764,56 +762,6 @@ export default function TakeTestPage() {
       !(navSettings.closeSectionOnLeave && (sectionResultView || showHub)),
     onExpire: (topicId, reason) => sectionExpireRef.current(topicId, reason),
   });
-
-  // PRD-67: which unit a leave closes (the topic, or the whole test without sections) and
-  // whether the setting acts on it — the SAME rule the server applies (`closesOnLeave`).
-  const isFlatFlow = flowStructure.flowMode === "linear_flat";
-  const leaveUnitOf = (topicId: string): string => (isFlatFlow ? WHOLE_TEST_SECTION : topicId);
-  const leaveGuarded = (topicId: string): boolean => {
-    const ownLimit = isFlatFlow
-      ? flatQuestions.reduce((m, q) => Math.max(m, q.sectionTimeLimitMinutes ?? 0), 0)
-      : (flatQuestions.find((q) => q.topicId === topicId)?.sectionTimeLimitMinutes ?? 0);
-    return closesOnLeave({
-      enabled: navSettings.closeSectionOnLeave,
-      testLimitMinutes: timeLimitMinutes,
-      sectionLimitMinutes: ownLimit,
-    });
-  };
-  // The topic the learner is inside right now, as far as a leave is concerned.
-  const leaveTopicId =
-    testMode === "standard" && phase === "question" && !sectionResultView && !showHub
-      ? (flatQuestions[currentIndex]?.topicId ?? null)
-      : null;
-  const leaveWarnedRef = useRef<Set<string>>(new Set());
-
-  // PRD-67 (FR-11): warn once per unit, on its first question, that leaving closes it.
-  // Waits for the server's first answer: after a reload the section may ALREADY be
-  // closed, and «leaving will close it» followed by «it is closed» would contradict itself.
-  useEffect(() => {
-    if (!leaveTopicId || !sectionTimerSynced || !leaveGuarded(leaveTopicId)) return;
-    const unit = leaveUnitOf(leaveTopicId);
-    if (closedTopics.has(unit) || leaveWarnedRef.current.has(unit)) return;
-    leaveWarnedRef.current.add(unit);
-    // Tone and wording follow approved/prd67-section-close-on-leave.html (state s-enter).
-    toast(
-      isFlatFlow
-        ? {
-            variant: "warning",
-            duration: LEAVE_NOTICE_MS,
-            title: "Выход из теста завершит попытку",
-            description:
-              "Если закрыть браузер или перезагрузить страницу, попытка будет завершена с данными ответами.",
-          }
-        : {
-            variant: "warning",
-            duration: LEAVE_NOTICE_MS,
-            title: "Выход из раздела закроет его",
-            description:
-              "Если перейти дальше, вернуться к списку разделов или закрыть браузер, вернуться в этот раздел будет нельзя.",
-          },
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leaveTopicId, sectionTimerSynced, closedTopics]);
 
   // Tracks mount so the adaptive expiry retry loop stops after navigation away.
   const mountedRef = useRef(true);
@@ -1296,7 +1244,6 @@ export default function TakeTestPage() {
         const totalSeconds = data.attempt.timeLimitMinutes * 60;
         const remaining = Math.max(0, totalSeconds - elapsedSeconds);
 
-        setTimeLimitMinutes(data.attempt.timeLimitMinutes);
         setRemainingSeconds(remaining);
 
         if (remaining <= 0) {
@@ -1494,7 +1441,6 @@ export default function TakeTestPage() {
 
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
-      setTimeLimitMinutes(data.timeLimitMinutes);
       setRemainingSeconds(data.timeLimitMinutes * 60);
     }
     const variant = data.variantJson as any;
@@ -1634,7 +1580,6 @@ export default function TakeTestPage() {
 
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
-      setTimeLimitMinutes(data.timeLimitMinutes);
       setRemainingSeconds(data.timeLimitMinutes * 60);
     }
   };

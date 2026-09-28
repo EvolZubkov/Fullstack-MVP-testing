@@ -13,14 +13,14 @@
       1) Редактор теста → «Правила прохождения» → «Ограничения» → раздел
          «Ограничения попытки» (client/.../editor/sections/basic-settings-section.tsx,
          LimitsPane → PerTopicLimitsBlock).
-      2) Учащийся: уведомление при входе в раздел и при возврате в закрытый раздел
+      2) Учащийся: уведомление при возврате в закрытый раздел. Уведомление при входе
+         в раздел снято 2026-09-29: правило автор пишет на вводной странице теста
          (веб — DS Toast; SCORM — существующий showToast рантайма, тот же текст).
     Состояния:
       s-on         — индивидуальные лимиты включены, переключатель включён
       s-off        — индивидуальные лимиты включены, переключатель выключен (по умолчанию)
       s-test-limit — только общий лимит теста: переключатель виден
       s-no-limits  — лимитов нет совсем: переключателя нет
-      s-enter      — ученик: первый вопрос раздела (и теста без разделов) под действием настройки
       s-closed     — ученик: возврат в закрытый раздел (и в тест без разделов)
       s-docs       — Пояснения + DS Mapping
     СОГЛАСОВАН 2026-09-24.
@@ -78,7 +78,6 @@
       <button type="button" onclick="showState(this, 'test-limit')">только общий лимит</button>
       <button type="button" onclick="showState(this, 'no-limits')">лимитов нет</button>
       <span class="wf-nav-sep"></span>
-      <button type="button" onclick="showState(this, 'enter')">ученик · вход в раздел</button>
       <button type="button" onclick="showState(this, 'closed')">ученик · раздел закрыт</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
@@ -316,29 +315,6 @@
       </div>
     </div>
 
-    <!-- ════════════════ s-enter: ученик входит в раздел ════════════════ -->
-    <div id="wf-enter" class="wf-state">
-      <div class="wf-toast-demo">
-        <div class="ou-toast ou-toast--warning" role="status">
-          <span class="ou-toast__ico"><svg width="18" height="18" aria-hidden="true"><use href="#i-alert-triangle" /></svg></span>
-          <div class="ou-toast__body">
-            <div class="ou-toast__title">Выход из раздела закроет его</div>
-            <div class="ou-toast__desc">Если перейти дальше, вернуться к списку разделов или закрыть браузер, вернуться в этот раздел будет нельзя.</div>
-          </div>
-          <button type="button" class="ou-toast__close" aria-label="Закрыть"><svg width="14" height="14" aria-hidden="true"><use href="#i-x" /></svg></button>
-        </div>
-        <!-- Тест без разделов: весь тест — один раздел -->
-        <div class="ou-toast ou-toast--warning" role="status">
-          <span class="ou-toast__ico"><svg width="18" height="18" aria-hidden="true"><use href="#i-alert-triangle" /></svg></span>
-          <div class="ou-toast__body">
-            <div class="ou-toast__title">Выход из теста завершит попытку</div>
-            <div class="ou-toast__desc">Если закрыть браузер или перезагрузить страницу, попытка будет завершена с данными ответами.</div>
-          </div>
-          <button type="button" class="ou-toast__close" aria-label="Закрыть"><svg width="14" height="14" aria-hidden="true"><use href="#i-x" /></svg></button>
-        </div>
-      </div>
-    </div>
-
     <!-- ════════════════ s-closed: возврат в закрытый раздел ════════════════ -->
     <div id="wf-closed" class="wf-state">
       <div class="wf-toast-demo">
@@ -377,8 +353,6 @@
             <tr><td>Область действия</td><td>разделы со своим лимитом + все разделы при общем лимите</td><td>Закрывается текущий раздел; тест без разделов — один раздел, выход завершает попытку</td></tr>
             <tr><td>Описание свича</td><td>зависит от состояния</td><td>Вкл — что считается выходом, что вернуться нельзя, что тест без разделов завершается; выкл — нынешнее поведение (время замирает)</td></tr>
             <tr><td>Поверхность 2</td><td>уведомление ученику</td><td>Веб — DS <code>Toast</code>; SCORM — существующий <code>showToast</code> рантайма (центральный тост), текст «заголовок. описание» одной строкой. Макеты шаблонов не меняются</td></tr>
-            <tr><td>Тост «Выход из раздела закроет его»</td><td>первый вопрос раздела, первый вход</td><td>warning; для раздела под действием настройки</td></tr>
-            <tr><td>Тост «Выход из теста завершит попытку»</td><td>первый вопрос теста без разделов</td><td>warning; вместо тоста раздела</td></tr>
             <tr><td>Тост «Раздел … закрыт»</td><td>возврат в закрытый раздел (перезапуск, возобновление)</td><td>info; ученика переводит дальше закрытого раздела, как при истечении лимита</td></tr>
             <tr><td>Тост «Попытка завершена»</td><td>возврат в тест без разделов</td><td>info; попытка сдана с данными ответами, ученик на итогах</td></tr>
             <tr><td>Обзор раздела</td><td>PRD-19, узел <code>review</code> своего раздела</td><td>Считается ВНУТРИ раздела: таймер идёт, возврат к вопросам доступен</td></tr>
