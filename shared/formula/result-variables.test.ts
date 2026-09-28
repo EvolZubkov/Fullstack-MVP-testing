@@ -131,6 +131,47 @@ describe("computeResultVariables — controls_status override", () => {
     expect(out.status).toEqual({});
     expect(out.errors).toHaveLength(1);
   });
+
+  it("several controllers of one status combine with OR — one true is enough, in any order", () => {
+    const trueFirst = computeResultVariables(
+      [
+        rv("a", "percent >= 75", { type: "boolean", controlsStatus: "success", sortOrder: 0 }),
+        rv("b", "percent >= 90", { type: "boolean", controlsStatus: "success", sortOrder: 1 }),
+      ],
+      base(),
+    );
+    const trueLast = computeResultVariables(
+      [
+        rv("a", "percent >= 90", { type: "boolean", controlsStatus: "success", sortOrder: 0 }),
+        rv("b", "percent >= 75", { type: "boolean", controlsStatus: "success", sortOrder: 1 }),
+      ],
+      base(),
+    );
+    expect(trueFirst.status).toEqual({ success: true });
+    expect(trueLast.status).toEqual({ success: true });
+  });
+
+  it("several controllers all false give false", () => {
+    const out = computeResultVariables(
+      [
+        rv("a", "percent >= 90", { type: "boolean", controlsStatus: "completion", sortOrder: 0 }),
+        rv("b", "percent >= 95", { type: "boolean", controlsStatus: "completion", sortOrder: 1 }),
+      ],
+      base(),
+    );
+    expect(out.status).toEqual({ completion: false });
+  });
+
+  it("an errored controller does not vote next to a working one", () => {
+    const out = computeResultVariables(
+      [
+        rv("broken", "percent >", { type: "boolean", controlsStatus: "success", sortOrder: 0 }),
+        rv("ok", "percent >= 90", { type: "boolean", controlsStatus: "success", sortOrder: 1 }),
+      ],
+      base(),
+    );
+    expect(out.status).toEqual({ success: false });
+  });
 });
 
 describe("computeResultVariables — recovery determinism (NFR-04)", () => {

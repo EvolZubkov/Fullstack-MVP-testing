@@ -575,8 +575,6 @@ CREATE INDEX "questions_topic_id_idx" ON "questions" USING btree ("topic_id");
 CREATE INDEX "report_blocks_test_mode_sort_idx" ON "report_blocks" USING btree ("test_id","mode","sort_order");
 CREATE INDEX "result_variables_test_id_idx" ON "result_variables" USING btree ("test_id");
 CREATE UNIQUE INDEX "result_variables_test_id_name_uq" ON "result_variables" USING btree ("test_id","name");
-CREATE UNIQUE INDEX "result_variables_one_success_per_test" ON "result_variables" USING btree ("test_id") WHERE "result_variables"."controls_status" = 'success';
-CREATE UNIQUE INDEX "result_variables_one_completion_per_test" ON "result_variables" USING btree ("test_id") WHERE "result_variables"."controls_status" = 'completion';
 CREATE INDEX "scales_test_id_idx" ON "scales" USING btree ("test_id");
 CREATE UNIQUE INDEX "scales_test_id_key_uq" ON "scales" USING btree ("test_id","key");
 CREATE INDEX "scorm_answers_attempt_id_idx" ON "scorm_answers" USING btree ("attempt_id");

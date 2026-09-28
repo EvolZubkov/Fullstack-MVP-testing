@@ -1,8 +1,9 @@
 # PRD-2: Пользовательские показатели результата
 
-**Версия:** 2.3  
-**Статус:** реализовано; редизайн конструктора + `topicByName`/код темы + общий балл — 2026-06-30  
-**Дата актуализации:** 2026-06-30  
+**Версия:** 2.4  
+**Статус:** реализовано; редизайн конструктора + `topicByName`/код темы + общий балл — 2026-06-30;
+несколько показателей на один статус (ИЛИ) и порядок с принудительным закрытием — 2026-09-28  
+**Дата актуализации:** 2026-09-28  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md),
 [PRD-5](../prd-5/scales-competency-measurements.md),
@@ -381,11 +382,22 @@ cmi.interactions[n].result           = "neutral"
 
 - `controls_status` доступен только для показателей с `type = "boolean"`. Валидация
   при сохранении блокирует комбинацию `controls_status != "none"` с другими типами.
-- В тесте может быть не более одного показателя с `controls_status = "success"` и
-  не более одного с `controls_status = "completion"`.
+- Одним статусом могут управлять несколько показателей (решение владельца 2026-09-28,
+  до этого — не более одного на статус). Их значения объединяются через ИЛИ: статус
+  получает `true`, если хотя бы один из показателей вернул `true`, и `false` — только
+  если все вернувшие значение показатели дали `false`. Нужна другая логика (И, «все
+  условия сразу») — она пишется внутри формулы одного показателя. Правило одинаково в
+  вебе (`shared/formula/result-variables.ts`) и в пакете (`dsl/formula.js`).
 - Если формула показателя возвращает `null` в runtime (например, из-за ошибки расчёта),
-  Core откатывается на стандартный путь по `passing_score` и пишет диагностику в
+  этот показатель в объединении не участвует. Если значения нет ни у одного показателя
+  статуса, Core откатывается на стандартный путь по `passing_score` и пишет диагностику в
   `suspend_data.custom.formulaErrors`.
+- Принудительное закрытие курса при исчерпанных попытках (пакет отправляет `passed` и пишет
+  `ATTEMPTS_EXHAUSTED: FAILED (forced close)` в `cmi.comments_from_learner`, иначе WebTutor
+  держит курс открытым под пересдачу) применяется ПОСЛЕ показателей: оно решает по итоговому
+  вердикту с учётом показателей и уже ничем не перезаписывается. До 2026-09-28 порядок был
+  обратным, и показатель возвращал `failed` поверх принудительного `passed` — курс с
+  израсходованными попытками оставался открытым.
 - Стандартный балл (`cmi.score.*`) этим механизмом не подменяется: показатель влияет
   только на статус прохождения, score остаётся реальным значением попытки.
 
@@ -419,13 +431,9 @@ CREATE TABLE result_variables (
   UNIQUE (test_id, name)
 );
 
--- Только один boolean-показатель может управлять success_status в тесте
-CREATE UNIQUE INDEX result_variables_one_success_per_test
-  ON result_variables(test_id) WHERE controls_status = 'success';
-
--- Только один boolean-показатель может управлять completion_status в тесте
-CREATE UNIQUE INDEX result_variables_one_completion_per_test
-  ON result_variables(test_id) WHERE controls_status = 'completion';
+-- Частичные уникальные индексы result_variables_one_success_per_test и
+-- result_variables_one_completion_per_test сняты миграцией 0044: одним статусом могут
+-- управлять несколько показателей (объединение через ИЛИ, §7.3).
 
 CREATE INDEX result_variables_test_id_idx ON result_variables(test_id);
 ```
@@ -524,8 +532,10 @@ POST /api/tests/:id/result-variables/validate-formula
 - [ ] `controls_status = "success"` для boolean-показателя записывает `cmi.success_status`
   на основании значения показателя, не на основании `passing_score`
 - [ ] Валидация блокирует `controls_status != "none"` для не-boolean показателей
-- [ ] Валидация блокирует две boolean-переменные с `controls_status = "success"`
-  в одном тесте
+- [x] Несколько boolean-показателей с одним `controls_status` сохраняются, их значения
+  объединяются через ИЛИ (заменило прежний пункт «валидация блокирует два показателя»)
+- [x] Принудительное закрытие при исчерпанных попытках применяется после показателей
+  (`tests/scorm-forced-close-order.test.ts`)
 
 ---
 

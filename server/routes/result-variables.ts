@@ -27,17 +27,6 @@ import type { ValueType } from "@shared/formula";
 const router = Router();
 const VALUE_TYPES: readonly string[] = ["boolean", "number", "string"];
 
-/** True when another result variable already drives the same success/completion status. */
-async function controlsStatusConflict(
-  testId: string,
-  controlsStatus: string | undefined,
-  excludeId?: string,
-): Promise<boolean> {
-  if (controlsStatus !== "success" && controlsStatus !== "completion") return false;
-  const existing = await storage.getResultVariables(testId);
-  return existing.some((rv) => rv.id !== excludeId && rv.controlsStatus === controlsStatus);
-}
-
 /**
  * Keep only the fields the client actually sent. `insertResultVariableSchema
  * .partial()` still APPLIES the schema defaults, so a PUT touching one field
@@ -84,10 +73,6 @@ router.post("/:id/result-variables", requirePermission("tests.edit"), requireTes
       return res.status(422).json({ error: first.message, field: first.path.join(".") });
     }
     const data = parsed.data;
-
-    if (await controlsStatusConflict(testId, data.controlsStatus)) {
-      return res.status(422).json({ error: `Другой показатель уже управляет статусом «${data.controlsStatus}»`, field: "controlsStatus" });
-    }
 
     const validation = await storage.validateResultVariableFormula(testId, data.formula, data.type as ValueType, { sortOrder: data.sortOrder });
     if (!validation.valid) {
@@ -166,10 +151,6 @@ router.put("/:id/result-variables/:varId", requirePermission("tests.edit"), requ
     }
     const updates = onlyProvided(parsed.data, req.body);
     const merged = { ...current, ...updates };
-
-    if (await controlsStatusConflict(testId, merged.controlsStatus, varId)) {
-      return res.status(422).json({ error: `Другой показатель уже управляет статусом «${merged.controlsStatus}»`, field: "controlsStatus" });
-    }
 
     const validation = await storage.validateResultVariableFormula(testId, merged.formula, merged.type as ValueType, {
       sortOrder: merged.sortOrder,

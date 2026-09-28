@@ -299,19 +299,19 @@ function finishAndClose() {
 
   // ===== LMS: отправляем лучшую попытку с хаком если нужно =====
   var attemptsExhausted = !!TEST_DATA.maxAttempts && !hasAttemptsLeft();
-  var realPassed = !!results.passed;
 
-  var passedForLms = realPassed;
-
-  if (state.timeExpired) {
-    passedForLms = false;
-  }
+  // PRD-2 (A7): a boolean controls_status="success" variable decides the verdict instead of
+  // the pass rule (several of them combine with OR, see FormulaDSL.computeResultVariables).
+  // It is resolved FIRST, so the forced close below sees the verdict that will actually be
+  // sent: applied after it, the variable used to overwrite the forced «passed» back to
+  // «failed», and a course whose attempts were spent stayed open in the LMS for good.
+  var rcStatus = (results.resultComputation && results.resultComputation.status) || {};
+  var realPassed = (typeof rcStatus.success === 'boolean') ? rcStatus.success : !!results.passed;
 
   var forcePassedHack = false;
   if (attemptsExhausted && !realPassed && !state.timeExpired) {
     console.log('🔴 Попытки кончились, принудительно закрываем с passed=true');
     forcePassedHack = true;
-    passedForLms = true;
     try {
       SCORM.setValue('cmi.comments_from_learner', 'ATTEMPTS_EXHAUSTED: FAILED (forced close)');
       SCORM.commit();
@@ -336,18 +336,17 @@ function finishAndClose() {
   var resultsForLms = bestAttempt || results;
   var bestPassed = !!resultsForLms.passed;
 
-  if (forcePassedHack) {
-    console.log('🔓 Хак активирован - переопределяем passed на true');
-    bestPassed = true;
-  }
-
-  // PRD-2 (A7): a boolean controls_status="success" variable overrides the LMS
-  // pass flag (cmi.success_status); completion is applied after SCORM.finish.
-  var rcStatus = (results.resultComputation && results.resultComputation.status) || {};
+  // PRD-2 (A7): the controls_status verdict overrides the LMS pass flag
+  // (cmi.success_status); completion is applied after SCORM.finish.
   if (typeof rcStatus.success === 'boolean') {
     console.log('🎚️ controls_status переопределяет passed:', rcStatus.success);
     bestPassed = rcStatus.success;
-    passedForLms = rcStatus.success;
+  }
+
+  // The forced close goes LAST: nothing after it may take the «passed» back.
+  if (forcePassedHack) {
+    console.log('🔓 Хак активирован - переопределяем passed на true');
+    bestPassed = true;
   }
 
   console.log('📤 Отправляем в LMS:', Math.round(resultsForLms.percent) + '%, passed:', bestPassed);

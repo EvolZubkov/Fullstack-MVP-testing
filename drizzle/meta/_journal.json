@@ -309,6 +309,13 @@
       "when": 1790317175777,
       "tag": "0043_user_lms_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1790612594998,
+      "tag": "0044_drop_single_status_controller",
+      "breakpoints": true
     }
   ]
 }

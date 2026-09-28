@@ -130,12 +130,14 @@ describe("validateTestEditor — result variables", () => {
     expect(errors).toEqual([]);
   });
 
-  it("rejects two variables controlling the same status", () => {
+  it("allows several variables controlling the same status (they combine with OR)", () => {
     const errors = rvErrors([
       rv({ name: "a", type: "boolean", formula: "percent >= 50", controlsStatus: "success" }),
       rv({ name: "b", type: "boolean", formula: "percent >= 90", controlsStatus: "success", sortOrder: 1 }),
+      rv({ name: "c", type: "boolean", formula: "percent >= 10", controlsStatus: "completion", sortOrder: 2 }),
+      rv({ name: "d", type: "boolean", formula: "percent >= 20", controlsStatus: "completion", sortOrder: 3 }),
     ]);
-    expect(errors.filter((e) => e.code === "duplicate_controller")).toHaveLength(2);
+    expect(errors).toEqual([]);
   });
 });
 

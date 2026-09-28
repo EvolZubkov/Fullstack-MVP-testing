@@ -646,8 +646,6 @@ function validateResultVariables(
 ): void {
   const vars = model.resultVariables ?? [];
   const seenNames = new Map<string, number>();
-  let successCount = 0;
-  let completionCount = 0;
 
   vars.forEach((v, i) => {
     if (!v.name.trim()) {
@@ -709,28 +707,8 @@ function validateResultVariables(
     if (v.type === "number") {
       validateInterpretationBands(v.bands, (j) => `resultVariables[${i}].bands[${j}]`, errors);
     }
-
-    if (v.controlsStatus === "success") successCount += 1;
-    if (v.controlsStatus === "completion") completionCount += 1;
-  });
-
-  vars.forEach((v, i) => {
-    if (v.controlsStatus === "success" && successCount > 1) {
-      errors.push({
-        field: `resultVariables[${i}].controlsStatus`,
-        code: "duplicate_controller",
-        message: "Только один показатель может управлять статусом «Успех».",
-        severity: "error",
-      });
-    }
-    if (v.controlsStatus === "completion" && completionCount > 1) {
-      errors.push({
-        field: `resultVariables[${i}].controlsStatus`,
-        code: "duplicate_controller",
-        message: "Только один показатель может управлять статусом «Завершение».",
-        severity: "error",
-      });
-    }
+    // Several indicators may control the same status: the runtime combines them with OR
+    // (shared/formula/result-variables), so there is no «only one» rule to enforce here.
   });
 }
 

@@ -422,6 +422,7 @@ var FormulaDSL = (function () {
   // Twin of shared/formula computeResultVariables. Evaluates variables in
   // sort_order so a later var("earlier") resolves; collects per-variable errors
   // without aborting; derives the controls_status override. Deterministic.
+  // Several controllers of one status combine with OR; a failed (null) one does not vote.
   function computeResultVariables(vars, base) {
     var ordered = vars.slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
     var computed = {}, values = {}, errors = [], status = {};
@@ -439,7 +440,7 @@ var FormulaDSL = (function () {
       values[v.name] = value;
       computed[v.name] = value;
       if ((v.controlsStatus === "success" || v.controlsStatus === "completion") && typeof value === "boolean") {
-        status[v.controlsStatus] = value;
+        status[v.controlsStatus] = status[v.controlsStatus] === true || value;
       }
     }
     return { values: values, errors: errors, status: status };

@@ -375,7 +375,7 @@ describe("POST /:id/workbook/import — ошибки и валидация", () 
     expect(storageMock.upsertQuestionMeasurements).not.toHaveBeenCalled();
   });
 
-  it("второй показатель с тем же controlsStatus → ошибка (гард ≤1)", async () => {
+  it("два показателя с одним controlsStatus импортируются оба (вердикты объединяются через ИЛИ)", async () => {
     const buf = await makeWorkbook({
       "Показатели": [
         { "Имя": "a", "Метка": "A", "Тип": "boolean", "Формула": "x", "Управляет статусом": "успех" },
@@ -384,8 +384,8 @@ describe("POST /:id/workbook/import — ошибки и валидация", () 
     });
     const res = await postWorkbook(buf);
 
-    expect(res.body.resultVariables.created).toBe(1);
-    expect(res.body.errors.some((e: string) => /success|управляет/i.test(e))).toBe(true);
+    expect(res.body.resultVariables.created).toBe(2);
+    expect(res.body.errors.some((e: string) => /управляет/i.test(e))).toBe(false);
   });
 
   it("невалидная формула → ошибка строки", async () => {

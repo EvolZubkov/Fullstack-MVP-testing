@@ -2920,13 +2920,8 @@ export const resultVariables = pgTable("result_variables", {
   // A variable name is addressed by var() in formulas — it must be unique within
   // a test, or the reference is ambiguous.
   testNameUq: uniqueIndex("result_variables_test_id_name_uq").on(table.testId, table.name),
-  // At most one variable may drive success_status / completion_status per test.
-  oneSuccessPerTest: uniqueIndex("result_variables_one_success_per_test")
-    .on(table.testId)
-    .where(sql`${table.controlsStatus} = 'success'`),
-  oneCompletionPerTest: uniqueIndex("result_variables_one_completion_per_test")
-    .on(table.testId)
-    .where(sql`${table.controlsStatus} = 'completion'`),
+  // No uniqueness on `controls_status`: several variables may drive the same status,
+  // and the runtime combines their verdicts with OR (migration 0044 dropped the limit).
   // The name is a DSL identifier (lowercase, starts with a letter, <=64 chars).
   nameFormat: check("result_variables_name_check", sql`${table.name} ~ '^[a-z][a-z0-9_]{0,63}$'`),
 }));

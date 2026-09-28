@@ -1534,16 +1534,10 @@ export async function importWorkbook(
     if (!dryRun) await syncScaleFeedbackUsages(testId);
   }
 
-  // ── Pass 3: «Показатели» (upsert by name; validate formula; controlsStatus guard). ──
+  // ── Pass 3: «Показатели» (upsert by name; validate formula). Several indicators may
+  // control the same status — the runtime combines them with OR. ──
   const existingVars = await storage.getResultVariables(testId);
   const varByName = new Map<string, ResultVariable>(existingVars.map((v) => [v.name, v]));
-  // Track which controller is taken (by another variable) to guard ≤1 each.
-  const controllerOwner = new Map<string, string>(); // status → name
-  for (const v of existingVars) {
-    if (v.controlsStatus === "success" || v.controlsStatus === "completion") {
-      controllerOwner.set(v.controlsStatus, v.name);
-    }
-  }
 
   const varsSheet = findSheet(workbook, "Показатели");
   if (varsSheet) {
@@ -1564,15 +1558,6 @@ export async function importWorkbook(
         continue;
       }
       const data = check.data;
-
-      // controlsStatus guard (≤1 success, ≤1 completion per test).
-      if (data.controlsStatus === "success" || data.controlsStatus === "completion") {
-        const owner = controllerOwner.get(data.controlsStatus);
-        if (owner && owner !== data.name) {
-          result.errors.push(`${where}: статусом «${data.controlsStatus}» уже управляет «${owner}»`);
-          continue;
-        }
-      }
 
       const validation = await storage.validateResultVariableFormula(testId, data.formula, data.type as ValueType, {
         sortOrder: data.sortOrder,
@@ -1595,9 +1580,6 @@ export async function importWorkbook(
         if (!dryRun) await storage.createResultVariable(data);
         varByName.set(data.name, { ...(data as any) } as ResultVariable);
         result.resultVariables.created++;
-      }
-      if (data.controlsStatus === "success" || data.controlsStatus === "completion") {
-        controllerOwner.set(data.controlsStatus, data.name);
       }
     }
     // Same rule as the scales pass: whoever writes the entity re-indexes it. The book
