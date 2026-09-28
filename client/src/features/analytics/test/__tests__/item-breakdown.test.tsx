@@ -6,6 +6,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ItemBreakdownPanel, type ItemBreakdownView, type OptionRow } from "../item-breakdown";
+import { termOrText } from "./term-text";
 
 function option(over: Partial<OptionRow> & Pick<OptionRow, "index" | "label">): OptionRow {
   return {
@@ -48,11 +49,11 @@ describe("ItemBreakdownPanel", () => {
   it("показывает величины задания плитками в одном ряду", () => {
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
 
-    expect(screen.getByText("Трудность")).toBeTruthy();
-    expect(screen.getByText("С поправкой на угадывание")).toBeTruthy();
-    expect(screen.getByText("Дискриминативность (r)")).toBeTruthy();
-    expect(screen.getByText("Индекс дискриминации (D)")).toBeTruthy();
-    expect(screen.getByText("Время, медиана")).toBeTruthy();
+    expect(screen.getByText(termOrText("Трудность"))).toBeTruthy();
+    expect(screen.getByText(termOrText("С поправкой на угадывание"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Дискриминативность (r)"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Индекс дискриминации (D)"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Время, медиана"))).toBeTruthy();
   });
 
   it("подписи плиток и заголовки вариантов несут подсказки; «Признак» стал «Качеством варианта» (FR-14b)", () => {
@@ -63,14 +64,14 @@ describe("ItemBreakdownPanel", () => {
       "Замысел и наблюдение", "Время, медиана",
       "Выбрали", "Слабые 27 %", "Сильные 27 %", "Корреляция с остатком", "Качество варианта",
     ]) {
-      const label = screen.getByText(term);
+      const label = screen.getByText(termOrText(term));
       const tip = label.closest("[aria-describedby]");
       expect(tip, term).not.toBeNull();
       expect(tip!.querySelector(".ou-sr-only")?.textContent, term).toBeTruthy();
-      // Значок — псевдоэлемент термина и держится при последнем слове (см. term-hint.tsx).
+      // Значок — lucide `Info` в одном неразрывном блоке с последним словом (см. term-hint.tsx).
       expect(label.classList.contains("tb-term-hint__term"), term).toBe(true);
     }
-    expect(screen.queryByText("Признак")).toBeNull();
+    expect(screen.queryByText(termOrText("Признак"))).toBeNull();
   });
 
   it("плитка поправки не рисуется там, где поправка неприменима", () => {
@@ -80,7 +81,7 @@ describe("ItemBreakdownPanel", () => {
       item: { ...view().item, correctedDifficulty: null },
     })} onBack={() => {}} />);
 
-    expect(screen.queryByText("С поправкой на угадывание")).toBeNull();
+    expect(screen.queryByText(termOrText("С поправкой на угадывание"))).toBeNull();
   });
 
   it("отрицательную поправку печатает типографским минусом, а не дефисом", () => {
@@ -89,16 +90,16 @@ describe("ItemBreakdownPanel", () => {
       item: { ...view().item, correctedDifficulty: -0.333 },
     })} onBack={() => {}} />);
 
-    expect(screen.getByText("−0,33")).toBeTruthy();
-    expect(screen.queryByText("-0,33")).toBeNull();
+    expect(screen.getByText(termOrText("−0,33"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("-0,33"))).toBeNull();
   });
 
   it("называет крайние группы их размером, а не «четвертями»", () => {
     // 27 % — не четверть, и подменять число словом нельзя (FR-26).
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
 
-    expect(screen.getByText(/Слабые 27 %/)).toBeTruthy();
-    expect(screen.getByText(/Сильные 27 %/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/Слабые 27 %/))).toBeTruthy();
+    expect(screen.getByText(termOrText(/Сильные 27 %/))).toBeTruthy();
   });
 
   it("сравнивает замысел автора с наблюдением в ОДНОЙ шкале и делает вывод (FR-18a)", () => {
@@ -106,40 +107,40 @@ describe("ItemBreakdownPanel", () => {
     // легко. Раньше рядом стояли «60 → 41», будто сравнимые числа; наблюдение переводится в шкалу
     // автора: 100 × (1 − 0,41) = 59.
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
-    expect(screen.getByText("60 → 59")).toBeTruthy();
-    expect(screen.getByText("расхождения нет")).toBeTruthy();
+    expect(screen.getByText(termOrText("60 → 59"))).toBeTruthy();
+    expect(screen.getByText(termOrText("расхождения нет"))).toBeTruthy();
   });
 
   it("задание оказалось легче задуманного — так и сказано", () => {
     // «Как расшифровывается ЭДО?»: задумано лёгким (20), решают 97 %.
     render(<ItemBreakdownPanel view={view({ item: { ...view().item, declaredDifficulty: 60, difficulty: 0.9 } })} onBack={() => {}} />);
-    expect(screen.getByText("60 → 10")).toBeTruthy();
-    expect(screen.getByText("легче задуманного на 50")).toBeTruthy();
+    expect(screen.getByText(termOrText("60 → 10"))).toBeTruthy();
+    expect(screen.getByText(termOrText("легче задуманного на 50"))).toBeTruthy();
   });
 
   it("задание оказалось труднее задуманного — так и сказано", () => {
     render(<ItemBreakdownPanel view={view({ item: { ...view().item, declaredDifficulty: 20, difficulty: 0.4 } })} onBack={() => {}} />);
-    expect(screen.getByText("20 → 60")).toBeTruthy();
-    expect(screen.getByText("труднее задуманного на 40")).toBeTruthy();
+    expect(screen.getByText(termOrText("20 → 60"))).toBeTruthy();
+    expect(screen.getByText(termOrText("труднее задуманного на 40"))).toBeTruthy();
   });
 
   it("поправка на угадывание называет число вариантов словом и ожидание (эскиз)", () => {
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
-    expect(screen.getByText("три варианта, ожидание 0,33")).toBeTruthy();
+    expect(screen.getByText(termOrText("три варианта, ожидание 0,33"))).toBeTruthy();
     // FR-17b эскиз перенёс в подсказку термина: под числом одна строка.
-    expect(screen.getByText("С поправкой на угадывание").closest("[aria-describedby]")!.textContent)
+    expect(screen.getByText(termOrText("С поправкой на угадывание")).closest("[aria-describedby]")!.textContent)
       .toMatch(/Частичное знание модель не учитывает/);
   });
 
   it("четыре варианта — «четыре варианта, ожидание 0,25»; больше десяти — цифрами", () => {
     const four = [0, 1, 2, 3].map(index => option({ index, label: `В${index}` }));
     const { unmount } = render(<ItemBreakdownPanel view={view({ options: four })} onBack={() => {}} />);
-    expect(screen.getByText("четыре варианта, ожидание 0,25")).toBeTruthy();
+    expect(screen.getByText(termOrText("четыре варианта, ожидание 0,25"))).toBeTruthy();
     unmount();
 
     const twelve = Array.from({ length: 12 }, (_, index) => option({ index, label: `В${index}` }));
     render(<ItemBreakdownPanel view={view({ options: twelve })} onBack={() => {}} />);
-    expect(screen.getByText("12 вариантов, ожидание 0,08")).toBeTruthy();
+    expect(screen.getByText(termOrText("12 вариантов, ожидание 0,08"))).toBeTruthy();
   });
 
   it("подзаголовок — «Тема · подтема · N наблюдений» (эскиз)", () => {
@@ -147,13 +148,13 @@ describe("ItemBreakdownPanel", () => {
       view={view({ topicName: "Право и комплаенс", tags: ["Антикоррупция"] })}
       onBack={() => {}}
     />);
-    expect(screen.getByText("Право и комплаенс · Антикоррупция · 268 наблюдений")).toBeTruthy();
-    expect(screen.getByText("Ко всем вопросам")).toBeTruthy();
+    expect(screen.getByText(termOrText("Право и комплаенс · Антикоррупция · 268 наблюдений"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Ко всем вопросам"))).toBeTruthy();
   });
 
   it("без подтем в подзаголовке только тема и число наблюдений", () => {
     render(<ItemBreakdownPanel view={view({ topicName: "Право и комплаенс", tags: [] })} onBack={() => {}} />);
-    expect(screen.getByText("Право и комплаенс · 268 наблюдений")).toBeTruthy();
+    expect(screen.getByText(termOrText("Право и комплаенс · 268 наблюдений"))).toBeTruthy();
   });
 
   it.each([
@@ -163,12 +164,12 @@ describe("ItemBreakdownPanel", () => {
     [0.95, "слишком лёгкий · приемлемо: 0,20 — 0,80"],
   ])("подпись трудности %s — «%s» (FR-13)", (p, caption) => {
     render(<ItemBreakdownPanel view={view({ item: { ...view().item, difficulty: p } })} onBack={() => {}} />);
-    expect(screen.getByText(caption)).toBeTruthy();
+    expect(screen.getByText(termOrText(caption))).toBeTruthy();
   });
 
   it("подпись дискриминативности (r) — как в эскизе", () => {
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
-    expect(screen.getByText("корреляция вопрос-остаток · хорошо от 0,30")).toBeTruthy();
+    expect(screen.getByText(termOrText("корреляция вопрос-остаток · хорошо от 0,30"))).toBeTruthy();
   });
 
   it.each([
@@ -185,12 +186,12 @@ describe("ItemBreakdownPanel", () => {
 
   it("время — медиана, размах и число наблюдений с временем (FR-34)", () => {
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
-    expect(screen.getByText("половина ответов 0:31 — 1:22 · 244 наблюдения")).toBeTruthy();
+    expect(screen.getByText(termOrText("половина ответов 0:31 — 1:22 · 244 наблюдения"))).toBeTruthy();
   });
 
   it("заголовок «Корреляция с остатком» держит предлог при слове", () => {
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
-    expect(screen.getByText("Корреляция с остатком").textContent).toBe("Корреляция с остатком");
+    expect(screen.getByText(termOrText("Корреляция с остатком")).textContent).toBe("Корреляция с остатком");
   });
 
   it("у задания без заявленной трудности сравнивать не с чем — плитки нет", () => {
@@ -199,18 +200,18 @@ describe("ItemBreakdownPanel", () => {
       item: { ...view().item, declaredDifficulty: null },
     })} onBack={() => {}} />);
 
-    expect(screen.queryByText("Замысел и наблюдение")).toBeNull();
+    expect(screen.queryByText(termOrText("Замысел и наблюдение"))).toBeNull();
   });
 
   it("работающие верный ответ и дистрактор — «Работает», мёртвый — «Мёртвый вариант» (эскиз)", () => {
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
 
-    const working = screen.getAllByText("Работает");
+    const working = screen.getAllByText(termOrText("Работает"));
     expect(working).toHaveLength(2);
     for (const tag of working) expect(tag.closest(".ou-tag--success")).not.toBeNull();
-    expect(screen.getByText("Мёртвый вариант").closest(".ou-tag--warning")).not.toBeNull();
+    expect(screen.getByText(termOrText("Мёртвый вариант")).closest(".ou-tag--warning")).not.toBeNull();
     // Что вариант верный, говорит подпись под ним, а не ярлык качества.
-    expect(screen.getByText("верный ответ")).toBeTruthy();
+    expect(screen.getByText(termOrText("верный ответ"))).toBeTruthy();
   });
 
   it("верный ответ, который выбирают слабые, «Работает» не называется", () => {
@@ -221,23 +222,23 @@ describe("ItemBreakdownPanel", () => {
       ],
     })} onBack={() => {}} />);
 
-    expect(screen.getByText("Верный ответ выбирают слабые")).toBeTruthy();
-    expect(screen.getByText("Выбирают сильные")).toBeTruthy();
-    expect(screen.queryByText("Работает")).toBeNull();
+    expect(screen.getByText(termOrText("Верный ответ выбирают слабые"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Выбирают сильные"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Работает"))).toBeNull();
   });
 
   it("для типа без вариантов разбор не выдумывается (FR-27)", () => {
     render(<ItemBreakdownPanel view={view({ options: null })} onBack={() => {}} />);
 
-    expect(screen.getByText(/разбор вариантов не применяется/)).toBeTruthy();
-    expect(screen.queryByText("Работает")).toBeNull();
+    expect(screen.getByText(termOrText(/разбор вариантов не применяется/))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Работает"))).toBeNull();
   });
 
   it("время печатается медианой и размахом, а не средним", () => {
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
 
-    expect(screen.getByText("0:48")).toBeTruthy();
-    expect(screen.getByText(/половина ответов 0:31 — 1:22/)).toBeTruthy();
+    expect(screen.getByText(termOrText("0:48"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/половина ответов 0:31 — 1:22/))).toBeTruthy();
   });
 });
 
@@ -258,8 +259,8 @@ describe("ItemBreakdownPanel — порядок блоков (FR-49)", () => {
       onSelectVersion={() => {}}
     />);
 
-    const options = screen.getByText("Варианты ответа");
-    const versionsTitle = screen.getByText(/Редакции содержания|Версии содержания/);
+    const options = screen.getByText(termOrText("Варианты ответа"));
+    const versionsTitle = screen.getByText(termOrText(/Редакции содержания|Версии содержания/));
     expect(options.compareDocumentPosition(versionsTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -270,16 +271,16 @@ describe("ItemBreakdownPanel — порядок блоков (FR-49)", () => {
       onSelectVersion={() => {}}
     />);
 
-    expect(screen.getByText("Версии содержания")).toBeTruthy();
+    expect(screen.getByText(termOrText("Версии содержания"))).toBeTruthy();
     for (const term of ["Редакция", "n", "Статистика карточки"]) {
-      expect(screen.getByText(term).closest("[aria-describedby]"), term).not.toBeNull();
+      expect(screen.getByText(termOrText(term)).closest("[aria-describedby]"), term).not.toBeNull();
     }
     // «Трудность» есть и в плитке, и в заголовке версий — подсказка у обеих.
-    for (const label of screen.getAllByText("Трудность")) {
+    for (const label of screen.getAllByText(termOrText("Трудность"))) {
       expect(label.closest("[aria-describedby]")).not.toBeNull();
     }
-    expect(screen.queryByText("Наблюдений")).toBeNull();
-    expect(screen.getByText("Дискриминативность").closest("[aria-describedby]")).not.toBeNull();
+    expect(screen.queryByText(termOrText("Наблюдений"))).toBeNull();
+    expect(screen.getByText(termOrText("Дискриминативность")).closest("[aria-describedby]")).not.toBeNull();
   });
 });
 
@@ -293,7 +294,7 @@ describe("ItemBreakdownPanel — таблица версий (FR-49a, FR-49b)", 
 
   /** Ячейки строки таблицы версий по подписи первой колонки. */
   function rowOf(title: string): HTMLElement {
-    return screen.getByText(title).closest("tr") as HTMLElement;
+    return screen.getByText(termOrText(title)).closest("tr") as HTMLElement;
   }
 
   it("подписи строк: текущая, прежняя с диапазоном дат и «Версия неизвестна»", () => {
@@ -303,12 +304,12 @@ describe("ItemBreakdownPanel — таблица версий (FR-49a, FR-49b)", 
       onSelectVersion={() => {}}
     />);
 
-    expect(screen.getByText("С 04.09.2026 — текущая")).toBeTruthy();
-    expect(screen.getByText("12.03.2026 — 03.09.2026")).toBeTruthy();
-    expect(screen.getByText("предыдущая редакция")).toBeTruthy();
-    expect(screen.getByText("Версия неизвестна")).toBeTruthy();
+    expect(screen.getByText(termOrText("С 04.09.2026 — текущая"))).toBeTruthy();
+    expect(screen.getByText(termOrText("12.03.2026 — 03.09.2026"))).toBeTruthy();
+    expect(screen.getByText(termOrText("предыдущая редакция"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Версия неизвестна"))).toBeTruthy();
     // Граница серии без отпечатка — день, с которого в выборке есть редакции с ним.
-    expect(screen.getByText("импорт выгрузок и прохождения до 12.03.2026")).toBeTruthy();
+    expect(screen.getByText(termOrText("импорт выгрузок и прохождения до 12.03.2026"))).toBeTruthy();
   });
 
   it("текущая редакция — первой, прежние от новых к старым, «Версия неизвестна» — последней", () => {
@@ -321,9 +322,9 @@ describe("ItemBreakdownPanel — таблица версий (FR-49a, FR-49b)", 
     />);
 
     const labels = [
-      screen.getByText("С 04.09.2026 — текущая"),
-      screen.getByText("12.03.2026 — 03.09.2026"),
-      screen.getByText("Версия неизвестна"),
+      screen.getByText(termOrText("С 04.09.2026 — текущая")),
+      screen.getByText(termOrText("12.03.2026 — 03.09.2026")),
+      screen.getByText(termOrText("Версия неизвестна")),
     ];
     expect(labels[0].compareDocumentPosition(labels[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(labels[1].compareDocumentPosition(labels[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -353,9 +354,9 @@ describe("ItemBreakdownPanel — таблица версий (FR-49a, FR-49b)", 
     />);
 
     expect(rowOf("С 04.09.2026 — текущая").querySelector(".ou-tag--info")?.textContent).toBe("Выбрана");
-    expect(screen.getAllByText("Выбрана")).toHaveLength(1);
+    expect(screen.getAllByText(termOrText("Выбрана"))).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Показать" })).toHaveLength(2);
-    expect(screen.queryByText(/все редакции вместе/)).toBeNull();
+    expect(screen.queryByText(termOrText(/все редакции вместе/))).toBeNull();
   });
 
   it("«Показать» переносит выбор в нажатую строку", () => {

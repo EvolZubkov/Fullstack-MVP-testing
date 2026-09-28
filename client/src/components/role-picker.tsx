@@ -3,11 +3,13 @@
  *
  * Multi-role selector for the user editor (PRD-13, WF-1). Renders the stored
  * roles as a checkbox list with descriptions; roles above the actor's ceiling
- * are disabled. Uses the design-system `ou-check` markup (styled by the ui-kit
- * CSS bundle), matching the approved wireframe.
+ * are disabled. Each role is the ui-kit `Checkbox` with label and description —
+ * the same `ou-check` markup the approved wireframe shows. The list used to
+ * hand-write that markup, check mark included, and so drew an icon of its own;
+ * the component brings the design system's own glyph instead.
  */
 
-import { Stack } from "@skillum/ui-kit";
+import { Checkbox, Stack } from "@skillum/ui-kit";
 
 import { ROLE_PRIORITY, STORED_ROLES, assignableRoles, type Role, type StoredRole } from "@shared/access";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS } from "@/lib/roles";
@@ -44,24 +46,14 @@ export function RolePicker({ value, onChange, actorRoles, atCreation, disabled }
         const checked = value.includes(role);
         const isDisabled = disabled || !allowed.has(role);
         return (
-          <label key={role} className={`ou-check${isDisabled ? " is-disabled" : ""}`}>
-            <input
-              className="ou-check__input"
-              type="checkbox"
-              checked={checked}
-              disabled={isDisabled}
-              onChange={(e) => toggle(role, e.target.checked)}
-            />
-            <span className="ou-check__box">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </span>
-            <span className="ou-check__text">
-              <span className="ou-check__lbl">{ROLE_LABELS[role]}</span>
-              <span className="ou-check__desc">{ROLE_DESCRIPTIONS[role]}</span>
-            </span>
-          </label>
+          <Checkbox
+            key={role}
+            label={ROLE_LABELS[role]}
+            description={ROLE_DESCRIPTIONS[role]}
+            checked={checked}
+            disabled={isDisabled}
+            onChange={(e) => toggle(role, e.target.checked)}
+          />
         );
       })}
     </Stack>

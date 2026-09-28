@@ -6,6 +6,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ScaleQualityPanel, type ScaleItemRow, type ScaleQualityRow } from "../scale-quality";
+import { termOrText } from "./term-text";
 
 function item(over: Partial<ScaleItemRow> & Pick<ScaleItemRow, "questionId" | "prompt">): ScaleItemRow {
   return {
@@ -37,12 +38,12 @@ describe("ScaleQualityPanel", () => {
   it("сводка «Шкалы методики» печатает согласованность шкалы с составом расчёта", () => {
     render(<ScaleQualityPanel scales={[scale()]} />);
 
-    expect(screen.getByText("Шкалы методики")).toBeTruthy();
-    expect(screen.getByText("Эмоциональное истощение")).toBeTruthy();
-    expect(screen.getByText("0,81")).toBeTruthy();
-    expect(screen.getByText("9")).toBeTruthy();
-    expect(screen.getByText("Хорошо")).toBeTruthy();
-    expect(screen.getByText("Пункты шкалы «Эмоциональное истощение»")).toBeTruthy();
+    expect(screen.getByText(termOrText("Шкалы методики"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Эмоциональное истощение"))).toBeTruthy();
+    expect(screen.getByText(termOrText("0,81"))).toBeTruthy();
+    expect(screen.getByText(termOrText("9"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Хорошо"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Пункты шкалы «Эмоциональное истощение»"))).toBeTruthy();
   });
 
   it("альфа ниже порога — вывод называет порог и пункты против шкалы", () => {
@@ -51,8 +52,8 @@ describe("ScaleQualityPanel", () => {
       items: [item({ questionId: "s3", prompt: "Обратный пункт", itemRest: -0.44, againstScale: true })],
     })]} />);
 
-    expect(screen.getByText("Ниже приемлемого")).toBeTruthy();
-    expect(screen.getByText("порог 0,70; 1 пункт против шкалы")).toBeTruthy();
+    expect(screen.getByText(termOrText("Ниже приемлемого"))).toBeTruthy();
+    expect(screen.getByText(termOrText("порог 0,70; 1 пункт против шкалы"))).toBeTruthy();
   });
 
   it("заголовки называют термины по эскизу и несут подсказки (FR-14b)", () => {
@@ -62,18 +63,18 @@ describe("ScaleQualityPanel", () => {
       "Пунктов", "Альфа Кронбаха", "n", "Вывод по шкале",
       "Вклад", "Корреляция с остатком шкалы", "Распределение ответов", "Качество пункта",
     ]) {
-      const label = screen.getByText(term);
+      const label = screen.getByText(termOrText(term));
       const tip = label.closest("[aria-describedby]");
       expect(tip, term).not.toBeNull();
       expect(tip!.querySelector(".ou-sr-only")?.textContent, term).toBeTruthy();
-      // Значок — псевдоэлемент термина и держится при последнем слове (см. term-hint.tsx).
+      // Значок — lucide `Info` в одном неразрывном блоке с последним словом (см. term-hint.tsx).
       expect(label.classList.contains("tb-term-hint__term"), term).toBe(true);
     }
-    expect(screen.queryByText("Признак")).toBeNull();
-    expect(screen.queryByText("Связь с остатком шкалы")).toBeNull();
+    expect(screen.queryByText(termOrText("Признак"))).toBeNull();
+    expect(screen.queryByText(termOrText("Связь с остатком шкалы"))).toBeNull();
     // Подсказка распределения — один текст на все случаи: он описывает единственную форму
     // гистограммы (FR-30), а не градации конкретного вопроса.
-    const hint = screen.getByText("Распределение ответов").closest("[aria-describedby]")!.querySelector(".ou-sr-only");
+    const hint = screen.getByText(termOrText("Распределение ответов")).closest("[aria-describedby]")!.querySelector(".ou-sr-only");
     expect(hint?.textContent).toBe(
       "Доли участников по градациям ответа. Под столбиками — номера градаций, словами подписаны крайние; расшифровка номеров — в подсказке ячейки.",
     );
@@ -82,7 +83,7 @@ describe("ScaleQualityPanel", () => {
 
   it("причину отсутствия согласованности называет словами", () => {
     render(<ScaleQualityPanel scales={[scale({ reliability: "no-variance" })]} />);
-    expect(screen.getByText(/все ответили одинаково/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/все ответили одинаково/))).toBeTruthy();
   });
 
   it("признак пункта называет ПОВЕДЕНИЕ, а следствие даёт числом (FR-31a, FR-31b)", () => {
@@ -98,8 +99,8 @@ describe("ScaleQualityPanel", () => {
       })],
     })]} />);
 
-    expect(screen.getByText("Работает против шкалы")).toBeTruthy();
-    expect(screen.getByText(/с вкладом −1 альфа 0,81 → 0,90/)).toBeTruthy();
+    expect(screen.getByText(termOrText("Работает против шкалы"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/с вкладом −1 альфа 0,81 → 0,90/))).toBeTruthy();
   });
 
   it("мёртвый пункт назван и несёт число, которое его вызвало (FR-50)", () => {
@@ -107,20 +108,20 @@ describe("ScaleQualityPanel", () => {
       items: [item({ questionId: "s2", prompt: "Все отвечают одинаково", dead: true, distribution: [0.01, 0.02, 0.94, 0.02, 0.01] })],
     })]} />);
 
-    expect(screen.getByText("Мёртвый пункт")).toBeTruthy();
+    expect(screen.getByText(termOrText("Мёртвый пункт"))).toBeTruthy();
     // Подпись — дословно из эскиза wf-scales: «94 % в одной градации».
-    expect(screen.getByText("94 % в одной градации")).toBeTruthy();
-    expect(screen.queryByText("Работает")).toBeNull();
+    expect(screen.getByText(termOrText("94 % в одной градации"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Работает"))).toBeNull();
   });
 
   it("здоровый пункт помечен «Работает», как в эскизе, а не прочерком", () => {
     render(<ScaleQualityPanel scales={[scale()]} />);
-    expect(screen.getByText("Работает")).toBeTruthy();
+    expect(screen.getByText(termOrText("Работает"))).toBeTruthy();
   });
 
   it("без связи с остатком шкалы «Работает» не утверждается", () => {
     render(<ScaleQualityPanel scales={[scale({ items: [item({ questionId: "s1", prompt: "Пункт", itemRest: null })] })]} />);
-    expect(screen.queryByText("Работает")).toBeNull();
+    expect(screen.queryByText(termOrText("Работает"))).toBeNull();
   });
 
   describe("колонка «Вклад»", () => {
@@ -132,10 +133,10 @@ describe("ScaleQualityPanel", () => {
         ],
       })]} />);
 
-      expect(screen.getByText("+1")).toBeTruthy();
+      expect(screen.getByText(termOrText("+1"))).toBeTruthy();
       // U+2212, а не дефис: в колонке чисел дефис читается как прочерк.
-      expect(screen.getByText("−1")).toBeTruthy();
-      expect(screen.queryByText("-1")).toBeNull();
+      expect(screen.getByText(termOrText("−1"))).toBeTruthy();
+      expect(screen.queryByText(termOrText("-1"))).toBeNull();
     });
 
     it("дробный и неравномерный вклад — с запятой и знаком приближения", () => {
@@ -146,8 +147,8 @@ describe("ScaleQualityPanel", () => {
         ],
       })]} />);
 
-      expect(screen.getByText("+0,5")).toBeTruthy();
-      expect(screen.getByText("≈−0,8")).toBeTruthy();
+      expect(screen.getByText(termOrText("+0,5"))).toBeTruthy();
+      expect(screen.getByText(termOrText("≈−0,8"))).toBeTruthy();
     });
 
     it("вклад, не выражаемый одним числом, — прочерк, а не выдуманное число", () => {
@@ -155,7 +156,7 @@ describe("ScaleQualityPanel", () => {
         items: [item({ questionId: "s1", prompt: "Выбор без порядка", contribution: null })],
       })]} />);
 
-      const cells = screen.getByText("Выбор без порядка").closest("tr")!.querySelectorAll("td");
+      const cells = screen.getByText(termOrText("Выбор без порядка")).closest("tr")!.querySelectorAll("td");
       // Прочерк, а причина — в подсказке ячейки.
       expect(cells[1].textContent?.startsWith("—")).toBe(true);
       expect(cells[1].textContent).toContain("одним числом не выражается");
@@ -178,7 +179,7 @@ describe("ScaleQualityPanel", () => {
 
   it("ипсативная методика помечается — альфа там занижена по построению", () => {
     render(<ScaleQualityPanel scales={[scale({ ipsative: true })]} />);
-    expect(screen.getByText("Ипсативная методика")).toBeTruthy();
+    expect(screen.getByText(termOrText("Ипсативная методика"))).toBeTruthy();
   });
 
   describe("подзаголовок карточки пунктов: градации и прохождения", () => {
@@ -197,7 +198,7 @@ describe("ScaleQualityPanel", () => {
         respondents: 312,
         items: [item({ questionId: "s1", prompt: "Пункт", ...grades(count) })],
       })]} />);
-      expect(screen.getByText(expected)).toBeTruthy();
+      expect(screen.getByText(termOrText(expected))).toBeTruthy();
     });
 
     it("пункты с разным числом градаций — диапазон", () => {
@@ -208,7 +209,7 @@ describe("ScaleQualityPanel", () => {
           item({ questionId: "s2", prompt: "Семибалльный", ...grades(7) }),
         ],
       })]} />);
-      expect(screen.getByText("от 5 до 7 градаций ответа · 312 прохождений")).toBeTruthy();
+      expect(screen.getByText(termOrText("от 5 до 7 градаций ответа · 312 прохождений"))).toBeTruthy();
     });
 
     it("без пунктов Ликерта — только число прохождений", () => {
@@ -221,14 +222,14 @@ describe("ScaleQualityPanel", () => {
           item({ questionId: "s2", prompt: "Выбор", questionType: "single", ...grades(4) }),
         ],
       })]} />);
-      expect(screen.getByText("312 прохождений")).toBeTruthy();
-      expect(screen.queryByText(/градаци\S* ответа ·/)).toBeNull();
+      expect(screen.getByText(termOrText("312 прохождений"))).toBeTruthy();
+      expect(screen.queryByText(termOrText(/градаци\S* ответа ·/))).toBeNull();
     });
   });
 
   describe("распределение ответов — одна форма (FR-30)", () => {
     function histogramOf(prompt: string): HTMLElement {
-      return screen.getByText(prompt).closest("tr")!.querySelector(".tb-psy-hist") as HTMLElement;
+      return screen.getByText(termOrText(prompt)).closest("tr")!.querySelector(".tb-psy-hist") as HTMLElement;
     }
 
     it("под столбиками номера, словами — только два края", () => {
@@ -286,6 +287,6 @@ describe("ScaleQualityPanel", () => {
 
   it("без шкал ничего не выдумывает", () => {
     render(<ScaleQualityPanel scales={[]} />);
-    expect(screen.getByText(/Шкал, по которым набраны наблюдения, в этом тесте нет/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/Шкал, по которым набраны наблюдения, в этом тесте нет/))).toBeTruthy();
   });
 });

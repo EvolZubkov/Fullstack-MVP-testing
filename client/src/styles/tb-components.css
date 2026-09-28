@@ -3255,11 +3255,11 @@
    оторванным от своей колонки. Правила — как в эскизе prd66-item-quality
    (`.ou-grid__th .ou-tip`, `.wf-tip-end`, `.wf-tip-wide`), но на метке
    `tb-term-hint`, а не на всех подсказках продукта.
-   - Значок — псевдоэлемент самого термина: неразрывный пробел (ТЕКСТ) и иконка
-     маской. Перенос не отрывает текстовый символ от слова, поэтому значок всегда
-     при последнем слове. Отдельный элемент `svg` так не работал: сброс стилей
-     делает его блочным, а соединитель U+2060 перед блоком браузер не соблюдает
-     (вскрыто приёмкой 5.2 — значок стоял под заголовком, отдельно от термина).
+   - Значок — компонент lucide `Info` (значки только из lucide-react, решение
+     владельца 2026-09-28; прежняя маска с переписанным путём в 12 px не читалась).
+     Он стоит в одном неразрывном блоке с последним словом (`__tail`), поэтому перенос
+     не отрывает его от термина. Сброс стилей делает `svg` блочным — значку возвращена
+     строчность (`__icon`), иначе он встал бы под заголовком, как при приёмке 5.2.
    - Шапка таблицы дизайн-системы не переносится (`nowrap`): длинный термин
      распирал колонку и включал горизонтальную прокрутку. Заголовку с термином
      перенос по словам разрешён.
@@ -3267,15 +3267,18 @@
      пропадает стрелка.
    - Пузырёк выводится поверх страницы (`FloatingHint`, ниже): внутри таблицы его
      обрезала рамка, а скрытый он раздувал прокрутку. */
-.tb-term-hint__term::after {
-  content: "\00a0";
-  padding-right: 12px;
-  background-color: var(--ou-fg-muted);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4M12 8h.01'/%3E%3C/svg%3E") no-repeat right center / 12px 12px;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4M12 8h.01'/%3E%3C/svg%3E") no-repeat right center / 12px 12px;
+.tb-term-hint__tail { white-space: nowrap; }
+.tb-term-hint__icon {
+  display: inline-block;
+  vertical-align: -0.15em;
+  margin-left: var(--ou-space-1);
+  color: var(--ou-fg-muted);
 }
 .ou-grid__th:has(.tb-term-hint) { white-space: normal; }
 .ou-grid__th .tb-term-hint { display: inline; }
+/* The grid's `.ou-grid__th svg` rule sizes and dims the SORT glyph; the hint icon
+   keeps the size given to the lucide component, in the header as on a tile. */
+.ou-grid__th .tb-term-hint__icon { width: 14px; height: 14px; opacity: 1; }
 .ou-grid__th > svg { flex-shrink: 0; }
 
 /* ─── PRD-66: подсказка поверх страницы (`FloatingHint`) ─────────────────────

@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ItemQualityPanel, type ItemQualityRow, type ItemQualityView } from "../item-quality";
+import { termOrText } from "./term-text";
 
 function row(over: Partial<ItemQualityRow> & Pick<ItemQualityRow, "questionId">): ItemQualityRow {
   return {
@@ -57,7 +58,7 @@ describe("ItemQualityPanel — прогноз длины (FR-22)", () => {
       lengthForecast: { target: 0.8, factor: 2.25, itemsDelta: 25 },
     })} />);
 
-    expect(screen.getByText(/до 0,80 — ещё 25 вопросов/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/до 0,80 — ещё 25 вопросов/))).toBeTruthy();
   });
 
   it("у теста надёжнее целевого говорит, сколько заданий МОЖНО СНЯТЬ", () => {
@@ -67,14 +68,14 @@ describe("ItemQualityPanel — прогноз длины (FR-22)", () => {
       lengthForecast: { target: 0.8, factor: 0.44, itemsDelta: -22 },
     })} />);
 
-    expect(screen.getByText(/22 вопроса можно снять/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/22 вопроса можно снять/))).toBeTruthy();
   });
 
   it("без прогноза строки нет вовсе", () => {
     render(<ItemQualityPanel view={view({ lengthForecast: null })} />);
 
-    expect(screen.queryByText(/можно снять/)).toBeNull();
-    expect(screen.queryByText(/до 0,80/)).toBeNull();
+    expect(screen.queryByText(termOrText(/можно снять/))).toBeNull();
+    expect(screen.queryByText(termOrText(/до 0,80/))).toBeNull();
   });
 
   it("оговорка о качестве добавляемых заданий названа в «Терминах»", async () => {
@@ -83,7 +84,7 @@ describe("ItemQualityPanel — прогноз длины (FR-22)", () => {
     render(<ItemQualityPanel view={view()} />);
     await userEvent.click(screen.getByRole("button", { name: "Термины" }));
 
-    expect(screen.getByText(/такого же качества/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/такого же качества/))).toBeTruthy();
   });
 
   // План сверки 5.7: статьи эскиза, которых не хватало.
@@ -92,11 +93,11 @@ describe("ItemQualityPanel — прогноз длины (FR-22)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Термины" }));
 
     for (const term of ["Корреляция с остатком", "Обратный пункт", "Дистрактор"]) {
-      expect(screen.getByText(term)).toBeTruthy();
+      expect(screen.getByText(termOrText(term))).toBeTruthy();
     }
-    expect(screen.getByText(/называют реверсированием/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/называют реверсированием/))).toBeTruthy();
     // Случайная выдача больше не «без надёжности»: оценка по связям вопросов (FR-20).
-    expect(screen.queryByText(/там нет и самой надёжности/)).toBeNull();
+    expect(screen.queryByText(termOrText(/там нет и самой надёжности/))).toBeNull();
   });
 });
 
@@ -106,10 +107,10 @@ describe("ItemQualityPanel", () => {
     // «Дискриминативности» — придуманный оборот, которого нет ни в одном учебнике.
     render(<ItemQualityPanel view={view()} />);
 
-    expect(screen.getByText("Надёжность (альфа)")).toBeTruthy();
-    expect(screen.getByText("Ошибка измерения")).toBeTruthy();
-    expect(screen.getByText("Трудность")).toBeTruthy();
-    expect(screen.getByText("Дискриминативность")).toBeTruthy();
+    expect(screen.getByText(termOrText("Надёжность (альфа)"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Ошибка измерения"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Трудность"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Дискриминативность"))).toBeTruthy();
   });
 
   it("признак называет СИМПТОМ, а числа под ним — основание", () => {
@@ -124,9 +125,9 @@ describe("ItemQualityPanel", () => {
       })],
     })} />);
 
-    expect(screen.getByText("Сильные ошибаются чаще")).toBeTruthy();
+    expect(screen.getByText(termOrText("Сильные ошибаются чаще"))).toBeTruthy();
     // Числа под заголовком — основание признака: сам он причины не называет.
-    expect(screen.getByText(/вероятна ошибка в ключе: r = .?0,21, D = .?0,14/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/вероятна ошибка в ключе: r = .?0,21, D = .?0,14/))).toBeTruthy();
   });
 
   it("у задания с малой выборкой трудность видна, а коэффициент — нет", () => {
@@ -142,8 +143,8 @@ describe("ItemQualityPanel", () => {
       })],
     })} />);
 
-    expect(screen.getByText("0,33")).toBeTruthy();
-    expect(screen.getByText("мало данных")).toBeTruthy();
+    expect(screen.getByText(termOrText("0,33"))).toBeTruthy();
+    expect(screen.getByText(termOrText("мало данных"))).toBeTruthy();
   });
 
   it("невычислимую величину печатает прочерком, а не нулём", () => {
@@ -153,12 +154,12 @@ describe("ItemQualityPanel", () => {
       items: [row({ questionId: "q1", itemRest: null, discrimination: null })],
     })} />);
 
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(termOrText("—")).length).toBeGreaterThan(0);
   });
 
   it("причину отсутствия надёжности называет словами", () => {
     render(<ItemQualityPanel view={view({ reliability: "no-variance", sem: null })} />);
-    expect(screen.getByText(/все набрали поровну/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/все набрали поровну/))).toBeTruthy();
   });
 
   it("показывает состав выборки и режим попыток", () => {
@@ -166,15 +167,15 @@ describe("ItemQualityPanel", () => {
     // любого фильтра.
     render(<ItemQualityPanel view={view()} />);
 
-    expect(screen.getByText(/веб — 210/)).toBeTruthy();
-    expect(screen.getByText(/телеметрия LMS — 244/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/веб — 210/))).toBeTruthy();
+    expect(screen.getByText(termOrText(/телеметрия LMS — 244/))).toBeTruthy();
     // Умолчание «первая попытка» уже стоит чипом в строке фильтра: второй раз тегом не говорится.
-    expect(screen.queryByText("только первая попытка")).toBeNull();
+    expect(screen.queryByText(termOrText("только первая попытка"))).toBeNull();
   });
 
   it("по всем попыткам предупреждает тегом «все попытки»", () => {
     render(<ItemQualityPanel view={view({ firstAttemptOnly: false })} />);
-    expect(screen.getAllByText("все попытки").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(termOrText("все попытки")).length).toBeGreaterThan(0);
   });
 
   // План сверки 5.4: единица строки — прохождения, как в эскизе и в подписи надёжности.
@@ -186,15 +187,15 @@ describe("ItemQualityPanel", () => {
       },
     })} />);
 
-    expect(screen.getByText("веб — 210")).toBeTruthy();
-    expect(screen.getByText("телеметрия LMS — 276")).toBeTruthy();
-    const strip = screen.getByText("Выборка:").parentElement!;
-    expect(within(strip).queryByText(/наблюдени/)).toBeNull();
+    expect(screen.getByText(termOrText("веб — 210"))).toBeTruthy();
+    expect(screen.getByText(termOrText("телеметрия LMS — 276"))).toBeTruthy();
+    const strip = screen.getByText(termOrText("Выборка:")).parentElement!;
+    expect(within(strip).queryByText(termOrText(/наблюдени/))).toBeNull();
   });
 
   it("предупреждает, когда проходной балл попал внутрь интервала ошибки", () => {
     render(<ItemQualityPanel view={view({ cutBand: { low: 26.8, high: 31.2, z: 1.96, withinBand: 0 } })} />);
-    expect(screen.getByText(/Проходной балл попадает внутрь интервала/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/Проходной балл попадает внутрь интервала/))).toBeTruthy();
   });
 
   it("называет, скольких участников интервал задел на самом деле (FR-21a)", () => {
@@ -204,7 +205,7 @@ describe("ItemQualityPanel", () => {
 
     // Знаменатель — участники с ПОЛНЫМ набором, по которым считалась надёжность, а не вся
     // выборка: при неравномерной выдаче это разные числа, и смешивать их в одной фразе нельзя.
-    expect(screen.getByText(/Внутри интервала 37 участников \(8 %\)\./)).toBeTruthy();
+    expect(screen.getByText(termOrText(/Внутри интервала 37 участников \(8 %\)\./))).toBeTruthy();
   });
 
   // План сверки 5.3, эскиз prd66-item-quality (состояние quality).
@@ -228,20 +229,20 @@ describe("ItemQualityPanel", () => {
       cutForecast: { target: 0.9, factor: 0.8, itemsDelta: -8 },
     })} />);
 
-    expect(screen.queryByText(/Для альфы 0,90/)).toBeNull();
+    expect(screen.queryByText(termOrText(/Для альфы 0,90/))).toBeNull();
   });
 
   it("ошибка измерения — в процентных пунктах, с подписью «интервал вокруг балла»", () => {
     render(<ItemQualityPanel view={view({ sem: 1.76, semPercent: 4.19 })} />);
 
-    expect(screen.getByText("4,2 п.п.")).toBeTruthy();
-    expect(screen.getByText("интервал вокруг балла")).toBeTruthy();
-    expect(screen.queryByText("в долях балла")).toBeNull();
+    expect(screen.getByText(termOrText("4,2 п.п."))).toBeTruthy();
+    expect(screen.getByText(termOrText("интервал вокруг балла"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("в долях балла"))).toBeNull();
   });
 
   it("подпись надёжности считает прохождения", () => {
     render(<ItemQualityPanel view={view()} />);
-    expect(screen.getByText("хорошо · 486 прохождений")).toBeTruthy();
+    expect(screen.getByText(termOrText("хорошо · 486 прохождений"))).toBeTruthy();
   });
 
   it("никого не задело — так и говорит, а не молчит", () => {
@@ -249,7 +250,7 @@ describe("ItemQualityPanel", () => {
     // не попал — это хорошая новость, и она стоит слов.
     render(<ItemQualityPanel view={view({ cutBand: { low: 26.8, high: 31.2, z: 1.96, withinBand: 0 } })} />);
 
-    expect(screen.getByText(/в него не попал никто/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/в него не попал никто/))).toBeTruthy();
   });
 
   it("предупреждает о ключах, построенных разными алгоритмами (FR-43)", () => {
@@ -260,9 +261,9 @@ describe("ItemQualityPanel", () => {
       bias: { unevenDelivery: false, importShare: 0.4, mixedAnonymity: true },
     })} />);
 
-    expect(screen.getByText(/посчитаны дважды/i)).toBeTruthy();
+    expect(screen.getByText(termOrText(/посчитаны дважды/i))).toBeTruthy();
     // Совет обязан вести к исправлению ключа, а не к снятию с учёта законных данных.
-    expect(screen.getByText(/скриптом обезличивания/i)).toBeTruthy();
+    expect(screen.getByText(termOrText(/скриптом обезличивания/i))).toBeTruthy();
   });
 
   it("без смешения такого баннера нет", () => {
@@ -270,7 +271,7 @@ describe("ItemQualityPanel", () => {
       bias: { unevenDelivery: false, importShare: 0, mixedAnonymity: false },
     })} />);
 
-    expect(screen.queryByText(/посчитаны дважды/i)).toBeNull();
+    expect(screen.queryByText(termOrText(/посчитаны дважды/i))).toBeNull();
   });
 
   it("доля невыданных наблюдений стоит рядом с трудностью задания (FR-41)", () => {
@@ -278,13 +279,13 @@ describe("ItemQualityPanel", () => {
     // задание видел, и чем больше невыданных, тем меньше выборка под числом.
     render(<ItemQualityPanel view={view({ items: [row({ questionId: "q1", missingShare: 0.31 })] })} />);
 
-    expect(screen.getByText(/не выдано 31 %/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/не выдано 31 %/))).toBeTruthy();
   });
 
   it("задание, выданное всем, доли не печатает — ноль там не о чем говорить", () => {
     render(<ItemQualityPanel view={view({ items: [row({ questionId: "q1", missingShare: 0 })] })} />);
 
-    expect(screen.queryByText(/не выдано/)).toBeNull();
+    expect(screen.queryByText(termOrText(/не выдано/))).toBeNull();
   });
 
   // Решение владельца 2026-09-25: пометка FR-09c живёт в «Версиях содержания» разбора вопроса.
@@ -293,19 +294,19 @@ describe("ItemQualityPanel", () => {
       sample: { respondents: 10, responses: 100, bySource: { import: 100 }, unknownVersionShare: 0.42 },
     })} />);
 
-    expect(screen.queryByText(/редакция неизвестна/)).toBeNull();
+    expect(screen.queryByText(termOrText(/редакция неизвестна/))).toBeNull();
   });
 
   it("кнопки выгрузок ведут на свои ручки", () => {
     render(<ItemQualityPanel view={view()} exportHref="/api/x/export" matrixHref="/api/x/matrix" />);
 
-    expect(screen.getByText("Психометрический отчёт").closest("a")?.getAttribute("href")).toBe("/api/x/export");
-    expect(screen.getByText("Матрица ответов").closest("a")?.getAttribute("href")).toBe("/api/x/matrix");
+    expect(screen.getByText(termOrText("Психометрический отчёт")).closest("a")?.getAttribute("href")).toBe("/api/x/export");
+    expect(screen.getByText(termOrText("Матрица ответов")).closest("a")?.getAttribute("href")).toBe("/api/x/matrix");
   });
 
   it("без ссылок выгрузок кнопок нет — интерфейс не обещает того, чего не делает", () => {
     render(<ItemQualityPanel view={view()} />);
-    expect(screen.queryByText("Матрица ответов")).toBeNull();
+    expect(screen.queryByText(termOrText("Матрица ответов"))).toBeNull();
   });
 
   it("список открывается самым тревожным: порядок по СИЛЕ подозрения (AC-02, FR-48)", () => {
@@ -346,19 +347,19 @@ describe("ItemQualityPanel", () => {
       items: [row({ questionId: "q1", observations: 12, coefficientConfidence: "insufficient" })],
     })} />);
 
-    expect(screen.getByText(/12 из 30 · нужно ещё 18 наблюдений/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/12 из 30 · нужно ещё 18 наблюдений/))).toBeTruthy();
   });
 
   it("баннер смещения показывается при неоднородной выдаче (AC-06, FR-39)", () => {
     render(<ItemQualityPanel view={view({ bias: { unevenDelivery: true, importShare: 0 } })} />);
 
-    expect(screen.getByText("Показатели дискриминации ослаблены")).toBeTruthy();
-    expect(screen.getByText(/Выдача неоднородна/)).toBeTruthy();
+    expect(screen.getByText(termOrText("Показатели дискриминации ослаблены"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/Выдача неоднородна/))).toBeTruthy();
   });
 
   it("у теста с однородной выдачей баннера нет — он был бы ложной тревогой", () => {
     render(<ItemQualityPanel view={view({ bias: { unevenDelivery: false, importShare: 0 } })} />);
-    expect(screen.queryByText("Показатели дискриминации ослаблены")).toBeNull();
+    expect(screen.queryByText(termOrText("Показатели дискриминации ослаблены"))).toBeNull();
   });
 
   it("тот же баннер поднимает заметная доля импорта (FR-40)", () => {
@@ -366,7 +367,7 @@ describe("ItemQualityPanel", () => {
     // своими словами.
     render(<ItemQualityPanel view={view({ bias: { unevenDelivery: false, importShare: 0.4 } })} />);
 
-    expect(screen.getByText(/доля наблюдений пришла из импорта \(40 %\)/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/доля наблюдений пришла из импорта \(40 %\)/))).toBeTruthy();
   });
 
   it("у теста, где все задания измерительные, вкладка показывает только шкалы (FR-52)", () => {
@@ -376,9 +377,9 @@ describe("ItemQualityPanel", () => {
 
     // Эскиз wf-scales: над «Шкалами методики» нет ничего — ни плиток, ни поясняющей карточки.
     expect(container.innerHTML).toBe("");
-    expect(screen.queryByText("Тест измерительный")).toBeNull();
-    expect(screen.queryByText("Надёжность (альфа)")).toBeNull();
-    expect(screen.queryByText("Вопросы")).toBeNull();
+    expect(screen.queryByText(termOrText("Тест измерительный"))).toBeNull();
+    expect(screen.queryByText(termOrText("Надёжность (альфа)"))).toBeNull();
+    expect(screen.queryByText(termOrText("Вопросы"))).toBeNull();
   });
 
   it("счётчик «под подозрением» считает задания с признаками, а не все подряд", () => {
@@ -390,10 +391,10 @@ describe("ItemQualityPanel", () => {
     render(<ItemQualityPanel view={view({ items: [clean, broken] })} />);
 
     // Плитка и фильтр называются одинаково — считаем по плитке, она в карточке сводки.
-    const tile = screen.getAllByText("Под подозрением")
+    const tile = screen.getAllByText(termOrText("Под подозрением"))
       .map(node => node.closest(".ou-card__body"))
       .find(Boolean)!;
-    expect(within(tile as HTMLElement).getByText("1")).toBeTruthy();
+    expect(within(tile as HTMLElement).getByText(termOrText("1"))).toBeTruthy();
   });
 });
 
@@ -408,7 +409,7 @@ describe("ItemQualityPanel — эвристики «Требуют ревизи�
   const FAST_AND_WRONG = { kinds: ["fast-and-wrong"], exposurePercent: 40, correctPercent: 30, latencyMedianMs: 4_000 };
 
   /** Строки таблицы сверху вниз — по тексту вопроса. */
-  const order = () => screen.getAllByText(/^Вопрос /).map((el) => el.textContent);
+  const order = () => screen.getAllByText(termOrText(/^Вопрос /)).map((el) => el.textContent);
 
   it("«Заезжено и трудно» — с числами показов и верных, как в эскизе", () => {
     render(<ItemQualityPanel
@@ -416,8 +417,8 @@ describe("ItemQualityPanel — эвристики «Требуют ревизи�
       heuristics={{ q1: HARD_AND_FREQUENT }}
     />);
 
-    expect(screen.getByText("Заезжено и трудно")).toBeTruthy();
-    expect(screen.getByText("82 % показов, 41 % верных")).toBeTruthy();
+    expect(screen.getByText(termOrText("Заезжено и трудно"))).toBeTruthy();
+    expect(screen.getByText(termOrText("82 % показов, 41 % верных"))).toBeTruthy();
   });
 
   it("«Слишком быстрые ответы» — с медианой времени и долей верных", () => {
@@ -426,8 +427,8 @@ describe("ItemQualityPanel — эвристики «Требуют ревизи�
       heuristics={{ q1: FAST_AND_WRONG }}
     />);
 
-    expect(screen.getByText("Слишком быстрые ответы")).toBeTruthy();
-    expect(screen.getByText("медиана 4 с при 30 % верных")).toBeTruthy();
+    expect(screen.getByText(termOrText("Слишком быстрые ответы"))).toBeTruthy();
+    expect(screen.getByText(termOrText("медиана 4 с при 30 % верных"))).toBeTruthy();
   });
 
   it("порядок: отрицательная дискриминация, эвристика, прочие признаки", () => {
@@ -453,9 +454,9 @@ describe("ItemQualityPanel — эвристики «Требуют ревизи�
     />);
 
     // «Мало данных» есть и в переключателе вида таблицы — смотрим строку задания.
-    const thinRow = screen.getByText("Вопрос мало").closest("tr") as HTMLElement;
-    expect(within(thinRow).getByText("Заезжено и трудно")).toBeTruthy();
-    expect(within(thinRow).queryByText("Мало данных")).toBeNull();
+    const thinRow = screen.getByText(termOrText("Вопрос мало")).closest("tr") as HTMLElement;
+    expect(within(thinRow).getByText(termOrText("Заезжено и трудно"))).toBeTruthy();
+    expect(within(thinRow).queryByText(termOrText("Мало данных"))).toBeNull();
     expect(order()).toEqual(["Вопрос мало", "Вопрос спокойный"]);
   });
 
@@ -466,10 +467,10 @@ describe("ItemQualityPanel — эвристики «Требуют ревизи�
     />);
 
     // «Под подозрением» есть и в переключателе вида таблицы — берём плитку.
-    const tile = screen.getAllByText("Под подозрением")
+    const tile = screen.getAllByText(termOrText("Под подозрением"))
       .map((el) => el.closest(".ou-card"))
       .find((card): card is HTMLElement => !!card && !card.querySelector("table")) as HTMLElement;
-    expect(within(tile).getByText("1")).toBeTruthy();
+    expect(within(tile).getByText(termOrText("1"))).toBeTruthy();
   });
 });
 
@@ -488,10 +489,10 @@ describe("ItemQualityPanel — сортировка колонок (FR-48a)", ()
     row({ questionId: "c", prompt: "Вопрос В", difficulty: 0.5, observations: 200, itemRest: -0.3, flags: NEG }),
     row({ questionId: "d", prompt: "Вопрос Г", difficulty: null, observations: 5, itemRest: null, coefficientConfidence: "insufficient" }),
   ];
-  const order = () => screen.getAllByText(/^Вопрос [А-Г]$/).map((el) => el.textContent);
+  const order = () => screen.getAllByText(termOrText(/^Вопрос [А-Г]$/)).map((el) => el.textContent);
   /** Щелчок по заголовку колонки: он и переключает направление. */
   const clickHeader = async (title: string) => {
-    const header = screen.getAllByText(title).find((el) => el.closest(".ou-grid__th")) as HTMLElement;
+    const header = screen.getAllByText(termOrText(title)).find((el) => el.closest(".ou-grid__th")) as HTMLElement;
     await userEvent.click(header);
   };
 
@@ -547,8 +548,8 @@ describe("ItemQualityPanel — ориентировочные коэффицие
       items: [row({ questionId: "q1", prompt: "Вопрос 1", observations: 44, coefficientConfidence: "tentative" })],
     })} />);
 
-    expect(screen.getByText("Ориентировочно")).toBeTruthy();
-    expect(screen.getByText("44 наблюдения")).toBeTruthy();
+    expect(screen.getByText(termOrText("Ориентировочно"))).toBeTruthy();
+    expect(screen.getByText(termOrText("44 наблюдения"))).toBeTruthy();
   });
 
   it("у задания с признаком признак главный, а оговорка — в числах под ним", () => {
@@ -559,8 +560,8 @@ describe("ItemQualityPanel — ориентировочные коэффицие
       })],
     })} />);
 
-    expect(screen.getByText("Сильные ошибаются чаще")).toBeTruthy();
-    expect(screen.getByText(/ориентировочно, 44 наблюдения/)).toBeTruthy();
+    expect(screen.getByText(termOrText("Сильные ошибаются чаще"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/ориентировочно, 44 наблюдения/))).toBeTruthy();
   });
 
   it("у признака по трудности оговорки нет: трудность под правило не попадает (FR-38a)", () => {
@@ -571,8 +572,8 @@ describe("ItemQualityPanel — ориентировочные коэффицие
       })],
     })} />);
 
-    expect(screen.getByText("Слишком лёгкий")).toBeTruthy();
-    expect(screen.queryByText(/ориентировочно/)).toBeNull();
+    expect(screen.getByText(termOrText("Слишком лёгкий"))).toBeTruthy();
+    expect(screen.queryByText(termOrText(/ориентировочно/))).toBeNull();
   });
 
   it("ориентировочность — не подозрение: в «Под подозрением» не считается", () => {
@@ -580,10 +581,10 @@ describe("ItemQualityPanel — ориентировочные коэффицие
       items: [row({ questionId: "q1", prompt: "Вопрос 1", observations: 44, coefficientConfidence: "tentative" })],
     })} />);
 
-    const tile = screen.getAllByText("Под подозрением")
+    const tile = screen.getAllByText(termOrText("Под подозрением"))
       .map((el) => el.closest(".ou-card"))
       .find((card): card is HTMLElement => !!card && !card.querySelector("table")) as HTMLElement;
-    expect(within(tile).getByText("0")).toBeTruthy();
+    expect(within(tile).getByText(termOrText("0"))).toBeTruthy();
   });
 
   it("при ста наблюдениях и больше оговорки нет", () => {
@@ -591,8 +592,8 @@ describe("ItemQualityPanel — ориентировочные коэффицие
       items: [row({ questionId: "q1", prompt: "Вопрос 1", observations: 150, coefficientConfidence: "reliable" })],
     })} />);
 
-    expect(screen.queryByText("Ориентировочно")).toBeNull();
-    expect(screen.queryByText(/ориентировочно/)).toBeNull();
+    expect(screen.queryByText(termOrText("Ориентировочно"))).toBeNull();
+    expect(screen.queryByText(termOrText(/ориентировочно/))).toBeNull();
   });
 });
 
@@ -600,12 +601,12 @@ describe("ItemQualityPanel — ориентировочные коэффицие
 describe("ItemQualityPanel — несопоставленные взаимодействия (FR-11)", () => {
   it("показывает число в составе выборки", () => {
     render(<ItemQualityPanel view={view({ unmatched: 7 })} />);
-    expect(screen.getByText("не сопоставлено — 7")).toBeTruthy();
+    expect(screen.getByText(termOrText("не сопоставлено — 7"))).toBeTruthy();
   });
 
   it("без потерь тега нет", () => {
     render(<ItemQualityPanel view={view({ unmatched: 0 })} />);
-    expect(screen.queryByText(/не сопоставлено/)).toBeNull();
+    expect(screen.queryByText(termOrText(/не сопоставлено/))).toBeNull();
   });
 });
 
@@ -629,32 +630,32 @@ describe("ItemQualityPanel — данных мало на уровне тест�
   it("говорит, сколько собрано и с чего начинаются числа", () => {
     render(<ItemQualityPanel view={thinView()} />);
 
-    expect(screen.getByText("Данных пока мало: собрано 18 прохождений")).toBeTruthy();
-    expect(screen.getByText(/Дискриминативность считается с 30 наблюдений на вопрос, надёжность теста — с 30 прохождений\. Трудность показывается с 10 наблюдений\./)).toBeTruthy();
+    expect(screen.getByText(termOrText("Данных пока мало: собрано 18 прохождений"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/Дискриминативность считается с 30 наблюдений на вопрос, надёжность теста — с 30 прохождений\. Трудность показывается с 10 наблюдений\./))).toBeTruthy();
   });
 
   it("плиток нет: считать их не из чего", () => {
     render(<ItemQualityPanel view={thinView()} />);
-    expect(screen.queryByText("Надёжность (альфа)")).toBeNull();
-    expect(screen.queryByText("Ошибка измерения")).toBeNull();
+    expect(screen.queryByText(termOrText("Надёжность (альфа)"))).toBeNull();
+    expect(screen.queryByText(termOrText("Ошибка измерения"))).toBeNull();
   });
 
   it("колонка «Что не так» становится «Состояние» и говорит, сколько добрать", () => {
     render(<ItemQualityPanel view={thinView()} />);
 
-    expect(screen.getByText("Состояние")).toBeTruthy();
-    expect(screen.queryByText("Что не так")).toBeNull();
-    expect(screen.getByText("Нужно ещё 12 наблюдений")).toBeTruthy();
-    expect(screen.getByText("Нужно ещё 19 наблюдений")).toBeTruthy();
-    expect(screen.getByText(/2 вопроса · накопление наблюдений/)).toBeTruthy();
+    expect(screen.getByText(termOrText("Состояние"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Что не так"))).toBeNull();
+    expect(screen.getByText(termOrText("Нужно ещё 12 наблюдений"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Нужно ещё 19 наблюдений"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/2 вопроса · накопление наблюдений/))).toBeTruthy();
   });
 
   it("с тридцати участников — обычная вкладка", () => {
     render(<ItemQualityPanel view={view({ sample: { ...THIN_SAMPLE, respondents: 30 } })} />);
 
-    expect(screen.queryByText(/Данных пока мало/)).toBeNull();
-    expect(screen.getByText("Надёжность (альфа)")).toBeTruthy();
-    expect(screen.getByText("Что не так")).toBeTruthy();
+    expect(screen.queryByText(termOrText(/Данных пока мало/))).toBeNull();
+    expect(screen.getByText(termOrText("Надёжность (альфа)"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Что не так"))).toBeTruthy();
   });
 });
 
@@ -668,11 +669,11 @@ describe("ItemQualityPanel — надёжность при неоднородн�
       reliability: { alpha: 0.78, items: 20, respondents: 486, totalSd: 3.1, dichotomous: true, method: "pairwise", pairs: 1200 },
     })} />);
 
-    expect(screen.getByText("0,78")).toBeTruthy();
-    expect(screen.getByText(/оценка по связям вопросов · вариант из 20 вопросов/)).toBeTruthy();
+    expect(screen.getByText(termOrText("0,78"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/оценка по связям вопросов · вариант из 20 вопросов/))).toBeTruthy();
     // Заголовок не должен противоречить подписи: это оценка, а не альфа полного набора.
-    expect(screen.getByText("Надёжность (оценка)")).toBeTruthy();
-    expect(screen.queryByText("Надёжность (альфа)")).toBeNull();
+    expect(screen.getByText(termOrText("Надёжность (оценка)"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Надёжность (альфа)"))).toBeNull();
   });
 
   it("интервал у порога при оценке считает участников по варианту, а не по полному набору", () => {
@@ -682,8 +683,8 @@ describe("ItemQualityPanel — надёжность при неоднородн�
     })} />);
 
     // Доля — от участников с вариантом той же длины (300), а не от всей выборки.
-    expect(screen.getByText(/Внутри интервала 129 участников \(43 %\)\./)).toBeTruthy();
-    expect(screen.queryByText(/с полным набором/)).toBeNull();
+    expect(screen.getByText(termOrText(/Внутри интервала 129 участников \(43 %\)\./))).toBeTruthy();
+    expect(screen.queryByText(termOrText(/с полным набором/))).toBeNull();
   });
 
   it("альфа по ядру стоит рядом с оценкой", () => {
@@ -692,7 +693,7 @@ describe("ItemQualityPanel — надёжность при неоднородн�
       coreReliability: { alpha: 0.71, items: 6, respondents: 486, totalSd: 1.2, dichotomous: true, method: "core" },
     })} />);
 
-    expect(screen.getByText(/по общему ядру из 6 вопросов — 0,71/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/по общему ядру из 6 вопросов — 0,71/))).toBeTruthy();
   });
 
   it("основной альфой по ядру подписана и она", () => {
@@ -700,12 +701,12 @@ describe("ItemQualityPanel — надёжность при неоднородн�
       reliability: { alpha: 0.71, items: 6, respondents: 486, totalSd: 1.2, dichotomous: true, method: "core" },
     })} />);
 
-    expect(screen.getByText(/по общему ядру · 6 вопросов/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/по общему ядру · 6 вопросов/))).toBeTruthy();
   });
 
   it("без пересечений — причина словами", () => {
     render(<ItemQualityPanel view={view({ reliability: "random-delivery", sem: null })} />);
-    expect(screen.getByText(/неприменимо к случайной выдаче/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/неприменимо к случайной выдаче/))).toBeTruthy();
   });
 });
 
@@ -719,9 +720,9 @@ describe("ItemQualityPanel — отрицательная дискриминат
       })],
     })} />);
 
-    expect(screen.getByText("Сильные ошибаются чаще")).toBeTruthy();
+    expect(screen.getByText(termOrText("Сильные ошибаются чаще"))).toBeTruthy();
     // Формулировка — дословно из спеки: причина-догадка и числа, на которых она стоит.
-    expect(screen.getByText(/^вероятна ошибка в ключе: r = .?0,21, D = .?0,14$/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/^вероятна ошибка в ключе: r = .?0,21, D = .?0,14$/))).toBeTruthy();
   });
 });
 
@@ -741,8 +742,8 @@ describe("ItemQualityPanel — «Сильные и слабые отвечают
       items: [row({ questionId: "q1", itemRest: 0.11, discrimination: 0.08, flags: WEAK })],
     })} />);
 
-    expect(screen.getByText("Сильные и слабые отвечают одинаково")).toBeTruthy();
-    expect(screen.getByText("r = 0,11, D = 0,08")).toBeTruthy();
+    expect(screen.getByText(termOrText("Сильные и слабые отвечают одинаково"))).toBeTruthy();
+    expect(screen.getByText(termOrText("r = 0,11, D = 0,08"))).toBeTruthy();
   });
 
   it("без индекса крайних групп подпись называет только r, без прочерка", () => {
@@ -750,7 +751,7 @@ describe("ItemQualityPanel — «Сильные и слабые отвечают
       items: [row({ questionId: "q1", itemRest: 0.11, discrimination: null, flags: WEAK })],
     })} />);
 
-    expect(screen.getByText("r = 0,11")).toBeTruthy();
+    expect(screen.getByText(termOrText("r = 0,11"))).toBeTruthy();
   });
 
   it("порядок FR-48: дефекты, эвристика, слабая дискриминативность, время и трудность", () => {
@@ -769,7 +770,7 @@ describe("ItemQualityPanel — «Сильные и слабые отвечают
       heuristics={{ heur: HEURISTIC }}
     />);
 
-    expect(screen.getAllByText(/^Вопрос /).map(el => el.textContent)).toEqual([
+    expect(screen.getAllByText(termOrText(/^Вопрос /)).map(el => el.textContent)).toEqual([
       "Вопрос ключ", "Вопрос угадывание", "Вопрос эвристика", "Вопрос одинаково",
       "Вопрос не читают", "Вопрос трудный", "Вопрос лёгкий", "Вопрос тормозит",
     ]);
@@ -781,7 +782,7 @@ describe("ItemQualityPanel — «Сильные и слабые отвечают
       row({ questionId: "b", prompt: "Вопрос 0,02", itemRest: 0.02, flags: WEAK }),
     ] })} />);
 
-    expect(screen.getAllByText(/^Вопрос /).map(el => el.textContent)).toEqual(["Вопрос 0,02", "Вопрос 0,18"]);
+    expect(screen.getAllByText(termOrText(/^Вопрос /)).map(el => el.textContent)).toEqual(["Вопрос 0,02", "Вопрос 0,18"]);
   });
 
   it("плитка, счётчик переключателя и отбор «Под подозрением» считают его одинаково", async () => {
@@ -790,16 +791,16 @@ describe("ItemQualityPanel — «Сильные и слабые отвечают
       row({ questionId: "q2", prompt: "Вопрос одинаково", itemRest: 0.11, flags: WEAK }),
     ] })} />);
 
-    const tile = screen.getAllByText("Под подозрением")
+    const tile = screen.getAllByText(termOrText("Под подозрением"))
       .map((el) => el.closest(".ou-card"))
       .find((card): card is HTMLElement => !!card && !card.querySelector("table")) as HTMLElement;
-    expect(within(tile).getByText("1")).toBeTruthy();
+    expect(within(tile).getByText(termOrText("1"))).toBeTruthy();
 
     const segment = screen.getByRole("button", { name: /Под подозрением/ });
     expect(segment.textContent).toContain("1");
 
     await userEvent.click(segment);
-    expect(screen.getAllByText(/^Вопрос /).map(el => el.textContent)).toEqual(["Вопрос одинаково"]);
+    expect(screen.getAllByText(termOrText(/^Вопрос /)).map(el => el.textContent)).toEqual(["Вопрос одинаково"]);
   });
 
   it("на ориентировочной выборке оговорка идёт в подпись: признак стоит на коэффициенте", () => {
@@ -807,7 +808,7 @@ describe("ItemQualityPanel — «Сильные и слабые отвечают
       row({ questionId: "q1", observations: 44, coefficientConfidence: "tentative", itemRest: 0.11, discrimination: 0.08, flags: WEAK }),
     ] })} />);
 
-    expect(screen.getByText(/r = 0,11, D = 0,08 · ориентировочно, 44 наблюдения/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/r = 0,11, D = 0,08 · ориентировочно, 44 наблюдения/))).toBeTruthy();
   });
 });
 
@@ -816,11 +817,11 @@ describe("ItemQualityPanel — «Сильные и слабые отвечают
  * самим термином и значком. Триггер доступен с клавиатуры.
  */
 function expectHint(term: string, hint: string): void {
-  const trigger = screen.getAllByText(hint)
+  const trigger = screen.getAllByText(termOrText(hint))
     .map(bubble => bubble.closest(".tb-term-hint") as HTMLElement | null)
-    .find(el => !!el && within(el).queryByText(term) !== null);
+    .find(el => !!el && within(el).queryByText(termOrText(term)) !== null);
   expect(trigger, `подсказка у «${term}»`).toBeTruthy();
-  // Значок — псевдоэлемент термина (см. term-hint.tsx): держится при последнем слове.
+  // Значок — lucide `Info` в одном неразрывном блоке с последним словом (см. term-hint.tsx).
   expect(trigger!.querySelector(".tb-term-hint__term")).toBeTruthy();
   expect(trigger!.getAttribute("tabindex")).toBe("0");
 }
@@ -852,10 +853,10 @@ describe("ItemQualityPanel — подсказки терминов (FR-14b)", ()
     render(<ItemQualityPanel view={view()} />);
 
     for (const term of ["Трудность", "Дискриминативность", "n"]) {
-      const header = screen.getAllByText(term).find(el => el.closest(".ou-grid__th"))!;
+      const header = screen.getAllByText(termOrText(term)).find(el => el.closest(".ou-grid__th"))!;
       expect(header.closest(".ou-text--end"), term).toBeTruthy();
     }
-    const flagHeader = screen.getAllByText("Что не так").find(el => el.closest(".ou-grid__th"))!;
+    const flagHeader = screen.getAllByText(termOrText("Что не так")).find(el => el.closest(".ou-grid__th"))!;
     expect(flagHeader.closest(".ou-text--end")).toBeNull();
   });
 });
@@ -866,13 +867,13 @@ describe("ItemQualityPanel — таблица", () => {
       items: [row({ questionId: "q1", observations: 12, coefficientConfidence: "insufficient" })],
     })} />);
 
-    expect(screen.getByText("мало данных").className).toContain("ou-text--tone-muted");
+    expect(screen.getByText(termOrText("мало данных")).className).toContain("ou-text--tone-muted");
   });
 
   it("подвала «Показано N из M» нет: список приходит целиком", () => {
     render(<ItemQualityPanel view={view({ items: [row({ questionId: "q1" }), row({ questionId: "q2" })] })} />);
 
-    expect(screen.queryByText(/Показано/)).toBeNull();
+    expect(screen.queryByText(termOrText(/Показано/))).toBeNull();
     expect(document.querySelector(".ou-grid__footer")).toBeNull();
   });
 
@@ -907,7 +908,7 @@ describe("ItemQualityPanel — меню строки", () => {
     const onOpenItem = vi.fn();
     render(<ItemQualityPanel view={one()} onOpenItem={onOpenItem} />);
 
-    await userEvent.click(screen.getByText("Вопрос про ключ"));
+    await userEvent.click(screen.getByText(termOrText("Вопрос про ключ")));
     expect(onOpenItem).not.toHaveBeenCalled();
     expect(document.querySelector("tr.is-clickable")).toBeNull();
   });
@@ -945,7 +946,7 @@ describe("ItemQualityPanel — меню строки", () => {
     await openMenu();
     await userEvent.click(screen.getByRole("menuitem", { name: "Исключить из выдачи: Вопрос про ключ" }));
 
-    expect(await screen.findByText(/останется 11/i)).toBeTruthy();
+    expect(await screen.findByText(termOrText(/останется 11/i))).toBeTruthy();
     expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/analytics/tests/t1/questions/q1/delivery-impact", expect.anything());
     await userEvent.click(screen.getByRole("button", { name: "Исключить из выдачи" }));
 
@@ -995,21 +996,21 @@ describe("ItemQualityPanel — вопрос ещё не выдавался", () 
     row({ questionId: "b", prompt: "Вопрос Б", difficulty: 0.1, observations: 120, flags: HARD }),
     row({ questionId: "d", prompt: "Вопрос Г", difficulty: null, observations: 5, itemRest: null, coefficientConfidence: "insufficient" }),
   ];
-  const order = () => screen.getAllByText(/^Вопрос [А-Я]$/).map((el) => el.textContent);
+  const order = () => screen.getAllByText(termOrText(/^Вопрос [А-Я]$/)).map((el) => el.textContent);
   const clickHeader = async (title: string) => {
-    const header = screen.getAllByText(title).find((el) => el.closest(".ou-grid__th")) as HTMLElement;
+    const header = screen.getAllByText(termOrText(title)).find((el) => el.closest(".ou-grid__th")) as HTMLElement;
     await userEvent.click(header);
   };
-  const rowOf = (prompt: string) => screen.getByText(prompt).closest("tr") as HTMLElement;
+  const rowOf = (prompt: string) => screen.getByText(termOrText(prompt)).closest("tr") as HTMLElement;
 
   it("строка говорит «Вопрос ещё не выдавался», числа — «нет наблюдений», n = 0", () => {
     render(<ItemQualityPanel view={view({ items })} />);
     const tr = rowOf("Вопрос Я");
 
-    expect(within(tr).getByText("Вопрос ещё не выдавался")).toBeTruthy();
-    expect(within(tr).getAllByText("нет наблюдений")).toHaveLength(2);
-    expect(within(tr).getByText("0")).toBeTruthy();
-    expect(within(tr).queryByText("Мало данных")).toBeNull();
+    expect(within(tr).getByText(termOrText("Вопрос ещё не выдавался"))).toBeTruthy();
+    expect(within(tr).getAllByText(termOrText("нет наблюдений"))).toHaveLength(2);
+    expect(within(tr).getByText(termOrText("0"))).toBeTruthy();
+    expect(within(tr).queryByText(termOrText("Мало данных"))).toBeNull();
   });
 
   it("стоит в конце при любой колонке и направлении сортировки", async () => {
@@ -1030,8 +1031,8 @@ describe("ItemQualityPanel — вопрос ещё не выдавался", () 
     expect(screen.getByRole("button", { name: /Мало данных/ }).textContent).toContain("2");
     expect(screen.getByRole("button", { name: /Под подозрением/ }).textContent).toContain("1");
     // Подзаголовок и плитка считают пул целиком — вместе с невыданными (эскиз: «42 вопроса»).
-    expect(screen.getByText(/^4 вопроса · отсортированы по силе подозрения$/)).toBeTruthy();
-    expect(screen.getByText("из 4 вопросов")).toBeTruthy();
+    expect(screen.getByText(termOrText(/^4 вопроса · отсортированы по силе подозрения$/))).toBeTruthy();
+    expect(screen.getByText(termOrText("из 4 вопросов"))).toBeTruthy();
 
     await userEvent.click(screen.getByRole("button", { name: /Мало данных/ }));
     expect(order()).toEqual(["Вопрос Г", "Вопрос Я"]);
@@ -1050,9 +1051,9 @@ describe("ItemQualityPanel — вопрос ещё не выдавался", () 
       ],
     })} />);
 
-    expect(screen.getByText("Нужно ещё 19 наблюдений")).toBeTruthy();
-    expect(within(rowOf("Вопрос 2")).getByText("Вопрос ещё не выдавался")).toBeTruthy();
-    expect(screen.queryByText("Нужно ещё 30 наблюдений")).toBeNull();
+    expect(screen.getByText(termOrText("Нужно ещё 19 наблюдений"))).toBeTruthy();
+    expect(within(rowOf("Вопрос 2")).getByText(termOrText("Вопрос ещё не выдавался"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Нужно ещё 30 наблюдений"))).toBeNull();
   });
 
   it("меню: «Открыть вопрос в теме» и исключение есть, «Разбор вопроса» — нет", async () => {

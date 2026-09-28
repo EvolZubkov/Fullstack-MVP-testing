@@ -17,6 +17,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuestionTable } from "../question-table";
+import { termOrText } from "./term-text";
 
 /**
  * Открыть меню действий строки.
@@ -61,8 +62,8 @@ describe("QuestionTable", () => {
   it("показывает задание с типом-пиктограммой и его темой", () => {
     render(<QuestionTable questions={QUESTIONS} />);
 
-    expect(screen.getByText("Какая мера относится к антикоррупционным?")).toBeTruthy();
-    expect(screen.getByText("Право и комплаенс")).toBeTruthy();
+    expect(screen.getByText(termOrText("Какая мера относится к антикоррупционным?"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Право и комплаенс"))).toBeTruthy();
     // Тип назван пиктограммой: у неё есть доступное имя, но своей колонки нет.
     expect(screen.getByLabelText("Один ответ")).toBeTruthy();
   });
@@ -70,9 +71,9 @@ describe("QuestionTable", () => {
   it("печатает прочерк там, где доли верных не существует", () => {
     render(<QuestionTable questions={QUESTIONS} />);
 
-    const row = screen.getByText("Насколько вы согласны?").closest("tr")!;
+    const row = screen.getByText(termOrText("Насколько вы согласны?")).closest("tr")!;
     // FR-22: у измерительного задания нет эталона — ноль здесь был бы ложью.
-    expect(within(row).getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    expect(within(row).getAllByText(termOrText("—")).length).toBeGreaterThanOrEqual(1);
   });
 
   it("отбирает задания с признаками ревизии и считает их", async () => {
@@ -80,8 +81,8 @@ describe("QuestionTable", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Требуют ревизии/ }));
 
-    expect(screen.getByText("Быстрый и мимо")).toBeTruthy();
-    expect(screen.queryByText("Какая мера относится к антикоррупционным?")).toBeNull();
+    expect(screen.getByText(termOrText("Быстрый и мимо"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Какая мера относится к антикоррупционным?"))).toBeNull();
   });
 
   it("называет признак словами, а не помечает значком", async () => {
@@ -89,7 +90,7 @@ describe("QuestionTable", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Требуют ревизии/ }));
 
-    expect(screen.getByText(/условие, похоже, не читают/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/условие, похоже, не читают/))).toBeTruthy();
   });
 
   it("говорит, что ревизия никому не нужна, когда признаков нет", async () => {
@@ -97,7 +98,7 @@ describe("QuestionTable", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Требуют ревизии/ }));
 
-    expect(screen.getByText(/Признаки проблем не сошлись/i)).toBeTruthy();
+    expect(screen.getByText(termOrText(/Признаки проблем не сошлись/i))).toBeTruthy();
   });
 
   it("ведёт из строки к прохождениям, где на задании ошиблись", async () => {
@@ -122,13 +123,13 @@ describe("QuestionTable", () => {
     // Заголовок сортируемой колонки в ДС — не кнопка, а кликабельная ячейка: доступность
     // заголовков это отдельный долг ДС, записанный в план Э4. По умолчанию таблица уже
     // отсортирована по трудности, поэтому проверяется ОБРАТНЫЙ порядок после клика.
-    await userEvent.click(screen.getByText("Трудность"));
+    await userEvent.click(screen.getByText(termOrText("Трудность")));
 
     const rows = screen.getAllByRole("row").slice(1);
     // Убывание: задание без трудности всегда первое (его «нет значения» уезжает в конец
     // при возрастании и в начало при убывании), затем 0,41, затем 0,20.
-    expect(within(rows[0]).getByText("Насколько вы согласны?")).toBeTruthy();
-    expect(within(rows[2]).getByText("Быстрый и мимо")).toBeTruthy();
+    expect(within(rows[0]).getByText(termOrText("Насколько вы согласны?"))).toBeTruthy();
+    expect(within(rows[2]).getByText(termOrText("Быстрый и мимо"))).toBeTruthy();
   });
 });
 
@@ -151,17 +152,17 @@ describe("QuestionTable — термины вкладки «Вопросы»", (
   it("колонки «Вопрос» и «Экспозиция»", () => {
     render(<QuestionTable questions={QUESTIONS} />);
 
-    expect(screen.getByText("Вопрос")).toBeTruthy();
-    expect(screen.getByText("Экспозиция")).toBeTruthy();
-    expect(screen.queryByText("Задание")).toBeNull();
-    expect(screen.queryByText("Выдаётся")).toBeNull();
+    expect(screen.getByText(termOrText("Вопрос"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Экспозиция"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Задание"))).toBeNull();
+    expect(screen.queryByText(termOrText("Выдаётся"))).toBeNull();
   });
 
   it("подзаголовок считает вопросы и прохождения", () => {
     render(<QuestionTable questions={QUESTIONS} passages={486} />);
 
     expect(screen.getByText(new RegExp(`^${QUESTIONS.length} вопрос`))).toBeTruthy();
-    expect(screen.getByText(/· 486 прохождений/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/· 486 прохождений/))).toBeTruthy();
   });
 });
 
@@ -174,9 +175,9 @@ describe("QuestionTable — психометрика в строке (PRD-66)", 
   it("вместо доли верных показывает трудность по доле балла", () => {
     render(<QuestionTable questions={QUESTIONS} psychometrics={PSYCHO} />);
 
-    expect(screen.queryByText("Доля верных")).toBeNull();
-    const row = screen.getByText("Какая мера относится к антикоррупционным?").closest("tr")!;
-    expect(within(row).getByText("0,41")).toBeTruthy();
+    expect(screen.queryByText(termOrText("Доля верных"))).toBeNull();
+    const row = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
+    expect(within(row).getByText(termOrText("0,41"))).toBeTruthy();
   });
 
   it("у задания с частичным кредитом трудность ВЫШЕ доли верных", () => {
@@ -184,16 +185,16 @@ describe("QuestionTable — психометрика в строке (PRD-66)", 
     // потому что полный балл берут немногие, а набирают его частями почти все.
     render(<QuestionTable questions={QUESTIONS} psychometrics={PSYCHO} />);
 
-    const row = screen.getByText("Быстрый и мимо").closest("tr")!;
-    expect(within(row).getByText("0,79")).toBeTruthy();
-    expect(within(row).queryByText("20 %")).toBeNull();
+    const row = screen.getByText(termOrText("Быстрый и мимо")).closest("tr")!;
+    expect(within(row).getByText(termOrText("0,79"))).toBeTruthy();
+    expect(within(row).queryByText(termOrText("20 %"))).toBeNull();
   });
 
   it("авторская трудность называется «Замысел», иначе колонок «Трудность» было бы две", () => {
     render(<QuestionTable questions={QUESTIONS} psychometrics={PSYCHO} />);
 
-    expect(screen.getByText("Замысел")).toBeTruthy();
-    expect(screen.getAllByText("Трудность")).toHaveLength(1);
+    expect(screen.getByText(termOrText("Замысел"))).toBeTruthy();
+    expect(screen.getAllByText(termOrText("Трудность"))).toHaveLength(1);
   });
 
   it("дискриминативность ведёт в разбор задания", async () => {
@@ -213,18 +214,18 @@ describe("QuestionTable — психометрика в строке (PRD-66)", 
       q1: { difficulty: 0.33, itemRest: null, observations: 12, coefficientConfidence: "insufficient" },
     }} />);
 
-    const row = screen.getByText("Какая мера относится к антикоррупционным?").closest("tr")!;
-    expect(within(row).getByText("0,33")).toBeTruthy();
-    expect(within(row).getByText("мало данных")).toBeTruthy();
+    const row = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
+    expect(within(row).getByText(termOrText("0,33"))).toBeTruthy();
+    expect(within(row).getByText(termOrText("мало данных"))).toBeTruthy();
   });
 
   it("разовое пояснение о смене числа закрывается навсегда", async () => {
     render(<QuestionTable questions={QUESTIONS} psychometrics={PSYCHO} />);
 
-    expect(screen.getByText(/заменена трудностью/i)).toBeTruthy();
+    expect(screen.getByText(termOrText(/заменена трудностью/i))).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Больше не показывать" }));
 
-    expect(screen.queryByText(/заменена трудностью/i)).toBeNull();
+    expect(screen.queryByText(termOrText(/заменена трудностью/i))).toBeNull();
   });
 
   it("без психометрики колонки на месте, но числа не выдуманы", () => {
@@ -232,8 +233,8 @@ describe("QuestionTable — психометрика в строке (PRD-66)", 
     // ложью о задании, которую автор успеет прочитать.
     render(<QuestionTable questions={QUESTIONS} />);
 
-    const row = screen.getByText("Какая мера относится к антикоррупционным?").closest("tr")!;
-    expect(within(row).getAllByText("—").length).toBeGreaterThan(0);
+    const row = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
+    expect(within(row).getAllByText(termOrText("—")).length).toBeGreaterThan(0);
   });
 });
 
@@ -260,8 +261,8 @@ describe("QuestionTable — исключение из выдачи", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Исключённые/ }));
 
-    expect(screen.getByText("Быстрый и мимо")).toBeTruthy();
-    expect(screen.queryByText("Какая мера относится к антикоррупционным?")).toBeNull();
+    expect(screen.getByText(termOrText("Быстрый и мимо"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Какая мера относится к антикоррупционным?"))).toBeNull();
   });
 
   it("спрашивает подтверждение и называет последствия числами", async () => {
@@ -272,12 +273,12 @@ describe("QuestionTable — исключение из выдачи", () => {
 
     // FR-17b, эскиз окна (план сверки 5.8): что станет с вопросом, что сохранится, сколько
     // останется при какой квоте и когда исключение подействует.
-    expect(screen.getByText(/Вопрос остаётся в теме и в банке/)).toBeTruthy();
-    expect(screen.getByText(/Право и комплаенс · 82 % показов при 41 % верных/)).toBeTruthy();
-    expect(await screen.findByText(/В теме останется 11 вопросов при квоте 10 на прохождение: выдача выполнима/)).toBeTruthy();
-    expect(screen.getByText(/ответы и статистика по вопросу сохраняются/)).toBeTruthy();
-    expect(screen.getByText("Подействует после новой публикации")).toBeTruthy();
-    expect(screen.getByText(/Тест опубликован 01.09.2026/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/Вопрос остаётся в теме и в банке/))).toBeTruthy();
+    expect(screen.getByText(termOrText(/Право и комплаенс · 82 % показов при 41 % верных/))).toBeTruthy();
+    expect(await screen.findByText(termOrText(/В теме останется 11 вопросов при квоте 10 на прохождение: выдача выполнима/))).toBeTruthy();
+    expect(screen.getByText(termOrText(/ответы и статистика по вопросу сохраняются/))).toBeTruthy();
+    expect(screen.getByText(termOrText("Подействует после новой публикации"))).toBeTruthy();
+    expect(screen.getByText(termOrText(/Тест опубликован 01.09.2026/))).toBeTruthy();
     expect(screen.getByRole("button", { name: "Исключить из выдачи" })).toBeTruthy();
   });
 
@@ -290,8 +291,8 @@ describe("QuestionTable — исключение из выдачи", () => {
     await openRowMenu(/Действия с вопросом: Какая мера/);
     await userEvent.click(screen.getByRole("menuitem", { name: /Исключить из выдачи: Какая мера/ }));
 
-    await screen.findByText(/В теме останется/);
-    expect(screen.queryByText("Подействует после новой публикации")).toBeNull();
+    await screen.findByText(termOrText(/В теме останется/));
+    expect(screen.queryByText(termOrText("Подействует после новой публикации"))).toBeNull();
   });
 
   it("не исключает, пока подтверждение не дано", async () => {
@@ -300,7 +301,7 @@ describe("QuestionTable — исключение из выдачи", () => {
 
     await openRowMenu(/Действия с вопросом: Какая мера/);
     await userEvent.click(screen.getByRole("menuitem", { name: /Исключить из выдачи: Какая мера/ }));
-    await screen.findByText(/останется 11/i);
+    await screen.findByText(termOrText(/останется 11/i));
     await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
 
     expect(onDeliveryChange).not.toHaveBeenCalled();
@@ -312,7 +313,7 @@ describe("QuestionTable — исключение из выдачи", () => {
 
     await openRowMenu(/Действия с вопросом: Какая мера/);
     await userEvent.click(screen.getByRole("menuitem", { name: /Исключить из выдачи: Какая мера/ }));
-    await screen.findByText(/останется 11/i);
+    await screen.findByText(termOrText(/останется 11/i));
     await userEvent.click(screen.getByRole("button", { name: "Исключить из выдачи" }));
 
     expect(onDeliveryChange).toHaveBeenCalledWith("q1", true);
@@ -335,7 +336,7 @@ describe("QuestionTable — исключение из выдачи", () => {
     await openRowMenu(/Действия с вопросом: Какая мера/);
     await userEvent.click(screen.getByRole("menuitem", { name: /Исключить из выдачи: Какая мера/ }));
 
-    expect(await screen.findByText(/Подтема «Охрана труда»: нужно 3, останется 2/)).toBeTruthy();
+    expect(await screen.findByText(termOrText(/Подтема «Охрана труда»: нужно 3, останется 2/))).toBeTruthy();
   });
 
   it("запрещает исключение, после которого выдачу собрать нельзя", async () => {
@@ -352,7 +353,7 @@ describe("QuestionTable — исключение из выдачи", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: /Исключить из выдачи: Какая мера/ }));
 
     // Не «выполнено с предупреждением»: кнопка выключена, и сказано почему.
-    expect(await screen.findByText(/выдачу собрать будет нельзя/i)).toBeTruthy();
+    expect(await screen.findByText(termOrText(/выдачу собрать будет нельзя/i))).toBeTruthy();
     expect(screen.getByRole("button", { name: "Исключить из выдачи" })).toBeDisabled();
   });
 
@@ -401,35 +402,35 @@ describe("QuestionTable — измерительный тест", () => {
   it("показывает разброс ответов вместо доли верных", () => {
     render(<QuestionTable questions={SURVEY} measurement minObservations={10} />);
 
-    expect(screen.getByText("Разброс ответов")).toBeTruthy();
-    expect(screen.queryByText("Доля верных")).toBeNull();
+    expect(screen.getByText(termOrText("Разброс ответов"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Доля верных"))).toBeNull();
     // Варианты идут по убыванию доли и только первые три: у распределения баллов их бывает
     // десять, и полный перечень занял бы строку на весь экран. У шкалы подписи короткие,
     // поэтому доля отделена тире: «3 44 %» читалось бы как одно число.
-    expect(screen.getByText("3 — 44 % · 4 — 26 % · 2 — 14 % · 5 — 10 % · ещё 1")).toBeTruthy();
+    expect(screen.getByText(termOrText("3 — 44 % · 4 — 26 % · 2 — 14 % · 5 — 10 % · ещё 1"))).toBeTruthy();
   });
 
   it("ниже порога наблюдений говорит «мало данных», а не рисует полосу", () => {
     render(<QuestionTable questions={SURVEY} measurement minObservations={10} />);
 
-    expect(screen.getByText("мало данных")).toBeTruthy();
+    expect(screen.getByText(termOrText("мало данных"))).toBeTruthy();
   });
 
   it("убирает колонки, которые без эталона ничего не значат", () => {
     // Трудность — свойство задания с верным ответом, экспозиция — вопрос вкладки «Выдача».
     render(<QuestionTable questions={SURVEY} measurement minObservations={10} />);
 
-    expect(screen.queryByText("Трудность")).toBeNull();
-    expect(screen.queryByText("Экспозиция")).toBeNull();
-    expect(screen.getByText("Ответов")).toBeTruthy();
+    expect(screen.queryByText(termOrText("Трудность"))).toBeNull();
+    expect(screen.queryByText(termOrText("Экспозиция"))).toBeNull();
+    expect(screen.getByText(termOrText("Ответов"))).toBeTruthy();
   });
 
   it("оцениваемому тесту таблицу не меняет", () => {
     render(<QuestionTable questions={QUESTIONS} />);
 
     // С PRD-66 FR-02 место доли верных занимает трудность — у оцениваемого теста она есть.
-    expect(screen.getByText("Трудность")).toBeTruthy();
-    expect(screen.queryByText("Разброс ответов")).toBeNull();
+    expect(screen.getByText(termOrText("Трудность"))).toBeTruthy();
+    expect(screen.queryByText(termOrText("Разброс ответов"))).toBeNull();
   });
 });
 
@@ -456,15 +457,15 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
 
   it("колонка появляется и в обычном тесте, а оценка задания остаётся", () => {
     render(<QuestionTable questions={WRITTEN} minObservations={10} />);
-    expect(screen.getByText("Что отвечали")).toBeTruthy();
+    expect(screen.getByText(termOrText("Что отвечали"))).toBeTruthy();
     // PRD-66 FR-02: колонка оценки задания на месте, но считается долей балла.
-    expect(screen.getByText("Трудность")).toBeTruthy();
-    expect(screen.getByText("Ростехнадзор 55 % · РТН 30 %")).toBeTruthy();
+    expect(screen.getByText(termOrText("Трудность"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Ростехнадзор 55 % · РТН 30 %"))).toBeTruthy();
   });
 
   it("у свободного текста вместо долей — объём и длина", () => {
     render(<QuestionTable questions={WRITTEN} minObservations={10} />);
-    expect(screen.getByText(/12 ответов · медиана 340 знаков \(от 42 до 3000\)/)).toBeTruthy();
+    expect(screen.getByText(termOrText(/12 ответов · медиана 340 знаков \(от 42 до 3000\)/))).toBeTruthy();
   });
 
   it("сами работы открываются списком и отдаются выгрузкой", async () => {
@@ -479,7 +480,7 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
     render(<QuestionTable questions={WRITTEN} testId="t1" minObservations={10} />);
     await userEvent.click(screen.getByRole("button", { name: /Прочитать ответы/ }));
 
-    expect(await screen.findByText("Сначала обесточить.")).toBeTruthy();
+    expect(await screen.findByText(termOrText("Сначала обесточить."))).toBeTruthy();
     expect(fetchMock.mock.calls[0][0]).toBe("/api/analytics/tests/t1/questions/w2/answers");
     expect(screen.getByRole("button", { name: "Выгрузить в Excel" })).toBeTruthy();
   });
@@ -502,10 +503,10 @@ describe("QuestionTable — подсказки терминов (FR-14b)", () =>
   it.each(HINTS)("«%s» — со значком и толкованием", (term, hint) => {
     render(<QuestionTable questions={QUESTIONS} />);
 
-    const trigger = screen.getByText(hint).closest(".tb-term-hint") as HTMLElement;
+    const trigger = screen.getByText(termOrText(hint)).closest(".tb-term-hint") as HTMLElement;
     expect(trigger).toBeTruthy();
-    expect(within(trigger).getByText(term)).toBeTruthy();
-    // Значок — псевдоэлемент термина (см. term-hint.tsx): держится при последнем слове.
+    expect(within(trigger).getByText(termOrText(term))).toBeTruthy();
+    // Значок — lucide `Info` в одном неразрывном блоке с последним словом (см. term-hint.tsx).
     expect(trigger.querySelector(".tb-term-hint__term")).toBeTruthy();
     expect(trigger.getAttribute("tabindex")).toBe("0");
     // Числовая колонка: заголовок справа, над числами.
