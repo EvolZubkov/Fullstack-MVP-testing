@@ -83,6 +83,7 @@ LMS, какие баллы/шкалы/показатели считаются и
 | Рендер экранов, выдача, расчёт балла/шкал/показателей, `suspend_data` within-attempt | да (тот же `app.js`/`runtime.js` пакета) | да |
 | Коммуникация с LMS (`cmi.*` чтения/записи, completion/success/score) | да (RTE-шим логирует трафик) | да |
 | Восстановление сессии within-attempt (resume по `suspend_data`) | да (localStorage) | да |
+| Активное время `cmi.total_time` (якорь лимита теста, PRD-20) | да: сумма `cmi.session_time` сессий, засчитывается на старте следующей сессии; элемент только для чтения (с 2026-09-29, до этого не велось — тест с общим лимитом не возобновлялся) | да |
 | Sequencing & Navigation (SN), активное дерево активностей | НЕТ (шим только RTE) | зависит от LMS |
 | Cross-attempt-стор, ротация вариантов на повторе (PRD-17) | НЕТ (`adl.data` недоступен; деградация до случайного выбора) | НЕТ (NFR-17) |
 | Реальный retake-gate по данным WebTutor (PRD-6) | только МОК ([scorm-player.mjs](../../../scripts/scorm-player.mjs) `/api/mock-webtutor`/ClientBridge) | да |
