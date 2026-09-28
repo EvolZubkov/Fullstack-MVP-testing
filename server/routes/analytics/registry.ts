@@ -161,6 +161,18 @@ async function attemptOrdinals(
   return out;
 }
 
+// GET /api/analytics/org-values — оргзначения для окна отбора (FR-06b).
+// Под правом аналитики, а не пользователей: оценщику нужны значения для отбора, а читать карточки
+// людей ему не обязательно. Отдаются значения и число употреблений — людей здесь нет.
+router.get("/org-values", requirePermission("analytics.read"), async (_req: Request, res: Response) => {
+  try {
+    res.json(await storage.getOrgValues());
+  } catch (error) {
+    logger.error("Org values analytics error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to load org values" });
+  }
+});
+
 // GET /api/analytics/registry — порция прохождений и общее их число
 router.get("/registry", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {

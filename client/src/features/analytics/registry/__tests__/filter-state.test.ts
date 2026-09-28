@@ -29,6 +29,10 @@ describe("filter-state", () => {
       snapshotIds: ["snap-1"],
       sources: ["web", "import"],
       outcomes: ["failed"],
+      // Оргструктура (FR-06b) — тоже условие адреса.
+      organizations: ["АО «Ромашка»"],
+      units: ["Отдел продаж"],
+      positions: [],
       from: "2026-09-01",
       to: "2026-09-30",
     };

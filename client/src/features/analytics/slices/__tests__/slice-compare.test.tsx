@@ -281,6 +281,32 @@ describe("SliceCompare", () => {
     });
   });
 
+  it("правка условий в слоте не теряет оргусловия (FR-06b)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        slices: [
+          SLICES[0],
+          { ...SLICES[1], conditions: { testIds: ["test1"], positions: ["Кладовщик"] } },
+        ],
+        minObservations: 10,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SliceCompare testId="test1" />);
+    await pick("Розница");
+    await userEvent.click(screen.getByRole("button", { name: "Изменить условия" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Применить" }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(call => (call[1] as RequestInit | undefined)?.method === "PUT");
+      expect(put).toBeTruthy();
+      expect(JSON.parse(String((put![1] as RequestInit).body)).conditions)
+        .toMatchObject({ positions: ["Кладовщик"] });
+    });
+  });
+
   // Править условия можно у СОХРАНЁННОГО среза: «тест целиком» условий не имеет, а набранный
   // отбор правится там, где набран, — в фильтре реестра.
   it("предлагает правку условий только сохранённому срезу", async () => {

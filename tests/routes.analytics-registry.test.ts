@@ -26,8 +26,9 @@ const { storageMock } = vi.hoisted(() => ({
     selectAttemptOrder: vi.fn(),
     getGroup: vi.fn(),
     getUserGroups: vi.fn(),
-    // План оргструктуры: хранящиеся написания оргполей.
+    // План оргструктуры: хранящиеся написания оргполей и свёрнутый справочник значений.
     selectOrgSpellings: vi.fn(),
+    getOrgValues: vi.fn(),
   },
 }));
 
@@ -105,6 +106,16 @@ describe("GET /api/analytics/registry — оргструктура (FR-06b)", ()
 
     expect(storageMock.selectObservations.mock.calls[0][0].orgValues)
       .toEqual({ organization: ["ООО «Альфа, Бета»"] });
+  });
+
+  it("отдаёт справочник оргзначений под правом аналитики", async () => {
+    const values = { organization: [], unit: [{ value: "Отдел продаж", users: 3, attempts: 40 }], position: [] };
+    storageMock.getOrgValues.mockResolvedValue(values);
+
+    const res = await request(makeApp()).get("/api/analytics/org-values").set("x-test-user", "a1");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(values);
   });
 
   it("отдаёт оргполя строки по правилу OQ-04: у веба — профиль", async () => {

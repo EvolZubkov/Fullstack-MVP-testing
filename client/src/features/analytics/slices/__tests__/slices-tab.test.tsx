@@ -101,6 +101,20 @@ describe("SlicesTab", () => {
     await waitFor(() => expect(lastSlicesQuery().get("axis")).toBe("source"));
   });
 
+  it("разбивает по подразделению и называет срез по оси (FR-06b)", async () => {
+    render(<SlicesTab tests={TESTS} />);
+    await pickTest("Сертификация руководителей");
+
+    await userEvent.click(screen.getByLabelText("Разбить по"));
+    // Оргоси стоят сразу за группой; должность и организация — рядом.
+    const options = (await screen.findAllByRole("option")).map(option => option.textContent);
+    expect(options.slice(0, 4)).toEqual(["Группа", "Подразделение", "Должность", "Организация"]);
+    await userEvent.click(screen.getByRole("option", { name: "Подразделение" }));
+
+    await waitFor(() => expect(lastSlicesQuery().get("axis")).toBe("unit"));
+    expect(await screen.findByText("Срез по подразделениям")).toBeTruthy();
+  });
+
   it("добавляет к условиям среза тест рамки при переходе в реестр", async () => {
     const onOpenRegistry = vi.fn();
     render(<SlicesTab tests={TESTS} onOpenRegistry={onOpenRegistry} />);

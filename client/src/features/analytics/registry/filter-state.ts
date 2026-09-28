@@ -33,10 +33,30 @@ export interface RegistryFilter {
    */
   formIds: string[];
   snapshotIds: string[];
+  /**
+   * Оргструктура (FR-06b): значения, как их называет человек. Сервер отбирает по любому
+   * написанию значения, поэтому здесь хранится то, что было выбрано, а не ключ сравнения.
+   */
+  organizations: string[];
+  units: string[];
+  positions: string[];
   /** Границы периода в формате `ГГГГ-ММ-ДД`; каждая необязательна. */
   from?: string;
   to?: string;
 }
+
+/**
+ * Оргусловия: поле фильтра, параметр адреса, префикс чипа и подпись.
+ *
+ * Одна таблица на все места, где условия перечисляются, — адрес, чипы, счётчик, сохранённый
+ * срез. Список ключей условий уже расходился между местами, и новое условие, забытое в одном
+ * из них, молча терялось на полпути.
+ */
+export const ORG_CONDITIONS = [
+  { key: "organizations", param: "organization", label: "Организация" },
+  { key: "units", param: "unit", label: "Подразделение" },
+  { key: "positions", param: "position", label: "Должность" },
+] as const;
 
 const SOURCES: readonly string[] = ["web", "telemetry", "import"];
 const OUTCOMES: readonly string[] = ["passed", "failed", "completed", "incomplete"];
@@ -44,7 +64,18 @@ const OUTCOMES: readonly string[] = ["passed", "failed", "completed", "incomplet
 /** Пустой фильтр — то, что видит пользователь, открывший реестр без ссылки. */
 export const EMPTY_FILTER: RegistryFilter = {
   testIds: [], groupIds: [], sources: [], outcomes: [], formIds: [], snapshotIds: [],
+  organizations: [], units: [], positions: [],
 };
+
+/**
+ * Значения повторённого параметра — БЕЗ разбора по запятой.
+ *
+ * Для оргзначений запятая — часть имени («ООО «Альфа, Бета»»), и деление по ней разрезало бы
+ * организацию на две несуществующие.
+ */
+function repeatedOf(params: URLSearchParams, name: string): string[] {
+  return params.getAll(name).map(value => value.trim()).filter(Boolean);
+}
 
 /**
  * Значения параметра: он может прийти повторами (`?testId=a&testId=b`) или списком
@@ -80,6 +111,9 @@ export function parseFilter(search: string): RegistryFilter {
     snapshotIds: valuesOf(params, "snapshotId"),
     sources: valuesOf(params, "source").filter((s): s is RegistrySource => SOURCES.includes(s)),
     outcomes: valuesOf(params, "outcome").filter((o): o is RegistryOutcome => OUTCOMES.includes(o)),
+    organizations: repeatedOf(params, "organization"),
+    units: repeatedOf(params, "unit"),
+    positions: repeatedOf(params, "position"),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
   };
@@ -99,6 +133,9 @@ export function filterToSearch(filter: Partial<RegistryFilter>): string {
   for (const id of filter.snapshotIds ?? []) params.append("snapshotId", id);
   for (const source of filter.sources ?? []) params.append("source", source);
   for (const outcome of filter.outcomes ?? []) params.append("outcome", outcome);
+  for (const { key, param } of ORG_CONDITIONS) {
+    for (const value of filter[key] ?? []) params.append(param, value);
+  }
   if (filter.from) params.set("from", filter.from);
   if (filter.to) params.set("to", filter.to);
 
@@ -114,6 +151,7 @@ export function isEmptyFilter(filter: RegistryFilter): boolean {
     && filter.snapshotIds.length === 0
     && filter.sources.length === 0
     && filter.outcomes.length === 0
+    && ORG_CONDITIONS.every(({ key }) => (filter[key] ?? []).length === 0)
     && !filter.from
     && !filter.to;
 }
@@ -177,6 +215,11 @@ export function describeConditions(
   for (const outcome of filter.outcomes) {
     items.push({ id: `outcome:${outcome}`, label: `Исход: ${OUTCOME_LABEL[outcome] ?? outcome}` });
   }
+  // Оргзначение — само по себе имя, справочник не нужен. Чип на значение, как у групп: снять
+  // одно подразделение из двух должно быть можно, не открывая окно.
+  for (const { key, param, label } of ORG_CONDITIONS) {
+    for (const value of filter[key] ?? []) items.push({ id: `${param}:${value}`, label: `${label}: ${value}` });
+  }
   if (filter.from || filter.to) {
     items.push({ id: "period", label: `Период: ${filter.from ?? "…"} — ${filter.to ?? "…"}` });
   }
@@ -204,6 +247,9 @@ export function conditionsToFilter(raw: unknown): RegistryFilter {
     snapshotIds: strings(source.snapshotIds),
     sources: strings(source.sources).filter((s): s is RegistrySource => SOURCES.includes(s)),
     outcomes: strings(source.outcomes).filter((o): o is RegistryOutcome => OUTCOMES.includes(o)),
+    organizations: strings(source.organizations),
+    units: strings(source.units),
+    positions: strings(source.positions),
     ...(date(source.from) ? { from: date(source.from) } : {}),
     ...(date(source.to) ? { to: date(source.to) } : {}),
   };
@@ -217,5 +263,6 @@ export function countConditions(filter: RegistryFilter): number {
     + filter.snapshotIds.length
     + filter.sources.length
     + filter.outcomes.length
+    + ORG_CONDITIONS.reduce((sum, { key }) => sum + (filter[key] ?? []).length, 0)
     + (filter.from || filter.to ? 1 : 0);
 }

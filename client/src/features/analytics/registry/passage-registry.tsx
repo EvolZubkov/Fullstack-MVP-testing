@@ -27,6 +27,7 @@ import {
   describeConditions,
   filterToSearch,
   EMPTY_FILTER,
+  ORG_CONDITIONS,
   type RegistryFilter,
   type RegistryOutcome,
   type RegistrySource,
@@ -209,6 +210,11 @@ export function PassageRegistry({
     else if (kind === "form") onFilterChange({ ...filter, formIds: filter.formIds.filter(x => x !== value) });
     else if (kind === "snapshot") {
       onFilterChange({ ...filter, snapshotIds: filter.snapshotIds.filter(x => x !== value) });
+    }
+    else if (ORG_CONDITIONS.some(condition => condition.param === kind)) {
+      // Оргусловие: префикс чипа — параметр адреса, значение — имя как есть (в нём бывают «:»).
+      const { key } = ORG_CONDITIONS.find(condition => condition.param === kind)!;
+      onFilterChange({ ...filter, [key]: filter[key].filter(x => x !== value) });
     }
     else if (id === "period") {
       const { from: _from, to: _to, ...rest } = filter;

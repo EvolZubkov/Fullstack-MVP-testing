@@ -93,6 +93,25 @@ describe("ExportDialog — только лучшая попытка", () => {
     }));
   });
 
+  it("оргусловия отбора уходят в выгрузку (FR-06b)", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ExportDialog
+          open
+          onClose={() => {}}
+          filter={{ ...EMPTY_FILTER, testIds: ["t1"], organizations: ["АО"], units: ["Отдел продаж"], positions: ["Кладовщик"] }}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByText(/12 прохождений/)).toBeTruthy());
+    await userEvent.click(screen.getByRole("button", { name: "Скачать книгу" }));
+
+    await waitFor(() => expect(exportBody()).toMatchObject({
+      organizations: ["АО"], units: ["Отдел продаж"], positions: ["Кладовщик"],
+    }));
+  });
+
   it("без галочки правило не передаётся включённым", async () => {
     renderDialog();
     await waitFor(() => expect(screen.getByText(/12 прохождений/)).toBeTruthy());

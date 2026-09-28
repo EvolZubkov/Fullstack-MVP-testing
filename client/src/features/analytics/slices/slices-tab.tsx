@@ -46,9 +46,15 @@ export interface SlicesTabProps {
   adhocTestId?: string | null;
 }
 
-/** Оси разбиения: только те, для которых данные уже есть (FR-06a, FR-06b). */
+/**
+ * Оси разбиения (FR-06a). Оргструктура — сразу за группой, по убыванию практической ценности:
+ * исключение FR-06b отменено 2026-09-28.
+ */
 const AXES: Array<{ value: string; label: string; heading: string }> = [
   { value: "group", label: "Группа", heading: "Срез по группам" },
+  { value: "unit", label: "Подразделение", heading: "Срез по подразделениям" },
+  { value: "position", label: "Должность", heading: "Срез по должностям" },
+  { value: "organization", label: "Организация", heading: "Срез по организациям" },
   { value: "period", label: "Поток (период)", heading: "Срез по потокам" },
   { value: "attempt", label: "Номер попытки", heading: "Срез по номеру попытки" },
   { value: "version", label: "Версия теста", heading: "Срез по версиям публикации" },

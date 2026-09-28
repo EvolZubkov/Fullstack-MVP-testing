@@ -849,6 +849,10 @@ export default function AnalyticsPage() {
       // их, и реестр открывается ровно тем составом, что в строке среза (FR-08).
       formIds: list(conditions.formIds),
       snapshotIds: list(conditions.snapshotIds),
+      // Оргсрезы (FR-06b) открываются в реестре тем же составом, что в строке.
+      organizations: list(conditions.organizations),
+      units: list(conditions.units),
+      positions: list(conditions.positions),
       sources: list(conditions.sources) as RegistryFilter["sources"],
       outcomes: list(conditions.outcomes) as RegistryFilter["outcomes"],
       ...(text(conditions.from) ? { from: text(conditions.from) } : {}),
@@ -1075,6 +1079,9 @@ export default function AnalyticsPage() {
                     // сравнивался бы как тест целиком.
                     formIds: compareWith.formIds,
                     snapshotIds: compareWith.snapshotIds,
+                    organizations: compareWith.organizations,
+                    units: compareWith.units,
+                    positions: compareWith.positions,
                     ...(compareWith.from ? { from: compareWith.from } : {}),
                     ...(compareWith.to ? { to: compareWith.to } : {}),
                   }

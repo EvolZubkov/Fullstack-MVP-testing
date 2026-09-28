@@ -46,9 +46,17 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
       const date = new Date(`${value}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}Z`);
       return Number.isNaN(date.getTime()) ? undefined : date;
     };
+    // Оргструктура (FR-06b) — повтором параметра, без деления по запятой: она бывает в имени.
+    const repeated = (value: unknown): string[] =>
+      (Array.isArray(value) ? value : value === undefined ? [] : [value])
+        .map(item => String(item).trim())
+        .filter(Boolean);
     const filter = {
       ...(listOf(req.query.source).length ? { sources: listOf(req.query.source) as never } : {}),
       ...(listOf(req.query.groupId).length ? { groupIds: listOf(req.query.groupId) } : {}),
+      ...(repeated(req.query.organization).length ? { organizations: repeated(req.query.organization) } : {}),
+      ...(repeated(req.query.unit).length ? { units: repeated(req.query.unit) } : {}),
+      ...(repeated(req.query.position).length ? { positions: repeated(req.query.position) } : {}),
       ...(dateOf(req.query.from, "start") ? { from: dateOf(req.query.from, "start") } : {}),
       ...(dateOf(req.query.to, "end") ? { to: dateOf(req.query.to, "end") } : {}),
     };

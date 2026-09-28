@@ -54,7 +54,7 @@ function lastQuery(): URLSearchParams {
 
 describe("PassageRegistry", () => {
   it("показывает прохождения, которые вернула ручка", async () => {
-    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
+    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
 
     expect(await screen.findByText("Морозова Анна")).toBeTruthy();
     expect(screen.getByText("Сертификация руководителей")).toBeTruthy();
@@ -69,7 +69,7 @@ describe("PassageRegistry", () => {
       { ...ROW, id: "web-2", participant: "Сомов Пётр", groups: [] },
     ], 2));
 
-    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
+    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
 
     expect(await screen.findByText("Группа")).toBeTruthy();
     expect(screen.getByText("Отдел продаж, Поток 2026")).toBeTruthy();
@@ -79,7 +79,7 @@ describe("PassageRegistry", () => {
   it("говорит в подзаголовке, сколько прохождений и откуда они", async () => {
     fetchMock.mockResolvedValue(page([ROW], 1284));
 
-    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
+    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
 
     expect(await screen.findByText(/1284 прохождения за всё время/)).toBeTruthy();
     expect(screen.getByText(/веб, телеметрия LMS и импортированные выгрузки/)).toBeTruthy();
@@ -90,7 +90,7 @@ describe("PassageRegistry", () => {
 
     render(
       <PassageRegistry
-        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: ["import"], outcomes: [] }}
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["import"], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -103,7 +103,7 @@ describe("PassageRegistry", () => {
   it("печатает в подвале, сколько строк показано из скольких", async () => {
     fetchMock.mockResolvedValue(page([ROW], 128));
 
-    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
+    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
 
     expect(await screen.findByText(/Показано 1 из 128/)).toBeTruthy();
   });
@@ -111,7 +111,7 @@ describe("PassageRegistry", () => {
   it("переносит условия отбора в запрос", async () => {
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], sources: ["import"], outcomes: ["failed"], from: "2026-09-01" }}
+        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["import"], outcomes: ["failed"], from: "2026-09-01" }}
         onFilterChange={() => {}}
       />,
     );
@@ -137,7 +137,7 @@ describe("PassageRegistry", () => {
 
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1"], groupIds: ["g1"], formIds: [], snapshotIds: [], sources: [], outcomes: [] }}
+        filter={{ testIds: ["t1"], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -148,11 +148,28 @@ describe("PassageRegistry", () => {
     expect(screen.getByText("Группа: Розница")).toBeTruthy();
   });
 
+  it("снимает оргусловие по одному значению, не трогая соседнее (FR-06b)", async () => {
+    const onFilterChange = vi.fn();
+    render(
+      <PassageRegistry
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: ["Отдел продаж", "Логистика: склад"], positions: [], sources: [], outcomes: [] }}
+        onFilterChange={onFilterChange}
+      />,
+    );
+
+    // Двоеточие внутри значения — не граница вида условия: снять надо именно «Логистика: склад».
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Снять условие: Подразделение: Логистика: склад/ }),
+    );
+
+    expect(onFilterChange).toHaveBeenCalledWith(expect.objectContaining({ units: ["Отдел продаж"] }));
+  });
+
   it("показывает применённые условия чипами и снимает их по одному", async () => {
     const onFilterChange = vi.fn();
     render(
       <PassageRegistry
-        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: ["import"], outcomes: [], from: "2026-09-01", to: "2026-09-30" }}
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["import"], outcomes: [], from: "2026-09-01", to: "2026-09-30" }}
         onFilterChange={onFilterChange}
       />,
     );
@@ -171,7 +188,7 @@ describe("PassageRegistry", () => {
     const onFilterChange = vi.fn();
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], sources: ["web"], outcomes: [] }}
+        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["web"], outcomes: [] }}
         onFilterChange={onFilterChange}
       />,
     );
@@ -179,7 +196,7 @@ describe("PassageRegistry", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Сбросить/ }));
 
     expect(onFilterChange).toHaveBeenCalledWith({
-      testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [],
+      testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [],
     });
   });
 
@@ -188,7 +205,7 @@ describe("PassageRegistry", () => {
 
     render(
       <PassageRegistry
-        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: ["import"], outcomes: [] }}
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["import"], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -202,12 +219,12 @@ describe("PassageRegistry", () => {
       fetchMock.mock.calls.filter(call => String(call[0]).includes("/api/analytics/registry")).length;
 
     const { rerender } = render(
-      <PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />,
+      <PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />,
     );
     await waitFor(() => expect(registryCalls()).toBe(1));
 
     rerender(
-      <PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: ["web"], outcomes: [] }} onFilterChange={() => {}} />,
+      <PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["web"], outcomes: [] }} onFilterChange={() => {}} />,
     );
 
     await waitFor(() => expect(registryCalls()).toBe(2));
@@ -231,7 +248,7 @@ describe("PassageRegistry — сортировка по попытке и гру
 
   for (const [header, key] of [["Попытка", "attempt"], ["Группа", "group"]] as const) {
     it(`«${header}» уходит на сервер параметром sort=${key}`, async () => {
-      render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
+      render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
       await screen.findByText("Морозова Анна");
 
       const th = screen.getAllByText(header).find(el => el.closest(".ou-grid__th")) as HTMLElement;
@@ -256,7 +273,7 @@ describe("PassageRegistry — сохранение среза", () => {
 
     render(
       <PassageRegistry
-        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }}
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -274,7 +291,7 @@ describe("PassageRegistry — сохранение среза", () => {
     // пересобирать отбор незачем: условия он уже набрал, не хватает только теста.
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1", "t2"], groupIds: [], formIds: [], snapshotIds: [], sources: ["web"], outcomes: [] }}
+        filter={{ testIds: ["t1", "t2"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["web"], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -290,7 +307,7 @@ describe("PassageRegistry — сохранение среза", () => {
   it("срез сохраняется по ВЫБРАННОМУ тесту, прочие условия переносятся", async () => {
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1", "t2"], groupIds: ["g1"], formIds: [], snapshotIds: [], sources: ["web"], outcomes: [] }}
+        filter={{ testIds: ["t1", "t2"], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["web"], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -312,7 +329,7 @@ describe("PassageRegistry — сохранение среза", () => {
   it("без теста в выборке срез сохранить нельзя: выбирать не из чего", async () => {
     render(
       <PassageRegistry
-        filter={{ testIds: [], groupIds: ["g1"], formIds: [], snapshotIds: [], sources: [], outcomes: [] }}
+        filter={{ testIds: [], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -327,7 +344,7 @@ describe("PassageRegistry — сохранение среза", () => {
     const onFilterChange = vi.fn();
     render(
       <PassageRegistry
-        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }}
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
         onFilterChange={onFilterChange}
       />,
     );
@@ -346,7 +363,7 @@ describe("PassageRegistry — сохранение среза", () => {
   it("не предлагает сохранить срез, когда условий нет", async () => {
     render(
       <PassageRegistry
-        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] }}
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
@@ -358,7 +375,7 @@ describe("PassageRegistry — сохранение среза", () => {
   it("сохраняет отбор срезом и говорит, что хранятся условия, а не состав", async () => {
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], sources: ["import"], outcomes: [] }}
+        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["import"], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );

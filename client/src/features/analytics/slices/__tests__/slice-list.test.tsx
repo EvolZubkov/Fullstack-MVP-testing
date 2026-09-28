@@ -467,6 +467,50 @@ describe("SliceList — меню «⋯» строки среза", () => {
     );
   });
 
+  it("правка сохранённого среза не теряет оргусловия (FR-06b)", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") return { ok: true, json: async () => ({ slice: {} }) };
+      if (String(url).startsWith("/api/analytics/slices?")) {
+        return answer([{ ...SLICE, conditions: { units: ["Отдел продаж"], testIds: ["t1"] } }]);
+      }
+      return { ok: true, json: async () => [] };
+    });
+    render(<SliceList testId="t1" />);
+
+    await openRowMenu("Отдел продаж");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Изменить условия" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: /Применить/ }));
+
+    await waitFor(() => expect(
+      fetchMock.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "PUT"),
+    ).toBe(true));
+    const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    expect(JSON.parse(String((put![1] as RequestInit).body)).conditions)
+      .toEqual(expect.objectContaining({ units: ["Отдел продаж"] }));
+  });
+
+  it("выгрузка оргсреза отбирает по его подразделению (FR-06b)", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (String(url).startsWith("/api/analytics/slices?")) {
+        return answer([{ ...AXIS_ROW, id: "unit:Логистика", name: "Логистика", conditions: { units: ["Логистика"] } }]);
+      }
+      if (String(url).startsWith("/api/analytics/registry?")) {
+        return { ok: true, json: async () => ({ total: 7, rows: [] }) };
+      }
+      return { ok: true, json: async () => [] };
+    });
+    render(<SliceList testId="t1" axis="unit" />);
+
+    await openRowMenu("Логистика");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Выгрузить прохождения" }));
+
+    await waitFor(() => {
+      const asked = callsTo("/api/analytics/registry?").at(-1) ?? "";
+      expect(new URLSearchParams(asked.slice(asked.indexOf("?"))).getAll("unit")).toEqual(["Логистика"]);
+    });
+  });
+
   it("«Выгрузить прохождения» открывает окно экспорта с условиями среза и рамкой", async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (String(url).startsWith("/api/analytics/slices?")) return answer([AXIS_ROW]);

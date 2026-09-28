@@ -11,14 +11,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RegistryFilterDialog } from "../filter-dialog";
 
-const EMPTY = { testIds: [], groupIds: [], formIds: [], snapshotIds: [], sources: [], outcomes: [] };
+const EMPTY = { testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] };
+
+const ORG_VALUES = {
+  organization: [{ value: "АО «Ромашка»", users: 3, attempts: 0 }],
+  unit: [
+    { value: "Логистика", users: 2, attempts: 5 },
+    { value: "Отдел продаж", users: 4, attempts: 40 },
+  ],
+  position: [],
+};
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (input: string) => ({
     ok: true,
     json: async () => (String(input).includes("/api/groups")
       ? [{ id: "g1", name: "Отдел продаж" }]
-      : [{ id: "t1", title: "Сертификация руководителей" }]),
+      : String(input).includes("/api/analytics/org-values")
+        ? ORG_VALUES
+        : [{ id: "t1", title: "Сертификация руководителей" }]),
   })));
 });
 
@@ -63,6 +74,30 @@ describe("RegistryFilterDialog", () => {
 
     expect((await screen.findByLabelText("Телеметрия LMS")) as HTMLInputElement).toBeChecked();
     expect((screen.getByLabelText("Период с") as HTMLInputElement).value).toBe("2026-09-01");
+  });
+
+  it("отбирает по подразделению из справочника оргзначений (FR-06b)", async () => {
+    const onApply = vi.fn();
+    render(<RegistryFilterDialog open filter={EMPTY} onApply={onApply} onClose={() => {}} />);
+
+    await userEvent.click(await screen.findByRole("combobox", { name: "Подразделение" }));
+    await userEvent.click(await screen.findByRole("option", { name: /Логистика/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ units: ["Логистика"] }));
+  });
+
+  it("показывает применённое оргзначение, даже если его написания нет в справочнике", async () => {
+    // Значение пришло ссылкой в другом написании: сервер отберёт по нему, а окно обязано
+    // показать его, иначе «Применить» молча сняло бы условие.
+    const onApply = vi.fn();
+    render(
+      <RegistryFilterDialog open filter={{ ...EMPTY, units: ["отдел продаж"] }} onApply={onApply} onClose={() => {}} />,
+    );
+
+    expect(await screen.findByText("отдел продаж")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Применить" }));
+    expect(onApply).toHaveBeenCalledWith(expect.objectContaining({ units: ["отдел продаж"] }));
   });
 
   it("сбрасывает все условия одной кнопкой", async () => {

@@ -321,6 +321,10 @@ export function SliceList({
       outcomes: own.outcomes,
       formIds: own.formIds,
       snapshotIds: own.snapshotIds,
+      // Оргусловия среза (FR-06b): без них книга по «Отделу продаж» собрала бы весь тест.
+      organizations: own.organizations,
+      units: own.units,
+      positions: own.positions,
       ...(periodFrom ? { from: periodFrom } : {}),
       ...(periodTo ? { to: periodTo } : {}),
     };
@@ -379,6 +383,9 @@ export function SliceList({
           outcomes: next.outcomes,
           formIds: next.formIds,
           snapshotIds: next.snapshotIds,
+          organizations: next.organizations,
+          units: next.units,
+          positions: next.positions,
           ...(next.from ? { from: next.from } : {}),
           ...(next.to ? { to: next.to } : {}),
         },

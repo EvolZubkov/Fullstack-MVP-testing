@@ -22,6 +22,7 @@ import {
   type RegistrySource,
 } from "./filter-state";
 import { useRegistryDictionaries, useTestDictionary } from "./use-dictionaries";
+import type { OrgField, OrgValueCount } from "@shared/org-fields";
 
 export interface RegistryFilterDialogProps {
   open: boolean;
@@ -60,13 +61,40 @@ function toggle<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter(item => item !== value) : [...list, value];
 }
 
+/** Оргполя окна: поле фильтра, поле справочника, подпись и заглушка — в порядке показа. */
+const ORG_FIELDS_OF_DIALOG: ReadonlyArray<{
+  key: "organizations" | "units" | "positions";
+  field: OrgField;
+  label: string;
+  placeholder: string;
+}> = [
+  { key: "organizations", field: "organization", label: "Организация", placeholder: "Все организации" },
+  { key: "units", field: "unit", label: "Подразделение", placeholder: "Все подразделения" },
+  { key: "positions", field: "position", label: "Должность", placeholder: "Все должности" },
+];
+
+/**
+ * Варианты оргполя: значения справочника плюс уже выбранные, которых в нём нет.
+ *
+ * Выбранное значение могло прийти ссылкой в другом написании («отдел продаж») или справочник
+ * ещё не доехал. Без него в вариантах поле показалось бы пустым, и «Применить» молча сняло бы
+ * условие, которое реестр прямо сейчас применяет.
+ */
+function orgOptions(values: readonly OrgValueCount[], selected: readonly string[]) {
+  const options = values.map(entry => ({ value: entry.value, label: entry.value }));
+  for (const value of selected) {
+    if (!options.some(option => option.value === value)) options.push({ value, label: value });
+  }
+  return options;
+}
+
 export function RegistryFilterDialog({
   open, filter, onApply, onClose, hideTest, scopeTestId,
 }: RegistryFilterDialogProps) {
   const [draft, setDraft] = useState<RegistryFilter>(filter);
   // Справочники спрашиваются только у открытого окна и тем же хуком, что зовут чипы: иначе
   // одно и то же условие называлось бы в двух местах по-разному.
-  const { tests, groups } = useRegistryDictionaries(open);
+  const { tests, groups, orgValues } = useRegistryDictionaries(open);
   /**
    * Тест, внутри которого осмысленны вариант и версия: заданный страницей либо единственный
    * выбранный. Несколько тестов сразу — условие теряет смысл, и поля не показываются.
@@ -149,6 +177,23 @@ export function RegistryFilterDialog({
           onValuesChange={values => setDraft(d => ({ ...d, groupIds: values }))}
           fullWidth
         />
+
+        {/*
+          Оргструктура (FR-06b) — сразу за группой: это тоже свойство ЧЕЛОВЕКА, а не попытки.
+          Значения из справочника профилей и прохождений, разные написания уже свёрнуты.
+        */}
+        {ORG_FIELDS_OF_DIALOG.map(({ key, field, label, placeholder }) => (
+          <Combobox
+            key={key}
+            label={label}
+            multiple
+            placeholder={placeholder}
+            options={orgOptions(orgValues?.[field] ?? [], draft[key])}
+            values={draft[key]}
+            onValuesChange={values => setDraft(d => ({ ...d, [key]: values }))}
+            fullWidth
+          />
+        ))}
 
         {/*
           Вариант выдачи и версия публикации — условия ВНУТРИ одного теста: у разных тестов

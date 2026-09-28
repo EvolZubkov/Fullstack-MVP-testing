@@ -26,6 +26,10 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
     getSnapshotsForTest: vi.fn().mockResolvedValue([]),
     selectObservations: vi.fn(), selectAnswersForTest: vi.fn(),
+    // План оргструктуры: хранящиеся написания оргполей.
+    selectOrgSpellings: vi.fn().mockResolvedValue({
+      organization: [], unit: ["Отдел продаж", "ОТДЕЛ ПРОДАЖ"], position: [],
+    }),
     // PRD-55: экспозиция и время задания — их читает та же ручка.
     getDeliveryCountsForTest: vi.fn(), getDeliveryCounts: vi.fn(),
     getOtherTestsCount: vi.fn(), getLatencyStats: vi.fn(),
@@ -88,6 +92,17 @@ beforeEach(() => {
     startedAt: recently(1), finishedAt: recently(1),
     resultPercent: 95, resultPassed: true, maxPoints: 20, totalPoints: 19,
   }]);
+});
+
+describe("GET /api/analytics/tests/:testId — оргусловия (FR-06b)", () => {
+  it("считает «Обзор» по отобранному подразделению, а не по всему тесту", async () => {
+    await request(makeApp())
+      .get(`/api/analytics/tests/test1?unit=${encodeURIComponent("отдел продаж")}`)
+      .set("x-test-user", "a1");
+
+    const query = storageMock.selectObservations.mock.calls[0][0];
+    expect(query.orgValues).toEqual({ unit: ["Отдел продаж", "ОТДЕЛ ПРОДАЖ"] });
+  });
 });
 
 describe("GET /api/analytics/tests/:testId — блоки экрана", () => {

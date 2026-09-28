@@ -317,6 +317,27 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     }
   });
 
+  it("«Сравнить со срезом» уносит в сравнение оргусловия отбора (FR-06b)", async () => {
+    window.history.replaceState(
+      null, "", `/author/analytics?testId=test1&unit=${encodeURIComponent("Отдел продаж")}&position=${encodeURIComponent("Кладовщик")}`,
+    );
+    try {
+      await renderLoaded();
+      fireEvent.click(await screen.findByRole("button", { name: "Сравнить со срезом" }));
+
+      await waitFor(() => {
+        const asked = fetchMock.mock.calls
+          .map(call => String(call[0]))
+          .find(url => url.includes("/api/analytics/slices") && url.includes("conditions="));
+        expect(asked).toBeTruthy();
+        const conditions = JSON.parse(new URL(asked!, "http://x").searchParams.get("conditions")!);
+        expect(conditions).toMatchObject({ units: ["Отдел продаж"], positions: ["Кладовщик"] });
+      });
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
   it("ведёт из строки среза в реестр с предзаполненными условиями", async () => {
     await renderLoaded();
     await openSlicesForTest();
