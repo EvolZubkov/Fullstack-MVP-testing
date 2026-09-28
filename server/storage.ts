@@ -98,6 +98,7 @@ import type {
   TestReviewComment,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
+import type { OrgField, OrgValueCount } from "@shared/org-fields";
 import { type ValidationResult, type ValueType } from "@shared/formula";
 
 export interface IStorage {
@@ -107,6 +108,8 @@ export interface IStorage {
   getUserByExternalKey(key: string): Promise<User | undefined>;
   /** PRD-54 BR-54-31: пользователь по идентификатору обучающегося в LMS. */
   getUserByLmsLearnerId(learnerId: string): Promise<User | undefined>;
+  /** Org-structure values in use (profiles and passages), folded per field. */
+  getOrgValues(): Promise<Record<OrgField, OrgValueCount[]>>;
   createUser(user: InsertUser): Promise<User>;
   validatePassword(email: string, password: string): Promise<User | null>;
   updateUserLastLogin(id: string): Promise<void>;
@@ -524,6 +527,10 @@ export class DatabaseStorage implements IStorage {
 
   getUserByLmsLearnerId(learnerId: string): Promise<User | undefined> {
     return this.usersRepo.getUserByLmsLearnerId(learnerId);
+  }
+
+  getOrgValues(): Promise<Record<OrgField, OrgValueCount[]>> {
+    return this.usersRepo.getOrgValues();
   }
 
   getUserByExternalKey(key: string): Promise<User | undefined> {

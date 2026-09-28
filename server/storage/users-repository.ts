@@ -19,9 +19,10 @@ import { randomUUID } from "crypto";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
-  users, passwordResetTokens,
+  users, passwordResetTokens, scormAttempts,
   type User, type InsertUser, type PasswordResetToken,
 } from "@shared/schema";
+import { ORG_FIELDS, foldOrgValues, type OrgField, type OrgValueCount } from "@shared/org-fields";
 import {
   encryptEmail,
   decryptEmail,
@@ -119,6 +120,12 @@ export class UsersRepository {
       gdprConsent: false,
       // PRD-54: внешний ключ можно проставить сразу при заведении — колонкой массовой загрузки.
       externalKey: insertUser.externalKey ?? null,
+      // PRD-54 BR-54-28/31 and the org-structure plan: the LMS learner id links
+      // telemetry to the person, the three org fields feed the analytics axes.
+      lmsLearnerId: insertUser.lmsLearnerId ?? null,
+      organization: insertUser.organization ?? null,
+      unit: insertUser.unit ?? null,
+      position: insertUser.position ?? null,
       createdAt: new Date(),
       createdBy: insertUser.createdBy || null,
     }).returning();
@@ -176,6 +183,8 @@ export class UsersRepository {
       // PRD-54: внешний ключ для связывания импортированных прохождений. `null` проходит сквозь
       // `pickDefined` намеренно — это «снять ключ», в отличие от `undefined` = «не трогать».
       "externalKey",
+      // Same null-means-clear rule for the LMS learner id and the org fields.
+      "lmsLearnerId", "organization", "unit", "position",
     ] as const);
     if (data.email) {
       set.email = await encryptEmail(data.email);
@@ -192,6 +201,51 @@ export class UsersRepository {
       return { ...updated, email: await decryptEmail(updated.email) };
     }
     return undefined;
+  }
+
+  /**
+   * The org-structure values in use, one list per field (org-structure plan, task 1).
+   *
+   * Two sources: profiles and passages. Passages count because an LMS export
+   * brings its own spelling of a unit, and the operator filling in a profile must
+   * see it to repeat it — otherwise the profile says «Отдел продаж», the export
+   * «ОТДЕЛ ПРОДАЖ», and nobody notices they are one department until the slices
+   * split. Only imported passages carry unit and position; telemetry reports the
+   * organisation alone (`cmi.student_org`), and that is counted too.
+   *
+   * SQL counts exact spellings; folding them into one value per unit is the job
+   * of {@link foldOrgValues}, the same engine the analytics compares with.
+   *
+   * @returns Values per field with profile and passage counts, sorted by label.
+   */
+  async getOrgValues(): Promise<Record<OrgField, OrgValueCount[]>> {
+    const fromUsers = {
+      organization: users.organization,
+      unit: users.unit,
+      position: users.position,
+    } as const;
+    const fromAttempts = {
+      organization: scormAttempts.lmsUserOrg,
+      unit: scormAttempts.lmsUserUnit,
+      position: scormAttempts.lmsUserPosition,
+    } as const;
+
+    const result = {} as Record<OrgField, OrgValueCount[]>;
+    for (const field of ORG_FIELDS) {
+      const userColumn = fromUsers[field];
+      const attemptColumn = fromAttempts[field];
+      const [userRows, attemptRows] = await Promise.all([
+        db.select({ value: userColumn, count: sql<number>`count(*)` })
+          .from(users).where(sql`${userColumn} is not null`).groupBy(userColumn),
+        db.select({ value: attemptColumn, count: sql<number>`count(*)` })
+          .from(scormAttempts).where(sql`${attemptColumn} is not null`).groupBy(attemptColumn),
+      ]);
+      result[field] = foldOrgValues([
+        ...userRows.map(r => ({ value: r.value ?? "", users: Number(r.count), attempts: 0 })),
+        ...attemptRows.map(r => ({ value: r.value ?? "", users: 0, attempts: Number(r.count) })),
+      ]);
+    }
+    return result;
   }
 
   async updateUserPassword(id: string, newPasswordHash: string): Promise<void> {

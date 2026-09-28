@@ -16,6 +16,7 @@ import {
   workbookToBuffer,
 } from "../utils/excel";
 import { randomBytes, createHash } from "crypto";
+import { ORG_FIELDS, normalizeOrgValue } from "@shared/org-fields";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -145,6 +146,18 @@ router.get("/bulk-template", requirePermission("users.read"), async (_req, res) 
   res.send(buf);
 });
 
+// GET /api/users/org-values — org-structure values in use (must be before /:id).
+// Feeds the profile form (choose or create, plan Р-3) and the list filters; the
+// counts tell a spelling that came from an LMS export from one typed by hand.
+router.get("/org-values", requirePermission("users.read"), async (_req, res) => {
+  try {
+    res.json(await storage.getOrgValues());
+  } catch (error) {
+    logger.error("Get org values error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to get org values" });
+  }
+});
+
 // GET /api/users/:id - Получить пользователя
 router.get("/:id", requirePermission("users.read"), async (req, res) => {
   try {
@@ -226,7 +239,14 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
       return res.status(400).json({ error: "User with this email already exists" });
     }
 
+    // Org fields and linking keys (org-structure plan, task 1): allowed for an
+    // external participant too — a contractor also works in some unit.
+    const profile = readProfileFields(req.body);
+    const conflict = await linkingKeyConflict(profile, null);
+    if (conflict) return res.status(409).json(conflict);
+
     const user = await storage.createUser({
+      ...profile,
       email,
       passwordHash: external ? null : password,
       isExternal: external,
@@ -313,6 +333,73 @@ export function readExternalKeyColumn(row: Record<string, unknown>): string | nu
   );
 }
 
+/** Profile fields a form or a list may set, besides name and email. */
+interface ProfileFields {
+  organization?: string | null;
+  unit?: string | null;
+  position?: string | null;
+  lmsLearnerId?: string | null;
+  externalKey?: string | null;
+}
+
+/**
+ * Read the optional profile fields of a request body (org-structure plan, task 1).
+ *
+ * A field ABSENT from the body is left out of the result — «do not touch»; a
+ * field present but empty becomes `null` — «clear». Without that difference
+ * every save of a form that does not show a field would wipe it. The org fields
+ * are normalised by the shared engine, the two linking keys by the key rule.
+ *
+ * @param body Request body.
+ * @returns Only the fields the body carries, normalised.
+ */
+function readProfileFields(body: Record<string, unknown>): ProfileFields {
+  const fields: ProfileFields = {};
+  for (const field of ORG_FIELDS) {
+    if (field in body) fields[field] = normalizeOrgValue(body[field]);
+  }
+  if ("lmsLearnerId" in body) fields.lmsLearnerId = normalizeExternalKey(body.lmsLearnerId);
+  if ("externalKey" in body) fields.externalKey = normalizeExternalKey(body.externalKey);
+  return fields;
+}
+
+/**
+ * The first linking key of `fields` that another account already holds.
+ *
+ * Both keys are unique per person (PRD-54 BR-54-26, BR-54-31; plan Р-6): a key
+ * with two owners makes linking a lottery. The check runs BEFORE the write to
+ * give an answer that names the owner; for the external key the unique index
+ * stays the real barrier against a race of two saves.
+ *
+ * @param fields Normalised fields about to be written.
+ * @param selfId The account being saved; it may keep its own keys.
+ * @returns The refusal to send, or `null` when both keys are free.
+ */
+async function linkingKeyConflict(
+  fields: ProfileFields,
+  selfId: string | null,
+): Promise<{ field: "lmsLearnerId" | "externalKey"; error: string } | null> {
+  if (fields.lmsLearnerId) {
+    const owner = await storage.getUserByLmsLearnerId(fields.lmsLearnerId);
+    if (owner && owner.id !== selfId) {
+      return {
+        field: "lmsLearnerId",
+        error: `Идентификатор в LMS «${fields.lmsLearnerId}» уже у пользователя ${owner.name ?? owner.id}`,
+      };
+    }
+  }
+  if (fields.externalKey) {
+    const owner = await storage.getUserByExternalKey(fields.externalKey);
+    if (owner && owner.id !== selfId) {
+      return {
+        field: "externalKey",
+        error: `Ключ «${fields.externalKey}» уже у пользователя ${owner.name ?? owner.id}`,
+      };
+    }
+  }
+  return null;
+}
+
 router.put("/:id", requirePermission("users.manage"), async (req, res) => {
   try {
     const { email, name, groupIds } = req.body;
@@ -331,25 +418,14 @@ router.put("/:id", requirePermission("users.manage"), async (req, res) => {
       }
     }
 
-    // PRD-54: внешний ключ. Поле необязательное, поэтому отличаем «не передали» (ключ не трогаем)
-    // от «передали пустым» (ключ снимаем) — иначе любое сохранение карточки стирало бы связь.
-    const patch: { email?: string; name?: string; externalKey?: string | null } = { email, name };
-    if ("externalKey" in req.body) {
-      const externalKey = normalizeExternalKey(req.body.externalKey);
-      if (externalKey) {
-        // Проверка ДО записи даёт внятную ошибку с именем владельца; уникальный индекс остаётся
-        // настоящим барьером на случай гонки двух сохранений.
-        const owner = await storage.getUserByExternalKey(externalKey);
-        if (owner && owner.id !== userId) {
-          return res.status(409).json({
-            error: `Ключ «${externalKey}» уже у пользователя ${owner.name ?? owner.id}`,
-          });
-        }
-      }
-      patch.externalKey = externalKey;
-    }
+    // PRD-54 и план оргструктуры: ключи связывания и оргполя. Все необязательны, поэтому
+    // «не передали» (не трогаем) отличается от «передали пустым» (снимаем) — иначе любое
+    // сохранение карточки стирало бы то, чего форма не показывает.
+    const profile = readProfileFields(req.body);
+    const conflict = await linkingKeyConflict(profile, userId);
+    if (conflict) return res.status(409).json(conflict);
 
-    const updated = await storage.updateUser(userId, patch);
+    const updated = await storage.updateUser(userId, { email, name, ...profile });
 
     // Обновляем группы если указаны
     if (groupIds && Array.isArray(groupIds)) {
