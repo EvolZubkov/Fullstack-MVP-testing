@@ -17,6 +17,7 @@ import {
 } from "../utils/excel";
 import { randomBytes, createHash } from "crypto";
 import { ORG_FIELDS, normalizeOrgValue } from "@shared/org-fields";
+import { readOrgColumns, readLmsLearnerIdColumn } from "../utils/org-columns";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
@@ -135,10 +136,13 @@ router.get("/bulk-template", requirePermission("users.read"), async (_req, res) 
   const wb = new ExcelJS.Workbook();
   // PRD-54: колонка «Внешний ключ» — в шаблоне, иначе о ней не узнает никто, кроме читавших спеку.
   // Она необязательна: пустая клетка не трогает уже проставленный ключ.
+  // Оргполя и идентификатор в LMS (план оргструктуры, BR-54-29): без них заведённые списком
+  // люди остаются без подразделения, и срезам аналитики нечем их делить.
   addAoaSheet(wb, "Users", [
-    ["email", "name", "role", "group", "external_key"],
-    ["user@example.com", "Иван Иванов", "learner", "Группа А", "TAB-1024"],
-    ["manager@example.com", "Анна Петрова", "learner", "", ""],
+    ["email", "name", "role", "group", "external_key", "organization", "unit", "position", "lms_learner_id"],
+    ["user@example.com", "Иван Иванов", "learner", "Группа А", "TAB-1024",
+      "АО «Пример»", "Отдел продаж", "Менеджер по продажам", "ivanov_i"],
+    ["manager@example.com", "Анна Петрова", "learner", "", "", "", "", "", ""],
   ]);
   const buf = await workbookToBuffer(wb);
   res.setHeader("Content-Disposition", "attachment; filename=users-template.xlsx");
@@ -781,16 +785,16 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
 
       // PRD-54: ключ, занятый ДРУГИМ пользователем, — ошибка строки, а не повод перезаписать:
       // на уникальности ключа держится связывание, и тихая перезапись порвала бы готовые связи.
+      // То же правило — у идентификатора в LMS (план оргструктуры, Р-6).
       const externalKey = readExternalKeyColumn(row);
-      if (externalKey) {
-        const keyOwner = await storage.getUserByExternalKey(externalKey);
-        if (keyOwner && keyOwner.id !== existing?.id) {
-          return {
-            idx, email, name, role: validRole, groupName, groupId: null, groupFound: false,
-            externalKey, status: "error",
-            error: `Ключ «${externalKey}» уже у пользователя ${keyOwner.name ?? keyOwner.id}`,
-          };
-        }
+      const lmsLearnerId = readLmsLearnerIdColumn(row);
+      const org = readOrgColumns(row);
+      const conflict = await linkingKeyConflict({ externalKey, lmsLearnerId }, existing?.id ?? null);
+      if (conflict) {
+        return {
+          idx, email, name, role: validRole, groupName, groupId: null, groupFound: false,
+          externalKey, lmsLearnerId, ...org, status: "error", error: conflict.error,
+        };
       }
 
       // Resolve group
@@ -809,9 +813,12 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
         groupId,
         groupFound,
         externalKey,
-        // PRD-54: строка существующего пользователя с НЕПУСТЫМ ключом не пропускается как дубль,
-        // а проставляет ключ. Иначе проставить ключи уже заведённой базе было бы нечем.
-        status: existing ? (externalKey ? "keyUpdate" : "duplicate") : "new",
+        lmsLearnerId,
+        ...org,
+        // PRD-54: строка существующего пользователя с НЕПУСТЫМ ключом (внешним или идентификатором
+        // в LMS) не пропускается как дубль, а проставляет ключ. Иначе проставить ключи уже
+        // заведённой базе было бы нечем.
+        status: existing ? (externalKey || lmsLearnerId ? "keyUpdate" : "duplicate") : "new",
         existingId: existing?.id || null,
       };
     }));
@@ -845,8 +852,27 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
         email: string; name?: string; role?: string;
         groupId?: string | null; groupName?: string | null;
         duplicateAction?: "skip" | "update"; status: string; existingId?: string;
-        externalKey?: string | null;
+        externalKey?: string | null; lmsLearnerId?: string | null;
+        organization?: string | null; unit?: string | null; position?: string | null;
       }[]
+    };
+
+    /**
+     * What a list row may write onto an EXISTING account: only non-empty cells.
+     *
+     * A list is not a form — an empty cell means «not given», and letting it wipe
+     * a unit someone filled in by hand would make every re-upload destructive.
+     * Clearing a field is the profile form's job.
+     */
+    const filledFieldsOf = (row: (typeof rows)[number]) => {
+      const fields: ProfileFields = {};
+      for (const field of ORG_FIELDS) {
+        const value = normalizeOrgValue(row[field]);
+        if (value) fields[field] = value;
+      }
+      const lmsLearnerId = normalizeExternalKey(row.lmsLearnerId);
+      if (lmsLearnerId) fields.lmsLearnerId = lmsLearnerId;
+      return fields;
     };
 
     logger.info(`bulk-import body keys: [${Object.keys(parsed || {}).join(",")}] rows type: ${typeof rows} rows length: ${Array.isArray(rows) ? rows.length : "N/A"} ct: ${req.headers["content-type"]}`);
@@ -881,8 +907,12 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
 
         // PRD-54: существующий пользователь с непустым ключом — не дубль, а проставление ключа.
         if (row.status === "keyUpdate" && row.existingId) {
+          const externalKey = normalizeExternalKey(row.externalKey);
           await storage.updateUser(row.existingId, {
-            externalKey: normalizeExternalKey(row.externalKey),
+            // A key update may come from the LMS id alone; an empty external key
+            // cell then leaves the stored key as it is.
+            ...(externalKey ? { externalKey } : {}),
+            ...filledFieldsOf(row),
             ...(row.name ? { name: row.name } : {}),
           });
           const gid = await resolveGroupId(row.groupId, row.groupName);
@@ -896,7 +926,7 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
         if (row.status === "duplicate") {
           if (row.duplicateAction === "skip" || !row.duplicateAction) { skipped++; continue; }
           if (row.duplicateAction === "update" && row.existingId) {
-            await storage.updateUser(row.existingId, { name: row.name || undefined });
+            await storage.updateUser(row.existingId, { name: row.name || undefined, ...filledFieldsOf(row) });
             const gid = await resolveGroupId(row.groupId, row.groupName);
             if (gid) await storage.addUserToGroup(row.existingId, gid).catch((e: Error) => {
               logger.warn(`bulk-import: addUserToGroup failed for ${row.email} → group ${gid}: ${e.message}`);
@@ -931,6 +961,7 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
           // PRD-54: the preview shows the key of a new row, so the row must be
           // created with it — without this the key was lost for every new person.
           externalKey: normalizeExternalKey(row.externalKey),
+          ...filledFieldsOf(row),
           createdBy: req.session.userId,
         });
         await storage.setUserRoles(user.id, rowRoles as StoredRole[], req.session.userId ?? null);

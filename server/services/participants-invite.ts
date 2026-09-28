@@ -14,6 +14,8 @@ import { readWorkbookFromBuffer, sheetToObjects } from "../utils/excel";
 import { deliverAssignmentLink, resolveAssignmentTokenExpiry } from "./assignment-link";
 import type { IStorage } from "../storage";
 import type { User } from "@shared/schema";
+import { ORG_FIELDS } from "@shared/org-fields";
+import { readOrgColumns } from "../utils/org-columns";
 
 /** What the pipeline refused on, told apart without reading the message. */
 export type ParticipantsInviteErrorKind =
@@ -53,15 +55,25 @@ export interface ParticipantRow {
   index: number;
   email: string;
   name: string | null;
+  /**
+   * Org-structure values from the sheet (org-structure plan, BR-54-29). Present
+   * only when the cell is filled: a list without these columns yields exactly
+   * the rows it did before, and the review scenario, which shares the parser,
+   * never sees them.
+   */
+  organization?: string;
+  unit?: string;
+  position?: string;
 }
 
 /**
  * Read the first worksheet of an uploaded workbook into participant rows.
  *
- * Only `email` and `name` are read (in the spellings the users-import template
- * already accepts). Every other column — `role`, `group` — is ignored on
- * purpose: a participant's role is always `learner`, and the group name comes
- * from the form, one for the whole run (PRD-28 раздел 5).
+ * `email` and `name` are read (in the spellings the users-import template
+ * already accepts), plus the org-structure columns when the file has them
+ * (BR-54-29). `role` and `group` are ignored on purpose: a participant's role is
+ * always `learner`, and the group name comes from the form, one for the whole
+ * run (PRD-28 раздел 5).
  *
  * @param buf The uploaded file; csv is not accepted, the reader takes OOXML only.
  * @param opts.maxRows Ceiling from configuration (`limits.participantsImportMaxRows`).
@@ -101,7 +113,13 @@ export async function parseParticipantsWorkbook(
     // and later ones are dropped before anything is created.
     if (key && seen.has(key)) return;
     if (key) seen.add(key);
-    rows.push({ index, email, name: name || null });
+    const parsed: ParticipantRow = { index, email, name: name || null };
+    const org = readOrgColumns(row);
+    for (const field of ORG_FIELDS) {
+      const value = org[field];
+      if (value) parsed[field] = value;
+    }
+    rows.push(parsed);
   });
   return rows;
 }
@@ -329,14 +347,25 @@ async function resolveParticipant(
 ): Promise<{ user: User; created: boolean }> {
   const existing = await ctx.storage.getUserByEmail(row.email);
   if (existing) {
-    if (!existing.name && row.name) {
-      const updated = await ctx.storage.updateUser(existing.id, { name: row.name });
-      return { user: updated ?? { ...existing, name: row.name }, created: false };
+    // The list fills gaps, it never overwrites: the name, and the org fields the
+    // same way (org-structure plan, task 2) — a unit set in the profile by hand
+    // is the better source than a column someone copied into a list.
+    const gaps: Partial<User> = {};
+    if (!existing.name && row.name) gaps.name = row.name;
+    for (const field of ORG_FIELDS) {
+      if (!existing[field] && row[field]) gaps[field] = row[field];
+    }
+    if (Object.keys(gaps).length > 0) {
+      const updated = await ctx.storage.updateUser(existing.id, gaps);
+      return { user: updated ?? { ...existing, ...gaps }, created: false };
     }
     return { user: existing, created: false };
   }
 
   const user = await ctx.storage.createUser({
+    organization: row.organization ?? null,
+    unit: row.unit ?? null,
+    position: row.position ?? null,
     email: row.email,
     passwordHash: null,
     isExternal: true,

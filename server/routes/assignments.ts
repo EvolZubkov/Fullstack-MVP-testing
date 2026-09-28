@@ -620,7 +620,8 @@ router.get(
   requirePermission("assignments.manage"),
   requireTestScope("assign"),
   async (_req, res) => {
-    const buf = await buildRecipientTemplateWorkbook();
+    // Оргколонки — только здесь: назначение их читает (BR-54-29), рецензирование нет.
+    const buf = await buildRecipientTemplateWorkbook({ withOrgFields: true });
     res.setHeader("Content-Disposition", "attachment; filename=participants-template.xlsx");
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.send(buf);

@@ -298,7 +298,7 @@ describe("POST /api/tests/:id/participants/invite", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe("GET /api/tests/:id/participants/template", () => {
-  it("отдаёт книгу с двумя колонками", async () => {
+  it("отдаёт книгу с адресом, именем и оргколонками", async () => {
     const res = await as("mgr1", request(app).get("/api/tests/t1/participants/template"))
       .buffer()
       .parse((r, cb) => {
@@ -313,9 +313,10 @@ describe("GET /api/tests/:id/participants/template", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(res.body);
     const ws = wb.worksheets[0];
-    // Two columns and no more: `role` and `group` are ignored by the reader, and
-    // offering them in the template would promise behaviour that does not exist.
-    expect(ws.getRow(1).values).toEqual([undefined, "email", "name"]);
+    // No `role` or `group`: they are ignored by the reader, and offering them in
+    // the template would promise behaviour that does not exist. The org columns
+    // ARE read (BR-54-29), so the template offers them.
+    expect(ws.getRow(1).values).toEqual([undefined, "email", "name", "organization", "unit", "position"]);
   });
 
   it("учащемуся отказано", async () => {

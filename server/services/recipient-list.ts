@@ -72,16 +72,28 @@ export function recipientRefusalMessage(error: ParticipantsInviteError): string 
 /**
  * The template workbook offered next to the file zone.
  *
- * Two columns only, unlike the users-import template: `role` and `group` are
- * ignored in this scenario (the role is always `learner`, the group comes from
- * the form), and offering them would promise behaviour that does not exist.
+ * Unlike the users-import template, `role` and `group` are not offered: they
+ * are ignored in this scenario (the role is always `learner`, the group comes
+ * from the form), and offering them would promise behaviour that does not exist.
+ * The org-structure columns are offered only to the assignment scenario, which
+ * reads them (BR-54-29); the review scenario does not, and keeps two columns.
+ *
+ * @param opts.withOrgFields Add organisation, unit and position columns.
  */
-export async function buildRecipientTemplateWorkbook(): Promise<Buffer> {
+export async function buildRecipientTemplateWorkbook(
+  opts: { withOrgFields?: boolean } = {},
+): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
-  addAoaSheet(wb, "Участники", [
-    ["email", "name"],
-    ["ivanov@example.com", "Иван Иванов"],
-    ["petrova@example.com", "Анна Петрова"],
-  ]);
+  addAoaSheet(wb, "Участники", opts.withOrgFields
+    ? [
+      ["email", "name", "organization", "unit", "position"],
+      ["ivanov@example.com", "Иван Иванов", "ООО «Пример»", "Отдел продаж", "Менеджер по продажам"],
+      ["petrova@example.com", "Анна Петрова", "", "", ""],
+    ]
+    : [
+      ["email", "name"],
+      ["ivanov@example.com", "Иван Иванов"],
+      ["petrova@example.com", "Анна Петрова"],
+    ]);
   return workbookToBuffer(wb);
 }
