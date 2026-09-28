@@ -19,6 +19,7 @@ interface Store {
   writeSuspendObj: (obj: unknown) => void;
   getAttemptsUsed: () => number;
   setAttemptsUsed: (n: number) => void;
+  hasCompletedAttempts: () => boolean;
 }
 
 /** Runtime store bound to an in-memory SCORM data model. */
@@ -40,7 +41,8 @@ function makeStore(initial = ""): { store: Store; cmi: { value: string } } {
     "TBRunState",
     `${src}
      return { readSuspendObj: readSuspendObj, writeSuspendObj: writeSuspendObj,
-              getAttemptsUsed: getAttemptsUsed, setAttemptsUsed: setAttemptsUsed };`,
+              getAttemptsUsed: getAttemptsUsed, setAttemptsUsed: setAttemptsUsed,
+              hasCompletedAttempts: hasCompletedAttempts };`,
   );
   const store = factory(
     SCORM,
@@ -74,6 +76,27 @@ describe("состояние прогона: счётчик попыток", () 
   it("повреждённая строка не роняет чтение", () => {
     const { store } = makeStore('{"attemptsUsed":2,"attempts":[{"per');
     expect(store.getAttemptsUsed()).toBe(0);
+  });
+});
+
+describe("состояние прогона: есть ли завершённые попытки («Мой результат»)", () => {
+  const summary = { n: 1, at: "2026-08-15T10:00:00.000Z", pc: 80, ok: true, t: [], bd: [], rv: {}, sv: {} };
+
+  it("начатая и брошенная попытка завершённой не считается", () => {
+    // Счётчик растёт на СТАРТЕ — так лимит попыток не обходится брошенной попыткой. Судить
+    // по нему о результатах значило показать «Мой результат», которого нет.
+    const { store } = makeStore(JSON.stringify({ v: 2, attemptsUsed: 1 }));
+    expect(store.hasCompletedAttempts()).toBe(false);
+  });
+
+  it("сводка лучшей попытки — это и есть завершённая попытка", () => {
+    const { store } = makeStore(JSON.stringify({ v: 2, attemptsUsed: 1, best: summary, last: 0 }));
+    expect(store.hasCompletedAttempts()).toBe(true);
+  });
+
+  it("тест без лимита попыток счётчик не ведёт, но результат у него есть", () => {
+    const { store } = makeStore(JSON.stringify({ v: 2, attemptsUsed: 0, best: summary, last: 0 }));
+    expect(store.hasCompletedAttempts()).toBe(true);
   });
 });
 

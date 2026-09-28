@@ -267,7 +267,12 @@ function getBestAttemptDetail() {
   return (s.best && s.best.d) || null;
 }
 
-// Есть ли завершенные попытки?
+/**
+ * Whether a FINISHED attempt exists — «Мой результат» has something to show. Judged by the
+ * best summary (written only when an attempt finishes, PRD-36 FR-03), not by the counter: the
+ * counter grows on START so an abandoned attempt still spends the limit, and it is not kept
+ * at all for a test without `maxAttempts`.
+ */
 function hasCompletedAttempts() {
-  return getAttemptsUsed() > 0;
+  return !!readSuspendObj().best;
 }
