@@ -11,6 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TopicDrawer } from "../topic-drawer";
 import type { Topic } from "@shared/schema";
+import { ToastProvider } from "@skillum/ui-kit";
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -28,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 function renderWithClient(ui: React.JSX.Element) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>);
 }
 
 const editTopic = {
@@ -420,9 +421,9 @@ describe("<TopicDrawer />: толкование темы", () => {
     );
     expect(screen.getByTestId("topic-interpretation")).toHaveTextContent("Объясняет результат по теме");
     rerender(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ToastProvider>
         <TopicDrawer target={{ mode: "edit", topic: other }} folders={[]} isAdmin={false} onClose={() => {}} />
-      </QueryClientProvider>,
+      </ToastProvider></QueryClientProvider>,
     );
     expect(screen.getByTestId("topic-interpretation")).toHaveTextContent("Без текста");
   });

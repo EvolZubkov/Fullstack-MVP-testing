@@ -27,7 +27,10 @@ const { toastSpy, authState } = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ user: authState.user, hasRole: (r: string) => authState.roles.includes(r) }),
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import { useContentGuard, type GuardedOperation } from "../use-content-guard";
 
@@ -194,7 +197,7 @@ describe("useContentGuard — error paths", () => {
       await result.current.guard(op({ onDone }));
     });
     expect(toastSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "destructive", description: "Не удалось проверить операцию" }),
+      expect.objectContaining({ tone: "error", description: "Не удалось проверить операцию" }),
     );
     expect(result.current.dialogProps.open).toBe(false);
     expect(onDone).not.toHaveBeenCalled();
@@ -222,7 +225,7 @@ describe("useContentGuard — error paths", () => {
       await result.current.guard(op({ onDone }));
     });
     expect(toastSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "destructive", description: "Операция не выполнена" }),
+      expect.objectContaining({ tone: "error", description: "Операция не выполнена" }),
     );
     expect(result.current.dialogProps.pending).toBe(false);
     expect(onDone).not.toHaveBeenCalled();

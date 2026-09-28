@@ -21,6 +21,7 @@ vi.mock("@/features/content-protection/use-content-guard", () => ({
 
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
 import { QuestionEditorDrawer, type QuestionEditorDrawerProps } from "../question-editor-drawer";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const topics = [{ id: "t1", name: "Тема A" }] as unknown as Topic[];
 
@@ -73,9 +74,9 @@ function renderDrawer(overrides: Partial<QuestionEditorDrawerProps> = {}) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <QuestionEditorDrawer {...props} />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

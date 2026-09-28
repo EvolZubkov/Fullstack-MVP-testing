@@ -48,8 +48,8 @@ import {
   Text,
   type TableColumn,
   type Tone,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 import { RolePicker } from "@/components/role-picker";
 import { useAuth } from "@/lib/auth";
@@ -129,7 +129,7 @@ interface UserAttemptsSummary {
 }
 
 export default function UsersPage() {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
   /** Acting user's effective roles, drives the role-assignment ceiling (WF-1). */
@@ -270,13 +270,13 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsCreateOpen(false);
       resetForm();
-      toast({ title: t.users.userCreated, description: t.users.userCreatedDescription });
+      toast({ tone: "success", title: t.users.userCreated, description: t.users.userCreatedDescription });
       // The account exists either way, so this is a second, weaker signal: the
       // letter that WAS asked for never left (SMTP off — the link is in the
       // server log, and the row menu can re-send it).
       if (variables.sendInvite && !data.inviteSent) {
         toast({
-          variant: "warning",
+          tone: "warning",
           title: t.users.inviteNotSent,
           description: t.users.inviteNotSentDescription,
         });
@@ -289,7 +289,7 @@ export default function UsersPage() {
         return;
       }
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: error.message === "User with this email already exists"
           ? t.users.emailAlreadyExists
@@ -311,7 +311,7 @@ export default function UsersPage() {
       setPreviewRows(rows.map(r => ({ ...r, duplicateAction: "skip" })));
       setBulkStep("preview");
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   const bulkImportMutation = useMutation({
@@ -329,7 +329,7 @@ export default function UsersPage() {
       setImportResult(result);
       setBulkStep("done");
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка импорта", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка импорта", description: e.message }),
   });
 
   const handleBulkFile = (file: File) => bulkPreviewMutation.mutate(file);
@@ -371,7 +371,7 @@ export default function UsersPage() {
       setIsEditOpen(false);
       setSelectedUser(null);
       resetForm();
-      toast({ title: t.users.userUpdated, description: t.users.userUpdatedDescription });
+      toast({ tone: "success", title: t.users.userUpdated, description: t.users.userUpdatedDescription });
     },
     onError: (error: Error) => {
       if (error instanceof LinkingKeyConflict) {
@@ -379,7 +379,7 @@ export default function UsersPage() {
         return;
       }
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: error.message === "User with this email already exists"
           ? t.users.emailAlreadyExists
@@ -402,10 +402,10 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       setIsDeactivateOpen(false);
       setSelectedUser(null);
-      toast({ title: t.users.userDeactivated, description: t.users.userDeactivatedDescription });
+      toast({ tone: "success", title: t.users.userDeactivated, description: t.users.userDeactivatedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToDeactivate });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToDeactivate });
     },
   });
 
@@ -421,10 +421,10 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: t.users.userActivated, description: t.users.userActivatedDescription });
+      toast({ tone: "success", title: t.users.userActivated, description: t.users.userActivatedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToActivate });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToActivate });
     },
   });
 
@@ -445,10 +445,10 @@ export default function UsersPage() {
       setIsResetPasswordOpen(false);
       setSelectedUser(null);
       setNewPassword("");
-      toast({ title: t.users.passwordReset, description: t.users.passwordResetDescription });
+      toast({ tone: "success", title: t.users.passwordReset, description: t.users.passwordResetDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToResetPassword });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToResetPassword });
     },
   });
 
@@ -466,17 +466,17 @@ export default function UsersPage() {
     },
     onSuccess: (data) => {
       if (data.sent) {
-        toast({ title: t.users.inviteSent, description: t.users.inviteSentDescription });
+        toast({ tone: "success", title: t.users.inviteSent, description: t.users.inviteSentDescription });
       } else {
         toast({
-          variant: "warning",
+          tone: "warning",
           title: t.users.inviteNotSent,
           description: t.users.inviteNotSentDescription,
         });
       }
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.users.failedToSendInvite });
+      toast({ tone: "error", title: t.common.error, description: t.users.failedToSendInvite });
     },
   });
 
@@ -495,18 +495,18 @@ export default function UsersPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       if (data.sent) {
-        toast({ title: "Учётная запись штатная", description: "Приглашение задать пароль отправлено." });
+        toast({ tone: "success", title: "Учётная запись штатная", description: "Приглашение задать пароль отправлено." });
       } else {
         // The account has changed kind either way; only the letter is missing.
         toast({
-          variant: "warning",
+          tone: "warning",
           title: "Учётная запись штатная",
           description: t.users.inviteNotSentDescription,
         });
       }
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось перевести в штатные" });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось перевести в штатные" });
     },
   });
 
@@ -525,10 +525,10 @@ export default function UsersPage() {
     onSuccess: () => {
       refetchAttempts();
       setSelectedTestForReset(null);
-      toast({ title: "Попытки сброшены", description: "Попытки пользователя успешно сброшены" });
+      toast({ tone: "success", title: "Попытки сброшены", description: "Попытки пользователя успешно сброшены" });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось сбросить попытки" });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось сбросить попытки" });
     },
   });
 

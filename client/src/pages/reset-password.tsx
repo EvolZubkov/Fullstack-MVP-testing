@@ -17,8 +17,8 @@ import {
   Spinner,
   Stack,
   Text,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 
 const passwordRegex = /^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/;
@@ -36,7 +36,7 @@ const resetPasswordSchema = z.object({
 type ResetPasswordData = z.infer<typeof resetPasswordSchema>;
 
 export default function ResetPasswordPage() {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [, navigate] = useLocation();
 
   const [token, setToken] = useState<string | null>(null);
@@ -97,7 +97,7 @@ export default function ResetPasswordPage() {
 
       if (!res.ok) {
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.common.error,
           description: result.error || t.auth.somethingWentWrong,
         });
@@ -107,7 +107,7 @@ export default function ResetPasswordPage() {
       setIsSuccess(true);
     } catch (error) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: t.auth.somethingWentWrong,
       });

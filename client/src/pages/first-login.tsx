@@ -15,8 +15,8 @@ import {
   Separator,
   Stack,
   Text,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 
@@ -50,7 +50,7 @@ const createSchema = (mustChangePassword: boolean) =>
   );
 
 export default function FirstLoginPage({ mustChangePassword }: FirstLoginPageProps) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const { refreshUser } = useAuth();
   const [, navigate] = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -83,7 +83,7 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
 
       if (!res.ok) {
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.common.error,
           description: result.error || t.auth.somethingWentWrong,
         });
@@ -91,7 +91,7 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
       }
 
       toast({
-        title: t.auth.registrationCompleted,
+        tone: "success", title: t.auth.registrationCompleted,
         description: t.auth.registrationCompletedDescription,
       });
 
@@ -102,7 +102,7 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
       navigate("/");
     } catch (error) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: t.auth.somethingWentWrong,
       });

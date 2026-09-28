@@ -17,7 +17,10 @@ vi.mock("wouter", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ login, logout }) }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toast, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 vi.mock("@/components/theme-toggle", () => ({ ThemeToggle: () => null }));
 
 import LoginPage from "../login";
@@ -62,7 +65,7 @@ describe("<LoginPage />", () => {
     fill("user@e.test", "wrong");
     fireEvent.click(screen.getByTestId("button-login"));
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
     expect(logout).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
@@ -78,7 +81,7 @@ describe("<LoginPage />", () => {
     fireEvent.click(screen.getByTestId("button-login"));
     await waitFor(() => expect(logout).toHaveBeenCalledTimes(1));
     expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "destructive", description: t.auth.linkScopeBlocksLogin }),
+      expect.objectContaining({ tone: "error", description: t.auth.linkScopeBlocksLogin }),
     );
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -89,7 +92,7 @@ describe("<LoginPage />", () => {
     fill("user@e.test", "secret");
     fireEvent.click(screen.getByTestId("button-login"));
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
     expect(navigate).not.toHaveBeenCalled();
   });

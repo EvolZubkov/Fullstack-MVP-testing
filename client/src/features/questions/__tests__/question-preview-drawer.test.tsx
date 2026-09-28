@@ -33,6 +33,7 @@ vi.mock("@/pages/learner/template-question-screen", () => ({
 }));
 
 import { QuestionEditorDrawer, type QuestionEditorDrawerProps } from "../question-editor-drawer";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const topics = [{ id: "t1", name: "Охрана труда" }] as unknown as Topic[];
 
@@ -73,9 +74,9 @@ function renderDrawer(overrides: Partial<QuestionEditorDrawerProps> = {}) {
   };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <QuestionEditorDrawer {...props} />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

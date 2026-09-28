@@ -417,7 +417,6 @@ test-builder/
 |   |   |   |-- topics/              # Drawer темы: «Свойства» + «Доступ» (PRD-15)
 |   |   |   |-- templates/           # Админ-реестр шаблонов: список, загрузка, превью (PRD-3)
 |   |   |   +-- content-protection/  # UI защиты контента (409 + dry-run, PRD-15)
-|   |   |-- hooks/                   # Custom React hooks
 |   |   |-- lib/                     # Утилиты и конфигурация
 |   |   |   |-- auth.tsx             # Контекст аутентификации
 |   |   |   |-- roles.ts            # Клиентская модель ролей/прав (PRD-13)

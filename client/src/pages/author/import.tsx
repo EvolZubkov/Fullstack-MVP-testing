@@ -33,10 +33,10 @@ import {
   Tag,
   Text,
   type ComboboxOption,
+  useToast,
 } from "@skillum/ui-kit";
 import { PageHeader } from "@/components/page-header";
 import { LmsImportForm, type LmsInspectResult } from "@/features/analytics/lms-import/lms-import-form";
-import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
@@ -168,7 +168,7 @@ class WorkbookReadFailure extends Error {
 }
 
 export default function ImportPage() {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const { can } = useAuth();
   const canCreateTest = can("tests.create");
 
@@ -233,7 +233,7 @@ export default function ImportPage() {
           : code === "unparsable"
             ? tr.unparsableXlsx
             : tr.failedToInspect;
-      toast({ variant: "destructive", title: t.common.error, description });
+      toast({ tone: "error", title: t.common.error, description });
       resetAll();
     },
   });
@@ -267,10 +267,10 @@ export default function ImportPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
-      toast({ title: tr.doneTitle, description: doneSummary(plan) });
+      toast({ tone: "success", title: tr.doneTitle, description: doneSummary(plan) });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: tr.failedToImport });
+      toast({ tone: "error", title: t.common.error, description: tr.failedToImport });
     },
   });
 
@@ -278,7 +278,7 @@ export default function ImportPage() {
     const f = files[0];
     if (!f) return;
     if (!/\.xlsx$/i.test(f.name)) {
-      toast({ variant: "destructive", title: t.common.error, description: tr.wrongFileType });
+      toast({ tone: "error", title: t.common.error, description: tr.wrongFileType });
       return;
     }
     setFile(f);

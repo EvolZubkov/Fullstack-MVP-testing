@@ -19,6 +19,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import UsersPage from "../users";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const common = {
   status: "active", mustChangePassword: false, gdprConsent: true,
@@ -86,9 +87,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <UsersPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

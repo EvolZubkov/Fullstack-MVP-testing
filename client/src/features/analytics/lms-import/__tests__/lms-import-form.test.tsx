@@ -8,6 +8,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn, queryClient } from "@/lib/queryClient";
 import { LmsImportForm, type LmsInspectResult } from "../lms-import-form";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const INSPECT: LmsInspectResult = {
   kind: "lmsExport", testId: "t1", testTitle: "Тест", rows: 3, questionIds: 2,
@@ -44,9 +45,9 @@ afterEach(() => vi.unstubAllGlobals());
 function renderForm() {
   const file = new File(["x"], "выгрузка.xlsx");
   return render(
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}><ToastProvider>
       <LmsImportForm file={file} inspect={INSPECT} />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -103,9 +104,9 @@ describe("<LmsImportForm /> — учёт загрузки в расчётах (P
 describe("<LmsImportForm /> — окно до выбора файла (эскиз prd54-lms-import, состояние «в окне»)", () => {
   function renderEmpty(props: { fixedTestId?: string; onCancel?: () => void } = {}) {
     return render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><ToastProvider>
         <LmsImportForm {...props} />
-      </QueryClientProvider>,
+      </ToastProvider></QueryClientProvider>,
     );
   }
 
@@ -154,7 +155,7 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
 
   it("с раскладкой по окну кнопки отдаются хосту отдельно от тела", async () => {
     render(
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}><ToastProvider>
         <LmsImportForm
           fixedTestId="t1"
           onCancel={() => {}}
@@ -165,7 +166,7 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
             </>
           )}
         />
-      </QueryClientProvider>,
+      </ToastProvider></QueryClientProvider>,
     );
     await screen.findAllByRole("checkbox", { name: "В расчётах" });
 

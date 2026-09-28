@@ -17,13 +17,14 @@ vi.mock("@/features/content-protection/use-content-guard", () => ({
 }));
 
 import { QuestionEditorDrawer } from "../question-editor-drawer";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const topics = [{ id: "t1", name: "Тема A" }] as unknown as Topic[];
 
 function renderDrawer() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <QuestionEditorDrawer
         open
         question={null}
@@ -31,7 +32,7 @@ function renderDrawer() {
         onClose={vi.fn()}
         onSaved={vi.fn()}
       />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

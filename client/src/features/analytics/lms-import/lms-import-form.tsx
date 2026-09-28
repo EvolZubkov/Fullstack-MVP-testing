@@ -30,8 +30,8 @@ import {
   Switch,
   Tag,
   Text,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { invalidateAnalytics } from "../invalidate-analytics";
 
@@ -144,7 +144,7 @@ function plural(n: number, forms: [string, string, string]): string {
 }
 
 export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestId, onDone, onReset, onCancel, frame }: LmsImportFormProps) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
 
   const [ownFile, setOwnFile] = useState<File | null>(null);
   const [ownInspect, setOwnInspect] = useState<LmsInspectResult | null>(null);
@@ -227,11 +227,11 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
       if (!res.ok) throw new Error("Не удалось откатить загрузку");
     },
     onSuccess: () => {
-      toast({ title: "Загрузка откачена" });
+      toast({ tone: "success", title: "Загрузка откачена" });
       invalidateAnalytics(queryClient);
       batches.refetch();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
   /**
    * PRD-66 FR-12: снять загрузку с учёта или вернуть. Решение обратимое, поэтому без
@@ -252,7 +252,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
       invalidateAnalytics(queryClient);
       batches.refetch();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   function reset() {

@@ -24,7 +24,10 @@ const { guardSpy, toastSpy } = vi.hoisted(() => ({ guardSpy: vi.fn(), toastSpy: 
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({ can: () => true, hasRole: () => false, user: { id: "u1", name: "Author" } }),
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 vi.mock("@/features/content-protection/use-content-guard", () => ({
   useContentGuard: () => ({ guard: guardSpy, dialogProps: { open: false } }),
 }));
@@ -209,7 +212,7 @@ describe("<ContentTree /> — question bulk bar", () => {
     await waitFor(() => expect(screen.getByTestId("ct-move-questions-confirm")).toBeEnabled());
     fireEvent.click(screen.getByTestId("ct-move-questions-confirm"));
     await waitFor(() =>
-      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
   });
 });

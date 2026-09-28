@@ -4,7 +4,7 @@ import { TemplateContentScreen, type ContentScreenTemplate } from "./template-co
 import { useLocation, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import { Button, Center, Stack, Text } from "@skillum/ui-kit";
+import { Button, Center, Stack, Text, useToast } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildProtectionSpec } from "@shared/template/protection/spec";
@@ -14,7 +14,6 @@ import {
   type AttemptReport,
   type AttemptReportRender,
 } from "@/features/learner/attempt-report";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Attempt, AttemptResult } from "@shared/schema";
@@ -122,7 +121,7 @@ export default function ResultPage() {
 
 function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
   const [, navigate] = useLocation();
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const { user } = useAuth();
   // A magic-link session has no test list — its "back"/"finish" both resolve to
   // its own test rather than "/learner", which would just bounce it to /login.
@@ -153,7 +152,7 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setContentTpl((await res.json()) as ContentScreenTemplate);
       } catch (e) {
-        toast({ variant: "destructive", title: "Не удалось открыть страницу", description: (e as Error).message });
+        toast({ tone: "error", title: "Не удалось открыть страницу", description: (e as Error).message });
         navigate(finishTarget);
         return;
       }
@@ -181,7 +180,7 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
     if (reportBusy.current) return;
     if (!attempt.report || !attempt.reportRender) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Отчёт недоступен",
         description: attempt.report
           ? "Шаблон не предоставил макет отчёта."
@@ -190,12 +189,12 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
       return;
     }
     reportBusy.current = true;
-    toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
+    toast({ tone: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
     try {
       await downloadAttemptReport(attempt.report, attempt.reportRender, attempt.measures ?? undefined);
     } catch (e) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Не удалось сформировать отчёт",
         description: (e as Error).message,
       });

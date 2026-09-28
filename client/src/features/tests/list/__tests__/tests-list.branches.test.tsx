@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ROLES } from "@shared/access";
 import { TestsListPage } from "../tests-list";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const { authMock } = vi.hoisted(() => ({
   authMock: {
@@ -113,9 +114,9 @@ function installFetch(opts: {
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <TestsListPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

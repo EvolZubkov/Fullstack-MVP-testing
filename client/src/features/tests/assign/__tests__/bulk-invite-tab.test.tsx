@@ -15,6 +15,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { BulkInviteTab } from "../bulk-invite-tab";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -76,14 +77,14 @@ function renderTab(props: { purpose?: "assign" | "review" } = {}) {
   });
   const onGoToAssignments = vi.fn();
   const utils = render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <BulkInviteTab
         testId="t1"
         testTitle="Основы ИБ"
         onGoToAssignments={onGoToAssignments}
         purpose={props.purpose}
       />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
   return { ...utils, onGoToAssignments };
 }

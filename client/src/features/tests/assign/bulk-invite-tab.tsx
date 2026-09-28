@@ -35,9 +35,9 @@ import {
   Textarea,
   type TableColumn,
   type Tone,
+  useToast,
 } from "@skillum/ui-kit";
 import { parseRecipientList } from "@shared/recipients/parse-recipient-list";
-import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 import { buildLinksWorkbook, linksWorkbookFileName } from "./bulk-invite-export";
 
@@ -250,7 +250,7 @@ export function BulkInviteTab({
   testId, testTitle, onGoToAssignments, purpose = "assign",
 }: BulkInviteTabProps) {
   const isReview = purpose === "review";
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
 
   /**
@@ -332,7 +332,7 @@ export function BulkInviteTab({
       setStep("preview");
     },
     onError: (e: Error) =>
-      toast({ variant: "destructive", title: t.common.error, description: e.message }),
+      toast({ tone: "error", title: t.common.error, description: e.message }),
   });
 
   const inviteMutation = useMutation({
@@ -384,7 +384,7 @@ export function BulkInviteTab({
         setGroupNameConflict(true);
         return;
       }
-      toast({ variant: "destructive", title: t.common.error, description: e.message });
+      toast({ tone: "error", title: t.common.error, description: e.message });
     },
   });
 
@@ -418,16 +418,16 @@ export function BulkInviteTab({
       return issued.length;
     },
     onSuccess: (count) =>
-      toast({ title: "Файл сохранён", description: `Ссылок в файле: ${count}` }),
+      toast({ tone: "success", title: "Файл сохранён", description: `Ссылок в файле: ${count}` }),
     onError: () =>
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось собрать файл со ссылками" }),
+      toast({ tone: "error", title: t.common.error, description: "Не удалось собрать файл со ссылками" }),
   });
 
   const handleFiles = (files: File[]) => {
     const picked = files[0];
     if (!picked) return;
     if (!/\.xlsx$/i.test(picked.name)) {
-      toast({ variant: "destructive", title: t.common.error, description: "Поддерживается только формат .xlsx." });
+      toast({ tone: "error", title: t.common.error, description: "Поддерживается только формат .xlsx." });
       return;
     }
     setFile(picked);

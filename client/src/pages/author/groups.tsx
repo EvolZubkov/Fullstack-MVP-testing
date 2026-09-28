@@ -39,8 +39,8 @@ import {
   Text,
   Textarea,
   type TableColumn,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 
 interface Group {
@@ -64,7 +64,7 @@ interface GroupWithUsers extends Group {
 }
 
 export default function GroupsPage() {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -116,10 +116,10 @@ export default function GroupsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
       setIsCreateOpen(false);
       resetForm();
-      toast({ title: t.groups.groupCreated, description: t.groups.groupCreatedDescription });
+      toast({ tone: "success", title: t.groups.groupCreated, description: t.groups.groupCreatedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.groups.failedToCreate });
+      toast({ tone: "error", title: t.common.error, description: t.groups.failedToCreate });
     },
   });
 
@@ -139,10 +139,10 @@ export default function GroupsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
       setIsEditOpen(false);
       setSelectedGroup(null);
-      toast({ title: t.groups.groupUpdated, description: t.groups.groupUpdatedDescription });
+      toast({ tone: "success", title: t.groups.groupUpdated, description: t.groups.groupUpdatedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.groups.failedToUpdate });
+      toast({ tone: "error", title: t.common.error, description: t.groups.failedToUpdate });
     },
   });
 
@@ -160,10 +160,10 @@ export default function GroupsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
       setIsDeleteOpen(false);
       setSelectedGroup(null);
-      toast({ title: t.groups.groupDeleted, description: t.groups.groupDeletedDescription });
+      toast({ tone: "success", title: t.groups.groupDeleted, description: t.groups.groupDeletedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.groups.failedToDelete });
+      toast({ tone: "error", title: t.common.error, description: t.groups.failedToDelete });
     },
   });
 
@@ -181,10 +181,10 @@ export default function GroupsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
-      toast({ title: t.groups.memberAdded, description: t.groups.memberAddedDescription });
+      toast({ tone: "success", title: t.groups.memberAdded, description: t.groups.memberAddedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.groups.failedToAddMember });
+      toast({ tone: "error", title: t.common.error, description: t.groups.failedToAddMember });
     },
   });
 
@@ -204,10 +204,10 @@ export default function GroupsPage() {
         // Refresh group details
         fetchGroupDetails(selectedGroupDetails.id).then(setSelectedGroupDetails);
       }
-      toast({ title: t.groups.memberRemoved, description: t.groups.memberRemovedDescription });
+      toast({ tone: "success", title: t.groups.memberRemoved, description: t.groups.memberRemovedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.groups.failedToRemoveMember });
+      toast({ tone: "error", title: t.common.error, description: t.groups.failedToRemoveMember });
     },
   });
 

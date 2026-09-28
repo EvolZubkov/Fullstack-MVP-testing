@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type * as React from "react";
 import { TestEditor, TestEditorView } from "../test-editor";
 import { useTestEditor } from "../use-test-editor";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ function makeClient() {
 }
 
 function withClient(client: QueryClient, ui: React.JSX.Element) {
-  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+  return <QueryClientProvider client={client}><ToastProvider>{ui}</ToastProvider></QueryClientProvider>;
 }
 
 // ─── fetch mocking ────────────────────────────────────────────────────────────

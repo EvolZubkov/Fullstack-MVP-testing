@@ -18,6 +18,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
 import AnalyticsPage from "../analytics";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ---------------------------------------------------------------------------
 // Fixture builders (fresh objects per test — nothing is shared/mutated).
@@ -188,9 +189,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <AnalyticsPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

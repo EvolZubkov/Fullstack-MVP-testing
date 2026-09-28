@@ -22,9 +22,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Drawer, Button, IconButton, Avatar, Label, Select, Combobox, EmptyState, Table,
   Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Box, Cluster, Stack, Text,
+  useToast,
 } from "@skillum/ui-kit";
 import { Trash2, KeyRound, RotateCcw } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
 import { FeedbackEditorModal } from "@/features/tests/editor/sections/feedback-editor-modal";
@@ -137,7 +137,7 @@ export function TopicDrawer({
   initialTab?: TopicTab;
   onClose: () => void;
 }) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const open = target !== null;
   const isEdit = target?.mode === "edit";
@@ -294,13 +294,13 @@ export function TopicDrawer({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
       refetchAccess();
-      toast({ title: isEdit ? "Тема обновлена" : "Тема создана" });
+      toast({ tone: "success", title: isEdit ? "Тема обновлена" : "Тема создана" });
       onClose();
     },
     onError: (e: Error) => {
       const dup = e.message.includes("duplicate_topic_name");
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка",
         description: dup
           ? (isEdit ? "У владельца уже есть тема с таким названием" : "У вас уже есть тема с таким названием")
@@ -321,7 +321,7 @@ export function TopicDrawer({
       if (!res.ok) throw new Error((await res.json()).error || "Не удалось выдать доступ");
     },
     onSuccess: () => { refetchAccess(); setAddUserId(null); setAddLevel("use"); },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   // ── Immediate revoke (soft default, hard admin-only, dependency-checked) ──────
@@ -344,9 +344,9 @@ export function TopicDrawer({
       refetchAccess();
       setRevokeTarget(null);
       setRevokeDeps(null);
-      toast({ title: "Доступ отозван" });
+      toast({ tone: "success", title: "Доступ отозван" });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   const grants = access?.grants ?? [];

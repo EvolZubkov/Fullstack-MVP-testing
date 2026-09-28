@@ -28,8 +28,8 @@ import {
   Tag,
   Text,
   type TableColumn,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 import { BulkInviteTab } from "@/features/tests/assign/bulk-invite-tab";
 
@@ -90,7 +90,7 @@ function tokenStatusTag(status?: string) {
 /** One member row inside an expanded group assignment (resend / revoke link). */
 function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: string }) {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { push: toast } = useToast();
 
   const resendUser = useMutation({
     mutationFn: async () => {
@@ -100,9 +100,9 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
-      toast({ title: "Ссылка обновлена", description: `Письмо отправлено ${user.email}` });
+      toast({ tone: "success", title: "Ссылка обновлена", description: `Письмо отправлено ${user.email}` });
     },
-    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось обновить ссылку" }),
+    onError: () => toast({ tone: "error", title: "Ошибка", description: "Не удалось обновить ссылку" }),
   });
 
   const revokeUser = useMutation({
@@ -113,9 +113,9 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
-      toast({ title: "Ссылка отозвана" });
+      toast({ tone: "success", title: "Ссылка отозвана" });
     },
-    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось отозвать ссылку" }),
+    onError: () => toast({ tone: "error", title: "Ошибка", description: "Не удалось отозвать ссылку" }),
   });
 
   return (
@@ -212,7 +212,7 @@ export function AssignTestDialog({
   mode = "assign",
 }: AssignTestDialogProps) {
   const isReview = mode === "review";
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<AssignTab>("current");
@@ -258,9 +258,9 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/review/reviewers`] });
-      toast({ title: "Доступ отозван", description: "Ссылка рецензента больше не работает." });
+      toast({ tone: "success", title: "Доступ отозван", description: "Ссылка рецензента больше не работает." });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: t.common.error, description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: t.common.error, description: e.message }),
   });
 
   // Fetch all users
@@ -307,10 +307,10 @@ export function AssignTestDialog({
       setDueDate("");
       setLinkExpiresAt("");
       setActiveTab("current");
-      toast({ title: t.assignments.assigned, description: t.assignments.assignedDescription });
+      toast({ tone: "success", title: t.assignments.assigned, description: t.assignments.assignedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.assignments.failedToAssign });
+      toast({ tone: "error", title: t.common.error, description: t.assignments.failedToAssign });
     },
   });
 
@@ -326,10 +326,10 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: t.assignments.removed, description: t.assignments.removedDescription });
+      toast({ tone: "success", title: t.assignments.removed, description: t.assignments.removedDescription });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.assignments.failedToRemove });
+      toast({ tone: "error", title: t.common.error, description: t.assignments.failedToRemove });
     },
   });
 
@@ -345,10 +345,10 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: "Ссылка отозвана", description: "Токен доступа деактивирован." });
+      toast({ tone: "success", title: "Ссылка отозвана", description: "Токен доступа деактивирован." });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отозвать ссылку." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось отозвать ссылку." });
     },
   });
 
@@ -364,10 +364,10 @@ export function AssignTestDialog({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: "Ссылки обновлены", description: `Отправлено ${data.sent} писем.` });
+      toast({ tone: "success", title: "Ссылки обновлены", description: `Отправлено ${data.sent} писем.` });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось обновить ссылки." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось обновить ссылки." });
     },
   });
 
@@ -383,10 +383,10 @@ export function AssignTestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
-      toast({ title: "Письмо отправлено", description: "Новая ссылка отправлена пользователю." });
+      toast({ tone: "success", title: "Письмо отправлено", description: "Новая ссылка отправлена пользователю." });
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отправить письмо." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось отправить письмо." });
     },
   });
 

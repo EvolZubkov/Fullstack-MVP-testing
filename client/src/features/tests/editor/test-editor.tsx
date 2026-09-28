@@ -38,6 +38,7 @@ import {
   Tag,
   Tabs,
   type TabItem,
+  useToast,
 } from "@skillum/ui-kit";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -52,7 +53,6 @@ import type { TestEditorModel, ValidationIssue } from "./test-editor.types";
 import { buildFieldErrorIndex, buildIssueLevel, REVEAL_EVENT } from "./field-errors";
 import { useDesignSettings } from "./use-design-settings";
 import { useContentPages, hasStructureErrors, hasStructureWarnings } from "./use-content-pages";
-import { useToast } from "@/hooks/use-toast";
 import {
   CompositionTab,
   FeedbackTab,
@@ -329,7 +329,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
       : undefined,
   );
 
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   // PRD-52: свои комментарии подписываются «Вы» — панель отличает их по идентификатору.
   const auth = useOptionalAuth();
 
@@ -587,7 +587,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
         // увидит — говорим отдельно и называем, что делать.
         if (createdId) {
           toast({
-            title: "Тест создан, но структуру дописать не удалось",
+            tone: "success", title: "Тест создан, но структуру дописать не удалось",
             description: "Откройте тест и сохраните структуру ещё раз.",
           });
         }
@@ -595,7 +595,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
       }
     }
     if (wasDirty) {
-      toast({ title: "Изменения сохранены" });
+      toast({ tone: "success", title: "Изменения сохранены" });
       // Refresh the tests list so its server-computed columns re-run — notably the
       // PRD-22 «недоступный вариант» mark (`unmappedPageCount`), which otherwise
       // kept its stale count after the author remapped the pages here.

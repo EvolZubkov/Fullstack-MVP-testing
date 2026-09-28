@@ -14,7 +14,10 @@ const toast = vi.fn();
 
 vi.mock("wouter", () => ({ useLocation: () => ["/first-login", navigate] }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ refreshUser }) }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toast, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import FirstLoginPage from "../first-login";
 
@@ -71,7 +74,7 @@ describe("<FirstLoginPage />", () => {
     render(<FirstLoginPage mustChangePassword={false} />);
     fireEvent.click(screen.getByRole("button", { name: /Завершить регистрацию/ }));
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
     expect(navigate).not.toHaveBeenCalled();
   });

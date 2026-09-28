@@ -72,9 +72,9 @@ import {
   Stack,
   Tag,
   Text,
+  useToast,
 } from "@skillum/ui-kit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/page-header";
 import { TransferImportDialog } from "@/features/tests/transfer/import-dialog";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
@@ -174,7 +174,7 @@ const EMPTY_FOLDERS: TestFolder[] = [];
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function TestsListPage(): React.JSX.Element {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const { can, hasRole, user } = useAuth();
 
   // Data ----------------------------------------------------------------------
@@ -411,7 +411,7 @@ export function TestsListPage(): React.JSX.Element {
           /* fall through to the toast */
         }
       }
-      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось изменить статус теста" });
+      toast({ tone: "error", title: "Ошибка", description: "Не удалось изменить статус теста" });
     },
   });
 
@@ -425,7 +425,7 @@ export function TestsListPage(): React.JSX.Element {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
       setForceRepublish(null);
       toast({
-        title: "Тест переопубликован",
+        tone: "success", title: "Тест переопубликован",
         description: `Прервано идущих попыток: ${data.annulledAttempts}`,
       });
     },
@@ -444,7 +444,7 @@ export function TestsListPage(): React.JSX.Element {
           /* fall through */
         }
       }
-      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось переопубликовать тест" });
+      toast({ tone: "error", title: "Ошибка", description: "Не удалось переопубликовать тест" });
     },
   });
 

@@ -14,6 +14,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 import { AssignTestDialog } from "../assign-test-dialog";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ function renderDialog(props: Partial<React.ComponentProps<typeof AssignTestDialo
   });
   const onOpenChange = vi.fn();
   const utils = render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <AssignTestDialog
         open
         onOpenChange={onOpenChange}
@@ -83,7 +84,7 @@ function renderDialog(props: Partial<React.ComponentProps<typeof AssignTestDialo
         testTitle="Основы ИБ"
         {...props}
       />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
   return { ...utils, onOpenChange };
 }

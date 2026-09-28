@@ -3,7 +3,6 @@ import { Switch, Route, Redirect, useLocation } from "wouter";
 import { ToastProvider } from "@skillum/ui-kit";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ToastBridge } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadingState } from "@/components/loading-state";
@@ -241,7 +240,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <ToastProvider>
-          <ToastBridge />
           <AuthProvider>
             <Router />
           </AuthProvider>

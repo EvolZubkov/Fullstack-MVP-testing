@@ -27,7 +27,10 @@ vi.mock("wouter", () => ({
   useParams: () => ({ testId: "test-1" }),
   useLocation: () => ["/learner/test/test-1", navigateSpy],
 }));
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastSpy }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastSpy, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 vi.mock("@/lib/auth", () => ({ useAuth: () => authState }));
 vi.mock("@/features/learner/attempt-report", () => ({
   downloadAttemptReport: vi.fn(async () => "report.pdf"),

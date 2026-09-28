@@ -15,7 +15,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const { navigateSpy, queryState, authState } = vi.hoisted(() => ({
   navigateSpy: vi.fn(),
@@ -78,6 +79,10 @@ vi.mock("../template-content-screen", () => ({
 }));
 
 import ResultPage from "../result";
+
+/** Components under test push notifications, and the ui-kit hook needs a provider. */
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+  rtlRender(ui, { wrapper: ToastProvider });
 
 const renderPayload = (over: Record<string, unknown> = {}) => ({
   layout: '<div data-slot="x"></div>',

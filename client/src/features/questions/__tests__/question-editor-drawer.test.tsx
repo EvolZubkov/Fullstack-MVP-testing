@@ -31,6 +31,7 @@ vi.mock("@/features/content-protection/use-content-guard", () => ({
 }));
 
 import { QuestionEditorDrawer, type QuestionEditorDrawerProps } from "../question-editor-drawer";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -128,9 +129,9 @@ function renderDrawer(overrides: Partial<QuestionEditorDrawerProps> = {}) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const utils = render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <QuestionEditorDrawer {...props} />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
   return { ...utils, onClose: props.onClose, onSaved: props.onSaved };
 }

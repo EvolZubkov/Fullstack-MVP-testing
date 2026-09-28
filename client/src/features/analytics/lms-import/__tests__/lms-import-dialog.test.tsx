@@ -9,6 +9,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn, queryClient } from "@/lib/queryClient";
 import { LmsImportDialog } from "../lms-import-dialog";
+import { ToastProvider } from "@skillum/ui-kit";
 
 const INSPECT = {
   kind: "lmsExport", testId: "t1", testTitle: "Тест", rows: 3, questionIds: 2,
@@ -37,9 +38,9 @@ function renderDialog(props: Partial<ComponentProps<typeof LmsImportDialog>> = {
   const onClose = vi.fn();
   const onDone = vi.fn();
   const utils = render(
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}><ToastProvider>
       <LmsImportDialog open onClose={onClose} onDone={onDone} fixedTestId="t1" description="Тест" {...props} />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
   return { ...utils, onClose, onDone };
 }

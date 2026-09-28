@@ -61,8 +61,8 @@ import {
   Tag,
   Text,
   Textarea,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { t } from "@/lib/i18n";
 import { handleMarkdownPaste } from "./paste-markdown";
@@ -130,7 +130,7 @@ export function QuestionEditorDrawer({
   onClose,
   onSaved,
 }: QuestionEditorDrawerProps) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const contentGuard = useContentGuard();
 
   const [selectedType, setSelectedType] = useState<QuestionType>("single");
@@ -279,8 +279,8 @@ export function QuestionEditorDrawer({
     queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
     toast(
       created
-        ? { title: t.questions.questionCreated, description: t.questions.questionCreatedDescription }
-        : { title: t.questions.questionUpdated, description: t.questions.questionUpdatedDescription },
+        ? { tone: "success", title: t.questions.questionCreated, description: t.questions.questionCreatedDescription }
+        : { tone: "success", title: t.questions.questionUpdated, description: t.questions.questionUpdatedDescription },
     );
     if (removed.length === 0) {
       onSaved?.();
@@ -309,7 +309,7 @@ export function QuestionEditorDrawer({
       settleSave(await res.json().catch(() => undefined), true);
     },
     onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.questions.failedToCreate });
+      toast({ tone: "error", title: t.common.error, description: t.questions.failedToCreate });
     },
   });
 
@@ -447,12 +447,12 @@ export function QuestionEditorDrawer({
   const uploadMediaFile = async (file: File) => {
     const MAX_MB = 200;
     if (file.size > MAX_MB * 1024 * 1024) {
-      toast({ variant: "destructive", title: t.common.error, description: `Файл слишком большой (>${MAX_MB}MB).` });
+      toast({ tone: "error", title: t.common.error, description: `Файл слишком большой (>${MAX_MB}MB).` });
       return;
     }
     const mt = guessMediaType(file.type);
     if (!mt) {
-      toast({ variant: "destructive", title: t.common.error, description: "Поддерживаются только image/audio/video." });
+      toast({ tone: "error", title: t.common.error, description: "Поддерживаются только image/audio/video." });
       return;
     }
     setIsUploadingMedia(true);
@@ -467,7 +467,7 @@ export function QuestionEditorDrawer({
       setMediaFileName(file.name);
     } catch (err) {
       console.error(err);
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось загрузить файл. Проверь права (author) и размер." });
+      toast({ tone: "error", title: t.common.error, description: "Не удалось загрузить файл. Проверь права (author) и размер." });
     } finally {
       setIsUploadingMedia(false);
     }
@@ -573,7 +573,7 @@ export function QuestionEditorDrawer({
     const { dataJson, correctJson } = buildQuestionData();
     if (isUploadingMedia) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: "Дождись окончания загрузки медиа.",
       });
@@ -582,7 +582,7 @@ export function QuestionEditorDrawer({
 
     if (mediaUrl && isDataUrl(mediaUrl)) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: "Нельзя сохранять медиа как base64 в JSON. Используй кнопку \"Загрузить файл\".",
       });

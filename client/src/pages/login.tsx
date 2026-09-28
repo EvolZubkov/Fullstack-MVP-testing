@@ -14,8 +14,8 @@ import {
   Separator,
   Stack,
   Text,
+  useToast,
 } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { loginSchema, type LoginData } from "@shared/schema";
@@ -24,7 +24,7 @@ import { t } from "@/lib/i18n";
 export default function LoginPage() {
   const [, navigate] = useLocation();
   const { login, logout } = useAuth();
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginData>({
@@ -38,7 +38,7 @@ export default function LoginPage() {
     try {
       const outcome = await login(data.email, data.password);
       if (outcome === "ok") {
-        toast({ title: t.auth.welcomeBack, description: t.auth.loginSuccess });
+        toast({ tone: "success", title: t.auth.welcomeBack, description: t.auth.loginSuccess });
         navigate("/");
       } else if (outcome === "link-scope") {
         // The session still carries an invitation link, and a link admits nothing
@@ -47,20 +47,20 @@ export default function LoginPage() {
         // told is wrong while it is right.
         await logout();
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.auth.loginFailed,
           description: t.auth.linkScopeBlocksLogin,
         });
       } else {
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.auth.loginFailed,
           description: t.auth.invalidCredentials,
         });
       }
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: t.auth.somethingWentWrong,
       });

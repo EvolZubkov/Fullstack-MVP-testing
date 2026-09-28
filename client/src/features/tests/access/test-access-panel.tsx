@@ -10,11 +10,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Box, Stack, Cluster, Text } from "@skillum/ui-kit";
+import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Box, Stack, Cluster, Text, useToast } from "@skillum/ui-kit";
 import { Trash2, KeyRound } from "lucide-react";
 import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
-import { useToast } from "@/hooks/use-toast";
 
 type AccessLevel = "edit" | "assign";
 
@@ -63,7 +62,7 @@ export function TestAccessPanel({
   test: { id: string; title: string } | null;
   onClose: () => void;
 }) {
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const open = test !== null;
   const testId = test?.id ?? null;
@@ -149,10 +148,10 @@ export function TestAccessPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
       if (testId) queryClient.invalidateQueries({ queryKey: ["/api/tests", testId, "access"] });
-      toast({ title: "Доступ сохранён" });
+      toast({ tone: "success", title: "Доступ сохранён" });
       onClose();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
 
   const addGrant = () => {

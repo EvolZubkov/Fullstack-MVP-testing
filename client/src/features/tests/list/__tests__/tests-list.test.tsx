@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getPermissions, ROLES, type Capability } from "@shared/access";
 import { TestsListPage } from "../tests-list";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // The list reads capabilities to gate row actions (PRD-13). Stub the auth
 // context so the component renders without an AuthProvider; `authMock.can` is
@@ -146,9 +147,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <TestsListPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

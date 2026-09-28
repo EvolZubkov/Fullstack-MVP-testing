@@ -33,7 +33,10 @@ vi.mock("@/features/content-protection/use-content-guard", () => ({
 // Capture toast calls so the destructive guard toasts (base64 / unsupported /
 // upload failure) can be asserted.
 const toastMock = vi.hoisted(() => vi.fn());
-vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast: toastMock }) }));
+vi.mock("@skillum/ui-kit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
+  useToast: () => ({ push: toastMock, dismiss: vi.fn(), clear: vi.fn() }),
+}));
 
 import { QuestionEditorDrawer, type QuestionEditorDrawerProps } from "../question-editor-drawer";
 
@@ -442,7 +445,7 @@ describe("<QuestionEditorDrawer /> — create save builds per-type payload", () 
     fireEvent.click(submit);
 
     await waitFor(() =>
-      expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })),
+      expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ tone: "error" })),
     );
   });
 });

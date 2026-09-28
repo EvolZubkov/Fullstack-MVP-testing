@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { ChevronLeft, Lock, RotateCcw } from "lucide-react";
-import { Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Text } from "@skillum/ui-kit";
-import { useToast } from "@/hooks/use-toast";
+import { Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Text, useToast } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
@@ -454,7 +453,7 @@ function StuckPreparingScreen({ diagnosis, timeoutMs = 10_000 }: { diagnosis: st
 export default function TakeTestPage() {
   const { testId } = useParams<{ testId: string }>();
   const [, navigate] = useLocation();
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const { user } = useAuth();
   // A magic-link session (assignment invitation) has no test list to return to —
   // the guard in ProtectedRoute would just bounce a "/learner" navigation back to
@@ -889,7 +888,7 @@ export default function TakeTestPage() {
   useEffect(() => {
     if (remainingSeconds === 0) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Время истекло",
         description: "Тест будет автоматически завершён",
       });
@@ -916,7 +915,7 @@ export default function TakeTestPage() {
             finishRun();
           } catch (err) {
             toast({
-              variant: "destructive",
+              tone: "error",
               title: "Ошибка отправки",
               description: "Не удалось отправить ответы",
             });
@@ -949,7 +948,7 @@ export default function TakeTestPage() {
             // Leave the attempt OPEN on failure: it stays resumable, which beats
             // sending the learner to a result page that has nothing to show.
             toast({
-              variant: "destructive",
+              tone: "error",
               title: "Не удалось завершить тест",
               description: "Время истекло, но результат не сохранён. Обновите страницу.",
             });
@@ -1040,7 +1039,7 @@ export default function TakeTestPage() {
       } catch (err) {
         console.error("Init test error:", err);
         toast({
-          variant: "destructive",
+          tone: "error",
           title: t.common.error,
           description: t.common.failedToStartTest,
         });
@@ -1150,7 +1149,7 @@ export default function TakeTestPage() {
       }
       console.error("Start test error:", err);
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: t.common.failedToStartTest,
       });
@@ -1196,7 +1195,7 @@ export default function TakeTestPage() {
       if (testMode === "adaptive") {
         // TODO: Реализовать восстановление адаптивного теста
         toast({
-          variant: "info",
+          tone: "info",
           title: "Информация",
           description: "Восстановление адаптивного теста пока не поддерживается. Начинаем заново.",
         });
@@ -1248,7 +1247,7 @@ export default function TakeTestPage() {
 
         if (remaining <= 0) {
           toast({
-            variant: "destructive",
+            tone: "error",
             title: "Время истекло",
             description: "Время на тест истекло пока вы отсутствовали",
           });
@@ -1337,13 +1336,13 @@ export default function TakeTestPage() {
       setPhase("question");
 
       toast({
-        title: "Тест восстановлен",
+        tone: "success", title: "Тест восстановлен",
         description: `Продолжаем с вопроса ${data.currentIndex + 1}`,
       });
     } catch (err) {
       console.error("Resume test error:", err);
       toast({
-        variant: "destructive",
+        tone: "error",
         title: t.common.error,
         description: "Не удалось восстановить тест",
       });
@@ -1363,7 +1362,7 @@ export default function TakeTestPage() {
     const attemptId = testMetadata?.lastCompletedAttemptId;
     if (!attemptId || reportBusy.current) return;
     reportBusy.current = true;
-    toast({ variant: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
+    toast({ tone: "info", title: "Готовим отчёт", description: "Файл скачается автоматически." });
     try {
       const res = await fetch(`/api/attempts/${attemptId}/result`, { credentials: "include" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1376,7 +1375,7 @@ export default function TakeTestPage() {
       await downloadAttemptReport(data.report, data.reportRender, data.measures ?? undefined);
     } catch (e) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Не удалось сформировать отчёт",
         description: (e as Error).message,
       });
@@ -1677,7 +1676,7 @@ export default function TakeTestPage() {
 
     if (currentAnswer === undefined || currentAnswer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос",
       });
@@ -1686,7 +1685,7 @@ export default function TakeTestPage() {
 
     if (currentQ.question.type === "multiple" && Array.isArray(currentAnswer) && currentAnswer.length === 0) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, выберите хотя бы один вариант ответа",
       });
@@ -1733,7 +1732,7 @@ export default function TakeTestPage() {
 
     if (currentAnswer === undefined || currentAnswer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос перед продолжением",
       });
@@ -1742,7 +1741,7 @@ export default function TakeTestPage() {
 
     if (currentQ.question.type === "multiple" && Array.isArray(currentAnswer) && currentAnswer.length === 0) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, выберите хотя бы один вариант ответа",
       });
@@ -1757,7 +1756,7 @@ export default function TakeTestPage() {
       for (let i = 0; i < leftItems.length; i++) {
         if (pairs[i] === undefined || pairs[i] === null) {
           toast({
-            variant: "destructive",
+            tone: "error",
             title: "Требуется ответ",
             description: "Пожалуйста, сопоставьте все элементы",
           });
@@ -2238,7 +2237,7 @@ export default function TakeTestPage() {
     // incorrect (FR-07). The обзор / finish-confirm warning is added in Block D.
     if (unansweredQuestions.length > 0 && !navSettings.allowReturnToUnanswered) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Не все вопросы отвечены",
         description: `Осталось ${unansweredQuestions.length} вопросов без ответа.`,
       });
@@ -2312,7 +2311,7 @@ export default function TakeTestPage() {
       finishRun();
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка отправки",
         description: "Не удалось отправить ответы",
       });
@@ -2342,7 +2341,7 @@ export default function TakeTestPage() {
       finishRun();
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка отправки",
         description: "Не удалось отправить ответы",
       });
@@ -2360,7 +2359,7 @@ export default function TakeTestPage() {
     // The server already froze every answer; this only hands the run in.
     if (reason === "test-closed") {
       toast({
-        variant: "info",
+        tone: "info",
         duration: LEAVE_NOTICE_MS,
         icon: <Lock size={18} aria-hidden="true" />,
         title: "Попытка завершена",
@@ -2376,7 +2375,7 @@ export default function TakeTestPage() {
       // PRD-67 (FR-12): the learner came back into a section they had left.
       const topicName = flatQuestions.find((q) => q.topicId === expiredTopicId)?.topicName;
       toast({
-        variant: "info",
+        tone: "info",
         duration: LEAVE_NOTICE_MS,
         icon: <Lock size={18} aria-hidden="true" />,
         title: topicName ? `Раздел «${topicName}» закрыт` : "Раздел закрыт",
@@ -2384,7 +2383,7 @@ export default function TakeTestPage() {
       });
     } else {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Время темы истекло",
         description: target === null ? "Завершаем тест" : "Переходим к следующей теме",
       });
@@ -2462,7 +2461,7 @@ export default function TakeTestPage() {
     const attemptId = adaptiveState?.attemptId;
     if (!attemptId) return;
     toast({
-      variant: "destructive",
+      tone: "error",
       title: "Время темы истекло",
       description: "Переходим к следующей теме",
     });
@@ -2483,7 +2482,7 @@ export default function TakeTestPage() {
   const handleAdaptiveConfirm = async () => {
     if (!adaptiveState || !adaptiveState.currentQuestion || adaptiveState.answer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос",
       });
@@ -2532,7 +2531,7 @@ export default function TakeTestPage() {
 
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка",
         description: "Не удалось отправить ответ",
       });
@@ -2608,7 +2607,7 @@ export default function TakeTestPage() {
   const handleAdaptiveSubmit = async () => {
     if (!adaptiveState || !adaptiveState.currentQuestion || adaptiveState.answer === null) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Требуется ответ",
         description: "Пожалуйста, ответьте на вопрос",
       });
@@ -2698,7 +2697,7 @@ export default function TakeTestPage() {
       }
     } catch (err) {
       toast({
-        variant: "destructive",
+        tone: "error",
         title: "Ошибка",
         description: "Не удалось отправить ответ",
       });

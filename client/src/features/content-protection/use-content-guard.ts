@@ -20,7 +20,7 @@
 import { useCallback, useState } from "react";
 import { ROLES } from "@shared/access";
 import { useAuth } from "@/lib/auth";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@skillum/ui-kit";
 import type {
   ContentInUseError,
   DryRunResult,
@@ -105,7 +105,7 @@ export interface UseContentGuardResult {
 
 export function useContentGuard(): UseContentGuardResult {
   const { user, hasRole } = useAuth();
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const [state, setState] = useState<DialogState>(CLOSED);
   const [op, setOp] = useState<GuardedOperation | null>(null);
 
@@ -132,7 +132,7 @@ export function useContentGuard(): UseContentGuardResult {
         if (res.status === 403) {
           const payload = await res.json().catch(() => ({}));
           toast({
-            variant: "destructive",
+            tone: "error",
             title: "Недостаточно прав",
             description:
               (payload as { message?: string }).message ??
@@ -149,7 +149,7 @@ export function useContentGuard(): UseContentGuardResult {
         operation.onDone(payload);
       } catch (e) {
         setState((s) => ({ ...s, pending: false }));
-        toast({ variant: "destructive", title: "Ошибка", description: "Операция не выполнена" });
+        toast({ tone: "error", title: "Ошибка", description: "Операция не выполнена" });
       }
     },
     [close, toast],
@@ -176,7 +176,7 @@ export function useContentGuard(): UseContentGuardResult {
           setOp(null);
         }
       } catch (e) {
-        toast({ variant: "destructive", title: "Ошибка", description: "Не удалось проверить операцию" });
+        toast({ tone: "error", title: "Ошибка", description: "Не удалось проверить операцию" });
         setOp(null);
       }
     },

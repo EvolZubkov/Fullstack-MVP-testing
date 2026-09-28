@@ -63,12 +63,11 @@ import {
   type LucideIcon,
   Pilcrow,
 } from "lucide-react";
-import { Button, Checkbox, Chip, Cluster, Input, Label, ModalDialog, Select, Stack, Text } from "@skillum/ui-kit";
+import { Button, Checkbox, Chip, Cluster, Input, Label, ModalDialog, Select, Stack, Text, useToast } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
 import { TruncatedLabel } from "@/components/truncated-label";
 import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Folder, Question, Topic } from "@shared/schema";
@@ -252,7 +251,7 @@ export function ContentTree() {
   const [expandedQuestions, setExpandedQuestions] = useState<ReadonlySet<string>>(() => new Set());
 
   // ── Phase 3: interaction layer (⋯-menus, FAB, drawers, move pickers, bulk) ──
-  const { toast } = useToast();
+  const { push: toast } = useToast();
   const queryClient = useQueryClient();
   const contentGuard = useContentGuard();
   const isAdmin = can("topics.owner.change");
@@ -282,11 +281,11 @@ export function ContentTree() {
     queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
     queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
   };
-  const onMutError = () => toast({ variant: "destructive", title: t.common.error });
+  const onMutError = () => toast({ tone: "error", title: t.common.error });
 
   const duplicateQuestionMut = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/questions/${id}/duplicate`),
-    onSuccess: () => { invalidateAll(); toast({ title: t.questions.duplicated }); },
+    onSuccess: () => { invalidateAll(); toast({ tone: "success", title: t.questions.duplicated }); },
     onError: onMutError,
   });
   // Topic/folder deletion is guarded (single topic → content guard; folder →
@@ -313,7 +312,7 @@ export function ContentTree() {
       for (const id of ids) await apiRequest("PUT", `/api/questions/${id}`, { topicId });
     },
     onSuccess: () => { invalidateAll(); setMoveQ(null); setSelected(new Set()); },
-    onError: () => toast({ variant: "destructive", title: t.common.error, description: "Не удалось переместить (возможно, затронуты опубликованные тесты)." }),
+    onError: () => toast({ tone: "error", title: t.common.error, description: "Не удалось переместить (возможно, затронуты опубликованные тесты)." }),
   });
 
   // Delete a question through the PRD-15 content guard (dry-run -> warn/block 409).
@@ -383,7 +382,7 @@ export function ContentTree() {
     const q = questions.find((x) => x.id === linkedQuestionId);
     if (!q) {
       // Deleted, or outside this author's topic scope: say so, do not block.
-      toast({ title: "Вопрос не найден", description: "Он удалён или недоступен вам." });
+      toast({ tone: "success", title: "Вопрос не найден", description: "Он удалён или недоступен вам." });
       return;
     }
     // Expand the folder path (folders start open, but the user may have collapsed

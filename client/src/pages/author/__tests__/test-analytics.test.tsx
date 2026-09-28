@@ -34,6 +34,7 @@ vi.mock("wouter", () => ({
 }));
 
 import TestAnalyticsPage from "../test-analytics";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────────
 
@@ -159,9 +160,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <TestAnalyticsPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 

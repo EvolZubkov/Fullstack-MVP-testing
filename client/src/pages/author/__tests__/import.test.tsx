@@ -18,6 +18,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 import ImportPage from "../import";
+import { ToastProvider } from "@skillum/ui-kit";
 
 // ─── fetch stub ─────────────────────────────────────────────────────────────
 
@@ -88,9 +89,9 @@ function renderPage() {
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={client}><ToastProvider>
       <ImportPage />
-    </QueryClientProvider>,
+    </ToastProvider></QueryClientProvider>,
   );
 }
 
@@ -169,9 +170,14 @@ describe("<ImportPage /> — questions-only path", () => {
       expect(screen.getByText("Ошибок не найдено — можно импортировать.")).toBeInTheDocument(),
     );
 
-    // Confirm the real import -> "Импорт выполнен" done banner.
+    // Confirm the real import -> "Импорт выполнен" done banner, plus the
+    // success notification with the same title in the toast stack.
     fireEvent.click(screen.getByRole("button", { name: "Импортировать" }));
-    await waitFor(() => expect(screen.getByText("Импорт выполнен")).toBeInTheDocument());
+    await waitFor(() => {
+      const onPage = screen.getAllByText("Импорт выполнен").filter((el) => !el.closest(".ou-toast-stack"));
+      expect(onPage).toHaveLength(1);
+    });
+    expect(document.querySelector(".ou-toast--success")).toHaveTextContent("Импорт выполнен");
     expect(screen.getByRole("button", { name: "Импортировать ещё" })).toBeInTheDocument();
   });
 });
