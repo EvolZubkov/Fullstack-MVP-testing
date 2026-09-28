@@ -1,59 +1,143 @@
-import { createContext, useContext, useEffect, useState } from "react";
+/**
+ * @module components/theme-provider
+ *
+ * Light/dark appearance of the author and learner shells.
+ *
+ * The design system switches its semantic tokens by a class on `<body>`:
+ * `.ou` is the always-present scope, `.ou--light` / `.ou--dark` pick the
+ * palette. This module owns exactly that pair of classes and nothing else.
+ *
+ * Resolution order of the initial appearance:
+ *  1. the choice the user made earlier, remembered in `localStorage`;
+ *  2. the operating system preference (`prefers-color-scheme`);
+ *  3. light.
+ *
+ * Only a recognised value is ever read back from storage, and every storage
+ * access tolerates a browser that refuses it (private mode, blocked site
+ * data): the appearance then still works for the session, it is just not
+ * remembered.
+ */
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
-type Theme = "light" | "dark";
+/** Appearance of the application shell. */
+export type Theme = "light" | "dark";
 
-interface ThemeContextType {
+/** What {@link useTheme} hands to consumers. */
+export interface ThemeState {
+  /** Appearance currently applied to the document. */
   theme: Theme;
+  /** Switch to the opposite appearance. */
   toggleTheme: () => void;
+  /** Apply the given appearance. */
   setTheme: (theme: Theme) => void;
 }
 
-const ThemeContext = createContext<ThemeContextType | null>(null);
+/**
+ * Storage key of the remembered choice. Kept as is on purpose: users who
+ * already picked an appearance keep it.
+ */
+const STORAGE_KEY = "theme";
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("theme") as Theme;
-      if (stored) return stored;
-      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    return "light";
-  });
+/** Class of the always-present design-system scope. */
+const SCOPE_CLASS = "ou";
 
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(theme);
-    // Mirror the choice onto <body> in the form Skillum Design System
-    // reads: `.ou + .ou--light` or `.ou + .ou--dark` (see styles/vendor/
-    // skillum-ds.css). Density (`.ou--normal`) is fixed on body via
-    // client/index.html and intentionally not toggled here.
-    const body = document.body;
-    body.classList.remove("ou--light", "ou--dark");
-    body.classList.add(theme === "dark" ? "ou--dark" : "ou--light");
-    if (!body.classList.contains("ou")) body.classList.add("ou");
-    localStorage.setItem("theme", theme);
-  }, [theme]);
+/** Palette class per appearance. */
+const PALETTE_CLASS: Record<Theme, string> = {
+  light: "ou--light",
+  dark: "ou--dark",
+};
 
-  const toggleTheme = () => {
-    setThemeState((prev) => (prev === "light" ? "dark" : "light"));
-  };
-
-  const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
-  };
-
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+function isTheme(value: unknown): value is Theme {
+  return value === "light" || value === "dark";
 }
 
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
+/** The remembered choice, or `null` when there is none or it is unreadable. */
+function rememberedTheme(): Theme | null {
+  try {
+    const value = window.localStorage.getItem(STORAGE_KEY);
+    return isTheme(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remember the choice; silently skipped when storage is unavailable. */
+function rememberTheme(theme: Theme): void {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // Storage refused: the appearance stays for this session only.
+  }
+}
+
+/** Appearance requested by the operating system. */
+function systemTheme(): Theme {
+  const query = typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : null;
+  return query?.matches ? "dark" : "light";
+}
+
+function initialTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  return rememberedTheme() ?? systemTheme();
+}
+
+/** Put the design-system scope and the palette of `theme` on `<body>`. */
+function paintBody(theme: Theme): void {
+  const { classList } = document.body;
+  classList.add(SCOPE_CLASS);
+  for (const [name, cls] of Object.entries(PALETTE_CLASS)) {
+    classList.toggle(cls, name === theme);
+  }
+}
+
+const ThemeContext = createContext<ThemeState | null>(null);
+
+/**
+ * Keeps `<body>` painted in the current appearance and shares the state with
+ * {@link useTheme}. Mounted once at the application root.
+ */
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
+
+  // Layout effect: the palette lands before the browser paints, so switching
+  // never shows a frame of the previous appearance.
+  useLayoutEffect(() => {
+    paintBody(theme);
+    rememberTheme(theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
+  }, []);
+
+  const state = useMemo<ThemeState>(
+    () => ({ theme, toggleTheme, setTheme }),
+    [theme, toggleTheme],
+  );
+
+  return <ThemeContext.Provider value={state}>{children}</ThemeContext.Provider>;
+}
+
+/**
+ * Current appearance and the actions to change it.
+ *
+ * @throws {Error} When called outside {@link ThemeProvider}: a control that
+ *   silently showed "light" without a provider would lie about the page.
+ */
+export function useTheme(): ThemeState {
+  const state = useContext(ThemeContext);
+  if (!state) {
     throw new Error("useTheme must be used within a ThemeProvider");
   }
-  return context;
+  return state;
 }
