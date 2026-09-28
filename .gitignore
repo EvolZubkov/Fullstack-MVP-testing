@@ -34,6 +34,8 @@ debug.log
 docker/config/deploy.env
 docker/build/
 coverage/
+# Vitest 5 report/attachment output
+.vitest/
 .playwright-mcp/
 /*.png
 
