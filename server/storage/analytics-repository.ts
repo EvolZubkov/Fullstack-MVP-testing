@@ -18,6 +18,33 @@ import {
   attempts, groups, lmsImportBatches, scormAnswers, scormAttempts, scormPackages, tests, userGroups, users,
   type Attempt, type ScormAttempt,
 } from "@shared/schema";
+import { ORG_FIELDS, type OrgField } from "@shared/org-fields";
+
+/** Колонка профиля и колонка прохождения для каждого оргполя. */
+const ORG_COLUMNS = {
+  organization: { profile: users.organization, passage: scormAttempts.lmsUserOrg },
+  unit: { profile: users.unit, passage: scormAttempts.lmsUserUnit },
+  position: { profile: users.position, passage: scormAttempts.lmsUserPosition },
+} as const;
+
+/**
+ * Значение оргполя прохождения из LMS: своё, иначе профиль связанного пользователя (PRD-56
+ * OQ-04). Пустая строка у прохождения — не значение: выгрузка пишет пустую клетку, и она не
+ * должна заслонять профиль. То же правило, что в нормализации сервиса.
+ */
+function lmsOrgValue(field: OrgField) {
+  const { profile, passage } = ORG_COLUMNS[field];
+  return sql`coalesce(
+    nullif(btrim(${passage}), ''),
+    (select ${profile} from ${users} where ${users.id} = ${scormAttempts.userId})
+  )`;
+}
+
+/** Значение оргполя веб-попытки: только профиль — веб своих оргполей не пишет. */
+function webOrgValue(field: OrgField) {
+  const { profile } = ORG_COLUMNS[field];
+  return sql`(select ${profile} from ${users} where ${users.id} = ${attempts.userId})`;
+}
 
 /** Откуда приехало прохождение. Совпадает с `ObservationSource` сервиса. */
 export type ObservationSourceName = "web" | "telemetry" | "import";
@@ -41,6 +68,16 @@ export interface ObservationQuery {
    */
   formIds?: string[];
   snapshotIds?: string[];
+  /**
+   * План оргструктуры: значения организации, подразделения, должности — ТОЧНЫЕ написания, как
+   * они лежат в базе. Сервис заранее переводит выбранное в все его написания
+   * (`shared/org-fields`), поэтому запрос сравнивает строки как есть и не зависит от локали
+   * базы: `lower()` кириллицы при `LC_CTYPE=C` не понижает, и отбор разошёлся бы с фильтром.
+   *
+   * Присутствие поля — уже условие: пустой список значит «таких значений нет ни у кого», и
+   * выборка обязана вернуть ноль строк, а не снять условие.
+   */
+  orgValues?: Partial<Record<OrgField, string[]>>;
   from?: Date;
   to?: Date;
   limit?: number;
@@ -221,7 +258,19 @@ export class AnalyticsRepository {
       scormAttempts.resultPassed,
     );
 
+    /**
+     * Условия оргструктуры источника: поле за полем через И, значения одного поля через ИЛИ.
+     * Пустой список — «ни у кого нет», а не «условия нет».
+     */
+    const orgConditions = (valueOf: (field: OrgField) => ReturnType<typeof sql>) =>
+      ORG_FIELDS.flatMap(field => {
+        const values = query.orgValues?.[field];
+        if (!values) return [];
+        return [values.length ? inArray(valueOf(field), values) : NOTHING];
+      });
+
     const webWhere = and(
+      ...orgConditions(webOrgValue),
       ...(testIds ? [inArray(attempts.testId, testIds)] : []),
       ...(query.from ? [gte(attempts.startedAt, query.from)] : []),
       ...(query.to ? [lte(attempts.startedAt, query.to)] : []),
@@ -259,6 +308,7 @@ export class AnalyticsRepository {
 
     const lmsWhere = and(
       lmsBatchCounted,
+      ...orgConditions(lmsOrgValue),
       ...(testIds ? [inArray(lmsTestId, testIds)] : []),
       ...(query.from ? [gte(scormAttempts.startedAt, query.from)] : []),
       ...(query.to ? [lte(scormAttempts.startedAt, query.to)] : []),
@@ -479,6 +529,31 @@ export class AnalyticsRepository {
       order: keys.map(k => ({ id: k.id, source: k.source as ObservationSourceName })),
       total: webTotal + lmsTotal,
     };
+  }
+
+  /**
+   * Все хранящиеся написания оргполей — профили и прохождения (план оргструктуры).
+   *
+   * Сырые, без свёртки: сервис сам решает, какие из них относятся к выбранному значению, по
+   * правилу `shared/org-fields`, и отдаёт запросу точный список. Различных значений у поля
+   * единицы и десятки, а не тысячи — это цена одного запроса на поле, не таблицы целиком.
+   */
+  async selectOrgSpellings(): Promise<Record<OrgField, string[]>> {
+    const out = {} as Record<OrgField, string[]>;
+    for (const field of ORG_FIELDS) {
+      const { profile, passage } = ORG_COLUMNS[field];
+      const [fromProfiles, fromPassages] = await Promise.all([
+        db.selectDistinct({ value: profile }).from(users).where(sql`${profile} is not null`),
+        // Обрезано так же, как в `lmsOrgValue`: сравнивается обрезанное значение прохождения,
+        // и написание с пробелами по краям иначе не совпало бы само с собой.
+        db.selectDistinct({ value: sql<string>`btrim(${passage})` }).from(scormAttempts)
+          .where(sql`nullif(btrim(${passage}), '') is not null`),
+      ]);
+      out[field] = [...new Set([...fromProfiles, ...fromPassages]
+        .map(row => row.value)
+        .filter((value): value is string => typeof value === "string"))];
+    }
+    return out;
   }
 
   /**

@@ -30,6 +30,8 @@ const { storageMock } = vi.hoisted(() => ({
     getSnapshotsForTest: vi.fn().mockResolvedValue([]),
     // PRD-56 FR-18: названия вариантов оси «вариант» берутся из наборов форм разделов.
     getTestSections: vi.fn().mockResolvedValue([]),
+    // «Назначено»: назначения теста; по умолчанию их нет.
+    getTestAssignments: vi.fn().mockResolvedValue([]),
     // PRD-56 FR-06e: разворот строки среза читает ответы теста общим сбором.
     getQuestionsByIds: vi.fn().mockResolvedValue([]),
     getTopics: vi.fn().mockResolvedValue([]),
@@ -260,10 +262,44 @@ describe("GET /api/analytics/slices?axis=... — разбиение", () => {
   });
 
   it("отказывает в неизвестной оси, а не молча отдаёт сохранённые срезы", async () => {
-    const res = await ask("?testId=test1&axis=должность");
+    // Оргструктура осью стала (FR-06b отменено 2026-09-28); региона в продукте нет.
+    const res = await ask("?testId=test1&axis=region");
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/ось/i);
+  });
+
+  it("разбивает по подразделению из профиля и считает «назначено» по профилю (Р-7)", async () => {
+    // u0..u7 проходили и числятся в отделе продаж (в двух написаниях), u8..u11 проходили без
+    // подразделения; u20 из отдела продаж назначен, но не начинал.
+    const unitOf = (index: number) =>
+      index < 4 ? "Отдел продаж" : index < 8 ? "ОТДЕЛ ПРОДАЖ" : index === 20 ? "отдел продаж" : null;
+    storageMock.getUser.mockImplementation(async (id: string) => {
+      const index = Number(id.replace("u", ""));
+      return Number.isNaN(index)
+        ? { id, name: "Оценщик", email: "o@b.c" }
+        : { id, name: id, unit: unitOf(index) };
+    });
+    storageMock.getTestAssignments.mockResolvedValue([
+      ...Array.from({ length: 12 }, (_, i) => ({ userId: `u${i}`, groupId: null })),
+      { userId: "u20", groupId: null },
+    ]);
+
+    const res = await ask("?testId=test1&axis=unit");
+
+    expect(res.status).toBe(200);
+    const byName = Object.fromEntries(
+      res.body.slices.map((slice: { name: string }) => [slice.name, slice]),
+    );
+    expect(Object.keys(byName).sort()).toEqual(["Не указано", "Отдел продаж"]);
+    expect(byName["Отдел продаж"]).toMatchObject({
+      completed: 8,
+      conditions: { units: ["Отдел продаж"] },
+    });
+    expect(byName["Не указано"]).toMatchObject({ completed: 4, conditions: {} });
+    // Назначено больше, чем прошло: u20 позван и не начинал — ради этого числа ось и нужна.
+    expect(byName["Отдел продаж"].assigned).toBe(9);
+    expect(byName["Не указано"].assigned).toBe(4);
   });
 });
 

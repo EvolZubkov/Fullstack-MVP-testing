@@ -35,10 +35,17 @@ import { analyticsScope } from "./helpers";
 
 const router = Router();
 
-/** Оси, для которых данные уже есть (FR-06a). Оргструктуры среди них нет и не будет (FR-06b). */
+/**
+ * Оси разбиения (FR-06a). Оргструктура — организация, подразделение, должность — вошла в их
+ * число, когда исключение FR-06b было отменено (2026-09-28).
+ */
 const AXES: readonly SliceAxis[] = [
-  "group", "period", "attempt", "version", "variant", "source", "external",
+  "group", "organization", "unit", "position",
+  "period", "attempt", "version", "variant", "source", "external",
 ];
+
+/** Оси оргструктуры: у них «назначено» считается по профилю назначенных (план, Р-7). */
+const ORG_AXES = new Set<SliceAxis>(["organization", "unit", "position"]);
 
 /**
  * Справочники для оси: членство в группах, их названия, номера версий и внешние участники.
@@ -104,6 +111,9 @@ function conditionsOf(raw: unknown): ObservationFilter {
     ...(list(source.outcomes).length ? { outcomes: list(source.outcomes) as ObservationOutcome[] } : {}),
     ...(list(source.formIds).length ? { formIds: list(source.formIds) } : {}),
     ...(list(source.snapshotIds).length ? { snapshotIds: list(source.snapshotIds) } : {}),
+    ...(list(source.organizations).length ? { organizations: list(source.organizations) } : {}),
+    ...(list(source.units).length ? { units: list(source.units) } : {}),
+    ...(list(source.positions).length ? { positions: list(source.positions) } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
   };
@@ -148,7 +158,11 @@ function groupIdsOf(raw: unknown): string[] | null {
     : [];
   if (groupIds.length > 0) return groupIds;
 
-  const hasOther = ["sources", "outcomes", "testIds", "formIds", "snapshotIds"].some(key =>
+  // Оргусловия тоже «другого рода» для этой величины: счёт по группам ничего о них не знает, и
+  // срез «Розница + Отдел продаж» получил бы число всей Розницы.
+  const hasOther = [
+    "sources", "outcomes", "testIds", "formIds", "snapshotIds", "organizations", "units", "positions",
+  ].some(key =>
     Array.isArray(source[key]) && (source[key] as unknown[]).length > 0)
     || typeof source.from === "string"
     || typeof source.to === "string";
@@ -212,8 +226,8 @@ router.get("/slices", requirePermission("analytics.read"), async (req: Request, 
       // сразу. Платы за это столько же, сколько за один разворот: ответы теста собираются
       // единожды, а срез — подмножество тех же фактов.
       const topics = await readSliceTopics(testId, rows);
-      // «Назначено» определено у осей, которые описывают ЛЮДЕЙ: группа и признак внешнего
-      // участника. По остальным срез описывает попытку, а назначают человека, а не попытку.
+      // «Назначено» определено у осей, которые описывают ЛЮДЕЙ: группа, признак внешнего
+      // участника и оргструктура. По остальным срез описывает попытку, а назначают человека.
       const assigned = await readAssigned(
         testId,
         axis === "group" ? buckets.map(bucket => bucket.key) : [],
@@ -224,6 +238,10 @@ router.get("/slices", requirePermission("analytics.read"), async (req: Request, 
         // назначенных без единой попытки в такой строке взять неоткуда.
         if (axis === "group") return key === NONE ? null : assigned.countFor([key]);
         if (axis === "external") return assigned.countByKind(key === "external");
+        // Оргструктура — по профилю назначенных (Р-7): отдел известен и у тех, кто не начинал.
+        if (ORG_AXES.has(axis as SliceAxis)) {
+          return assigned.countByOrg(axis as "organization" | "unit" | "position", key === NONE ? null : key);
+        }
         return null;
       };
 

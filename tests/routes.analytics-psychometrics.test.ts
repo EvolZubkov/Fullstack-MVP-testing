@@ -28,6 +28,8 @@ const { storageMock } = vi.hoisted(() => ({
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     getTestGrantForUser: vi.fn().mockResolvedValue(undefined),
     selectObservations: vi.fn().mockResolvedValue({ web: [], lms: [], order: [], total: 0 }),
+    // План оргструктуры: хранящиеся написания оргполей.
+    selectOrgSpellings: vi.fn().mockResolvedValue({ organization: [], unit: [], position: [] }),
     getAttemptsByIds: vi.fn().mockResolvedValue([]),
     selectAnswersForAttempts: vi.fn().mockResolvedValue([]),
     selectGroupsOfUsers: vi.fn().mockResolvedValue(new Map()),
@@ -121,6 +123,20 @@ beforeEach(() => {
     lms: [],
     order: ATTEMPTS.map(a => ({ id: a.id, source: "web" })),
     total: ATTEMPTS.length,
+  });
+});
+
+describe("GET /analytics/psychometrics/:testId — оргусловия (FR-06b)", () => {
+  it("отбирает по подразделению тем же разбором, что реестр", async () => {
+    storageMock.selectOrgSpellings.mockResolvedValue({
+      organization: [], unit: ["Отдел продаж", "ОТДЕЛ ПРОДАЖ"], position: [],
+    });
+
+    const res = await ask(`?unit=${encodeURIComponent("Отдел продаж")}`);
+
+    expect(res.status).toBe(200);
+    const query = storageMock.selectObservations.mock.calls[0][0];
+    expect(query.orgValues).toEqual({ unit: ["Отдел продаж", "ОТДЕЛ ПРОДАЖ"] });
   });
 });
 

@@ -560,6 +560,11 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
     const formIds = stringsOf(config?.formIds);
     const snapshotIds = stringsOf(config?.snapshotIds);
+    // Оргструктура (FR-06b) — такие же условия реестра: без них срез «Отдел продаж» выгрузился
+    // бы всем тестом.
+    const organizations = stringsOf(config?.organizations);
+    const units = stringsOf(config?.units);
+    const positions = stringsOf(config?.positions);
     const observed = (await loadObservations(
       {
         testIds: [...selectedTestIds],
@@ -568,6 +573,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         ...(outcomes.length ? { outcomes } : {}),
         ...(formIds.length ? { formIds } : {}),
         ...(snapshotIds.length ? { snapshotIds } : {}),
+        ...(organizations.length ? { organizations } : {}),
+        ...(units.length ? { units } : {}),
+        ...(positions.length ? { positions } : {}),
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
       },
@@ -693,8 +701,12 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
     if (includeSheets.attempts) {
       // PRD-56 FR-04: строки берутся из общего слоя наблюдений — веб, телеметрия и импорт.
       // До этого лист знал только `attempts`, и выгрузка молчала о половине прохождений.
+      // Оргколонки — сразу за участником (план оргструктуры): книгу по срезу «Отдел продаж»
+      // открывают, чтобы увидеть, кто в нём, и значение должно стоять рядом с человеком.
+      // Значения — по тому же правилу, что у оси (OQ-04): своё у прохождения, иначе профиль.
       const rows: any[][] = [[
-        "Тест", "ID прохождения", "Участник", "Дата начала", "Дата завершения",
+        "Тест", "ID прохождения", "Участник", "Организация", "Подразделение", "Должность",
+        "Дата начала", "Дата завершения",
         "Время (сек)", "Результат (%)", "Баллы", "Макс. баллы", "Статус", "Источник",
       ]];
 
@@ -703,6 +715,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           testTitleMap.get(o.testId ?? "") || o.testId || "Удалённый тест",
           o.id,
           o.participant,
+          o.organization ?? "",
+          o.unit ?? "",
+          o.position ?? "",
           o.startedAt ? new Date(o.startedAt).toLocaleString("ru-RU") : "",
           o.finishedAt ? new Date(o.finishedAt).toLocaleString("ru-RU") : "",
           o.durationMs === null ? "" : Math.round(o.durationMs / 1000),
@@ -716,7 +731,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         ]);
       }
 
-      addAoaSheet(wb, "Попытки", rows, [24, 36, 22, 18, 18, 12, 12, 10, 12, 12, 14]);
+      addAoaSheet(wb, "Попытки", rows, [24, 36, 22, 22, 22, 22, 18, 18, 12, 12, 10, 12, 12, 14]);
     }
 
     // Sheet: Answers

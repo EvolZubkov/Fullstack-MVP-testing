@@ -13,6 +13,8 @@
  * (FR-29).
  */
 
+import { orgValueKey, type OrgField } from "@shared/org-fields";
+
 import { logger } from "../../logger";
 import { storage } from "../../storage";
 
@@ -37,6 +39,19 @@ export interface AssignedReader {
    * @param external считать внешних (`true`) либо сотрудников (`false`)
    */
   countByKind(external: boolean): number;
+
+  /**
+   * Сколько назначенных несут в профиле это значение оргполя (план оргструктуры, Р-7).
+   *
+   * Оргструктура — свойство ЧЕЛОВЕКА, как группа, поэтому у назначенного, который не начинал,
+   * ответ есть: его отдел известен из профиля. Значение сравнивается по правилу
+   * `shared/org-fields` — разные написания одного отдела считаются вместе.
+   *
+   * @param field оргполе оси
+   * @param value значение среза; `null` — срез «не указано», назначенные с пустым полем
+   * @returns число назначенных; `null`, когда назначения прочитать не удалось
+   */
+  countByOrg(field: OrgField, value: string | null): number | null;
 }
 
 /**
@@ -62,7 +77,7 @@ export async function readAssigned(
     assignments = await storage.getTestAssignments(testId);
   } catch (error) {
     logger.warn("Назначения теста не прочитаны — " + (error as Error).message);
-    return { countFor: () => null, countByKind: () => 0 };
+    return { countFor: () => null, countByKind: () => 0, countByOrg: () => null };
   }
 
   const needed = new Set<string>(sliceGroupIds);
@@ -75,12 +90,15 @@ export async function readAssigned(
   const external = new Set<string>();
   /** Про кого признак уже известен: все, кто попался в составе прочитанных групп. */
   const knownKind = new Set<string>();
+  /** Оргполя профиля — читаются вместе с признаком, тем же проходом (Р-7). */
+  const profiles = new Map<string, Partial<Record<OrgField, string | null>>>();
   const membersOfGroup = new Map<string, string[]>(
     await Promise.all([...needed].map(async id => {
       const members = await storage.getGroupUsers(id);
       for (const member of members) {
         knownKind.add(member.id);
         if ((member as { isExternal?: boolean }).isExternal) external.add(member.id);
+        profiles.set(member.id, member as Partial<Record<OrgField, string | null>>);
       }
       return [id, members.map(user => user.id)] as const;
     })),
@@ -104,9 +122,19 @@ export async function readAssigned(
     .map(async id => {
       const user = await storage.getUser(id);
       if (user && (user as { isExternal?: boolean }).isExternal) external.add(id);
+      if (user) profiles.set(id, user as Partial<Record<OrgField, string | null>>);
     }));
 
   return {
+    countByOrg(field, value) {
+      const wanted = orgValueKey(value);
+      let count = 0;
+      for (const userId of assignedUsers) {
+        if (orgValueKey(profiles.get(userId)?.[field]) === wanted) count += 1;
+      }
+      return count;
+    },
+
     countByKind(wantExternal) {
       let count = 0;
       for (const userId of assignedUsers) {

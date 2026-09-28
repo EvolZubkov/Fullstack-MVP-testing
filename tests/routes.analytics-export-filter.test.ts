@@ -32,6 +32,8 @@ const { storageMock } = vi.hoisted(() => ({
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     selectObservations: vi.fn(),
+    // План оргструктуры: хранящиеся написания оргполей.
+    selectOrgSpellings: vi.fn(),
   },
 }));
 
@@ -160,6 +162,39 @@ describe("POST /api/export/excel — состав строк задаёт фил
     expect(attemptsRows.map(r => r[1])).toEqual(["web-1"]);
     const summary = await sheetRows(res.body, "Сводка");
     expect(summary).toContainEqual(["Попыток (завершённых)", 1]);
+  });
+
+  it("печатает оргполя за участником по правилу OQ-04: своё у импорта, профиль у веба", async () => {
+    storageMock.getUser.mockResolvedValue({
+      id: "u1", name: "Морозова Анна", email: "a@b.c", organization: "АО «Ромашка»", unit: "Логистика",
+    });
+    storageMock.getAllScormAttempts.mockResolvedValue([{
+      id: "lms-1", testId: "test1", packageId: null, origin: "import",
+      userId: null, participantKey: "7f3a9c21", groupId: null, lmsUserName: null,
+      lmsUserUnit: "Отдел продаж", lmsUserPosition: "Менеджер",
+      startedAt: new Date("2026-09-10T09:00:00Z"), finishedAt: new Date("2026-09-10T09:30:00Z"),
+      resultPercent: 64, resultPassed: false, maxPoints: 20, totalPoints: 13,
+    }]);
+
+    const res = await exportWith({ testIds: ["test1"] });
+
+    const rows = await sheetRows(res.body, "Попытки");
+    const byId = Object.fromEntries(rows.map(r => [r[1], r.slice(3, 6)]));
+    // Нет значения — пустая клетка, а не прочерк: колонку фильтруют в Excel, и «—» встал бы
+    // там отдельным значением.
+    expect(byId["web-1"]).toEqual(["АО «Ромашка»", "Логистика", ""]);
+    expect(byId["lms-1"]).toEqual(["", "Отдел продаж", "Менеджер"]);
+  });
+
+  it("передаёт оргусловия фильтра в отбор", async () => {
+    storageMock.selectOrgSpellings.mockResolvedValue({
+      organization: [], unit: ["Отдел продаж"], position: [],
+    });
+
+    await exportWith({ testIds: ["test1"], units: ["отдел продаж"] });
+
+    const query = storageMock.selectObservations.mock.calls.at(-1)![0];
+    expect(query.orgValues).toEqual({ unit: ["Отдел продаж"] });
   });
 
   it("подписывает источник каждой строки: импорт и веб читаются по-разному", async () => {

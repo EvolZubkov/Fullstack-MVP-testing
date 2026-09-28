@@ -26,6 +26,8 @@ const { storageMock } = vi.hoisted(() => ({
     selectAttemptOrder: vi.fn(),
     getGroup: vi.fn(),
     getUserGroups: vi.fn(),
+    // План оргструктуры: хранящиеся написания оргполей.
+    selectOrgSpellings: vi.fn(),
   },
 }));
 
@@ -79,6 +81,42 @@ beforeEach(() => {
     startedAt: new Date("2026-09-10T09:00:00Z"), finishedAt: new Date("2026-09-10T09:30:00Z"),
     resultPercent: 64, resultPassed: false, maxPoints: 20, totalPoints: 13,
   }]);
+});
+
+describe("GET /api/analytics/registry — оргструктура (FR-06b)", () => {
+  it("переводит условие по подразделению во все его хранящиеся написания", async () => {
+    storageMock.selectOrgSpellings.mockResolvedValue({
+      organization: [], unit: ["Отдел продаж", "ОТДЕЛ  ПРОДАЖ", "Логистика"], position: [],
+    });
+
+    const res = await ask(`?unit=${encodeURIComponent("отдел продаж")}`);
+
+    expect(res.status).toBe(200);
+    const query = storageMock.selectObservations.mock.calls[0][0];
+    expect(query.orgValues).toEqual({ unit: ["Отдел продаж", "ОТДЕЛ  ПРОДАЖ"] });
+  });
+
+  it("не режет значение по запятой: она бывает в названии организации", async () => {
+    storageMock.selectOrgSpellings.mockResolvedValue({
+      organization: ["ООО «Альфа, Бета»"], unit: [], position: [],
+    });
+
+    await ask(`?organization=${encodeURIComponent("ООО «Альфа, Бета»")}`);
+
+    expect(storageMock.selectObservations.mock.calls[0][0].orgValues)
+      .toEqual({ organization: ["ООО «Альфа, Бета»"] });
+  });
+
+  it("отдаёт оргполя строки по правилу OQ-04: у веба — профиль", async () => {
+    storageMock.getUser.mockResolvedValue({
+      id: "u1", name: "Морозова Анна", email: "a@b.c", unit: "Логистика", position: "Кладовщик",
+    });
+
+    const res = await ask();
+
+    const row = res.body.rows.find((r: { id: string }) => r.id === "web-1");
+    expect(row).toMatchObject({ unit: "Логистика", position: "Кладовщик", organization: null });
+  });
 });
 
 describe("GET /api/analytics/registry", () => {

@@ -179,6 +179,15 @@ router.get("/registry", requirePermission("analytics.read"), async (req: Request
     // выбранном тесте; ручка принимает как есть — чужая ссылка не повод падать.
     const formIds = listOf(req.query.formId);
     const snapshotIds = listOf(req.query.snapshotId);
+    // Оргструктура (FR-06b): значение в любом написании. Не через запятую — запятая бывает в
+    // названии организации («ООО «Альфа, Бета»»), поэтому только повтор параметра.
+    const repeated = (value: unknown): string[] =>
+      (Array.isArray(value) ? value : value === undefined ? [] : [value])
+        .map(item => String(item).trim())
+        .filter(Boolean);
+    const organizations = repeated(req.query.organization);
+    const units = repeated(req.query.unit);
+    const positions = repeated(req.query.position);
 
     // Столбец сортировки принимается только из перечня: незнакомое имя — это опечатка в
     // чужой ссылке, и отвечать на неё ошибкой незачем, реестр просто встаёт по умолчанию.
@@ -193,6 +202,9 @@ router.get("/registry", requirePermission("analytics.read"), async (req: Request
         ...(groupIds.length ? { groupIds } : {}),
         ...(formIds.length ? { formIds } : {}),
         ...(snapshotIds.length ? { snapshotIds } : {}),
+        ...(organizations.length ? { organizations } : {}),
+        ...(units.length ? { units } : {}),
+        ...(positions.length ? { positions } : {}),
         ...(sources.length ? { sources } : {}),
         ...(outcomes.length ? { outcomes } : {}),
         ...(dateOf(req.query.from, "start") ? { from: dateOf(req.query.from, "start") } : {}),
@@ -239,6 +251,11 @@ router.get("/registry", requirePermission("analytics.read"), async (req: Request
         // одинаково. `null` только там, где связывать не по чему: участник не опознан (ни
         // учётной записи, ни псевдонима) либо у прохождения нет даты начала.
         attemptNumber: ordinals.get(row.id) ?? null,
+        // Оргструктура строки по правилу OQ-04 — для выгрузки и будущей колонки; экран пока
+        // её не рисует, но отдать уже выведенное дешевле, чем выводить второй раз.
+        organization: row.organization,
+        unit: row.unit,
+        position: row.position,
       })),
       total: page.total,
       limit,

@@ -5,12 +5,14 @@
  * Срез отвечает на «покажи вот эту группу», ось — на «покажи мне все группы». Это разные
  * вопросы: первый задают, когда знают, кого искать, второй — когда ищут, где проблема.
  *
- * Осей оргструктуры (организация, подразделение, должность) здесь пока нет. Исключение их из
- * объёма отменено (FR-06b, 2026-09-28): значение берётся у прохождения, иначе из профиля
- * связанного пользователя (OQ-04). Предусловие — поля профиля в интерфейсе пользователей.
+ * Оси оргструктуры — организация, подразделение, должность (FR-06b, отмена исключения
+ * 2026-09-28). Значение у наблюдения уже выведено по правилу OQ-04 (своё, иначе профиль), здесь
+ * оно только группируется: разные написания одного отдела — один срез (`shared/org-fields`).
  *
  * Модуль чистый: членство в группах, названия и признак внешнего участника приходят снаружи.
  */
+
+import { orgValueKey } from "@shared/org-fields";
 
 import type { Observation } from "./observations";
 
@@ -29,7 +31,22 @@ export type SliceAxis =
   /** Веб, телеметрия, импорт — разные популяции. */
   | "source"
   /** Внутренние сотрудники против внешних участников (PRD-28). */
-  | "external";
+  | "external"
+  /** Оргструктура (FR-06b): значение прохождения, иначе профиль (OQ-04). */
+  | "organization"
+  | "unit"
+  | "position";
+
+/** Оси оргструктуры и подпись их среза «нет значения». */
+const ORG_AXES: Partial<Record<SliceAxis, string>> = {
+  organization: "Не указана",
+  unit: "Не указано",
+  position: "Не указана",
+};
+
+function isOrgAxis(axis: SliceAxis): axis is "organization" | "unit" | "position" {
+  return axis in ORG_AXES;
+}
 
 /** Справочники, без которых ось не назвать человеческим языком. */
 export interface AxisContext {
@@ -162,6 +179,17 @@ function keysOf(
         ? { key: "external", label: "Внешние участники" }
         : { key: "internal", label: "Внутренние сотрудники" }];
     }
+    case "organization":
+    case "unit":
+    case "position": {
+      // Ключ — сравнительный (без регистра и лишних пробелов); подпись и итоговый ключ среза
+      // выбирает `splitByAxis` по самому частому написанию, когда соберёт весь срез.
+      const value = observation[axis];
+      const key = orgValueKey(value);
+      return key === null
+        ? [{ key: NONE, label: ORG_AXES[axis]! }]
+        : [{ key, label: value! }];
+    }
   }
 }
 
@@ -184,6 +212,9 @@ export function registryConditions(
   sources?: string[];
   formIds?: string[];
   snapshotIds?: string[];
+  organizations?: string[];
+  units?: string[];
+  positions?: string[];
   from?: string;
   to?: string;
 } {
@@ -192,6 +223,14 @@ export function registryConditions(
   if (key === NONE) return {};
 
   switch (axis) {
+    // Ключ оргсреза — его подпись (самое частое написание); реестр отбирает по нему все
+    // написания того же значения, поэтому перевод точен.
+    case "organization":
+      return { organizations: [key] };
+    case "unit":
+      return { units: [key] };
+    case "position":
+      return { positions: [key] };
     case "group":
       return { groupIds: [key] };
     case "source":
@@ -231,11 +270,31 @@ export function splitByAxis(
   const numbers = axis === "attempt" ? attemptNumbers(observations) : new Map<string, number>();
   const buckets = new Map<string, AxisBucket>();
 
+  /** Написания значения в срезе оргоси — по ним выбирается подпись. */
+  const spellings = new Map<string, Map<string, number>>();
+
   for (const observation of observations) {
     for (const { key, label } of keysOf(observation, axis, context, numbers.get(observation.id) ?? 1)) {
       const bucket = buckets.get(key) ?? { key, label, observations: [] };
       bucket.observations.push(observation);
       buckets.set(key, bucket);
+      if (isOrgAxis(axis) && key !== NONE) {
+        const counts = spellings.get(key) ?? new Map<string, number>();
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+        spellings.set(key, counts);
+      }
+    }
+  }
+
+  // Оргсрез подписывается САМЫМ ЧАСТЫМ написанием (при равенстве — первым по алфавиту, чтобы
+  // подпись не мигала между загрузками), и оно же становится ключом: ключ уходит в условия
+  // реестра, и «перейти к прохождениям» должно читаться как имя, а не как нижний регистр.
+  if (isOrgAxis(axis)) {
+    for (const [key, counts] of spellings) {
+      const [label] = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ru"))[0];
+      const bucket = buckets.get(key)!;
+      bucket.label = label;
+      bucket.key = label;
     }
   }
 

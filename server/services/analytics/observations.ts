@@ -13,6 +13,7 @@
  */
 
 import { hasPronouncedVerdict, nothingToGrade } from "@shared/scoring/pass-rule";
+import { ORG_FIELDS, normalizeOrgValue, orgValueKey, type OrgField } from "@shared/org-fields";
 
 import { storage } from "../../storage";
 import type { ObservationSort } from "../../storage/analytics-repository";
@@ -75,11 +76,28 @@ export interface Observation {
    * ось «вариант» среза отвечала «Без варианта» на всё.
    */
   forms: Record<string, string>;
+  /**
+   * Оргструктура участника (PRD-56 FR-06b, OQ-04): значение самого прохождения, иначе профиль
+   * связанного пользователя. Веб своих значений не пишет — у него всегда профиль, и значит
+   * ТЕКУЩИЙ: переведённый человек переезжает в новый отдел вместе со всеми попытками. У импорта
+   * значение — на момент прохождения. `null` — нет ни того, ни другого.
+   */
+  organization: string | null;
+  unit: string | null;
+  position: string | null;
+}
+
+/** Что аналитика берёт из профиля участника. */
+export interface ObservationUser {
+  name: string | null;
+  organization?: string | null;
+  unit?: string | null;
+  position?: string | null;
 }
 
 /** Справочники, общие для всех строк одного запроса. */
 export interface ObservationContext {
-  users: ReadonlyMap<string, { name: string | null }>;
+  users: ReadonlyMap<string, ObservationUser>;
   /** Тест объявляет проходной балл (`declaresPassThreshold`). */
   gradedTest: boolean | undefined;
 }
@@ -119,6 +137,27 @@ interface LmsAttemptRow {
   /** PRD-56 FR-19a: версия публикации и выданные варианты, сообщённые пакетом. */
   snapshotId?: string | null;
   formsJson?: Record<string, string> | null;
+  /** Оргструктура из LMS: организация — у телеметрии и необезличенного импорта, остальное — у импорта. */
+  lmsUserOrg?: string | null;
+  lmsUserUnit?: string | null;
+  lmsUserPosition?: string | null;
+}
+
+/**
+ * Оргполя прохождения: своё значение, иначе профиль (OQ-04), по каждому полю отдельно.
+ *
+ * Поле за полем, а не «всё или ничего»: обезличенный импорт несёт подразделение и должность,
+ * но не организацию (PRD-54), и организация тогда честно приходит из профиля.
+ */
+function orgOf(
+  own: { organization?: string | null; unit?: string | null; position?: string | null },
+  profile: ObservationUser | undefined,
+): Pick<Observation, "organization" | "unit" | "position"> {
+  return {
+    organization: normalizeOrgValue(own.organization) ?? normalizeOrgValue(profile?.organization),
+    unit: normalizeOrgValue(own.unit) ?? normalizeOrgValue(profile?.unit),
+    position: normalizeOrgValue(own.position) ?? normalizeOrgValue(profile?.position),
+  };
 }
 
 /**
@@ -229,6 +268,7 @@ export const toObservation = {
       adaptive,
       snapshotId: row.snapshotId ?? null,
       forms: formsOfVariant(row.variantJson),
+      ...orgOf({}, ctx.users.get(row.userId)),
     };
   },
 
@@ -268,6 +308,10 @@ export const toObservation = {
       // прохождение идёт в разрез «версия не указана», а не приписывается текущей версии.
       snapshotId: row.snapshotId ?? null,
       forms: row.formsJson ?? {},
+      ...orgOf(
+        { organization: row.lmsUserOrg, unit: row.lmsUserUnit, position: row.lmsUserPosition },
+        row.userId ? ctx.users.get(row.userId) : undefined,
+      ),
     };
   },
 };
@@ -282,6 +326,13 @@ export interface ObservationFilter {
   formIds?: string[];
   /** Версии публикации (`snapshot_id`): тоже условие внутри одного теста. */
   snapshotIds?: string[];
+  /**
+   * Оргструктура (FR-06b): значения в любом написании — «отдел продаж» отбирает и «Отдел
+   * продаж» профиля, и «ОТДЕЛ ПРОДАЖ» выгрузки (правило `shared/org-fields`).
+   */
+  organizations?: string[];
+  units?: string[];
+  positions?: string[];
   /** Период по дате НАЧАЛА прохождения. */
   from?: Date;
   to?: Date;
@@ -330,6 +381,8 @@ export async function loadObservations(
     ? testIds
     : (testIds ?? [...scope.ids]).filter(id => scope.ids.has(id));
 
+  const orgValues = await orgSpellingsOf(filter);
+
   const { web, lms, order, total } = await storage.selectObservations({
     testIds: allowed,
     groupIds: filter.groupIds,
@@ -337,6 +390,7 @@ export async function loadObservations(
     outcomes: filter.outcomes,
     formIds: filter.formIds,
     snapshotIds: filter.snapshotIds,
+    ...(orgValues ? { orgValues } : {}),
     from: filter.from,
     to: filter.to,
     limit: filter.limit,
@@ -352,6 +406,41 @@ export async function loadObservations(
     rows: order.map(k => byId.get(k.id)).filter((o): o is Observation => !!o),
     total,
   };
+}
+
+/** Условие отбора фильтра для каждого оргполя. */
+const ORG_FILTER_KEYS: Record<OrgField, "organizations" | "units" | "positions"> = {
+  organization: "organizations",
+  unit: "units",
+  position: "positions",
+};
+
+/**
+ * Оргусловия отбора, переведённые в ТОЧНЫЕ хранящиеся написания.
+ *
+ * Сравнение по правилу `shared/org-fields` делается здесь, а запрос сравнивает строки как
+ * есть. Так отбор совпадает с тем, что показывают фильтры и оси, и не зависит от локали базы.
+ * Выбранное значение, которого нет ни у кого, даёт пустой список — «ноль строк», а не снятое
+ * условие.
+ *
+ * @returns `undefined`, когда оргусловий в фильтре нет вовсе.
+ */
+async function orgSpellingsOf(
+  filter: ObservationFilter,
+): Promise<Partial<Record<OrgField, string[]>> | undefined> {
+  const wanted = ORG_FIELDS.filter(field => filter[ORG_FILTER_KEYS[field]]?.length);
+  if (wanted.length === 0) return undefined;
+
+  const stored = await storage.selectOrgSpellings();
+  const out: Partial<Record<OrgField, string[]>> = {};
+  for (const field of wanted) {
+    const keys = new Set(filter[ORG_FILTER_KEYS[field]]!.map(orgValueKey).filter((k): k is string => !!k));
+    out[field] = stored[field].filter(spelling => {
+      const key = orgValueKey(spelling);
+      return key !== null && keys.has(key);
+    });
+  }
+  return out;
 }
 
 /** Привести выбранные строки к наблюдениям, дочитав справочники теста и участников. */
@@ -379,8 +468,11 @@ async function normalise(
     ...lms.map(r => r.userId).filter((id): id is string => !!id),
   ]);
   const userRows = await Promise.all([...userIds].map(id => storage.getUser(id)));
-  const users = new Map(
-    userRows.filter((u): u is NonNullable<typeof u> => !!u).map(u => [u.id, { name: u.name }]),
+  // Профиль несёт и оргполя: у веба они единственный источник, у LMS — запасной (OQ-04).
+  const users = new Map<string, ObservationUser>(
+    userRows.filter((u): u is NonNullable<typeof u> => !!u).map(u => [u.id, {
+      name: u.name, organization: u.organization, unit: u.unit, position: u.position,
+    }]),
   );
 
   // Пакет — запасной путь к тесту у строк телеметрии, которым backfill ничего не нашёл.

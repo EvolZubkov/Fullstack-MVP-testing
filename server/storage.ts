@@ -354,6 +354,8 @@ export interface IStorage {
   getLatencyStats(questionIds: string[], testId: string, since: Date): Promise<Map<string, { medianMs: number; sampleSize: number }>>;
   /** PRD-56 FR-33: страница прохождений веба, телеметрии и импорта одной выборкой. */
   selectObservations(query: ObservationQuery): Promise<ObservationRows>;
+  /** План оргструктуры: все хранящиеся написания оргполей — профили и прохождения. */
+  selectOrgSpellings(): Promise<Record<OrgField, string[]>>;
   /** PRD-56 FR-25: ответы прохождений теста, пришедших из LMS. */
   selectAnswersForTest(testId: string): Promise<TestAnswerRow[]>;
   selectAnswersForAttempts(attemptIds: string[]): Promise<TestAnswerRow[]>;
@@ -1212,6 +1214,10 @@ export class DatabaseStorage implements IStorage {
 
   selectObservations(query: ObservationQuery): Promise<ObservationRows> {
     return this.analyticsRepo.selectObservations(query);
+  }
+
+  selectOrgSpellings(): Promise<Record<OrgField, string[]>> {
+    return this.analyticsRepo.selectOrgSpellings();
   }
 
   selectScaleValuesForTest(testId: string): Promise<ScaleValuesRow[]> {

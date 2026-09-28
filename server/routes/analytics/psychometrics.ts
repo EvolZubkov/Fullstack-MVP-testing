@@ -171,6 +171,15 @@ function readQuery(req: Request, testId: string): { filter: ObservationFilter; o
   // Умолчание — «только первая попытка» (FR-51): повторные попытки одного человека не
   // независимы, и выключает это читатель осознанно, с предупреждением на экране.
   const onlyFirst = String(req.query.firstAttemptOnly ?? "true").toLowerCase() !== "false";
+  // Оргструктура (FR-06b) — тот же разбор, что у реестра: только повтор параметра, без запятых,
+  // потому что запятая бывает в названии организации.
+  const repeated = (value: unknown): string[] =>
+    (Array.isArray(value) ? value : value === undefined ? [] : [value])
+      .map(item => String(item).trim())
+      .filter(Boolean);
+  const organizations = repeated(req.query.organization);
+  const units = repeated(req.query.unit);
+  const positions = repeated(req.query.position);
 
   return {
     onlyFirst,
@@ -179,6 +188,9 @@ function readQuery(req: Request, testId: string): { filter: ObservationFilter; o
       ...(groupIds.length ? { groupIds } : {}),
       ...(formIds.length ? { formIds } : {}),
       ...(snapshotIds.length ? { snapshotIds } : {}),
+      ...(organizations.length ? { organizations } : {}),
+      ...(units.length ? { units } : {}),
+      ...(positions.length ? { positions } : {}),
       ...(sources.length ? { sources } : {}),
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
@@ -372,6 +384,9 @@ function conditionsOf(raw: unknown): ObservationFilter {
     ...(list(source.sources).length ? { sources: list(source.sources) as ObservationSource[] } : {}),
     ...(list(source.formIds).length ? { formIds: list(source.formIds) } : {}),
     ...(list(source.snapshotIds).length ? { snapshotIds: list(source.snapshotIds) } : {}),
+    ...(list(source.organizations).length ? { organizations: list(source.organizations) } : {}),
+    ...(list(source.units).length ? { units: list(source.units) } : {}),
+    ...(list(source.positions).length ? { positions: list(source.positions) } : {}),
   };
 }
 
@@ -640,6 +655,10 @@ function describeFilter(filter: ObservationFilter): string {
   if (filter.sources?.length) parts.push(`источники: ${filter.sources.join(", ")}`);
   if (filter.formIds?.length) parts.push(`варианты: ${filter.formIds.length}`);
   if (filter.snapshotIds?.length) parts.push(`версии публикации: ${filter.snapshotIds.length}`);
+  // Оргзначения читаются словами, а не числом: это имена, и отчёт без них не воспроизвести.
+  if (filter.organizations?.length) parts.push(`организация: ${filter.organizations.join(", ")}`);
+  if (filter.units?.length) parts.push(`подразделение: ${filter.units.join(", ")}`);
+  if (filter.positions?.length) parts.push(`должность: ${filter.positions.join(", ")}`);
   if (filter.from) parts.push(`с ${filter.from.toISOString().slice(0, 10)}`);
   if (filter.to) parts.push(`по ${filter.to.toISOString().slice(0, 10)}`);
   return parts.join("; ");
