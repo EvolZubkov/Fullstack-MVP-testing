@@ -112,8 +112,10 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
   const noAttempts = input.maxAttempts != null && input.completedAttempts >= input.maxAttempts;
   const hasCompleted = input.hasCompletedResults;
   // FR-20: a cooldown block any new attempt — it overrides resume/start (the
-  // learner cannot proceed), so resume is suppressed while blocked.
-  const blocked = !!input.cooldown;
+  // learner cannot proceed), so resume is suppressed while blocked. With the attempts
+  // spent there is no next attempt to wait for: «Повторный запуск будет доступен с …»
+  // would promise a start that never unlocks, so the exhausted state wins.
+  const blocked = !!input.cooldown && !noAttempts;
   const canResume = !!input.resume && !blocked;
 
   const state: CtxState = {
@@ -179,8 +181,10 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
     title: i.title,
     // Header subtitle "Попытка N из M": the upcoming attempt is one past those
     // already completed. Same builder both hosts use on the question/обзор screens.
+    // With the limit spent there is no upcoming attempt — the last one is named
+    // instead, never «Попытка 2 из 1».
     subtitle: buildCourseSubtitle({
-      attemptNumber: input.completedAttempts + 1,
+      attemptNumber: noAttempts ? (input.maxAttempts as number) : input.completedAttempts + 1,
       maxAttempts: input.maxAttempts,
     }),
     description: i.description || "",

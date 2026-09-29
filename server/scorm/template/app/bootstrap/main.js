@@ -8,12 +8,22 @@
     // SCORM runtime должен быть уже загружен (runtime.js)
     SCORM.init();
 
+    // Read BEFORE anything is written: the statuses the LMS handed over are what tell a
+    // finished learning re-opened for viewing from one still being taken.
+    state.reviewLaunch = detectReviewLaunch();
+    if (state.reviewLaunch) console.log('👁 Просмотр завершённого обучения: показываем сохранённый результат');
+
     // Initialize telemetry if configured
     if (TEST_DATA.telemetry) {
       Telemetry.init(TEST_DATA.telemetry);
     }
 
     window.addEventListener("beforeunload", function (e) {
+      // A viewing reports nothing: the learning is closed and its result already stands.
+      if (state.reviewLaunch) {
+        if (!state.reviewClosed) closeReviewLaunch();
+        return;
+      }
       if (typeof scormFinished === 'undefined' || !scormFinished) {
         // Тест завершён (submit), но "Завершить и закрыть" не нажали — сохраняем попытку
         if (state.submitted) {
@@ -88,6 +98,17 @@
       // Делегированные клики по вариантам/ранжированию из общей эмиссии
       // (data-action="select:N" / "rank-up|rank-down:pos") — заменяют inline onclick.
       if (typeof bindQuestionInputClicksOnce === 'function') bindQuestionInputClicksOnce();
+
+      // ===== ПРОСМОТР ЗАВЕРШЁННОГО ОБУЧЕНИЯ =====
+      // Straight to the saved result, before recovery: recovery may close sections and
+      // rewrite the run state, and a viewing must leave the learning as it found it.
+      if (state.reviewLaunch) {
+        generateVariant();
+        state.phase = 'viewResults';
+        state.viewedAttempt = getBestAttempt();
+        render();
+        return;
+      }
 
       // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
       // PRD-67: a section still open from the previous session is one the learner left by
@@ -224,6 +245,37 @@
     setTimeout(boot, 0);
   }
 })();
+
+/**
+ * Whether the LMS re-opened a FINISHED learning for viewing. WebTutor lets a learner back
+ * into one only through «Просмотреть», and hands it over `completed` with its own run state
+ * (a fresh or unfinished learning arrives `not attempted` / `incomplete`, checked live
+ * 2026-09-29); other LMSs say the same with `cmi.mode = review`. A viewing needs a finished
+ * attempt to show — without one the ordinary start screen stays in charge.
+ * Must be called right after Initialize, before the package writes anything.
+ */
+function detectReviewLaunch() {
+  var mode = '', completion = '';
+  try { mode = SCORM.getValue('cmi.mode') || ''; } catch (e) { mode = ''; }
+  try { completion = SCORM.getValue('cmi.completion_status') || ''; } catch (e) { completion = ''; }
+  if (mode !== 'review' && completion !== 'completed') return false;
+  return typeof hasCompletedAttempts === 'function' && hasCompletedAttempts();
+}
+
+/**
+ * Leave a viewing. Nothing about the result is written — no statuses, no score: the
+ * learning is closed and what it reported stands. Only `cmi.exit = suspend`, so the LMS
+ * keeps the run state for the next viewing.
+ */
+function closeReviewLaunch() {
+  if (typeof state !== 'undefined' && state) state.reviewClosed = true;
+  try { SCORM.setValue('cmi.exit', 'suspend'); } catch (e) { }
+  try { SCORM.commit(); } catch (e) { }
+  try { SCORM.terminate(); } catch (e) { }
+  setTimeout(function () {
+    try { window.close(); } catch (e) { }
+  }, typeof RESULTS_CLOSE_DELAY_MS !== 'undefined' ? RESULTS_CLOSE_DELAY_MS : 0);
+}
 
 // ===== ОТПРАВКА ЛУЧШЕЙ ПОПЫТКИ В LMS =====
 function sendBestAttemptToLMS(bestAttempt) {

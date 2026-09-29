@@ -91,6 +91,46 @@ describe("buildStartState", () => {
     expect(state.canViewResults).toBe(false);
   });
 
+  it("attempts exhausted: the header names the last spent attempt, never one past the limit", () => {
+    const { course } = buildStartState({
+      info: { ...info, maxAttempts: 1 },
+      maxAttempts: 1,
+      completedAttempts: 1,
+      resume: null,
+      hasCompletedResults: true,
+      canStartNew: false,
+    });
+    // Used to read «Попытка 2 из 1»: the upcoming attempt that no longer exists.
+    expect(course.subtitle).toBe("Попытка 1 из 1");
+  });
+
+  it("attempts remain: the header names the upcoming attempt", () => {
+    const { course } = buildStartState({
+      info,
+      maxAttempts: 3,
+      completedAttempts: 1,
+      resume: null,
+      hasCompletedResults: true,
+      canStartNew: true,
+    });
+    expect(course.subtitle).toBe("Попытка 2 из 3");
+  });
+
+  it("attempts exhausted: a wait card is not shown — there is nothing to wait for", () => {
+    const { state } = buildStartState({
+      info: { ...info, maxAttempts: 1 },
+      maxAttempts: 1,
+      completedAttempts: 1,
+      resume: null,
+      hasCompletedResults: true,
+      canStartNew: false,
+      cooldown: { availableDateHuman: "30.09.2026 в 18:23", daysUntil: null },
+    });
+    expect(state.cooldown).toBeUndefined();
+    expect(state.canViewResults).toBe(true);
+    expect(state.canStart).toBe(false);
+  });
+
   it("unlimited attempts: never exhausted", () => {
     const { state } = buildStartState({
       info: { title: "T" },

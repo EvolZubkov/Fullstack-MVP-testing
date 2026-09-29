@@ -374,13 +374,19 @@ var RetakeGate = (function () {
     });
   }
 
-  // PRD-19 FR-20: render the cooldown state ON the normal start page (start.html)
-  // instead of a separate block-wall — pre-Initialize, so a blocked test never
-  // opens a SCORM session (NFR-01/02). Only the date + a DISABLED start button are
-  // shown: the prior result / report are NOT offered here because suspend_data is
-  // unavailable before Initialize (and WebTutor has no cross-attempt store), so the
-  // builder gets no prior facts. Falls back to the block-wall if the active
-  // template ships no `start` layout (every conformant template does).
+  // PRD-19 FR-20: the cooldown state is shown ON the normal start page — and it is
+  // drawn by the normal start page itself (`renderStartPage`, startPage.js), which
+  // reads the verdict from `state.retake` (set by `run` before this is called). The
+  // gate used to assemble a second copy of that screen and it drifted: it dropped the
+  // description format (raw HTML tags on screen) and everything else it did not repeat
+  // (testuniver.rt.ru, 2026-09-29). One renderer means the screen reached through
+  // «Пройти заново» and the one reached through «Просмотреть» cannot differ.
+  //
+  // `runCourse` is deliberately NOT called: it installs the unload handler that writes
+  // the result to the LMS, and a blocked launch must write nothing (NFR-01/02). The
+  // session is already terminated by `run`, so the screen reads an empty run state —
+  // a fresh learning has no prior attempt to offer. Falls back to the block-wall if
+  // the active template ships no `start` layout (every conformant template does).
   function renderCooldownStart(retake, td) {
     if (typeof document === 'undefined') return;
     glog('rendering cooldown state...');
@@ -409,41 +415,15 @@ var RetakeGate = (function () {
       var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
       var layout = layouts && layouts['start'];
       glog('template ready. start layout:', !!layout, '| TBTemplate:', !!(TB && TB.renderScreenInto), '| #app:', !!el);
-      if (!layout || !TB || !TB.renderScreenInto || !TB.buildStartState) {
+      if (!layout || !TB || !TB.renderScreenInto || typeof renderStartPage !== 'function') {
         renderBlockWall(retake, td);
         rendered = true;
         return;
       }
-      var ctx = TB.buildStartState({
-        info: {
-          title: td.title || '',
-          description: td.description || '',
-          questionCount: td.totalQuestions,
-          passPercent: td.passPercent,
-          hasGradedContent: td.hasGradedContent !== false,
-          timeLimitMinutes: td.timeLimitMinutes,
-          maxAttempts: td.maxAttempts
-        },
-        maxAttempts: td.maxAttempts || null,
-        completedAttempts: 0,
-        resume: null,
-        hasCompletedResults: false,
-        canStartNew: false,
-        cooldown: {
-          availableDateHuman: retake.availableDate ? fmtDateHuman(retake.availableDate) : '',
-          daysUntil: EligibilityEngine.daysUntilDate(retake.availableDate, retake.effectiveToday || retake.todayDate)
-        }
-      });
-      ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
-      if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
-      el.innerHTML = '';
-      // Mount directly into #app so .tb-pad > .cover fills the fixed stage — mirrors
-      // renderGalleryPage (a wrapper div would defeat the child-combinator rule).
-      TB.renderScreenInto(el, { layout: layout, context: ctx });
+      if (typeof state !== 'undefined' && state) state.phase = 'start';
+      renderStartPage();
       rendered = true;
       glog('cooldown state rendered on start page');
-      // No action wiring: the start button is disabled and nothing else is
-      // clickable pre-Initialize, so the SCORM session stays unopened.
     }).catch(function (e) {
       // A throw here (renderScreenInto / buildStartState) was previously an unhandled
       // rejection: no log, learner stuck on the loading text. Fall back to the wall.

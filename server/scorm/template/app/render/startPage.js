@@ -72,6 +72,38 @@ function resolveStartLayout() {
   return base;
 }
 
+/** «11.10.2026» — the calendar day barrier A reopens (the cooldown is counted in days). */
+function fmtIsoDateHuman(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  return m ? (m[3] + '.' + m[2] + '.' + m[1]) : '';
+}
+
+/**
+ * The wait card of the start screen, or null when nothing holds the next attempt back.
+ * The shared builder renders one card for both barriers:
+ *   - barrier A (between assignments) is decided by the retake gate before the course
+ *     runs and lands in `state.retake`; a calendar date and a «через N дн.» countdown;
+ *   - barrier B (hours inside one assignment) is decided here, post-Initialize, from
+ *     suspend_data; a moment with a time and no day countdown. It only matters while
+ *     attempts remain — with the limit spent there is nothing to wait for.
+ * Reading the gate's verdict HERE is what makes the blocked screen the ordinary one:
+ * the gate no longer assembles a copy of its own.
+ */
+function startCooldownCard(attemptsLeft) {
+  var retake = (typeof state !== 'undefined' && state) ? state.retake : null;
+  if (retake && retake.checked && retake.allowed === false) {
+    return {
+      availableDateHuman: fmtIsoDateHuman(retake.availableDate),
+      daysUntil: (typeof EligibilityEngine !== 'undefined')
+        ? EligibilityEngine.daysUntilDate(retake.availableDate, retake.effectiveToday || retake.todayDate)
+        : null
+    };
+  }
+  if (!attemptsLeft) return null;
+  var interval = attemptIntervalState();
+  return interval.allowed ? null : { availableDateHuman: fmtInstantHuman(interval.availableAt), daysUntil: null };
+}
+
 /**
  * Gathers the SCORM start facts (incl. resume eligibility — session staleness /
  * time-limit / adaptive checks) and delegates the action-flag assembly to the
@@ -83,12 +115,9 @@ function buildScormStartContext() {
   var hasLimit = !!TEST_DATA.maxAttempts;
   // PRD-36 FR-03: «есть завершённые» — это счётчик, а не длина списка: списка больше нет.
   var hasCompleted = hasCompletedAttempts();
-  // PRD-31 barrier B: the hour interval between attempts INSIDE this assignment.
-  // Decided here, post-Initialize, because its source is suspend_data — the gate
-  // could not read it before Initialize. An open interval leaves the screen exactly
-  // as it was; a closed one disables the start and shows the moment it reopens.
-  var interval = attemptIntervalState();
-  var canStartNew = hasAttemptsLeft() && interval.allowed;
+  var attemptsLeft = hasAttemptsLeft();
+  var cooldown = startCooldownCard(attemptsLeft);
+  var canStartNew = attemptsLeft && !cooldown;
   // PRD-19 FR-19 «повтор: можно»: prior-attempt summary + downloadable report from
   // the best saved attempt. Runs post-Initialize (suspend_data available); the
   // pre-Initialize cooldown gate builds its own minimal context without this.
@@ -133,13 +162,7 @@ function buildScormStartContext() {
     resume: canResume ? { index: (pendingSession.i || 0), total: pendingCount } : null,
     hasCompletedResults: hasCompleted,
     canStartNew: canStartNew,
-    // The shared builder renders the same cooldown card for both barriers; barrier B
-    // carries a moment with a time, and no day countdown — «через N дн.» is
-    // meaningless for an interval measured in hours.
-    cooldown: interval.allowed ? null : {
-      availableDateHuman: fmtInstantHuman(interval.availableAt),
-      daysUntil: null
-    },
+    cooldown: cooldown,
     priorResult: best ? {
       percent: best.percent,
       passed: best.passed,

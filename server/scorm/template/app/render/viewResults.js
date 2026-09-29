@@ -670,11 +670,14 @@ function renderViewResultsTemplated(app, results) {
   // NB: no attempt counter in the header — the scene header names the test, run
   // parameters belong to the screen's own content (parity with the web host).
 
+  // A viewing of a finished learning (main.js `detectReviewLaunch`) has no test to go
+  // back to — the result IS the screen, and leaving it closes the window.
+  var reviewLaunch = !!(typeof state !== 'undefined' && state && state.reviewLaunch);
   ctx.result.nav = window.TBTemplate.buildResultsNav({
     canReport: vrReportEnabled(),
     canRetry: false,
     hasPostPages: false,
-    finishLabel: 'Вернуться к тесту'
+    finishLabel: reviewLaunch ? 'Закрыть' : 'Вернуться к тесту'
   });
 
   // PRD-7 G21: mount default's results layout + activate default's stylesheet
@@ -693,7 +696,7 @@ function renderViewResultsTemplated(app, results) {
     // The screen shows the BEST saved attempt, so the report must be that attempt —
     // not whatever `downloadPDF()` would pick for the CURRENT run.
     'download-report': function () { if (typeof downloadPDF === 'function') downloadPDF(true); },
-    'results-finish': backToStart
+    'results-finish': reviewLaunch ? closeReviewLaunch : backToStart
   });
 }
 

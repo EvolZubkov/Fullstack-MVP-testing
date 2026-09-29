@@ -230,6 +230,11 @@ function disableFinishButtons() {
 }
 
 function finishAndClose() {
+  // A viewing of a finished learning grades and reports nothing (main.js).
+  if (typeof state !== 'undefined' && state && state.reviewLaunch) {
+    closeReviewLaunch();
+    return;
+  }
   if (scormFinished) return;
   scormFinished = true;
   try { disableFinishButtons(); } catch (e) { }
