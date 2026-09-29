@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.33.3](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.33.2...v2.33.3)
+
+### Fixes
+
+- **fix**(analytics): значок подсказки — lucide Info, выбор ролей — Checkbox ui-kit (2026-09-28) [`5a92cdc7f26b82ad4a97b4a12269b98e1b1b8c0a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5a92cdc7f26b82ad4a97b4a12269b98e1b1b8c0a)
+  Значок у термина был нарисован вручную (маска data-URL). Теперь это
+  компонент Info из lucide-react размером 14 px в неразрывном блоке с
+  последним словом термина, чтобы узкая колонка не отрывала его. Правило
+  DataGrid для значка сортировки больше не ужимает и не приглушает его в
+  заголовке. Выбор ролей рисовал галочку своей разметкой, теперь это
+  Checkbox из ui-kit. Тесты ищут термины через termOrText.
+
 ## [2.33.2](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.33.1...v2.33.2)
 
 ### Fixes
