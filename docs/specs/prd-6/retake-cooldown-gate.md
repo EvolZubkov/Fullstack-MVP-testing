@@ -3,7 +3,7 @@
 **Версия:** 1.1  
 **Статус:** ЗАКРЫТ 2026-07-05 (Phase 1 реализована 2026-06-04); администрируемый реестр
 eligibility-плагинов (бывшая Phase 2) вынесен в [PRD-21](../prd-21/eligibility-plugin-registry.md)  
-**Дата актуализации:** 2026-07-05  
+**Дата актуализации:** 2026-09-29 (название курса в WebTutor, §4.1, §4.2, §5.1, §7.1)  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md), [PRD-4](../prd-4/course-flow-sections.md),
 [Платформа SCORM-шаблонов](../spec-template-platform.md)  
@@ -276,6 +276,7 @@ Plugin registry - общий список доступных eligibility plugins
 | `eligibilityPlugin.failPolicy` | `failOpen` или `failClosed` |
 | `gateMode` | MVP: `before_internal_start` |
 | `blockedPageId` | Системная/контентная страница блокировки |
+| `lmsCourseName` | Необязательно. Название курса в WebTutor, если оно отличается от названия теста; до 500 символов, пробелы по краям обрезаются, пустое значение не хранится |
 
 Если `eligibilityPlugin.key` пустой, Core не выполняет проверку и возвращает `allowed = true`.
 Это поведение обязательно для обратной совместимости и для тестов, где ограничение не настроено.
@@ -342,6 +343,16 @@ MVP-plugin `webtutor_cooldown` должен поддерживать конфи�
 - plugin использует `credentials: include`;
 - plugin не сохраняет персональные данные в `TEST_DATA`;
 - plugin возвращает сырые диагностические данные только в debug-режиме.
+
+**Название курса (2026-09-29).** Плагин оставляет только записи, чьё поле `nameField` (`name`)
+в точности совпадает с названием курса; этим же названием подставляется `{{test.title}}` в
+`parametersTemplate` (слово поиска). Название курса — это `retakePolicy.lmsCourseName`, а если
+его нет — название теста. Раньше бралось только название теста, и курс, названный в WebTutor
+иначе, не находился никогда: гейт отбрасывал все записи (`no_prior_attempt`) и пропускал
+повторное прохождение без периода охлаждения. Так было на testuniver.rt.ru: тест «Сертификация
+руководителей в «Ростелекоме»», курс «… (предфинальный тест)». Сетка отдаёт по записи только
+`id`, `name`, `state`, `progress` и даты; идентификатора курса в ней нет, поэтому сопоставление
+идёт по названию. Гейт пишет в консоль, какое название он искал.
 
 ### 4.3 Runtime-последовательность
 
@@ -449,9 +460,13 @@ SCORM registration, удалён [PRD-40](../prd-40/cooldown-by-outcome.md) (202
     "configId": "webtutor_catalog_default",
     "failPolicy": "failOpen"
   },
-  "blockedPageId": "system.blocked"
+  "blockedPageId": "system.blocked",
+  "lmsCourseName": "Сертификация руководителей в «Ростелекоме» (предфинальный тест)"
 }
 ```
+
+`lmsCourseName` запекается в `TEST_DATA.retakePolicy` только у теста с гейтом и только
+непустым; у теста без него пакет не меняется ни на байт.
 
 ### 5.2 `eligibility_plugins`
 
@@ -563,7 +578,10 @@ WebTutor-сессию и same-origin cookies. Серверный test endpoint �
 - выбор eligibility plugin из активного registry;
 - выбор конфигурации выбранного plugin;
 - выбор страницы блокировки;
-- readonly-информация о выбранном plugin и версии его конфигурации.
+- readonly-информация о выбранном plugin и версии его конфигурации;
+- при плагине WebTutor — поле **"Название курса в WebTutor"** (`lmsCourseName`) с названием
+  теста в качестве подсказки-заполнителя. Оно заменило предупреждение о точном совпадении
+  названий (эскиз `docs/wireframes/editor-settings-target.html`, состояние `s-rules-limits`).
 
 ### 7.2 UI администратора
 
@@ -655,6 +673,9 @@ Phase 1 (реализовано):
 - [x] `nextAllowedDate` заполняется тем же значением как совместимый alias для старых шаблонов/диагностики.
 - [x] `failOpen` разрешает старт при ошибке plugin и пишет предупреждение.
 - [x] `failClosed` показывает блокировку при ошибке plugin.
+- [x] Курс, названный в WebTutor иначе, чем тест, находится по `lmsCourseName`: запись берётся,
+      период охлаждения действует; пустое поле означает название теста
+      (`tests/eligibility-gate-lms-name.test.ts`).
 
 Администрируемый реестр (бывшая Phase 2) вынесен в отдельный
 [PRD-21 «Администрируемый реестр eligibility-плагинов»](../prd-21/eligibility-plugin-registry.md):

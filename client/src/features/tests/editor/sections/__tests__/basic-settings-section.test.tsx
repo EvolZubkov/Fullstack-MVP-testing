@@ -1079,6 +1079,33 @@ describe("<LimitsPane /> — Повторное прохождение (PRD-6)",
     expect(runUpdater(updateModel, model, 1).retakePolicy.cooldownPeriodDaysFailed).toBe(1);
   });
 
+  it("offers the WebTutor course name with the test title as the placeholder", () => {
+    const model = enabledPolicy();
+    renderRetake({ ...model, basic: { ...model.basic, title: "Сертификация руководителей" } });
+    const input = screen.getByTestId("settings-retake-lms-course-name") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("Сертификация руководителей");
+    // The exact-match warning is gone: the field itself now resolves the mismatch.
+    expect(screen.queryByTestId("settings-retake-webtutor-name-warning")).toBeNull();
+  });
+
+  it("writes the typed course name into the policy", () => {
+    const updateModel = vi.fn();
+    const model = enabledPolicy();
+    renderRetake(model, updateModel);
+    fireEvent.change(screen.getByTestId("settings-retake-lms-course-name"), {
+      target: { value: "Сертификация руководителей (предфинальный тест)" },
+    });
+    expect(runUpdater(updateModel, model).retakePolicy.lmsCourseName).toBe(
+      "Сертификация руководителей (предфинальный тест)",
+    );
+  });
+
+  it("shows the saved course name", () => {
+    renderRetake(enabledPolicy({ lmsCourseName: "Курс в LMS" }));
+    expect((screen.getByTestId("settings-retake-lms-course-name") as HTMLInputElement).value).toBe("Курс в LMS");
+  });
+
   it("toggles failPolicy to failClosed via the segmented control", () => {
     const updateModel = vi.fn();
     const model = enabledPolicy();

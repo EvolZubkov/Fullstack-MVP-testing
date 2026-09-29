@@ -1174,6 +1174,7 @@ function readRetakePolicyFromApi(api: ApiTestResponse): RetakePolicy {
     eligibilityPlugin,
     attemptInterval,
     ...(typeof r.blockedPageId === "string" ? { blockedPageId: r.blockedPageId } : {}),
+    ...(typeof r.lmsCourseName === "string" ? { lmsCourseName: r.lmsCourseName } : {}),
   };
 }
 

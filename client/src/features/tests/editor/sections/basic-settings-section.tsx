@@ -1005,12 +1005,25 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
             />
           </div>
 
+          {/* The gate matches WebTutor records by the course name EXACTLY; a course
+              named differently from the test is found only through this field. */}
           {currentKey === "webtutor_cooldown" && (
-            <Banner
-              tone="warning"
-              description="Проверка через WebTutor находит прошлые попытки по названию курса. Ограничение сработает, только если название курса в WebTutor точно совпадает с названием этого теста."
-              data-testid="settings-retake-webtutor-name-warning"
-            />
+            <div className="ou-formfield">
+              <Input
+                id="settings-retake-lms-course-name"
+                size="m"
+                fullWidth
+                label="Название курса в WebTutor"
+                value={policy.lmsCourseName ?? ""}
+                placeholder={model.basic.title}
+                hint="По этому названию проверка находит прошлые попытки в WebTutor, поэтому оно должно совпадать точно. Если поле пустое, используется название теста."
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setPolicy({ lmsCourseName: value });
+                }}
+                data-testid="settings-retake-lms-course-name"
+              />
+            </div>
           )}
 
           <div

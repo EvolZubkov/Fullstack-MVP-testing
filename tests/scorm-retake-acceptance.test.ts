@@ -101,6 +101,31 @@ describe("SCORM package — PRD-6 retake policy export", () => {
     expect((cfg.attemptFilter as Record<string, unknown>).dateField).toBe("last_usage_date");
   });
 
+  it("bakes the WebTutor course name when the author set one", async () => {
+    const td = await decodeTestData(
+      {
+        enabled: true,
+        cooldownPeriodDays: 30,
+        lmsCourseName: "Курс (предфинальный тест)",
+        eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_catalog_default", failPolicy: "failOpen" },
+      },
+      "retake-lms-name",
+    );
+    expect(td.retakePolicy.lmsCourseName).toBe("Курс (предфинальный тест)");
+  });
+
+  it("leaves no lmsCourseName key when the author set none (byte-identical package)", async () => {
+    const td = await decodeTestData(
+      {
+        enabled: true,
+        cooldownPeriodDays: 30,
+        eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_catalog_default", failPolicy: "failOpen" },
+      },
+      "retake-no-lms-name",
+    );
+    expect(Object.prototype.hasOwnProperty.call(td.retakePolicy, "lmsCourseName")).toBe(false);
+  });
+
   it("omits retakePolicy/retakePlugin when no policy is set (FR-02)", async () => {
     const td = await decodeTestData(null, "retake-off");
     expect(td.retakePolicy).toBeUndefined();

@@ -846,6 +846,15 @@ describe("apiToEditorModel — retake policy", () => {
     expect(p.eligibilityPlugin).toEqual({ key: "wt", configId: "cfg-1", failPolicy: "failClosed" });
   });
 
+  it("keeps the WebTutor course name and drops a non-string one", () => {
+    const named = apiToEditorModel({
+      retakePolicyJson: { enabled: true, lmsCourseName: "Курс (предфинальный тест)" },
+    }).retakePolicy;
+    expect(named.lmsCourseName).toBe("Курс (предфинальный тест)");
+    const junk = apiToEditorModel({ retakePolicyJson: { enabled: true, lmsCourseName: 5 } }).retakePolicy;
+    expect(junk).not.toHaveProperty("lmsCourseName");
+  });
+
   it("defaults failPolicy to failOpen and omits configId when it is not a string", () => {
     const p = apiToEditorModel({
       retakePolicyJson: { enabled: true, eligibilityPlugin: { key: "wt", failPolicy: "??", configId: 5 } },

@@ -4311,10 +4311,12 @@
                       <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
                     </button>
                   </div>
-                  <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
-                    <div class="ou-banner__body">
-                      <div class="ou-banner__desc">Проверка через WebTutor находит прошлые попытки по названию курса. Ограничение сработает, только если название курса в WebTutor точно совпадает с названием этого теста.</div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="r-lms-name">Название курса в WebTutor</label>
+                    <div class="ou-field ou-field--m">
+                      <div class="ou-field__box"><input class="ou-field__input" id="r-lms-name" type="text" value="Сертификация руководителей в «Ростелекоме» (предфинальный тест)" placeholder="Сертификация руководителей в «Ростелекоме»" /></div>
                     </div>
+                    <span class="ou-formfield__desc">По этому названию проверка находит прошлые попытки в WebTutor, поэтому оно должно совпадать точно. Если поле пустое, используется название теста.</span>
                   </div>
                   <div class="ou-formfield">
                     <label class="ou-formfield__lbl">При ошибке проверки допуска</label>

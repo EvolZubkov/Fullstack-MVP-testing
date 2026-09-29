@@ -568,6 +568,9 @@ export function buildTestJson(data: ExportData): string {
       eligibilityPlugin: gatePlugin ? rp.eligibilityPlugin : null,
       blockedPageId: rp.blockedPageId ?? null,
       ...(intervalOn ? { attemptInterval: rp.attemptInterval } : {}),
+      // The WebTutor course name the gate matches records by; absent = the test title.
+      // Only a gated package needs it, and only when set — otherwise the key is left out.
+      ...(gatePlugin && rp.lmsCourseName?.trim() ? { lmsCourseName: rp.lmsCourseName.trim() } : {}),
     };
   }
   if (rp && gatePlugin) {

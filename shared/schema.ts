@@ -419,6 +419,10 @@ export const attemptIntervalSchema = z.object({
  * decision (see `shared/eligibility/engine.ts` `resolveCooldownDays`). Off (the
  * default, and every existing test) keeps `cooldownPeriodDays` as the only period,
  * byte-identical to pre-PRD-40 behaviour.
+ *
+ * `lmsCourseName` names the course in WebTutor when it differs from the test title: the
+ * `webtutor_cooldown` gate finds the previous attempts by that name, exactly. Absent =
+ * the test title, which is every test created before the field existed.
  */
 export const retakePolicySchema = z.preprocess(
   (val) => {
@@ -441,6 +445,12 @@ export const retakePolicySchema = z.preprocess(
       eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
       blockedPageId: z.string().optional(),
       attemptInterval: attemptIntervalSchema.nullish(),
+      // The course name the `webtutor_cooldown` gate looks for in the LMS records (exact
+      // match). A blank value means "same as the test title" and is dropped.
+      lmsCourseName: z.preprocess(
+        (v) => (typeof v === "string" ? v.trim() || undefined : v),
+        z.string().max(500).optional(),
+      ),
     })
     .superRefine((v, ctx) => {
       if (v.enabled && v.cooldownByOutcome) {

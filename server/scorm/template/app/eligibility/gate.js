@@ -71,10 +71,23 @@ var RetakeGate = (function () {
     });
   }
 
+  // The name the course carries IN THE LMS. The WebTutor adapter searches records by it
+  // and keeps only those whose name equals it exactly, so a course named differently
+  // from the test (e.g. «… (предфинальный тест)») is matched only through the author's
+  // `lmsCourseName`; without it the test title stands in, as it always did.
+  function lmsCourseName(td) {
+    var own = td.retakePolicy && typeof td.retakePolicy.lmsCourseName === 'string'
+      ? td.retakePolicy.lmsCourseName.replace(/^\s+|\s+$/g, '') : '';
+    return own || td.title || '';
+  }
+
   function buildContext(td) {
     var tz = '';
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
     var config = td.retakePlugin.config || {};
+    var courseName = lmsCourseName(td);
+    glog('LMS course name:', courseName,
+      (courseName === (td.title || '') ? '(the test title)' : '(set by the author; test title: ' + (td.title || '') + ')'));
     return resolveToday(config).then(function (todayDate) {
       return {
         test: { id: td.id || '', title: td.title || '' },
@@ -89,7 +102,7 @@ var RetakeGate = (function () {
           timezone: tz,
           launchUrl: typeof location !== 'undefined' ? location.href : ''
         },
-        lms: { scormVersion: '2004' },
+        lms: { scormVersion: '2004', courseName: courseName },
         config: config
       };
     });
@@ -103,9 +116,12 @@ var RetakeGate = (function () {
     return json.results || json.data || json.rows || json.records || json.items || [];
   }
 
+  // `{{test.title}}` in an admin template is the title the LMS knows the course by, so it
+  // resolves to the LMS course name (see lmsCourseName), which IS the title unless the
+  // author named the course differently.
   function resolveTemplate(tpl, ctx, personId) {
     return String(tpl == null ? '' : tpl)
-      .replace(/\{\{\s*test\.title\s*\}\}/g, ctx.test.title)
+      .replace(/\{\{\s*test\.title\s*\}\}/g, ctx.lms.courseName)
       .replace(/\{\{\s*personId\s*\}\}/g, personId || '');
   }
 
@@ -196,9 +212,9 @@ var RetakeGate = (function () {
       }).then(function (json) {
         if (json && json.success === false) throw new Error('collection_error: ' + (json.messageText || 'unknown'));
         var records = extractRecords(json);
-        glog('records:', records.length, '| total:', (json && json.total), '| course:', ctx.test.title,
+        glog('records:', records.length, '| total:', (json && json.total), '| course:', ctx.lms.courseName,
           '| filter:', JSON.stringify(config.attemptFilter || {}));
-        var result = EligibilityPlugins.webtutorCooldownDecide(records, config.attemptFilter || {}, ctx, ctx.test.title);
+        var result = EligibilityPlugins.webtutorCooldownDecide(records, config.attemptFilter || {}, ctx, ctx.lms.courseName);
         glog('selected lastAttemptDate:',
           (result.data && result.data.lastAttemptDate) || '(none — no finished attempt for this course)');
         return result;
