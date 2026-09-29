@@ -295,7 +295,7 @@ administrator, developer, author, manager, learner), а эффективные �
 | bcryptjs | 3.0 | Legacy-проверка старых bcrypt-хешей паролей (динамический импорт; удаляется после дренажа rehash, PRD-9 Этап 3) |
 | Nodemailer | 9.0 | Отправка email |
 | Multer | 2.2 | Загрузка файлов |
-| Archiver | 7.0 | Создание SCORM ZIP-пакетов |
+| JSZip | 3.10 | Создание и чтение ZIP (SCORM-пакеты, перенос теста, шаблоны) |
 | ExcelJS | 4.4 | Импорт/экспорт Excel |
 
 ### Инструменты сборки

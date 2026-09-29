@@ -8,7 +8,7 @@ import { copyDsAssetsInto } from "../../server/scorm/builders/ds-styles";
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
 // Dependencies to bundle (reduces cold start syscalls)
-// Note: archiver and bcryptjs excluded due to ESM/CJS interop issues
+// Note: bcryptjs excluded due to ESM/CJS interop issues
 const allowlist = [
   "@google/generative-ai",
   // ESM-only wrapper: bundle it into the CJS output so the production build does
@@ -45,7 +45,7 @@ const allowlist = [
 // pinned external explicitly: the wrapper is bundled, and esbuild would otherwise
 // follow its `import 'pino'` and bundle pino too — breaking pino's runtime resolution
 // of its own worker/transport internals. Kept external, pino resolves normally at runtime.
-const forceExternal = ["archiver", "bcryptjs", "@vvlad1973/crypto", "pino"];
+const forceExternal = ["bcryptjs", "@vvlad1973/crypto", "pino"];
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
