@@ -37,26 +37,23 @@ RUN groupadd -r -g 1500 nodejs && \
 WORKDIR /app
 
 COPY package*.json ./
-# drizzle-kit is a production dependency in this deployment: schema migrations are
-# applied via `drizzle-kit migrate` inside the container, and drizzle.config.ts
-# imports it.
+# drizzle-kit is a devDependency and is NOT in the image: schema migrations are
+# applied by the bundled `dist/migrate.cjs` (the migrator built into drizzle-orm),
+# so neither the CLI nor drizzle.config.ts is needed at runtime.
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy compiled application artifacts (source excluded via .dockerignore)
 COPY --chown=nodejs:nodejs dist ./dist
 COPY --chown=nodejs:nodejs shared ./shared
-COPY --chown=nodejs:nodejs drizzle.config.ts ./
 
 # Versioned schema migrations + journal (drizzle-kit generate). The deploy applies
-# them with `drizzle-kit migrate` in a one-off container before the app boots.
+# them with `node dist/migrate.cjs` in a one-off container before the app boots.
 # Required in the image because the DB is external and the image carries no psql.
-# (tsx IS present — drizzle-kit depends on it — but the .ts sources it would run
-# are not copied here, so it cannot apply migrations either.)
 COPY --chown=nodejs:nodejs drizzle ./drizzle
 
 # Legacy hand-written data/DDL migrations, kept as a historical record and for
 # ad-hoc fixes via `node scripts/db/run-sql.cjs <file>`. The deploy no longer runs
-# these — schema is applied by drizzle-kit migrate (drizzle/ above).
+# these — schema is applied by dist/migrate.cjs (drizzle/ above).
 COPY --chown=nodejs:nodejs migrations ./migrations
 COPY --chown=nodejs:nodejs scripts/db/run-sql.cjs ./scripts/db/run-sql.cjs
 # Shared config loader (server/config-loader.mjs) — required at runtime by

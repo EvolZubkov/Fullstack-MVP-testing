@@ -88,47 +88,33 @@ async function buildAll() {
   // hand-written JS twin would be a second copy of the text pipeline. Bundling
   // them with the same esbuild config means the migration runs the SAME code the
   // application does.
+  //
+  // The same holds for the schema steps. `reconcile-migration-ledger` realigns the
+  // timestamps a regenerated migration leaves behind and runs BEFORE `migrate`;
+  // `migrate` applies drizzle/ with the migrator built into drizzle-orm, so the
+  // image needs no drizzle-kit (a devDependency). Both read drizzle/meta/_journal.json
+  // copied into the image. See each module's own header.
   console.log("building deploy scripts...");
-  await esbuild({
-    entryPoints: ["scripts/db/backfill-page-text.ts"],
-    platform: "node",
-    bundle: true,
-    format: "cjs",
-    outfile: "dist/backfill-page-text.cjs",
-    banner: {
-      js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
-    },
-    define: {
-      "process.env.NODE_ENV": '"production"',
-      "import.meta.url": "__importMetaUrl",
-      "import.meta.dirname": "__dirname",
-    },
-    minify: false,
-    external: externals,
-    logLevel: "info",
-  });
-
-  // Same bundling for the ledger repair the deploy runs BEFORE `drizzle-kit migrate`:
-  // it reads drizzle/meta/_journal.json (copied into the image) and realigns the
-  // timestamps a regenerated migration leaves behind. See the module's own header.
-  await esbuild({
-    entryPoints: ["scripts/db/reconcile-migration-ledger.ts"],
-    platform: "node",
-    bundle: true,
-    format: "cjs",
-    outfile: "dist/reconcile-migration-ledger.cjs",
-    banner: {
-      js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
-    },
-    define: {
-      "process.env.NODE_ENV": '"production"',
-      "import.meta.url": "__importMetaUrl",
-      "import.meta.dirname": "__dirname",
-    },
-    minify: false,
-    external: externals,
-    logLevel: "info",
-  });
+  for (const name of ["backfill-page-text", "reconcile-migration-ledger", "migrate"]) {
+    await esbuild({
+      entryPoints: [`scripts/db/${name}.ts`],
+      platform: "node",
+      bundle: true,
+      format: "cjs",
+      outfile: `dist/${name}.cjs`,
+      banner: {
+        js: "const __importMetaUrl = require('url').pathToFileURL(__filename).href;",
+      },
+      define: {
+        "process.env.NODE_ENV": '"production"',
+        "import.meta.url": "__importMetaUrl",
+        "import.meta.dirname": "__dirname",
+      },
+      minify: false,
+      external: externals,
+      logLevel: "info",
+    });
+  }
 
   console.log("copying scorm assets...");
   await mkdir("dist/scorm/assets", { recursive: true });

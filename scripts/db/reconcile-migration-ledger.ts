@@ -2,7 +2,8 @@
  * @module scripts/db/reconcile-migration-ledger
  *
  * Deploy-time repair step: realign the timestamps in `drizzle.__drizzle_migrations`
- * with `drizzle/meta/_journal.json` so `drizzle-kit migrate` does not try to apply a
+ * with `drizzle/meta/_journal.json` so `migrate` (`scripts/db/migrate.ts` on deploy,
+ * `drizzle-kit migrate` in development — the same migrator) does not try to apply a
  * migration that is already in the database.
  *
  * WHY this exists. `migrate` decides what to apply by TIME, not by hash: it takes
@@ -38,6 +39,7 @@ import { sql } from "drizzle-orm";
 import { db, closeDatabaseConnection } from "../../server/db";
 import { initConfig } from "../../server/config";
 import { loadEnv } from "../../server/config-loader.mjs";
+import { describeError, errorCode } from "./db-error";
 
 /** One journal entry as drizzle-kit writes it. */
 interface JournalEntry {
@@ -112,33 +114,6 @@ async function main(): Promise<void> {
     for (const line of report.details) console.log(`  ${line}`);
   }
   await closeDatabaseConnection();
-}
-
-/** PostgreSQL error code, dug out of however many wrappers drizzle put around it. */
-function errorCode(error: unknown): string | undefined {
-  for (let e: unknown = error, depth = 0; e != null && depth < 5; e = (e as { cause?: unknown }).cause, depth++) {
-    const code = (e as { code?: unknown }).code;
-    if (typeof code === "string") return code;
-  }
-  return undefined;
-}
-
-/**
- * The message plus every wrapped cause.
- *
- * Printing only `error.message` hid the one thing an operator needs: drizzle
- * reports a failed statement as «Failed query: SELECT … params:» and leaves the
- * driver's actual complaint — «no pg_hba.conf entry for host …», «password
- * authentication failed», ECONNREFUSED — in `cause`. A deploy once spent an hour
- * blind because of it.
- */
-function describeError(error: unknown): string {
-  const parts: string[] = [];
-  for (let e: unknown = error, depth = 0; e != null && depth < 5; e = (e as { cause?: unknown }).cause, depth++) {
-    const message = (e as { message?: unknown }).message;
-    if (typeof message === "string" && message && !parts.includes(message)) parts.push(message);
-  }
-  return parts.join(" | ") || String(error);
 }
 
 // Same shape as the sibling deploy script: run on import, so the file works both as

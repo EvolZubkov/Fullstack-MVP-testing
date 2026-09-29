@@ -531,7 +531,7 @@ elif [ -n "${CLONE_FROM}" ]; then
 
     # After a --no-owner restore every object belongs to postgres. The app user
     # needs OWNERSHIP (not just grants) so migrations can ALTER these tables, and
-    # CREATE on the DATABASE because drizzle-kit migrate keeps its ledger in a
+    # CREATE on the DATABASE because the migrator keeps its ledger in a
     # separate `drizzle` schema.
     info "Reassigning ownership of '${DB_NAME}' to '${DB_USER}'..."
     sudo -u postgres psql -v ON_ERROR_STOP=1 "${DB_NAME}" << SQL
@@ -556,7 +556,7 @@ SQL
 elif [ -n "${INIT_DB_FROM}" ]; then
     # An EMPTY database, owned by the app role from the start — no restore happened,
     # so there is nothing to reassign. CREATE on the database is granted explicitly
-    # anyway: the owner has it implicitly today, but drizzle-kit keeps its ledger in
+    # anyway: the owner has it implicitly today, but the migrator keeps its ledger in
     # a separate `drizzle` schema and a future role change must not silently break
     # migrations. Everything else — tables, built-in templates, the superadmin
     # accounts — is produced by the migrations and the application's own startup.
@@ -583,9 +583,8 @@ fi
 # project gets its OWN docker bridge network with its OWN /16, and pg_hba.conf is
 # matched per subnet. A brand-new instance was therefore refused by PostgreSQL on
 # the very first step that touches the database — the migrations — and the reason
-# was invisible, because drizzle-kit answers a connection failure by exiting 1
-# with NO message whatsoever (reproduced: the log simply stops after "Using 'pg'
-# driver"). Open the door first, then knock.
+# was invisible, because the former `drizzle-kit migrate` answered a connection
+# failure by exiting 1 with NO message whatsoever. Open the door first, then knock.
 # ---------------------------------------------------------------------------
 DOCKER_NETWORK="${PROJECT_NAME}_default"
 # Compose creates the network on its first `run`; none has happened yet (section 6
@@ -622,14 +621,15 @@ fi
 # Applied BEFORE the app boots: startup (syncBuiltinTemplates) is awaited before
 # the HTTP server listens and aborts the whole boot on a stale schema.
 #
-# `drizzle-kit migrate` applies the reviewed SQL under drizzle/ in order, each in
-# its own transaction — unlike the former `push --force` it never diffs the live
-# DB and never silently drops/recreates on drift.
+# `dist/migrate.cjs` (scripts/db/migrate.ts: the migrator built into drizzle-orm,
+# the same one `drizzle-kit migrate` wraps) applies the reviewed SQL under drizzle/
+# in order — unlike the former `push --force` it never diffs the live DB and never
+# silently drops/recreates on drift. drizzle-kit itself is not in the image.
 #
 # -T is essential, not cosmetic: without it `docker compose run` attaches to the
 # terminal that `ssh -tt` provides and tears the stream down the moment the
 # container exits, losing the final stderr. The inner redirect-then-cat is what
-# makes a failure legible: drizzle-kit ends a failed run with process.exit(1),
+# makes a failure legible: the script ends a failed run with process.exit(1),
 # truncating pending writes to a PIPE; writes to a FILE are synchronous.
 # Ledger repair FIRST. `migrate` decides what to apply by TIME (MAX(created_at) in
 # drizzle.__drizzle_migrations against `when` in the journal), never by hash — so a
@@ -647,15 +647,15 @@ if ! docker compose run --rm -T --no-deps --entrypoint sh app \
     warn "ledger reconcile FAILED — continuing; the migration step below will report the real error."
 fi
 
-info "Applying DB migrations (drizzle-kit migrate)..."
+info "Applying DB migrations (dist/migrate.cjs)..."
 if ! docker compose run --rm -T --no-deps --entrypoint sh app \
-    -c 'npx drizzle-kit migrate > /tmp/migrate.log 2>&1; ec=$?; cat /tmp/migrate.log; exit $ec'; then
+    -c 'node dist/migrate.cjs > /tmp/migrate.log 2>&1; ec=$?; cat /tmp/migrate.log; exit $ec'; then
     echo ""
-    warn "drizzle-kit migrate FAILED — see the error above. Known causes:"
-    warn "  NO error text at all (the log just stops after \"Using 'pg' driver\"):"
-    warn "     drizzle-kit reports a failure to CONNECT by exiting 1 in total silence."
-    warn "     Check that pg_hba.conf allows the docker subnet ${DOCKER_SUBNET:-of this instance}"
-    warn "     (network ${DOCKER_NETWORK}) and that the password in env/.env is right:"
+    warn "migrate FAILED — see the error above. Known causes:"
+    warn "  'no pg_hba.conf entry for host', 'password authentication failed', ECONNREFUSED:"
+    warn "     the container cannot CONNECT. Check that pg_hba.conf allows the docker subnet"
+    warn "     ${DOCKER_SUBNET:-of this instance} (network ${DOCKER_NETWORK}) and that the"
+    warn "     password in env/.env is right:"
     warn "       sudo -u postgres psql -tAc \"SHOW hba_file\"   # then grep '^host' in it"
     warn "  'permission denied for database': the app role lacks CREATE on the DB"
     warn "     (migrate needs it for the drizzle schema). As the postgres superuser:"
@@ -856,7 +856,7 @@ fi
 #
 # The minimum a from-scratch instance needs, and no more. Two of the three layers
 # are already done by the time we get here and are NOT reimplemented:
-#   - the schema comes from drizzle-kit migrate (step 8);
+#   - the schema comes from dist/migrate.cjs (step 8);
 #   - the design-template registry and the configured superadmin accounts come
 #     from the application's own startup (syncBuiltinTemplates /
 #     provisionSuperadmins, server/index.ts).
