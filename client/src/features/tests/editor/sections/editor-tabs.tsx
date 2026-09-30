@@ -50,6 +50,7 @@ import { TopicFeedbackCard } from "./topic-feedback-card";
 import { LevelFeedbackCard } from "./level-feedback-card";
 import { BandFeedbackSection, hasAnyBands } from "./band-feedback-section";
 import { QuestionFeedbackRegistry } from "./question-feedback-registry";
+import { TestQuestionsSection } from "../questions/test-questions-section";
 import { templateBlockOrder } from "@shared/template/results-order";
 
 /** Общий набор props вкладки: черновик, мутатор и ошибки полей. */
@@ -97,12 +98,17 @@ export function MainTab({ model, updateModel, fieldErrors, issueLevel }: EditorT
 
 // ─── «Состав и сценарий» ──────────────────────────────────────────────────────
 
-type CompositionRail = "composition" | "adaptive" | "scenario";
+/** Пункт темы в группе «Вопросы теста»: ключ несёт идентификатор темы. */
+type QuestionsRail = `questions:${string}`;
+
+type CompositionRail = "composition" | "adaptive" | "scenario" | QuestionsRail;
+
+const QUESTIONS_PREFIX = "questions:";
 
 /**
- * Из чего собран тест и как он идёт: темы с выборкой и вариантами, лестница уровней
- * адаптивного теста и полотно сценария. «Адаптивные уровни» показываются только
- * адаптивному тесту — у стандартного лестницы нет.
+ * Из чего собран тест и как он идёт: темы с выборкой и вариантами, вопросы каждой темы,
+ * лестница уровней адаптивного теста и полотно сценария. «Адаптивные уровни» показываются
+ * только адаптивному тесту — у стандартного лестницы нет.
  */
 export function CompositionTab({
   model,
@@ -113,11 +119,17 @@ export function CompositionTab({
   content,
   savedFlowMode,
   designDraft,
+  onOpenQuestion,
+  onCreateQuestion,
 }: EditorTabProps & {
   testId?: string;
   content?: UseContentPagesResult;
   savedFlowMode: string | null;
   designDraft?: UseDesignSettingsResult["draft"];
+  /** Открыть вопрос в ящике вопроса. Ящик монтирует хозяин вкладки. */
+  onOpenQuestion?: (questionId: string) => void;
+  /** Открыть ящик нового вопроса с заданной темой. */
+  onCreateQuestion?: (topicId: string) => void;
 }): React.JSX.Element {
   const isAdaptive = model.mode === "adaptive";
   // Стоп-фактор адаптивного теста: ни одна тема не включена (лестницы нет вообще).
@@ -131,12 +143,25 @@ export function CompositionTab({
       const topic = model.adaptive.topics.find((t) => t.topicId === section.topicId);
       return topic?.enabled && topic.levels.length < 2;
     });
-  const items: RailItem<CompositionRail>[] = [
+  const items: RailEntry<CompositionRail>[] = [
     {
       key: "composition",
       label: "Состав",
       dot: railDot(issueLevel, "sections"),
     },
+    // Решение владельца 2026-10-01: вопросы — отдельная группа рейла, темы — её пункты.
+    // Группа прячется, пока тем нет: перечислять нечего, а темы добавляются в «Составе».
+    ...(model.sections.length > 0
+      ? [
+          {
+            label: "Вопросы теста",
+            items: model.sections.map((section, i) => ({
+              key: `${QUESTIONS_PREFIX}${section.topicId}` as QuestionsRail,
+              label: `${i + 1}. ${section.topicName}`,
+            })),
+          },
+        ]
+      : []),
     ...(isAdaptive
       ? [
           {
@@ -148,7 +173,7 @@ export function CompositionTab({
               ? "error"
               : railDot(issueLevel, "adaptive") ?? (adaptiveWarning ? "warning" : undefined)
             ) as RailItem<CompositionRail>["dot"],
-          },
+          } as RailItem<CompositionRail>,
         ]
       : []),
     {
@@ -168,6 +193,17 @@ export function CompositionTab({
     >
       {active === "composition" && (
         <CompositionSection model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
+      )}
+      {active.startsWith(QUESTIONS_PREFIX) && (
+        <TestQuestionsSection
+          // Своя панель на тему: поиск одной темы не переносится в другую.
+          key={active}
+          model={model}
+          topicId={active.slice(QUESTIONS_PREFIX.length)}
+          testId={testId}
+          onOpenQuestion={onOpenQuestion}
+          onCreateQuestion={onCreateQuestion}
+        />
       )}
       {active === "adaptive" && (
         <AdaptivePane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />

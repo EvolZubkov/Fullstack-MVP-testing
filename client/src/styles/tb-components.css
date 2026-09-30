@@ -2707,6 +2707,20 @@
 .tb-qscoring__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
 /* Пиктограмма типа вопроса — инлайново перед текстом, на той же строке. */
 .tb-qscoring__qtype { display: inline-flex; vertical-align: -0.15em; margin-right: var(--ou-space-2); color: var(--ou-fg-muted); }
+
+/* ─── «Вопросы теста» (рейл «Состава» → тема) ────────────────────────────────
+   Эскиз `editor-settings-target.html`, состояние `s-composition-questions`: текст
+   вопроса первой строкой, сводка его свойств в этом тесте второй, отметки третьей;
+   вся строка открывает ящик вопроса, действия — в правой колонке. */
+.tb-qlist__title { display: inline-flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
+.tb-qlist__row { cursor: pointer; }
+.tb-qlist__row:hover > td { background: var(--ou-bg-surface-2); }
+.tb-qlist__cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+.tb-qlist__text { font: var(--ou-text-body-m); }
+.tb-qlist__text .tb-qscoring__qtype { margin-right: var(--ou-space-1); }
+.tb-qlist__meta { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-qlist__flags { display: flex; flex-wrap: wrap; gap: var(--ou-space-1); }
+.tb-qlist__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
 /* Recap вопроса в модале переопределения (read-only контекст). */
 .tb-qscoring__recap {
   padding: var(--ou-space-3) var(--ou-space-4);

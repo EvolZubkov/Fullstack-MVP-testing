@@ -294,16 +294,30 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
    * в редком случае.
    */
   const [reviewQuestionId, setReviewQuestionId] = useState<string | null>(null);
+  /**
+   * «Вопросы теста» → «Добавить вопрос»: тема нового вопроса. Тот же ящик вопроса, что
+   * в «Темах и вопросах», в режиме создания; монтируется только пока открыт.
+   */
+  const [newQuestionTopicId, setNewQuestionTopicId] = useState<string | null>(null);
+  const questionDrawerOpen = Boolean(reviewQuestionId) || Boolean(newQuestionTopicId);
   const reviewQuestions = useQuery<Question[]>({
     queryKey: ["/api/questions"],
     // Нужны в двух местах: открыть карточку вопроса по якорю и предложить вопросы
     // раздела во втором поле формы комментария. Второе — сразу на вкладке.
-    enabled: Boolean(reviewQuestionId) || activeTab === "review",
+    enabled: questionDrawerOpen || activeTab === "review",
   });
   const reviewTopics = useQuery<Topic[]>({
     queryKey: ["/api/topics"],
-    enabled: Boolean(reviewQuestionId),
+    enabled: questionDrawerOpen,
   });
+  // Подсказки подтем для ящика вопроса — как в «Темах и вопросах»: все теги банка.
+  const tagSuggestions = useMemo(
+    () =>
+      questionDrawerOpen
+        ? [...new Set((reviewQuestions.data ?? []).flatMap((q) => q.tags ?? []))].sort()
+        : [],
+    [questionDrawerOpen, reviewQuestions.data],
+  );
   const reviewQuestion = reviewQuestionId
     ? (reviewQuestions.data ?? []).find((q) => q.id === reviewQuestionId) ?? null
     : null;
@@ -926,6 +940,8 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               content={contentPages}
               savedFlowMode={editor.savedFlowMode}
               designDraft={design.draft}
+              onOpenQuestion={setReviewQuestionId}
+              onCreateQuestion={setNewQuestionTopicId}
             />
           )}
           {editor.model && activeTab === "rules" && (
@@ -1002,8 +1018,19 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               open={Boolean(reviewQuestion)}
               question={reviewQuestion}
               topics={reviewTopics.data ?? []}
+              tagSuggestions={tagSuggestions}
               onClose={() => setReviewQuestionId(null)}
               onSaved={() => setReviewQuestionId(null)}
+            />
+          ) : newQuestionTopicId ? (
+            <QuestionEditorDrawer
+              open
+              question={null}
+              defaultTopicId={newQuestionTopicId}
+              topics={reviewTopics.data ?? []}
+              tagSuggestions={tagSuggestions}
+              onClose={() => setNewQuestionTopicId(null)}
+              onSaved={() => setNewQuestionTopicId(null)}
             />
           ) : null}
           </div>
