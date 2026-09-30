@@ -8,7 +8,7 @@
  *   FR-14 — overall percent value in [0, 100]
  *   FR-15a — passDecisionPolicy is a valid enum value
  *   FR-15g — forbidden combination: all_topics_passed + inherit_overall + overall.type=none
- *   FR-20  — webhook URL valid or empty
+ *   FR-20  — снят: «Webhook URL» больше не проверяется (поля в форме нет)
  */
 import { describe, expect, it } from "vitest";
 import { TAG_MAX_LENGTH } from "@shared/tags";
@@ -279,36 +279,17 @@ describe("FR-15g: forbidden combination all_topics_passed + inherit_overall + ov
   });
 });
 
-// ─── FR-20: webhook URL valid or empty ───────────────────────────────────────
+// ─── Снятый «Webhook URL» ─────────────────────────────────────────────────────
 
-describe("FR-20: webhook URL valid or empty", () => {
-  it("happy path — empty webhook URL passes", () => {
-    const result = validateTestEditor(baseModel());
-    const urlErrors = result.errors.filter((e) => e.field === "basic.webhookUrl");
-    expect(urlErrors).toHaveLength(0);
-  });
-
-  it("happy path — valid HTTPS URL passes", () => {
-    const model = baseModel({
-      basic: { ...baseModel().basic, webhookUrl: "https://example.com/hook" },
-    });
-    const result = validateTestEditor(model);
-    const urlErrors = result.errors.filter((e) => e.field === "basic.webhookUrl");
-    expect(urlErrors).toHaveLength(0);
-  });
-
-  it("sad path — malformed URL produces invalid_url error", () => {
+describe("снятый «Webhook URL»", () => {
+  it("значение, оставшееся в модели, не блокирует сохранение", () => {
+    // Поля в форме больше нет: ошибка по нему была бы невидимой и держала бы тест
+    // несохраняемым без объяснения.
     const model = baseModel({
       basic: { ...baseModel().basic, webhookUrl: "not-a-url" },
     });
     const result = validateTestEditor(model);
-    expect(result.errors).toContainEqual(
-      expect.objectContaining({
-        field: "basic.webhookUrl",
-        code: "invalid_url",
-        severity: "error",
-      }),
-    );
+    expect(result.errors.filter((e) => e.field === "basic.webhookUrl")).toHaveLength(0);
   });
 });
 

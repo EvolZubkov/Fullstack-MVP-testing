@@ -60,7 +60,6 @@ const ROUND_TRIP_SOURCE = {
   protectionWatermark: true,
   protectionHideOnBlur: false,
   telemetryEnabled: true,
-  webhookUrl: "https://example.test/hook",
   flowPolicyJson: { mode: "linear_by_topics", router: { completionPolicy: "all_required_passed" } },
   retakePolicyJson: {
     enabled: true,
@@ -295,6 +294,22 @@ describe("реестр листа «Настройки»", () => {
     expect(draft.plugin.key).toBe("custom_x");
   });
 
+  it("снятый параметр «Webhook URL» из старой книги пропускается без ошибки", () => {
+    // Книги, выгруженные до 2026-09-30, несут эту строку. Ошибка на каждой из них была бы
+    // шумом, а значение больше некуда писать: адрес телеметрии — настройка установки.
+    const { draft, errors } = parseSettingsSheet([
+      row("Webhook URL", "https://example.test/hook"),
+      row("Отправлять телеметрию о прохождении", "Да"),
+    ]);
+    expect(errors).toEqual([]);
+    expect(draft.test).not.toHaveProperty("webhookUrl");
+    expect(draft.test.telemetryEnabled).toBe(true);
+  });
+
+  it("выгрузка не несёт строки «Webhook URL»", () => {
+    expect(SETTING_PARAM_NAMES).not.toContain("Webhook URL");
+  });
+
   it("перечисление принимает и хранимое значение, а не только метку", () => {
     const { draft, errors } = parseSettingsSheet([row("Тип общего правила", "percent")]);
     expect(errors).toEqual([]);
@@ -365,7 +380,6 @@ describe("реестр листа «Настройки»", () => {
       protectionWatermark: true,
       protectionHideOnBlur: false,
       telemetryEnabled: true,
-      webhookUrl: "https://example.test/hook",
       passDecisionPolicy: "required_topics_only",
       lmsAttemptResult: "best",
       breakdownGateEnabled: true,

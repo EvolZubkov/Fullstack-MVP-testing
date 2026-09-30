@@ -615,7 +615,6 @@ export const SETTING_PARAMS: SettingParam[] = [
   intParam("Интервал, часов", (s) => branch(s.retakePolicyJson, "attemptInterval").hours, "attemptInterval", "hours", { min: 1, max: 8760 }),
 
   // ── Integration ──
-  textParam("Webhook URL", (s) => s.webhookUrl, "test", "webhookUrl"),
   boolParam("Отправлять телеметрию о прохождении", (s) => s.telemetryEnabled, "test", "telemetryEnabled"),
   // Действует только в SCORM-пакете: в вебе внешней системы нет, и попытки показываются
   // каждая сама по себе.
@@ -665,6 +664,16 @@ for (const param of SETTING_PARAMS) {
   }
 }
 
+/**
+ * Параметры, снятые с листа. Книга, выгруженная до снятия, несёт их строкой, и такая строка
+ * пропускается молча: ошибка «неизвестный параметр» на каждой старой книге была бы шумом о
+ * том, что автор ничего не сделал не так.
+ *
+ * «Webhook URL» снят 2026-09-30: рантайм пакета его никогда не читал, а адрес, куда пакет
+ * шлёт данные, — адрес телеметрии из конфигурации установки, а не настройка теста.
+ */
+const RETIRED_PARAM_NAMES = new Set(["Webhook URL"].map(normalizeCell));
+
 /** Export: one row per registry parameter, always all of them. */
 export function serializeSettingsRows(src: SettingsSource): Record<string, unknown>[] {
   return SETTING_PARAMS.map((p) => ({ [PARAM_COL]: p.name, [VALUE_COL]: p.read(src) }));
@@ -692,6 +701,7 @@ export function parseSettingsSheet(rows: Record<string, unknown>[]): {
       errors.push(`${where}: не указан «${PARAM_COL}»`);
       return;
     }
+    if (RETIRED_PARAM_NAMES.has(normalizeCell(name))) return;
     const param = PARAM_BY_NAME.get(normalizeCell(name));
     if (!param) {
       errors.push(`${where}: неизвестный параметр: "${name}"`);

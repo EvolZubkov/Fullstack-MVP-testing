@@ -712,8 +712,6 @@ export const t = {
     overallPassCriteria: "Общие критерии прохождения",
     overallPassType: "Тип прохождения",
     overallPassValue: "Значение",
-    webhookUrl: "URL вебхука (опционально)",
-    webhookUrlDescription: "URL для отправки результатов после завершения теста",
     feedback: "Обратная связь",
     feedbackPlaceholder: "Комментарий к тесту (показывается в результатах)",
     timeLimit: "Ограничение времени (минуты)",

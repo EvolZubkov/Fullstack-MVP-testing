@@ -8,7 +8,7 @@
  * range), FR-14 (percent range), FR-15* (absolute pass rules), FR-15a (valid
  * policy), FR-15g (forbidden combination), FR-16 (adaptive difficulty range),
  * FR-17 (adaptive questions count), FR-18 (adaptive pass threshold), FR-19
- * (adaptive link completeness), FR-20 (webhook URL format).
+ * (adaptive link completeness). FR-20 (webhook URL format) снят вместе с полем.
  */
 import {
   sectionDrawsAll,
@@ -34,14 +34,6 @@ const VALID_PASS_DECISION_POLICIES: PassDecisionPolicy[] = [
   "all_topics_passed",
 ];
 
-function isValidHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
 
 /**
  * A section's maximum attainable points (Σ question points). PRD-10: an absolute
@@ -215,16 +207,6 @@ export function validateTestEditor(
       code: "forbidden_combination",
       message:
         'Cannot use "all_topics_passed" when overall pass type is "none" and any topic inherits the overall rule.',
-      severity: "error",
-    });
-  }
-
-  // FR-20: webhook URL must be a valid HTTP/HTTPS URL when provided
-  if (model.basic.webhookUrl !== "" && !isValidHttpUrl(model.basic.webhookUrl)) {
-    errors.push({
-      field: "basic.webhookUrl",
-      code: "invalid_url",
-      message: "Адрес вебхука должен начинаться с http:// или https://.",
       severity: "error",
     });
   }

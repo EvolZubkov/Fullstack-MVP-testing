@@ -26,7 +26,7 @@ import { buildScormExportData, ScormBuildError } from "../scorm/build-export-dat
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { DEFAULT_TEMPLATE_ID } from "../services/template-rebind";
 import { logger } from "../logger";
-import { appBaseUrl } from "../config";
+import { telemetryBaseUrl } from "../config";
 import {
   testSettingsService,
   VersionConflictError,
@@ -1548,15 +1548,27 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     const data = await buildScormExportData(req.params.id, { source: "export" });
     const test = data.test;
 
-    // Telemetry configuration (request-specific): an opt-in flag creates a
-    // scorm_package record so the in-LMS package can post back telemetry.
+    // Телеметрия включается НАСТРОЙКОЙ ТЕСТА («Интеграция» → «Отправлять телеметрию о
+    // прохождении»), а адрес приёма — настройка УСТАНОВКИ (`scorm.telemetryBaseUrl`). Параметр
+    // запроса `?telemetry=true` больше не читается: интерфейс его никогда не передавал, и
+    // настройка теста до этого не влияла на пакет вовсе. У опубликованного теста флаг берётся
+    // из той же редакции, из которой собирается пакет.
     let telemetryConfig = null;
-    const enableTelemetry = req.query.telemetry === "true";
+    const enableTelemetry = test.telemetryEnabled === true;
 
     if (enableTelemetry) {
+      const apiBaseUrl = telemetryBaseUrl();
+      if (!apiBaseUrl) {
+        // Без адреса пакет отправлял бы данные в никуда, а автор узнал бы об этом только по
+        // пустой аналитике. Отказ до записи `scorm_packages`: пакета, который никуда не шлёт,
+        // в реестре быть не должно.
+        return res.status(422).json({
+          error: "Телеметрия включена в настройках теста, но адрес приёма телеметрии не задан в конфигурации системы (scorm.telemetryBaseUrl или server.appUrl)",
+          field: "telemetryBaseUrl",
+        });
+      }
       const packageId = crypto.randomUUID();
       const secretKey = crypto.randomBytes(32).toString("hex");
-      const apiBaseUrl = appBaseUrl();
 
       // Create scorm_package record
       await storage.createScormPackage({

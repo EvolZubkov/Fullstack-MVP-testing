@@ -7,7 +7,7 @@
  *   session-injecting middleware) is copied from tests/routes.tests.test.ts and
  *   extended with the access/owner/scope storage methods those branches touch.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import session from "express-session";
@@ -127,6 +127,7 @@ vi.mock("../server/services/test-settings", async (importOriginal) => {
 });
 
 import testsRouter from "../server/routes/tests";
+import { config } from "../server/config";
 import { ScormBuildError } from "../server/scorm/build-export-data";
 import { FlowPolicyValidationError } from "../server/services/flow-policy-validator";
 
@@ -689,12 +690,57 @@ describe("GET /api/tests/:id/export/scorm", () => {
     expect(storageMock.createScormPackage).not.toHaveBeenCalled();
   });
 
-  it("200 creates a scorm_package record when telemetry=true", async () => {
+  it("ignores ?telemetry=true when the test's setting is off", async () => {
+    // Раньше телеметрию включал только параметр запроса, который интерфейс не передавал;
+    // теперь решает настройка теста, и параметр не читается вовсе.
     const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm?telemetry=true"));
     expect(res.status).toBe(200);
-    expect(storageMock.createScormPackage).toHaveBeenCalledTimes(1);
-    const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: { enabled: boolean } | null }];
-    expect(payload.telemetry?.enabled).toBe(true);
+    expect(storageMock.createScormPackage).not.toHaveBeenCalled();
+    const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: unknown }];
+    expect(payload.telemetry).toBeNull();
+  });
+
+  describe("telemetry enabled in the test settings", () => {
+    const saved = { ...config.scorm, appUrl: config.server.appUrl };
+    beforeEach(() => {
+      buildExportMock.mockResolvedValue({
+        test: { id: "test1", title: "My Test", mode: "standard", telemetryEnabled: true },
+      });
+    });
+    afterEach(() => {
+      config.scorm.telemetryBaseUrl = saved.telemetryBaseUrl;
+      config.server.appUrl = saved.appUrl;
+    });
+
+    it("bakes the address from the system configuration", async () => {
+      config.scorm.telemetryBaseUrl = "https://telemetry.example";
+      config.server.appUrl = "https://app.example";
+      const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm"));
+      expect(res.status).toBe(200);
+      expect(storageMock.createScormPackage).toHaveBeenCalledTimes(1);
+      const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: { enabled: boolean; apiBaseUrl: string } | null }];
+      expect(payload.telemetry?.enabled).toBe(true);
+      expect(payload.telemetry?.apiBaseUrl).toBe("https://telemetry.example");
+    });
+
+    it("falls back to server.appUrl when the telemetry address is empty", async () => {
+      config.scorm.telemetryBaseUrl = "";
+      config.server.appUrl = "https://app.example";
+      const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm"));
+      expect(res.status).toBe(200);
+      const [payload] = generateScormMock.mock.calls[0] as [{ telemetry: { apiBaseUrl: string } | null }];
+      expect(payload.telemetry?.apiBaseUrl).toBe("https://app.example");
+    });
+
+    it("422 and no package record when no address is configured at all", async () => {
+      config.scorm.telemetryBaseUrl = "";
+      config.server.appUrl = "";
+      const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm"));
+      expect(res.status).toBe(422);
+      expect(res.body.field).toBe("telemetryBaseUrl");
+      expect(storageMock.createScormPackage).not.toHaveBeenCalled();
+      expect(generateScormMock).not.toHaveBeenCalled();
+    });
   });
 });
 

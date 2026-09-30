@@ -98,6 +98,17 @@ export interface AppConfig {
      */
     exposureWindowMonths: number;
   };
+  /** Пакет SCORM: то, что относится к установке, а не к отдельному тесту. */
+  scorm: {
+    /**
+     * Базовый адрес, на который пакет с включённой телеметрией отправляет данные
+     * (`<адрес>/api/scorm-telemetry/...`). Пустая строка — берётся `server.appUrl`.
+     *
+     * Живёт в конфигурации установки, а не в настройках теста: принимает телеметрию эта
+     * система, и адрес у неё один для всех тестов. Тест решает только, включена ли она.
+     */
+    telemetryBaseUrl: string;
+  };
   /** Operational ceilings that an installation may tune without a code change. */
   limits: {
     /** Maximum rows accepted from one uploaded workbook (participants and users import). */
@@ -215,6 +226,7 @@ export function shape(raw: Record<string, unknown>): AppConfig {
   const analytics = asRecord(raw.analytics);
   const lmsImport = asRecord(analytics.lmsImport);
   const delivery = asRecord(raw.delivery);
+  const scorm = asRecord(raw.scorm);
 
   return {
     log: {
@@ -260,6 +272,9 @@ export function shape(raw: Record<string, unknown>): AppConfig {
       // целиком — такое значение не принимается, а не «работает как задано».
       exposureWindowMonths: asPositiveInt(delivery.exposureWindowMonths, 12),
     },
+    scorm: {
+      telemetryBaseUrl: asString(scorm.telemetryBaseUrl, "").trim().replace(/\/$/, ""),
+    },
     limits: {
       participantsImportMaxRows: asNumber(limits.participantsImportMaxRows, 500),
       passwordEmailsPerHour: asNumber(limits.passwordEmailsPerHour, 3),
@@ -304,4 +319,15 @@ export function appBaseUrl(): string {
   if (config.server.appUrl) return config.server.appUrl;
   const port = process.env.PORT ?? String(config.server.port);
   return `http://localhost:${port}`;
+}
+
+/**
+ * Адрес приёма телеметрии SCORM: `scorm.telemetryBaseUrl`, иначе `server.appUrl`.
+ *
+ * `null` — адрес не задан. Запасного `localhost`, как у {@link appBaseUrl}, здесь нет
+ * намеренно: пакет уходит в LMS на чужой машине, и запечённый туда `localhost` молча
+ * отправлял бы данные в никуда.
+ */
+export function telemetryBaseUrl(): string | null {
+  return config.scorm.telemetryBaseUrl || config.server.appUrl || null;
 }

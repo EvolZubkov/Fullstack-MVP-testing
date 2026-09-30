@@ -12,7 +12,7 @@
  *                            closeSectionOnLeave (PRD-67) and the retake block
  *                            (PRD-6/31/40: cooldown + attempt interval), which
  *                            used to be a rail item of its own
- *   - «Интеграция»        — webhookUrl, telemetryEnabled
+ *   - «Интеграция»        — telemetryEnabled (адрес приёма — в конфигурации системы)
  *   - «Правила прохождения» — passDecisionPolicy + per-topic pass rules
  *   - «Адаптивный режим»   — adaptive levels editor (hidden when mode !== "adaptive")
  *
@@ -1117,27 +1117,6 @@ function RetakeBlock({ model, updateModel }: SettingsSectionProps) {
 export function IntegrationPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
   return (
     <FormSection title="Интеграция" stacked>
-      <div className="ou-formfield" data-field="basic.webhookUrl">
-        <Input
-          id="settings-webhook"
-          size="m"
-          fullWidth
-          label="Webhook URL"
-          type="url"
-          value={model.basic.webhookUrl}
-          placeholder="https://some-lms.example.ru/hooks/scorm"
-          error={fieldErrors.get("basic.webhookUrl")}
-          onChange={(e) => {
-            const value = e.target.value;
-            updateModel((m) => ({
-              ...m,
-              basic: { ...m.basic, webhookUrl: value },
-            }));
-          }}
-          data-testid="settings-webhook-input"
-        />
-      </div>
-
       <div className="ou-formfield">
         <Switch
           label="Отправлять телеметрию о прохождении"
@@ -1150,6 +1129,15 @@ export function IntegrationPane({ model, updateModel, fieldErrors = EMPTY_FIELD_
             }));
           }}
           data-testid="settings-telemetry-checkbox"
+        />
+        {/* Адреса здесь нет намеренно: принимает телеметрию эта система, и адрес у неё один на
+            установку (`scorm.telemetryBaseUrl` в конфигурации). Тест решает только, включена ли. */}
+        <Banner
+          tone="info"
+          size="sm"
+          icon={false}
+          description="Пакет SCORM отправляет данные о прохождениях в эту систему — они появятся в аналитике теста. Настройка действует на пакеты, выгруженные после её изменения."
+          data-testid="settings-telemetry-note"
         />
       </div>
 

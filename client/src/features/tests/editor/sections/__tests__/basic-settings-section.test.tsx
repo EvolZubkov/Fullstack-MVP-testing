@@ -9,7 +9,7 @@
  *     the editor draft via updateModel.
  *   - Limits pane: timeLimitMinutes / maxAttempts (number or null) +
  *     showCorrectAnswers checkbox + the retake block (PRD-6).
- *   - Integration pane: webhookUrl + telemetryEnabled.
+ *   - Integration pane: telemetryEnabled (адреса в форме нет — он в конфигурации системы).
  *   - Pass-rules pane: decisionPolicy / overall rule / per-topic source.
  *   - Adaptive pane: mode warning, master toggle, per-topic accordion +
  *     level CRUD (add / edit / remove) + level links CRUD.
@@ -519,16 +519,11 @@ describe("<LimitsPane /> — «Ограничения»", () => {
 // ─── Integration pane bindings ────────────────────────────────────────────────
 
 describe("<IntegrationPane /> — «Интеграция»", () => {
-  it("updates webhookUrl from input", () => {
-    const updateModel = vi.fn();
-    const model = baseModel();
-    render(<IntegrationPane model={model} updateModel={updateModel} />);
-    fireEvent.change(screen.getByTestId("settings-webhook-input"), {
-      target: { value: "https://example.com/webhook" },
-    });
-    expect(runUpdater(updateModel, model).basic.webhookUrl).toBe(
-      "https://example.com/webhook",
-    );
+  it("не предлагает адреса: он задаётся в конфигурации системы", () => {
+    render(<IntegrationPane model={baseModel()} updateModel={vi.fn()} />);
+    expect(screen.queryByTestId("settings-webhook-input")).toBeNull();
+    expect(screen.queryByLabelText(/webhook/i)).toBeNull();
+    expect(screen.getByTestId("settings-telemetry-note")).toBeTruthy();
   });
 
   it("toggles telemetryEnabled via checkbox", () => {

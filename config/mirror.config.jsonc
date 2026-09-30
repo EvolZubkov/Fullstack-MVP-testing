@@ -63,6 +63,8 @@
       "anonymizeParticipants": true
     }
   },
+  // Пакет SCORM: адрес приёма телеметрии — см. config/config.jsonc. Пусто -> server.appUrl (APP_URL зеркала).
+  "scorm": { "telemetryBaseUrl": "" },
   // Operational ceilings — see config/config.jsonc for what each one bounds.
   "limits": { "participantsImportMaxRows": 500, "passwordEmailsPerHour": 3, "shortAnswerMaxLength": 250, "answerCheckBudgetMs": 1000, "answerCheckWarnMs": 200 }
 }

@@ -452,8 +452,11 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   // unresolved reference is a ReferenceError as soon as the learner reaches that screen.
   // Removing the call sites by regex instead is what used to leave that hole: a form the
   // pattern did not anticipate (`Telemetry.finish(results)`) survived the strip.
+  //
+  // Telemetry ON reads the runtime STRICTLY: a missing file must fail the build, not ship a
+  // package that silently sends nothing and leaves `Telemetry` unbound.
   const telemetryJs = telemetryEnabled
-    ? tryReadAsset(["app/telemetry/telemetry.js"])
+    ? readOneOf(["app/telemetry/telemetry.js"])
     : readOneOf(["app/telemetry/telemetry-disabled.js"]);
 
   // PRD-12 (2-7): shared template runtime bundled from `@shared` and exposed as the

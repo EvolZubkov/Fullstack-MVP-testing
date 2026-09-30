@@ -31,11 +31,11 @@ function question(id: string) {
   };
 }
 
-function buildFixture(testId: string, telemetry: unknown) {
+function buildFixture(testId: string, telemetry: unknown, webhookUrl: string | null = null) {
   const topic = { id: TOPIC_ID, name: "Тема", description: "", feedback: null, createdAt: new Date(), updatedAt: new Date() };
   const test = {
     id: testId, title: "Тест", description: "", mode: "standard",
-    showDifficultyLevel: true, overallPassRuleJson: { type: "percent", value: 70 }, webhookUrl: null,
+    showDifficultyLevel: true, overallPassRuleJson: { type: "percent", value: 70 }, webhookUrl,
     feedback: null, timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: true,
     startPageContent: null, published: true, status: "published", folderId: null,
     designSettingsJson: { templateId: "default", params: {} }, retakePolicyJson: null,
@@ -54,9 +54,9 @@ function buildFixture(testId: string, telemetry: unknown) {
   };
 }
 
-async function buildAppJs(telemetry: unknown, testId: string) {
+async function buildAppJs(telemetry: unknown, testId: string, webhookUrl: string | null = null) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buffer = await generateScormPackage(buildFixture(testId, telemetry) as any);
+  const buffer = await generateScormPackage(buildFixture(testId, telemetry, webhookUrl) as any);
   const zip = await JSZip.loadAsync(buffer);
   return await zip.file("app.js")!.async("string");
 }
@@ -67,6 +67,12 @@ const TELEMETRY_ON = {
   secretKey: "secret",
   apiBaseUrl: "https://telemetry.example",
 };
+
+/** TEST_DATA, запечённый в пакет. */
+function testDataOf(appjs: string) {
+  const b64 = (appjs.match(/var b64 = "([A-Za-z0-9+/=]+)"/) || [])[1]!;
+  return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+}
 
 /** Strings that exist only inside the real telemetry runtime. */
 const RUNTIME_MARKERS = ["/api/scorm-telemetry/", "offlineBuffer", "sendBeacon", "crypto.subtle"];
@@ -124,5 +130,25 @@ describe("SCORM package — telemetry bundling", () => {
     const b64 = (appjs.match(/var b64 = "([A-Za-z0-9+/=]+)"/) || [])[1]!;
     const td = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
     expect(td.telemetry).toBeUndefined();
+  });
+
+  it("bakes the configured receiving address when enabled", async () => {
+    const td = testDataOf(await buildAppJs(TELEMETRY_ON, "telemetry-on-testdata"));
+    expect(td.telemetry).toEqual({
+      enabled: true,
+      packageId: "pkg-1",
+      secretKey: "secret",
+      apiBaseUrl: "https://telemetry.example",
+    });
+  });
+
+  it("carries no sending address of any kind when disabled", async () => {
+    // У теста мог остаться старый «Webhook URL» из снятой настройки — в пакет он не едет.
+    const appjs = await buildAppJs(null, "telemetry-off-address", "https://hooks.example/scorm");
+    const td = testDataOf(appjs);
+    expect(td).not.toHaveProperty("telemetry");
+    expect(td).not.toHaveProperty("webhookUrl");
+    expect(appjs).not.toContain("hooks.example");
+    expect(appjs).not.toContain("telemetry.example");
   });
 });
