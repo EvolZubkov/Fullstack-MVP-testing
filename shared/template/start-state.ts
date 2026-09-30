@@ -21,6 +21,7 @@ import type { CtxCourse, CtxState, CtxStartCooldown } from "./context";
 import { buildCourseSubtitle } from "./course-subtitle";
 import { formatMinutesHuman } from "./duration";
 import { richTextToHtml, type RichTextFormat } from "./rich-text";
+import { buildCoursePassCondition, type PassConditionSection } from "./pass-condition";
 
 /** Test info shown on the start screen (maps to `course.*`). */
 export interface StartInfo {
@@ -55,6 +56,12 @@ export interface StartInfo {
    * condition. Absent — a host or a test that predates the policy: shown as before.
    */
   passDecisionPolicy?: string | null;
+  /**
+   * `tests.overall_pass_rule_json` and the sections — what the topic part of the pass
+   * condition (`course.passCondition`) is counted from. Absent — no topic tile.
+   */
+  overallPassRule?: unknown;
+  sections?: PassConditionSection[] | null;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   startPageContent?: string;
@@ -192,6 +199,9 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
   }
 
   const i = input.info;
+  // The topic tile of the cover: a measurement method has no condition to state at all.
+  const passCondition =
+    i.hasGradedContent === false ? null : buildCoursePassCondition(i.passDecisionPolicy, i.overallPassRule, i.sections);
   const course: CtxCourse = {
     title: i.title,
     // Header subtitle "Попытка N из M": the upcoming attempt is one past those
@@ -224,6 +234,9 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
     startPageContent: i.startPageContent || "",
     // Only when true: a test without the setting keeps exactly the context it had.
     ...(i.closesOnLeave === true ? { closesOnLeave: true } : {}),
+    // Only when the topics decide: a test under «Только общий результат» keeps exactly
+    // the context it had.
+    ...(passCondition ? { passCondition } : {}),
   };
 
   return { course, state };

@@ -152,6 +152,10 @@ function buildScormStartContext() {
       hasGradedContent: TEST_DATA.hasGradedContent !== false,
       // «Тест пройден, если»: when the topics decide, the overall threshold is not shown.
       passDecisionPolicy: TEST_DATA.passDecisionPolicy,
+      // …and the cover names the topic condition instead, counted from the same rules.
+      overallPassRule: TEST_DATA.overallPassRule,
+      // An adaptive test passes by its levels, not by topic thresholds.
+      sections: TEST_DATA.mode === 'adaptive' ? [] : (TEST_DATA.sections || []),
       timeLimitMinutes: TEST_DATA.timeLimitMinutes,
       maxAttempts: TEST_DATA.maxAttempts,
       // PRD-7 S10: startPageContent migrated to an intro content page; not shown here.

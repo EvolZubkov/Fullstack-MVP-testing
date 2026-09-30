@@ -22,6 +22,7 @@ import type { CtxMeasureView } from "./measure-view";
 import type { CtxScalesChart } from "./scales-chart";
 import type { CtxScaleBars } from "./scale-bars";
 import type { CtxRecommendations } from "./recommendations";
+import type { CtxCoursePassCondition } from "./pass-condition";
 
 /** Test-level info shown on the start screen and as the screen title (`course.*`). */
 export interface CtxCourse {
@@ -66,6 +67,13 @@ export interface CtxCourse {
    * The hosts already warn with their own notices; the shipped layouts do not print it.
    */
   closesOnLeave?: boolean;
+  /**
+   * The topic part of the pass condition when the «Тест пройден, если» policy makes the
+   * topics decide: `{ count, total, kind, countLabel, label }` — the cover tile «8 из 8 /
+   * обязательных тем для прохождения». Absent under «Только общий результат», for a
+   * measurement method and when no topic carries a threshold. Contract 3.14.0.
+   */
+  passCondition?: CtxCoursePassCondition;
 }
 
 /** A recommended course/event link for failed-topic guidance (SCORM-extra). */
@@ -679,6 +687,22 @@ export interface CtxSectionIntro {
   hasIllustration: boolean;
   /** «Далее» action label. */
   continueLabel: string;
+  /**
+   * The threshold of this topic, ready to print: «Для прохождения: 70 %» /
+   * «Для прохождения: 7 баллов из 10» (by the DELIVERED variant). Empty string when the
+   * topic is not gated — the layout gates the line on the string. Contract 3.14.0.
+   */
+  passCondition?: string;
+  /**
+   * The topic is one the test verdict depends on («Обязательная тема»): set only under the
+   * «…обязательные темы» policies and only for a gated topic. Contract 3.14.0.
+   */
+  isRequired?: boolean;
+  /**
+   * System warning when the section has its own time limit: the countdown starts on the
+   * continue button and cannot be paused. Empty string without a limit. Contract 3.14.0.
+   */
+  timerWarning?: string;
 }
 
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */

@@ -67,6 +67,7 @@ import { t } from "@/lib/i18n";
 import { reportClientError } from "@/lib/report-error";
 import { useAuth } from "@/lib/auth";
 import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
+import type { ResolvedRule } from "@shared/scoring/pass-rule";
 
 /**
  * Вопрос попытки: строка банка плюс ЭФФЕКТИВНАЯ цена ответа этого теста
@@ -153,6 +154,34 @@ export function contentPagesBetween(
     if (item.kind === "content" && !item.isRouter) pages.push(item.page as RenderableContentPage);
   }
   return pages;
+}
+
+/** One section's pass condition as the server resolved it for this attempt. */
+interface SectionCondition {
+  passRule: ResolvedRule | null;
+  possiblePoints: number;
+  required: boolean;
+}
+
+/** The pass conditions of the delivered sections, keyed by topic, and the verdict policy. */
+interface SectionConditionsState {
+  policy: string | null;
+  byTopic: Record<string, SectionCondition>;
+}
+
+const NO_SECTION_CONDITIONS: SectionConditionsState = { policy: null, byTopic: {} };
+
+/**
+ * Reads `sectionConditions` / `passDecisionPolicy` off a start or resume attempt payload.
+ * Absent (an older server) — no conditions, and the section intro renders as before.
+ */
+export function readSectionConditions(payload: unknown): SectionConditionsState {
+  const p = (payload ?? {}) as { sectionConditions?: unknown; passDecisionPolicy?: unknown };
+  const byTopic =
+    p.sectionConditions && typeof p.sectionConditions === "object"
+      ? (p.sectionConditions as Record<string, SectionCondition>)
+      : {};
+  return { policy: typeof p.passDecisionPolicy === "string" ? p.passDecisionPolicy : null, byTopic };
 }
 
 interface FlatQuestion {
@@ -330,6 +359,10 @@ type TestMetadata = {
   passPercent: number | null;
   /** «Тест пройден, если» — decides whether the overall threshold is a condition at all. */
   passDecisionPolicy: string | null;
+  /** `tests.overall_pass_rule_json` — resolves the «как у теста» topic rules. */
+  overallPassRule: unknown;
+  /** Section obligations and topic rules — what the cover's topic condition counts. */
+  passSections: Array<{ required: boolean | null; topicPassRule: unknown }>;
   /** Whether the test grades anything (false ⇒ measurement method, no pass threshold). */
   hasGradedContent: boolean;
   hasInProgress: boolean;
@@ -370,6 +403,11 @@ function buildTestMetadataFromListEntry(test: any): TestMetadata {
     startPageContent: test.startPageContent || null,
     passPercent,
     passDecisionPolicy: test.passDecisionPolicy ?? null,
+    overallPassRule: test.overallPassRuleJson ?? null,
+    passSections: (test.sections ?? []).map((s: any) => ({
+      required: s.required ?? null,
+      topicPassRule: s.topicPassRuleJson ?? null,
+    })),
     // Absent on a payload from a server that predates the flag ⇒ treat as grading,
     // i.e. exactly the behaviour this screen had before.
     hasGradedContent: test.hasGradedContent !== false,
@@ -481,6 +519,10 @@ export default function TakeTestPage() {
     /** PRD-4 v1.1 §4.7 router gating; `null` outside router mode. */
     routerPolicy: RouterPolicyPayload | null;
   }>({ flowMode: "linear_flat", contentPages: [], routerPolicy: null });
+  // The pass condition each «Введение раздела» states — resolved by the server against the
+  // delivered variant (the learner host has no prices), plus the «Тест пройден, если» policy
+  // that decides the «Обязательная тема» mark. Empty on an attempt served by an older server.
+  const [sectionConditions, setSectionConditions] = useState<SectionConditionsState>(NO_SECTION_CONDITIONS);
   const [contentTpl, setContentTpl] = useState<ContentScreenTemplate | null>(null);
   const [pageQueue, setPageQueue] = useState<RenderableContentPage[]>([]);
   /** Section order from the variant — the anchor for the per-topic zones. */
@@ -1329,6 +1371,7 @@ export default function TakeTestPage() {
         contentPages: (data.attempt.contentPages as FlowContentPage[]) ?? [],
         routerPolicy: (data.attempt.routerPolicy as RouterPolicyPayload | undefined) ?? null,
       });
+      setSectionConditions(readSectionConditions(data.attempt));
       setSections(
         (variant.sections || []).map((s: any) => ({
           topicId: s.topicId,
@@ -1508,7 +1551,8 @@ export default function TakeTestPage() {
       routerPolicy: (data.routerPolicy as RouterPolicyPayload | undefined) ?? null,
     };
     setFlowStructure(structure);
-    const variantSections = (variant.sections || []).map((s: any) => ({
+    setSectionConditions(readSectionConditions(data));
+    const variantSections =(variant.sections || []).map((s: any) => ({
       topicId: s.topicId,
       // PRD-4 v1.1 §4.7: obligation rides on the delivered section, as it does in
       // TEST_DATA.sections. Absent on an attempt started before it shipped ⇒ required.
@@ -2858,6 +2902,11 @@ export default function TakeTestPage() {
             sectionsTotal: sections.length,
             courseTitle: testInfo?.title || attempt?.testTitle || "",
             instruction: String((page.valuesJson?.values as any)?.instruction ?? ""),
+            // The threshold of this topic by the delivered variant, resolved server-side.
+            passRule: sectionConditions.byTopic[introTopicId]?.passRule ?? null,
+            possiblePoints: sectionConditions.byTopic[introTopicId]?.possiblePoints ?? null,
+            required: sectionConditions.byTopic[introTopicId]?.required ?? null,
+            passDecisionPolicy: sectionConditions.policy,
           })
         : undefined;
     return (
@@ -2954,6 +3003,10 @@ export default function TakeTestPage() {
         questionCount: testMode === "adaptive" ? undefined : testMetadata.totalQuestions,
         passPercent: testMetadata.passPercent,
         passDecisionPolicy: testMetadata.passDecisionPolicy,
+        // The topic condition of the cover, counted from the same rules the grader applies.
+        // An adaptive test passes by its levels, not by topic thresholds.
+        overallPassRule: testMetadata.overallPassRule,
+        sections: testMode === "adaptive" ? [] : testMetadata.passSections,
         hasGradedContent: testMetadata.hasGradedContent,
         timeLimitMinutes: testMetadata.timeLimitMinutes,
         maxAttempts: testMetadata.maxAttempts,

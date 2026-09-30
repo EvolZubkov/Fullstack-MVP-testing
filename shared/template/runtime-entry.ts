@@ -69,6 +69,13 @@ export { lmsScoreFor } from "../scoring/lms-score";
 export { checkRuleSet, hasRules, normalizeForCompare } from "../answer-check";
 export { computeBreakdowns, sectionScope, TEST_SCOPE } from "../breakdown/compute";
 export { buildStartState } from "./start-state";
+// Условие прохождения на обложке и на вводной раздела: одна формулировка на оба хоста.
+export {
+  buildCoursePassCondition,
+  sectionPassConditionText,
+  sectionIsRequiredForVerdict,
+  sectionTimerWarningText,
+} from "./pass-condition";
 // PRD-22: the start illustration is a property of the START PAGE, with the branding
 // param as the fallback. Exported so the package resolves it through the SAME rule
 // the web host and the editor previews use.

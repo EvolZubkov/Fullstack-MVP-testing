@@ -367,6 +367,9 @@ body { background: var(--ou-bg-page); color: var(--ou-fg-default); }
   align-items: center; justify-content: safe center; text-align: center;
   gap: var(--ou-space-5);
 }
+/* A DS banner keeps its own left-aligned text inside the centred column (the timer
+   warning of the section intro). */
+.tb-scene__col--center .ou-banner { text-align: left; }
 .tb-scene__col--narrow { max-width: 640px; }
 .tb-scene__hero--s { font-size: 28px; }
 /* DS ring at a fixed diameter (the component does not size itself). */

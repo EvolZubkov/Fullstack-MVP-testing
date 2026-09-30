@@ -47,7 +47,8 @@ import {
 import { resolveResultsBlocks, type ResultsBlocks, type ResultsBlockSettings } from "./results-blocks";
 // PRD-29 §6.7 lives in the scoring layer, not here: the results screen was its first
 // reader, not its owner (see the two gates in `buildResultContext`).
-import { hasGradedScore as isGradedRun, hasPronouncedVerdict } from "../scoring/pass-rule";
+import { hasGradedScore as isGradedRun, hasPronouncedVerdict, type ResolvedRule } from "../scoring/pass-rule";
+import { sectionIsRequiredForVerdict, sectionPassConditionText, sectionTimerWarningText } from "./pass-condition";
 // PRD-61: КАКИЕ вводные тексты печатать — вопрос выдачи, и ответ на него один на оба хоста.
 // Лежит он в `shared/report`, потому что тот же ответ нужен внутри SCORM-пакета.
 import { introBlocksToPrint, type IntroBlockLike } from "../report/report-intro";
@@ -1531,6 +1532,17 @@ export interface SectionIntroInput {
   /** Author section illustration URL; non-empty → the illustration column shows. */
   illustration?: string | null;
   continueLabel?: string;
+  /**
+   * The topic rule resolved against the overall one and the DELIVERED variant
+   * (`resolveTopicRule`); `null`/absent — the topic is not gated, no condition line.
+   */
+  passRule?: ResolvedRule | null;
+  /** Σ prices of the delivered graded questions of the section; absent — unknown. */
+  possiblePoints?: number | null;
+  /** `test_sections.required`; absent — required. */
+  required?: boolean | null;
+  /** «Тест пройден, если» — decides whether the topic is marked «Обязательная тема». */
+  passDecisionPolicy?: string | null;
 }
 
 /**
@@ -1565,6 +1577,9 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
     illustrationUrl: illo,
     hasIllustration: illo.length > 0,
     continueLabel: input.continueLabel || "Далее",
+    passCondition: sectionPassConditionText(input.passRule, input.possiblePoints),
+    isRequired: sectionIsRequiredForVerdict(input.passDecisionPolicy, input.required, input.passRule),
+    timerWarning: sectionTimerWarningText(input.timeLimitMinutes, input.continueLabel || "Далее"),
   };
   if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
   return {

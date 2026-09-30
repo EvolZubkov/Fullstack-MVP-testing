@@ -183,6 +183,32 @@ describe("start attempt — router gating reaches the web host", () => {
   });
 });
 
+describe("start attempt — the section intro's pass condition reaches the web host", () => {
+  it("resolves each delivered topic's rule and the delivered points, with the policy", async () => {
+    storageMock.getTest.mockResolvedValue({
+      ...testRow({ mode: "linear_by_topics" }),
+      passDecisionPolicy: "required_topics_only",
+    });
+    storageMock.getTestSections.mockResolvedValue([
+      { topicId: "t1", drawCount: 1, topicPassRuleJson: { source: "custom", type: "absolute", value: 1 } },
+      { topicId: "t2", drawCount: 1, required: false, topicPassRuleJson: { source: "inherit_overall" } },
+    ]);
+    storageMock.getQuestionsByIds.mockImplementation(async (ids: string[]) =>
+      ids.map((id) => q(id, id.split("-")[0])),
+    );
+
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+
+    expect(res.status).toBe(201);
+    expect(res.body.passDecisionPolicy).toBe("required_topics_only");
+    expect(res.body.sectionConditions).toEqual({
+      // One delivered question at the system default price of 1 point.
+      t1: { passRule: { type: "count", value: 1 }, possiblePoints: 1, required: true },
+      t2: { passRule: { type: "percent", value: 70 }, possiblePoints: 1, required: false },
+    });
+  });
+});
+
 describe("start attempt — section obligation reaches the web host", () => {
   it("carries `required` per delivered section, optional stays optional", async () => {
     storageMock.getTest.mockResolvedValue(testRow({ mode: "router_by_topics" }));

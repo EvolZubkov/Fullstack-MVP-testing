@@ -14,6 +14,7 @@ import {
   type AggregateSection,
 } from "@shared/scoring/aggregate";
 import type { CorrectData, Answer } from "@shared/scoring/engine";
+import { resolveOverallRule, resolveTopicRule, type ResolvedRule } from "@shared/scoring/pass-rule";
 import { drawSection } from "@shared/draw/blueprint";
 import { computeWeights, weightedPick } from "@shared/draw/exposure";
 import { selectForm } from "@shared/draw/forms";
@@ -312,6 +313,63 @@ async function flowPayload(src: TestDataSource, test: Test) {
       hidden: p.hidden === true,
     })),
   };
+}
+
+/**
+ * The pass condition of each delivered section, for the «Введение раздела» screen of the
+ * web run: the topic rule resolved against the overall one and the DELIVERED variant, the
+ * Σ prices of the delivered graded questions, and the obligation. The same resolution the
+ * grader runs at finish (`aggregateStandardResult`), so the intro promises exactly the
+ * threshold the verdict will apply. Computed here because the learner host receives no
+ * prices unless the test shows correctness.
+ *
+ * Read through `src`, so a snapshot-pinned attempt states the PUBLISHED thresholds.
+ */
+async function sectionConditionsPayload(
+  src: TestDataSource,
+  testId: string,
+  variant: { sections?: Array<{ topicId: string; questionIds?: string[]; formId?: string }> } | null,
+  questions: Question[],
+): Promise<Record<string, { passRule: ResolvedRule | null; possiblePoints: number; required: boolean }>> {
+  // A line on an intro screen must never cost the learner the attempt start: on any
+  // failure the intro simply renders without a condition, as it did before.
+  try {
+    return await resolveSectionConditions(src, testId, variant, questions);
+  } catch (error) {
+    logger.warn("Условия прохождения разделов не рассчитаны — " + (error as Error).message);
+    return {};
+  }
+}
+
+/** The body of {@link sectionConditionsPayload}, without the failure guard. */
+async function resolveSectionConditions(
+  src: TestDataSource,
+  testId: string,
+  variant: { sections?: Array<{ topicId: string; questionIds?: string[]; formId?: string }> } | null,
+  questions: Question[],
+): Promise<Record<string, { passRule: ResolvedRule | null; possiblePoints: number; required: boolean }>> {
+  const test = await src.getTest(testId);
+  if (!test || !Array.isArray(variant?.sections)) return {};
+  const sections = await src.getTestSections(testId);
+  const scoring = await loadTestScoringContext(testId, src);
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const overall = resolveOverallRule(test.overallPassRuleJson);
+  const out: Record<string, { passRule: ResolvedRule | null; possiblePoints: number; required: boolean }> = {};
+  for (const vs of variant!.sections!) {
+    const section = sections.find((s) => s.topicId === vs.topicId);
+    let possiblePoints = 0;
+    for (const id of vs.questionIds ?? []) {
+      const q = byId.get(id);
+      // A measurement-only question brings no points to the grader, so none here either.
+      if (q && !isMeasurementOnly(q)) possiblePoints += scoring.resolve(q).points;
+    }
+    out[vs.topicId] = {
+      passRule: resolveTopicRule(section?.topicPassRuleJson ?? null, overall, { formId: vs.formId ?? null }),
+      possiblePoints,
+      required: section?.required ?? true,
+    };
+  }
+  return out;
 }
 
 /**
@@ -1037,6 +1095,9 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       // follows the same structure as the SCORM package.
       ...(await flowPayload(src, test)),
       questions: await questionsForClient(src, test, allQuestions),
+      // The threshold each section intro states (and the «Обязательная тема» mark).
+      sectionConditions: await sectionConditionsPayload(src, test.id, variant, allQuestions),
+      passDecisionPolicy: test.passDecisionPolicy ?? null,
     });
   } catch (error) {
     logger.error("Start attempt error: " + (error as Error).message);
@@ -1826,6 +1887,8 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
         // PRD-12 (FR-6): structure (content pages + flow mode) for the resumed run.
         ...(await flowPayload(src, test)),
         questions: await questionsForClient(src, test, allQuestions),
+        sectionConditions: await sectionConditionsPayload(src, test.id, variant, allQuestions),
+        passDecisionPolicy: test.passDecisionPolicy ?? null,
       },
       savedAnswers: inProgressAttempt.answersJson || {},
       currentIndex: variant.currentIndex || 0,

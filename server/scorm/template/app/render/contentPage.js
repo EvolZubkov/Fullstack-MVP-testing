@@ -181,11 +181,53 @@ function buildSectionIntroFallback(inp) {
     hasIllustration: illo.length > 0,
     continueLabel: inp.continueLabel || "Далее",
   };
+  // The pass-condition fields come from the bundle too; a bundle without them shows the
+  // intro as before (no condition line, no mark, no warning).
+  var TBx = (typeof window !== "undefined") ? window.TBTemplate : null;
+  if (TBx && typeof TBx.sectionPassConditionText === "function") {
+    sectionIntro.passCondition = TBx.sectionPassConditionText(inp.passRule, inp.possiblePoints);
+    sectionIntro.isRequired = TBx.sectionIsRequiredForVerdict(inp.passDecisionPolicy, inp.required, inp.passRule);
+    sectionIntro.timerWarning = TBx.sectionTimerWarningText(inp.timeLimitMinutes, sectionIntro.continueLabel);
+  }
   if (secTotal) sectionIntro.progressPercent = Math.round((secNum / secTotal) * 100);
   return {
     course: { title: inp.courseTitle || inp.topicName || "", subtitle: inp.subtitle || "" },
     sectionIntro: sectionIntro,
   };
+}
+
+/**
+ * The topic rule of a section, resolved the way computeSectionResult resolves it — against
+ * the overall rule and the DELIVERED variant. Null when the topic is not gated or the
+ * bundle lacks the resolver.
+ * @param {object} section  A TEST_DATA.sections entry.
+ * @returns {{type: string, value: number}|null}
+ */
+function sectionIntroPassRule(section) {
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  if (!TB || typeof TB.resolveTopicRule !== "function" || typeof TB.resolveOverallRule !== "function") return null;
+  var formId = (typeof deliveredFormId === "function") ? deliveredFormId(section.topicId) : null;
+  return TB.resolveTopicRule(section.topicPassRule, TB.resolveOverallRule(TEST_DATA.overallPassRule), { formId: formId });
+}
+
+/**
+ * Σ prices of the delivered GRADED questions of a topic — the «из M» of a points threshold.
+ * A measurement-only question brings no points to the grader, so none here either. Null
+ * when the run holds no questions of the topic yet.
+ * @param {string} topicId
+ * @returns {number|null}
+ */
+function sectionIntroPossiblePoints(topicId) {
+  var flat = (typeof state !== "undefined" && state && state.flatQuestions) || [];
+  var sum = 0, seen = false;
+  for (var i = 0; i < flat.length; i++) {
+    if (flat[i].topicId !== topicId) continue;
+    seen = true;
+    var q = flat[i].question;
+    if (typeof TBQType !== "undefined" && TBQType.isMeasurementOnly(q)) continue;
+    sum += q.points != null ? q.points : 1;
+  }
+  return seen ? sum : null;
 }
 
 function renderSectionIntro(page) {
@@ -225,6 +267,12 @@ function renderSectionIntro(page) {
     instruction: instruction,
     illustration: illustrationUrl,
     continueLabel: "Далее",
+    // The threshold of this topic, stated before the learner answers: the SAME rule the
+    // grader applies (computeSectionResult), by the variant actually delivered.
+    passRule: sectionIntroPassRule(section),
+    possiblePoints: sectionIntroPossiblePoints(section.topicId),
+    required: section.required,
+    passDecisionPolicy: (typeof TEST_DATA !== "undefined" ? TEST_DATA.passDecisionPolicy : null) || null,
   };
   var built = TB.buildSectionIntroContext
     ? TB.buildSectionIntroContext(introInput)

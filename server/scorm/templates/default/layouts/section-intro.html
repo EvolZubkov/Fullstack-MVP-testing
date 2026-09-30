@@ -23,11 +23,22 @@
     <div class="tb-scene__col tb-scene__col--center">
       <span class="tb-eyebrow">{{ sectionIntro.eyebrow }}</span>
       <h2 class="tb-scene__hero" data-path="sectionIntro.topicName"></h2>
+      {{#if sectionIntro.isRequired}}<span><span class="ou-tag ou-tag--neutral">Обязательная тема</span></span>{{/if}}
       {{#if sectionIntro.hasDescription}}<span class="tb-scene__lead" data-path="sectionIntro.description"></span>{{/if}}
       <div class="tb-meta-dots">
         <span class="tb-meta-dots__item"><span class="tb-meta-dots__dot" aria-hidden="true"></span>{{ sectionIntro.questionCountLabel }}</span>
         {{#if sectionIntro.hasTimeLimit}}<span class="tb-meta-dots__item"><span class="tb-meta-dots__dot" aria-hidden="true"></span>{{ sectionIntro.timeLimitLabel }}</span>{{/if}}
       </div>
+      {{#if sectionIntro.passCondition}}<span class="tb-scene__lead" data-path="sectionIntro.passCondition"></span>{{/if}}
+      {{#if sectionIntro.timerWarning}}
+      <div class="ou-banner ou-banner--sm ou-banner--subtle ou-banner--warning" role="note">
+        <span class="ou-banner__ico" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+        <div class="ou-banner__body">
+          <div class="ou-banner__title">Важно</div>
+          <div class="ou-banner__desc" data-path="sectionIntro.timerWarning"></div>
+        </div>
+      </div>
+      {{/if}}
       {{#if sectionIntro.hasInstruction}}
       <div class="tb-card">
         {{#if page.sectionSubtitle}}<span class="tb-card__head">{{ page.sectionSubtitle }}</span>{{/if}}

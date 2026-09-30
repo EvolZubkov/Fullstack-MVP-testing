@@ -30,6 +30,12 @@
               <div class="tb-facts__lbl">проходной балл</div>
             </div>
             {{/if}}
+            {{#if course.passCondition}}
+            <div class="tb-facts__item">
+              <div class="tb-facts__num" data-path="course.passCondition.countLabel"></div>
+              <div class="tb-facts__lbl" data-path="course.passCondition.label"></div>
+            </div>
+            {{/if}}
             {{#if course.timeLimitLabel}}
             <div class="tb-facts__item">
               <div class="tb-facts__num" data-path="course.timeLimitLabel"></div>

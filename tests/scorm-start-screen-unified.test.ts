@@ -203,6 +203,20 @@ describe("SCORM start screen — the overall threshold only when it decides", ()
     expect(rt.buildScormStartContext().course.passPercent).toBeNull();
   });
 
+  it("topics decide: the cover names the topic condition from the baked sections", () => {
+    const rt = makeRuntime({ maxAttempts: 1, attemptsUsed: 0, best: null, intervalAllowed: true });
+    Object.assign(rt.TEST_DATA, {
+      passPercent: 80,
+      passDecisionPolicy: "required_topics_only",
+      overallPassRule: { type: "percent", value: 80 },
+      sections: [
+        { topicId: "a", required: true, topicPassRule: { source: "custom", type: "absolute", value: 7 } },
+        { topicId: "b", required: false, topicPassRule: { source: "custom", type: "absolute", value: 7 } },
+      ],
+    });
+    expect(rt.buildScormStartContext().course.passCondition).toMatchObject({ countLabel: "1 из 1", kind: "required" });
+  });
+
   it("the overall result decides: the threshold is shown", () => {
     const rt = makeRuntime({ maxAttempts: 1, attemptsUsed: 0, best: null, intervalAllowed: true });
     Object.assign(rt.TEST_DATA, { passPercent: 80, passDecisionPolicy: "overall_and_required_topics" });
