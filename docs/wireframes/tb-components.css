@@ -3108,3 +3108,15 @@
 .tb-atom--code pre { margin: 0; }
 .tb-atom--formula,
 .tb-atom--blank { font-family: var(--ou-font-mono, monospace); font-size: 0.95em; }
+
+/* ─── Таблица с выпадающими меню в ячейках ──────────────────────────────────
+   `.ou-tbl` держит `overflow: hidden` ради скруглённых углов, и меню `Select`
+   (оно позиционируется абсолютно, без портала) обрезалось краем таблицы:
+   в форме импорта теста у темы виднелся один пункт «Что делать» из трёх.
+   Модификатор снимает обрезку, а скругление переносит на угловые ячейки —
+   фон шапки иначе вылез бы за углы. */
+.ou-tbl.tb-tbl--menus { overflow: visible; }
+.ou-tbl.tb-tbl--menus thead th:first-child { border-top-left-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus thead th:last-child { border-top-right-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus tbody tr:last-child td:first-child { border-bottom-left-radius: var(--ou-radius-l); }
+.ou-tbl.tb-tbl--menus tbody tr:last-child td:last-child { border-bottom-right-radius: var(--ou-radius-l); }

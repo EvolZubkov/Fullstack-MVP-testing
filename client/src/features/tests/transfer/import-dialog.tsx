@@ -178,6 +178,8 @@ export function TransferImportDialog({ open, onClose, onDone }: TransferImportDi
                 />
                 {t.options.parts.structure && (
                   <Table<TransferTopicSummary>
+                    // В ячейках — меню «Что делать»: без модификатора их обрезал край таблицы.
+                    className="tb-tbl--menus"
                     density="compact"
                     rowKey={(row) => row.id}
                     rows={summary.topics}

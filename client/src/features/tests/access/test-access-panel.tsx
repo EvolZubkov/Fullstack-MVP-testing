@@ -250,8 +250,8 @@ export function TestAccessPanel({
               // The per-row level Select renders its menu inline (position:
               // absolute), and the DS Table root (.ou-tbl) sets overflow:hidden
               // to clip its rounded corners — which also clips the open menu.
-              // Relax it here so the dropdown can extend past the table edge.
-              style={{ overflow: "visible" }}
+              // `tb-tbl--menus` relaxes it and keeps the corners rounded.
+              className="tb-tbl--menus"
               rowKey={(g) => g.userId}
               rows={grants}
               columns={[

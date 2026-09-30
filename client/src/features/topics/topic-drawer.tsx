@@ -554,7 +554,8 @@ export function TopicDrawer({
                 />
               ) : (
                 <Table<GrantRow>
-                  style={{ overflow: "visible" }}
+                  // Меню уровня доступа в ячейке: без модификатора его обрезал край таблицы.
+                  className="tb-tbl--menus"
                   rowKey={(g) => g.id}
                   rows={grants}
                   columns={[
