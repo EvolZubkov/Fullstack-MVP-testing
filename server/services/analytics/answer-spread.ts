@@ -28,8 +28,13 @@ import { normalizeForCompare, parseNumericAnswer } from "@shared/answer-check";
 export interface SpreadOption {
   /** Подпись варианта: градация шкалы либо утверждение распределения. */
   label: string;
-  /** Доля в процентах: у шкалы — доля людей, у распределения — доля розданных баллов. */
+  /**
+   * Доля в процентах: у шкалы и выбора — доля людей, у распределения — доля розданных баллов.
+   * У множественного выбора доли в сумме больше ста: человек отмечает несколько вариантов.
+   */
   share: number;
+  /** Вариант верный по эталону; есть только у выбора — у шкалы и распределения эталона нет. */
+  correct?: boolean;
 }
 
 /** Разброс ответов одного задания. */
@@ -40,7 +45,7 @@ export interface AnswerSpread {
 }
 
 export interface AnswerSpreadInput {
-  type: "scale" | "allocation" | "short";
+  type: "scale" | "allocation" | "short" | "single" | "multiple";
   /**
    * Варианты задания: и у шкалы, и у распределения они лежат в `dataJson.options`.
    * У короткого ответа список ПУСТ — варианты образуют сами ответы.
@@ -55,6 +60,41 @@ export interface AnswerSpreadInput {
    * рядом с заданием, в `correct_json`.
    */
   answerKind?: "text" | "number";
+  /**
+   * Индексы верных вариантов у выбора: по ним строки разброса помечаются верными. Разброс
+   * оцениваемого задания без этой пометки читался бы как опрос — «какой вариант популярен»,
+   * а автору нужно «куда уходят те, кто ошибся».
+   */
+  correctIndices?: readonly number[];
+}
+
+/** Разброс выбора: доля людей, выбравших каждый вариант (FR-28x для оцениваемых заданий). */
+function choiceSpread(input: AnswerSpreadInput): AnswerSpread | null {
+  const { type, options, answers } = input;
+  const correct = new Set(input.correctIndices ?? []);
+  const chosen = new Array<number>(options.length).fill(0);
+  let counted = 0;
+
+  for (const answer of answers) {
+    // Одиночный выбор приходит индексом, множественный — списком индексов; строкой индекс
+    // бывает у выгрузки LMS, как и у шкалы.
+    const picks = (Array.isArray(answer) ? answer : [answer])
+      .map((index) => (typeof index === "number" ? index : Number(index)))
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < options.length);
+    if (picks.length === 0) continue;
+    for (const index of new Set(picks)) chosen[index] += 1;
+    counted += 1;
+  }
+
+  if (counted === 0) return null;
+  return {
+    options: options.map((label, index) => ({
+      label,
+      share: Math.round((chosen[index] / counted) * 1000) / 10,
+      correct: correct.has(index),
+    })),
+    answered: counted,
+  };
 }
 
 /** Баллы распределения: ключ — индекс утверждения строкой, значение — сколько отдано. */
@@ -270,6 +310,7 @@ export function answerSpread(input: AnswerSpreadInput): AnswerSpread | null {
   // проверка «нет вариантов — считать не из чего» отбросила бы его целиком.
   if (type === "short") return answerKind === "number" ? numericSpread(answers) : textSpread(answers);
   if (options.length === 0 || answers.length === 0) return null;
+  if (type === "single" || type === "multiple") return choiceSpread(input);
 
   const weight = new Array<number>(options.length).fill(0);
   let counted = 0;

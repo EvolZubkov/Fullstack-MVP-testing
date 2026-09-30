@@ -186,10 +186,14 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
        * что варианты там не заданы заранее, а написания расходятся, и автору нужно видеть,
        * какие из них правило не ловит.
        */
+      // У выбора разброс — доли выбранных вариантов с пометкой верного: «куда уходят
+      // ошибившиеся» видно из колонки, не открывая разбор задания.
       const spreadType =
         question.type === "scale" || question.type === "allocation" || isTextEntry(question.type)
-          ? (question.type as "scale" | "allocation" | "short")
+          || question.type === "single" || question.type === "multiple"
+          ? (question.type as "scale" | "allocation" | "short" | "single" | "multiple")
           : null;
+      const key = (question.correctJson ?? {}) as { correctIndex?: unknown; correctIndices?: unknown };
       const spread = spreadType
         ? answerSpread({
           type: spreadType,
@@ -199,6 +203,9 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
           // гистограмма значений. Вид ответа лежит в наборе правил, отдельного признака
           // у задания нет и заводить его незачем.
           answerKind: ((question.correctJson ?? {}) as { answerKind?: "text" | "number" }).answerKind,
+          correctIndices: typeof key.correctIndex === "number"
+            ? [key.correctIndex]
+            : Array.isArray(key.correctIndices) ? key.correctIndices.filter((i): i is number => typeof i === "number") : [],
         })
         : null;
 

@@ -153,7 +153,7 @@ interface TestAnalytics {
         /** PRD-56 FR-17a: задание исключено из выдачи этого теста. */
         excludedFromDelivery?: boolean;
         /** PRD-56 FR-22: разброс ответов измерительного задания вместо доли верных. */
-        spread?: { options: Array<{ label: string; share: number }>; answered: number } | null;
+        spread?: { options: Array<{ label: string; share: number; correct?: boolean }>; answered: number } | null;
         /** PRD-57 FR-32: сводка свободного текста — объём и длина вместо частот. */
         volume?: { answered: number; medianLength: number; minLength: number; maxLength: number } | null;
         // PRD-55 (FR-31/FR-31a/FR-32). Необязательные: ответ старой сборки сервера этих полей

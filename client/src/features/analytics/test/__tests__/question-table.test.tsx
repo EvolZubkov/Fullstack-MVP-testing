@@ -463,12 +463,28 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
     expect(screen.getByText(termOrText("Ростехнадзор 55 % · РТН 30 %"))).toBeTruthy();
   });
 
-  it("у вопроса с выбором в колонке прочерк, а не «мало данных»", () => {
-    // Разброса у выбора нет по устройству: «мало данных» при 60 ответах было бы неправдой.
-    render(<QuestionTable questions={[...WRITTEN, QUESTIONS[0]]} minObservations={10} />);
-    const row = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
-    const spreadCell = within(row).getAllByRole("cell")[1];
-    expect(spreadCell.textContent).toBe("—");
+  it("у сопоставления в колонке прочерк, а не «мало данных»", () => {
+    // Разброса у сопоставления нет по устройству: «мало данных» при 60 ответах было бы неправдой.
+    const matching = { ...QUESTIONS[0], questionId: "m1", questionPrompt: "Сопоставьте", questionType: "matching" };
+    render(<QuestionTable questions={[...WRITTEN, matching]} minObservations={10} />);
+    const row = screen.getByText(termOrText("Сопоставьте")).closest("tr")!;
+    expect(within(row).getAllByRole("cell")[1].textContent).toBe("—");
+  });
+
+  it("у выбора — доли вариантов, верный помечен галочкой", () => {
+    const choice = {
+      ...QUESTIONS[0],
+      spread: {
+        answered: 60,
+        options: [
+          { label: "Проверка контрагента", share: 40, correct: true },
+          { label: "Подарок партнёру", share: 45, correct: false },
+          { label: "Скидка", share: 15, correct: false },
+        ],
+      },
+    };
+    render(<QuestionTable questions={[choice]} minObservations={10} />);
+    expect(screen.getByText(termOrText("Подарок партнёру — 45 % · ✓ Проверка контрагента — 40 % · Скидка — 15 %"))).toBeTruthy();
   });
 
   it("у свободного текста вместо долей — объём и длина", () => {

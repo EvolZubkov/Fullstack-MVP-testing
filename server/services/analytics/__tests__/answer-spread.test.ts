@@ -120,6 +120,30 @@ describe("answerSpread — короткий ответ (PRD-57 FR-28x)", () => {
   });
 });
 
+describe("answerSpread — выбор", () => {
+  const OPTIONS = ["Владелец ресурса", "Сам сотрудник", "Любой коллега"];
+
+  it("одиночный выбор: доля людей по вариантам, верный помечен", () => {
+    const spread = answerSpread({ type: "single", options: OPTIONS, answers: [0, 0, 2, "1"], correctIndices: [0] });
+    expect(spread?.answered).toBe(4);
+    expect(spread?.options).toEqual([
+      { label: "Владелец ресурса", share: 50, correct: true },
+      { label: "Сам сотрудник", share: 25, correct: false },
+      { label: "Любой коллега", share: 25, correct: false },
+    ]);
+  });
+
+  it("множественный выбор: доля людей, отметивших вариант, — в сумме больше ста", () => {
+    const spread = answerSpread({ type: "multiple", options: OPTIONS, answers: [[0, 1], [0], [0, 2]], correctIndices: [0, 1] });
+    expect(spread?.options.map((option) => option.share)).toEqual([100, 33.3, 33.3]);
+    expect(spread?.options.map((option) => option.correct)).toEqual([true, true, false]);
+  });
+
+  it("индекс вне списка вариантов не считается ответом", () => {
+    expect(answerSpread({ type: "single", options: OPTIONS, answers: [7, -1] })).toBeNull();
+  });
+});
+
 describe("answerSpread — текст, похожий на число", () => {
   it("у текстового задания ответ «42», прочитанный числом, остаётся написанием", () => {
     const spread = answerSpread({ type: "short", options: [], answers: [42, "42", "сорок два"] });

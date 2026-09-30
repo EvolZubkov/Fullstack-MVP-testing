@@ -75,7 +75,7 @@ export interface QuestionRow {
    * PRD-56 FR-22: разброс ответов измерительного задания — то, чем у него заменена доля
    * верных. `null` — задание оценивается либо разбрасывать нечего.
    */
-  spread?: { options: Array<{ label: string; share: number }>; answered: number } | null;
+  spread?: { options: Array<{ label: string; share: number; correct?: boolean }>; answered: number } | null;
   /**
    * PRD-57 FR-32: сводка свободного текста — сколько написали и как длинно. Частотная
    * таблица развёрнутому ответу не годится: двух одинаковых ответов не бывает.
@@ -178,7 +178,7 @@ function sortValue(row: QuestionRow, key: string, psycho?: QuestionPsychometrics
 const SPREAD_VISIBLE: Record<string, number> = { scale: 4, allocation: 2 };
 
 /** Типы, у которых сервер считает разброс ответов (`answer-spread.ts`); у прочих его нет. */
-const SPREAD_TYPES = new Set(["scale", "allocation", "short"]);
+const SPREAD_TYPES = new Set(["scale", "allocation", "short", "single", "multiple"]);
 
 /** Предел длины подписи варианта: утверждения опросника бывают в целое предложение. */
 const SPREAD_LABEL_MAX = 44;
@@ -197,15 +197,18 @@ const SPREAD_LABEL_MAX = 44;
  * prd56-test-analytics.html, состояние items-measurement.
  */
 function spreadLabel(
-  options: ReadonlyArray<{ label: string; share: number }>,
+  options: ReadonlyArray<{ label: string; share: number; correct?: boolean }>,
   type: string,
 ): { short: string; full: string } {
-  const dash = type === "scale" ? " — " : " ";
-  const say = (option: { label: string; share: number }, cut: boolean) => {
+  // У выбора подпись — текст варианта, и бывает числом («3389»): без тире доля сливается с ним.
+  const dash = type === "scale" || type === "single" || type === "multiple" ? " — " : " ";
+  const say = (option: { label: string; share: number; correct?: boolean }, cut: boolean) => {
     const label = cut && option.label.length > SPREAD_LABEL_MAX
       ? `${option.label.slice(0, SPREAD_LABEL_MAX).trimEnd()}…`
       : option.label;
-    return `${label}${dash}${Math.round(option.share)} %`;
+    // Верный вариант помечается: у оцениваемого задания разброс читают как «куда уходят
+    // ошибившиеся», и без пометки лидирующий неверный вариант не отличить от верного.
+    return `${option.correct ? "✓ " : ""}${label}${dash}${Math.round(option.share)} %`;
   };
 
   const ranked = [...options].sort((a, b) => b.share - a.share);
