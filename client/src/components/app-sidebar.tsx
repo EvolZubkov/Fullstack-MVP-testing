@@ -43,9 +43,11 @@ const NAV: NavEntry[] = [
   // PRD-25: главная доступна любому аутентифицированному пользователю, поэтому
   // гейтится правом `auth.self`, которое есть у каждой роли.
   { id: "home", href: "/", label: t.navigation.home, icon: Home, perm: "auth.self" },
+  // «Тесты» стоят выше «Тем и вопросов»: тест — основной объект работы автора,
+  // а его вопросы видны и правятся прямо из ящика теста.
+  { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },
   // PRD-16: «Темы» и «Вопросы» объединены в единый раздел «Темы и вопросы».
   { id: "content", href: "/author/content", label: t.navigation.topicsAndQuestions, icon: FolderTree, perm: "topics.manage" },
-  { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },
   { id: "templates", href: "/author/templates", label: t.navigation.templates, icon: LayoutTemplate, perm: "adminTemplates.manage" },
   { id: "analytics", href: "/author/analytics", label: t.navigation.analytics, icon: BarChart3, perm: "analytics.read" },
   { id: "users", href: "/author/users", label: t.navigation.users, icon: Users, perm: "users.read" },
