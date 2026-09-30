@@ -228,6 +228,32 @@ describe("buildStartState", () => {
     });
   });
 
+  describe("общий проходной на обложке — только когда он решает исход", () => {
+    // «Тест пройден, если»: при «только обязательные темы» и «все темы» общий процент
+    // справочный. Показанный на обложке как «проходной балл», он называл бы условие,
+    // которого у теста нет (так ставят ненулевой порог ради LMS, 2026-09-30).
+    const base = { maxAttempts: 1, completedAttempts: 0, resume: null, hasCompletedResults: false, canStartNew: true };
+
+    it("решает общий результат — процент показывается", () => {
+      for (const policy of ["overall_only", "overall_and_required_topics"]) {
+        const { course } = buildStartState({ info: { ...info, passPercent: 80, passDecisionPolicy: policy }, ...base });
+        expect(course.passPercent).toBe(80);
+      }
+    });
+
+    it("решают темы — процент не показывается", () => {
+      for (const policy of ["required_topics_only", "all_topics_passed"]) {
+        const { course } = buildStartState({ info: { ...info, passPercent: 80, passDecisionPolicy: policy }, ...base });
+        expect(course.passPercent).toBeNull();
+      }
+    });
+
+    it("политика не передана (старый хост, старый тест) — как раньше", () => {
+      const { course } = buildStartState({ info: { ...info, passPercent: 80 }, ...base });
+      expect(course.passPercent).toBe(80);
+    });
+  });
+
   describe("PRD-29 §6.7 на обложке — порог только у теста, который оценивает", () => {
     it("измерительный тест: «проходной балл» не показывается", () => {
       const { course } = buildStartState({

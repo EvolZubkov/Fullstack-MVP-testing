@@ -150,6 +150,8 @@ function buildScormStartContext() {
       // Absent in every package built before the flag existed, and in every package
       // of a test that does grade — `!== false` is what keeps both showing it.
       hasGradedContent: TEST_DATA.hasGradedContent !== false,
+      // «Тест пройден, если»: when the topics decide, the overall threshold is not shown.
+      passDecisionPolicy: TEST_DATA.passDecisionPolicy,
       timeLimitMinutes: TEST_DATA.timeLimitMinutes,
       maxAttempts: TEST_DATA.maxAttempts,
       // PRD-7 S10: startPageContent migrated to an intro content page; not shown here.

@@ -196,6 +196,20 @@ describe("SCORM start screen — the gate draws the ordinary screen", () => {
   });
 });
 
+describe("SCORM start screen — the overall threshold only when it decides", () => {
+  it("topics decide («только обязательные темы»): a threshold set for the LMS is not shown", () => {
+    const rt = makeRuntime({ maxAttempts: 1, attemptsUsed: 0, best: null, intervalAllowed: true });
+    Object.assign(rt.TEST_DATA, { passPercent: 80, passDecisionPolicy: "required_topics_only" });
+    expect(rt.buildScormStartContext().course.passPercent).toBeNull();
+  });
+
+  it("the overall result decides: the threshold is shown", () => {
+    const rt = makeRuntime({ maxAttempts: 1, attemptsUsed: 0, best: null, intervalAllowed: true });
+    Object.assign(rt.TEST_DATA, { passPercent: 80, passDecisionPolicy: "overall_and_required_topics" });
+    expect(rt.buildScormStartContext().course.passPercent).toBe(80);
+  });
+});
+
 describe("SCORM start screen — re-entry into the same learning («Просмотреть»)", () => {
   const best = { percent: 46.3, passed: false, attemptNumber: 1 };
 

@@ -48,6 +48,13 @@ export interface StartInfo {
    * correct answers is that same nonsense, printed before the learner even starts.
    */
   hasGradedContent?: boolean;
+  /**
+   * «Тест пройден, если» (`tests.pass_decision_policy`). Under «only required topics» and
+   * «every topic» the overall threshold does not decide the outcome — it is informational
+   * (a non-zero one is set only for the LMS), so the cover must not present it as THE
+   * condition. Absent — a host or a test that predates the policy: shown as before.
+   */
+  passDecisionPolicy?: string | null;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   startPageContent?: string;
@@ -97,6 +104,14 @@ export interface StartStateInput {
 export interface StartRenderContext {
   course: CtxCourse;
   state: CtxState;
+}
+
+/**
+ * Whether the overall threshold takes part in the verdict under this «Тест пройден, если»
+ * policy. Unknown or absent — the pre-policy behaviour, where it always did.
+ */
+function overallThresholdDecides(policy: string | null | undefined): boolean {
+  return policy !== "required_topics_only" && policy !== "all_topics_passed";
 }
 
 /**
@@ -197,7 +212,9 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
     // here rather than in each layout, so every design template (and every future
     // one) inherits the rule from the ONE builder both hosts call. `null` is what
     // the layouts' `{{#if course.passPercent}}` already gates on.
-    passPercent: i.hasGradedContent === false ? null : i.passPercent,
+    // Nor is it shown when the topics, not the overall result, decide the outcome: the
+    // cover would name a condition the test does not have.
+    passPercent: i.hasGradedContent === false || !overallThresholdDecides(i.passDecisionPolicy) ? null : i.passPercent,
     timeLimitMinutes: i.timeLimitMinutes,
     // The unit is decided by the ONE formatter both hosts share, not by each
     // layout: a layout can only print the raw number, which reads «20160 мин»
