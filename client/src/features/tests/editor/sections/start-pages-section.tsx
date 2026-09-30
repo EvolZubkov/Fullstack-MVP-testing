@@ -1585,9 +1585,9 @@ function AfterTestZone(props: {
             ) : (
               <SortablePageItem page={item} handlers={handlers} />
             )}
-            {/* После «Итогов теста» вставки нет: это последний экран прохождения, и
-                страница за ним недостижима — предлагать её значит обещать невозможное. */}
-            {!handlers.readOnly && item.kind !== "results" && (
+            {/* Вставка есть и после «Итогов теста»: страницы за ними ученик получает после
+                экрана итогов — в вебе и в пакете (eb8031e7). */}
+            {!handlers.readOnly && (
               <InsertRow onClick={() => addAt(idx + 1)} testId={`structure-insert-after-test-${idx + 1}`} />
             )}
           </Fragment>

@@ -545,11 +545,11 @@ describe("<StructureSection /> — zone layouts", () => {
     // Both the system «Итоги теста» row and the author after-page render in the zone.
     expect(screen.getByTestId("structure-system-results")).toBeInTheDocument();
     expect(screen.getByTestId("structure-page-row-pg-after")).toHaveTextContent("Пост-итог");
-    // Вставки есть перед списком и между строками, но НЕ после «Итогов теста»:
-    // это последний экран прохождения, и страница за ним недостижима.
+    // Вставки есть в каждом промежутке, включая место после «Итогов теста»: страницы за
+    // ними ученик получает после экрана итогов.
     expect(screen.getByTestId("structure-insert-after-test-0")).toBeInTheDocument();
     expect(screen.getByTestId("structure-insert-after-test-1")).toBeInTheDocument();
-    expect(screen.queryByTestId("structure-insert-after-test-2")).toBeNull();
+    expect(screen.getByTestId("structure-insert-after-test-2")).toBeInTheDocument();
   });
 });
 
