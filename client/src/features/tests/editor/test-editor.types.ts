@@ -725,6 +725,12 @@ export type TestEditorModel = {
     defaultQuestionPoints: number | null;
     questionOverrides: QuestionScoringOverride[];
   };
+  /**
+   * PRD-56: вопросы, исключённые из выдачи в этом тесте. Только для чтения: признак
+   * ставит аналитика, редактор его лишь показывает («Вопросы теста») и в сохранение не
+   * отдаёт. Необязателен: черновик, собранный локально, среза не несёт.
+   */
+  deliveryExcludedQuestionIds?: string[];
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────

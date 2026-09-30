@@ -722,6 +722,24 @@ function buildQuestionOverridesFromApi(src: ApiTestResponse): QuestionScoringOve
   return out;
 }
 
+/**
+ * PRD-56: questions the test excludes from delivery. The flag rides on the same
+ * `questionScoring` rows as the scoring overrides but is NOT part of them: it is set
+ * by analytics, and the editor only reads it («Вопросы теста»). Keeping it out of
+ * `QuestionScoringOverride` keeps the overrides' save and dirty checks untouched.
+ */
+function readDeliveryExcludedFromApi(src: ApiTestResponse): string[] {
+  const raw = src.questionScoring;
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.questionId === "string" && r.excludedFromDelivery === true) out.push(r.questionId);
+  }
+  return out;
+}
+
 const SCALE_VALENCES = new Set(["higher_is_better", "lower_is_better", "none"]);
 
 /**
@@ -1395,6 +1413,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
         typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
       questionOverrides: buildQuestionOverridesFromApi(src),
     },
+    deliveryExcludedQuestionIds: readDeliveryExcludedFromApi(src),
   };
 }
 

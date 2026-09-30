@@ -821,6 +821,20 @@ describe("apiToEditorModel — question scoring overrides", () => {
     }).scoring.questionOverrides;
     expect(o.scoringJson).toBeNull();
   });
+
+  it("collects questions excluded from delivery apart from the scoring overrides", () => {
+    const model = apiToEditorModel({
+      questionScoring: [
+        { questionId: "q1", excludedFromDelivery: true },
+        { questionId: "q2", points: 2, excludedFromDelivery: false },
+        { questionId: "q3", excludedFromDelivery: "yes" },
+      ],
+    });
+    expect(model.deliveryExcludedQuestionIds).toEqual(["q1"]);
+    // The flag never leaks into the override rows: saving them must not carry it.
+    expect(model.scoring.questionOverrides[0]).not.toHaveProperty("excludedFromDelivery");
+    expect(apiToEditorModel({}).deliveryExcludedQuestionIds).toEqual([]);
+  });
 });
 
 // ─── readRetakePolicyFromApi ──────────────────────────────────────────────────
