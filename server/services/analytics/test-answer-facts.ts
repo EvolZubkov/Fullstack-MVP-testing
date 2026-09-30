@@ -14,6 +14,7 @@
  */
 
 import type { Question } from "@shared/schema";
+import { isMeasurementOnly } from "@shared/questions/question-type";
 import { resolveOverallRule, resolveTopicRule, type ResolvedRule } from "@shared/scoring/pass-rule";
 
 import { storage } from "../../storage";
@@ -54,6 +55,12 @@ export interface TestAnswerFacts {
   topicRules: Map<string, ResolvedRule | null>;
   /** Эффективная трудность задания: та же цепочка, что и у стоимости (PRD-15 блок D). */
   difficultyOf: (question: Question) => number | null;
+  /**
+   * Цена задания в этом тесте — та же цепочка, что оценивает ответы (переопределение в тесте →
+   * цена раздела → цена теста). `null` у измерительного задания: баллов оно не приносит, и
+   * «цена 1» у опросного пункта читалась бы как вклад в результат, которого нет.
+   */
+  pointsOf: (question: Question) => number | null;
 }
 
 /**
@@ -116,5 +123,6 @@ export async function loadTestAnswerFacts(
     topicNameById: new Map(topics.map(t => [t.id, t.name])),
     topicRules,
     difficultyOf: question => scoring.difficultyOf(question),
+    pointsOf: question => (isMeasurementOnly(question) ? null : scoring.resolve(question).points),
   };
 }

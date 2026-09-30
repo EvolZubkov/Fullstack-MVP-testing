@@ -85,6 +85,19 @@ describe("loadTestAnswerFacts", () => {
     expect(facts.find(f => f.questionId === "q1")).toMatchObject({ result: "correct" });
   });
 
+  it("цена задания — та же цепочка, что оценивает ответы; у измерительного цены нет", async () => {
+    // Переопределение в тесте сильнее цены раздела, а та — цены теста.
+    storageMock.getTestSections.mockResolvedValue([
+      { id: "s1", testId: "t1", topicId: "tp-1", topicPassRuleJson: null, defaultPoints: 2 },
+    ]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([{ questionId: "q1", points: 3 }]);
+    const { pointsOf } = await loadTestAnswerFacts("t1", [attempt()]);
+
+    expect(pointsOf(SINGLE as never)).toBe(3);
+    expect(pointsOf(SCALE as never)).toBeNull();
+    expect(pointsOf({ ...SINGLE, id: "q9" } as never)).toBe(2);
+  });
+
   it("задание, которого в тесте больше нет, сбор не роняет", async () => {
     storageMock.getQuestionsByIds.mockResolvedValue([SINGLE]);
 

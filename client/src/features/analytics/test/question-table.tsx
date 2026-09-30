@@ -43,6 +43,8 @@ const HINTS = {
   exposure: "Доля прохождений, в которые попал вопрос. Высокая экспозиция при малом банке — ответ быстро становится известен.",
   latency: "Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.",
   declared: "Трудность, которую автор заявил при создании вопроса: 0 — легко, 100 — сложно. Сравнивается с наблюдаемой в разборе вопроса.",
+  points: "Сколько баллов вопрос приносит в этом тесте: цена, заданная вопросу в тесте, иначе цена раздела, иначе цена теста.",
+  otherTests: "В скольких других тестах вопрос выдавался за окно наблюдения экспозиции (по умолчанию 12 месяцев). Вопрос, который показывают в нескольких тестах, быстрее становится известен.",
 } as const;
 
 /** Признак ревизии — то, что отдаёт `GET /api/analytics/tests/:testId`. */
@@ -66,6 +68,10 @@ export interface QuestionRow {
   /** Доля пропусков; `null` — состав выдачи неизвестен (прохождения только из LMS). */
   skipShare: number | null;
   exposurePercent: number | null;
+  /** В скольких ДРУГИХ тестах задание выдавалось за окно экспозиции (PRD-55 FR-32). */
+  otherTestsCount?: number;
+  /** Цена задания в этом тесте; `null` — измерительное задание, баллов не приносит. */
+  points?: number | null;
   latencyMedianMs: number | null;
   latencySampleSize: number;
   reviewFlags: ReviewFlagView[];
@@ -159,13 +165,17 @@ function duration(ms: number | null): string {
 
 /** Значение для сортировки: отсутствующее всегда уезжает в конец. */
 function sortValue(row: QuestionRow, key: string, psycho?: QuestionPsychometrics): number {
-  const value = key === "difficulty" ? psycho?.difficulty ?? null
-    : key === "itemRest" ? psycho?.itemRest ?? null
-      : key === "skip" ? row.skipShare
-        : key === "exposure" ? row.exposurePercent
-          : key === "latency" ? row.latencyMedianMs
-            : key === "declared" ? row.difficulty
-              : row.totalAnswers;
+  const byKey: Record<string, number | null> = {
+    difficulty: psycho?.difficulty ?? null,
+    itemRest: psycho?.itemRest ?? null,
+    skip: row.skipShare,
+    exposure: row.exposurePercent,
+    otherTests: row.otherTestsCount ?? null,
+    points: row.points ?? null,
+    latency: row.latencyMedianMs,
+    declared: row.difficulty,
+  };
+  const value = key in byKey ? byKey[key] : row.totalAnswers;
   return value ?? Number.POSITIVE_INFINITY;
 }
 
@@ -333,7 +343,7 @@ export function QuestionTable({
       frozen: true,
       // У опросника колонка ограничена: рядом с ней стоит разброс ответов, и текст вопроса,
       // растянувший её по себе, вытолкнул бы за край экрана всё, что правее.
-      ...(measurement ? { width: "40%" } : share("24%")),
+      ...(measurement ? { width: "40%" } : share("20%")),
       render: (row: QuestionRow) => (
         // Текст задания переносится, иначе строка вопроса распирает столбец по себе: ячейки
         // стола по умолчанию не переносятся, и это верно для чисел, но не для предложения.
@@ -437,7 +447,7 @@ export function QuestionTable({
       // колонки значило бы закрепить неверное число рядом с верным.
       {
         key: "difficulty",
-        ...share("11%"),
+        ...share("10%"),
         header: <TermHint term="Трудность" hint={DIFFICULTY_HINT} align="end" />,
         numeric: true,
         align: "right" as const,
@@ -448,7 +458,7 @@ export function QuestionTable({
       // иначе новая вкладка становится складом, куда никто не заходит.
       {
         key: "itemRest",
-        ...share("17%"),
+        ...share("15%"),
         header: <TermHint term="Дискриминативность" hint={ITEM_REST_HINT} align="end" />,
         numeric: true,
         align: "right" as const,
@@ -477,7 +487,7 @@ export function QuestionTable({
     ]),
     {
       key: "skip",
-      ...share("10%"),
+      ...share("9%"),
       header: <TermHint term="Пропуски" hint={HINTS.skip} align="end" />,
       numeric: true,
       align: "right" as const,
@@ -489,7 +499,7 @@ export function QuestionTable({
     // вопрос вкладки «Выдача», где профиль банка и стоит (FR-20).
     ...(measurement ? [] : [{
       key: "exposure",
-      ...share("11%"),
+      ...share("10%"),
       // «Экспозиция» — как в эскизе и в пояснении под таблицей: то же слово, что у профиля
       // банка на вкладке «Выдача» (PRD-55).
       header: <TermHint term="Экспозиция" hint={HINTS.exposure} align="end" />,
@@ -497,10 +507,21 @@ export function QuestionTable({
       align: "right" as const,
       sortable: true,
       render: (row: QuestionRow) => percent(row.exposurePercent),
+    }, {
+      // Колонка «Количество тестов» отчёта WebTutor. Считается по ВЫДАЧАМ, а не по составу
+      // тестов: задание в теме чужого теста, которое там ни разу не выпало, участники не
+      // видели, и для износа задания оно не в счёт (PRD-55 FR-32).
+      key: "otherTests",
+      ...share("7%"),
+      header: <TermHint term="Другие тесты" hint={HINTS.otherTests} align="end" />,
+      numeric: true,
+      align: "right" as const,
+      sortable: true,
+      render: (row: QuestionRow) => row.otherTestsCount ?? "—",
     }]),
     {
       key: "latency",
-      ...share("12%"),
+      ...share("10%"),
       header: <TermHint term="Время, медиана" hint={HINTS.latency} align="end" />,
       numeric: true,
       align: "right" as const,
@@ -515,12 +536,24 @@ export function QuestionTable({
     // заявленная автором величина — это именно замысел, а не измерение.
     ...(measurement ? [] : [{
       key: "declared",
-      ...share("11%"),
+      ...share("8%"),
       header: <TermHint term="Замысел" hint={HINTS.declared} align="end" />,
       numeric: true,
       align: "right" as const,
       sortable: true,
       render: (row: QuestionRow) => row.difficulty,
+    }, {
+      // Колонка «Вес» отчёта WebTutor. Цена та же, что у движка оценивания: иначе таблица
+      // называла бы одну цену, а результат участника считался бы по другой.
+      key: "points",
+      ...share("7%"),
+      header: <TermHint term="Цена" hint={HINTS.points} align="end" />,
+      numeric: true,
+      align: "right" as const,
+      sortable: true,
+      render: (row: QuestionRow) => (row.points === null || row.points === undefined
+        ? "—"
+        : row.points.toLocaleString("ru-RU")),
     }]),
     // Действия строки — ПОД ТРОЕТОЧИЕМ, как в эскизе (prd66-item-quality, состояние
     // wf-items). Двумя текстовыми кнопками они занимали 263 px — пятую часть таблицы, — и

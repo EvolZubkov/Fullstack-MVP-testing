@@ -130,7 +130,7 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
     const selectedAttempts = completedAttempts.filter(attempt => selects(attempt.id));
 
     const {
-      facts: allFacts, questionById, topicNameById, topicRules, difficultyOf,
+      facts: allFacts, questionById, topicNameById, topicRules, difficultyOf, pointsOf,
     } = await loadTestAnswerFacts(testId, selectedAttempts);
     // Ответы прохождений из LMS дочитываются по тесту целиком, поэтому отбор применяется и к
     // ним: иначе фильтр по группе резал бы веб, а телеметрию оставлял бы нетронутой (FR-25).
@@ -277,11 +277,17 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
     //
     // Ноль попыток означает «сравнивать не с чем»: доля тогда `null`, а не ноль, иначе экран
     // покажет «0%» там, где данных нет вовсе.
+    //
+    // Источники знаменателя — ТЕ ЖЕ, что пополняют счётчик: веб, телеметрия и импорт выгрузок
+    // (PRD-55 FR-07/FR-08). Считать только веб-попытки нельзя: с выдачами из выгрузок в числителе
+    // тест, пройденный в LMS, показывал «23 500 %». Отбор страницы сюда не идёт — экспозиция
+    // считается по тесту целиком, как на вкладке «Выдача».
     const exposureWindowStart = new Date();
     exposureWindowStart.setMonth(exposureWindowStart.getMonth() - config.delivery.exposureWindowMonths);
-    const attemptsInWindow = testAttempts.filter(
-      (a) => new Date(a.startedAt as Date) >= exposureWindowStart,
-    ).length;
+    const allPassages = narrowed
+      ? (await loadObservations({ testIds: [testId] }, { all: true, ids: new Set([testId]) })).rows
+      : observations.rows;
+    const attemptsInWindow = allPassages.filter((o) => o.startedAt >= exposureWindowStart).length;
 
     // PRD-55 (FR-31/FR-31a/FR-32): экспозиция задания и время на него. Три запроса на ВЕСЬ тест,
     // а не по заданию: карточек на экране десятки, и запрос в цикле превратил бы страницу в
@@ -348,6 +354,11 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
         exposurePercent,
         globalExposureCount: exposureGlobal.get(qs.questionId) ?? 0,
         otherTestsCount: otherTests.get(qs.questionId) ?? 0,
+        // Цена задания в этом тесте; `null` у измерительного — баллов оно не приносит.
+        points: (() => {
+          const question = questionMap.get(qs.questionId);
+          return question ? pointsOf(question) : null;
+        })(),
         // Своя выборка: веб времени не измеряет, пакеты старше 2026-09-12 его не сообщают.
         latencyMedianMs: lat ? lat.medianMs : null,
         latencySampleSize: lat ? lat.sampleSize : 0,

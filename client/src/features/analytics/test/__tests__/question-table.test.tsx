@@ -158,6 +158,29 @@ describe("QuestionTable — термины вкладки «Вопросы»", (
     expect(screen.queryByText(termOrText("Выдаётся"))).toBeNull();
   });
 
+  it("колонки «Цена» и «Другие тесты» — как «Вес» и «Количество тестов» в отчёте WebTutor", () => {
+    const rows = [
+      { ...QUESTIONS[0], points: 1.5, otherTestsCount: 2 },
+      { ...QUESTIONS[2], points: null, otherTestsCount: 0 },
+    ];
+    render(<QuestionTable questions={rows} />);
+
+    expect(screen.getByText(termOrText("Цена"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Другие тесты"))).toBeTruthy();
+    const graded = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
+    expect(within(graded).getByText("1,5")).toBeTruthy();
+    expect(within(graded).getByText("2")).toBeTruthy();
+    // У измерительного задания цены нет: баллов оно не приносит.
+    const measurement = screen.getByText(termOrText("Насколько вы согласны?")).closest("tr")!;
+    expect(within(measurement).getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("опросник колонок выдачи и цены не держит", () => {
+    render(<QuestionTable questions={[QUESTIONS[2]]} measurement />);
+    expect(screen.queryByText(termOrText("Цена"))).toBeNull();
+    expect(screen.queryByText(termOrText("Другие тесты"))).toBeNull();
+  });
+
   it("подзаголовок считает вопросы и прохождения", () => {
     render(<QuestionTable questions={QUESTIONS} passages={486} />);
 

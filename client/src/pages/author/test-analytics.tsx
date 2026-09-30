@@ -162,6 +162,8 @@ interface TestAnalytics {
         exposurePercent: number | null;
         globalExposureCount?: number;
         otherTestsCount?: number;
+        /** Цена задания в этом тесте; `null` у измерительного. */
+        points?: number | null;
         latencyMedianMs: number | null;
         latencySampleSize: number;
     }>;

@@ -34,6 +34,8 @@ const { storageMock } = vi.hoisted(() => ({
     getDeliveryCounts: vi.fn(),
     getOtherTestsCount: vi.fn(),
     getLatencyStats: vi.fn(),
+    getAllScormAttempts: vi.fn().mockResolvedValue([]),
+    getScormPackages: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -90,6 +92,9 @@ beforeEach(() => {
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getTest.mockResolvedValue(dbTest);
   storageMock.getAllAttempts.mockResolvedValue([attempt("a1"), attempt("a2")]);
+  // `clearAllMocks` подставленных значений не сбрасывает: без этой строки прохождения из LMS
+  // одного теста перетекали бы в следующие.
+  storageMock.getAllScormAttempts.mockResolvedValue([]);
   storageMock.getQuestionsByIds.mockResolvedValue([question("q1"), question("q2")]);
   storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 2 }]);
   storageMock.getDeliveryCountsForTest.mockResolvedValue(new Map([["q1", 46]]));
@@ -121,6 +126,22 @@ describe("аналитика теста: экспозиция и время за
     storageMock.getDeliveryCountsForTest.mockResolvedValue(new Map([["q1", 1]]));
     const q1 = await statsFor("q1");
     expect(q1.exposurePercent).toBe(50); // одна выдача из двух попыток
+  });
+
+  it("прохождения из выгрузок LMS входят в знаменатель — их выдачи уже в числителе (PRD-55 FR-08)", async () => {
+    // Тест прошли в LMS: одна веб-попытка и три импортированных прохождения, все четыре
+    // выдали q1. Знаменатель только по вебу дал бы 400 % — на стенде было «23 500 %».
+    const imported = (id: string) => ({
+      id, testId: "test1", origin: "import", packageId: null, participantKey: id,
+      startedAt: new Date("2026-09-02T10:00:00"), finishedAt: new Date("2026-09-02T10:00:00"),
+      lastActivityAt: new Date("2026-09-02T10:00:00"),
+    });
+    storageMock.getAllAttempts.mockResolvedValue([attempt("a1")]);
+    storageMock.getAllScormAttempts.mockResolvedValue([imported("i1"), imported("i2"), imported("i3")]);
+    storageMock.getDeliveryCountsForTest.mockResolvedValue(new Map([["q1", 4]]));
+
+    const q1 = await statsFor("q1");
+    expect(q1.exposurePercent).toBe(100);
   });
 
   it("БРОШЕННАЯ попытка входит в знаменатель", async () => {
