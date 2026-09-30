@@ -129,8 +129,10 @@ function storageStub(externalKeys: Record<string, string> = {}, learnerIds: Reco
   const snapshotLookups: number[] = [];
   /** Патчи счётчиков, которыми партия дописывается после записи строк. */
   const batchPatches: Record<string, unknown>[] = [];
+  /** Тесты, чей срез экспозиции импорта пересчитан (PRD-55 FR-08). */
+  const exposureRebuilds: string[] = [];
   return {
-    batches, attempts, answers, snapshotLookups, batchPatches,
+    batches, attempts, answers, snapshotLookups, batchPatches, exposureRebuilds,
     // PRD-56 FR-19a: у теста одна опубликованная версия — третья.
     getSnapshotByVersion: async (_testId: string, version: number) => {
       snapshotLookups.push(version);
@@ -158,6 +160,7 @@ function storageStub(externalKeys: Record<string, string> = {}, learnerIds: Reco
     updateLmsImportBatch: async (_id: string, patch: Record<string, unknown>) => { batchPatches.push(patch); return undefined; },
     upsertImportedAttempt: async (a: unknown) => { attempts.push(a); return { id: "a1", created: true }; },
     replaceImportedAnswers: async (_id: string, rows: unknown[]) => { answers.push(rows); },
+    rebuildImportExposure: async (testId: string) => { exposureRebuilds.push(testId); },
   };
 }
 
@@ -302,6 +305,21 @@ describe("runImport", () => {
     expect(res.rowsCreated).toBe(1);
     expect(s.batches).toHaveLength(0);
     expect(s.attempts).toHaveLength(0);
+    expect(s.exposureRebuilds).toHaveLength(0);
+  });
+
+  it("выданный состав пишется на прохождение, экспозиция теста пересчитывается (PRD-55 FR-08)", async () => {
+    const s = storageStub();
+    // q1 — задание теста, q9 — чужое: экспозицию несуществующему заданию не заводят.
+    const delivered = { ...book, questionIds: ["q1", "q9"], rows: [{ ...book.rows[0], answers: { q1: "", q9: "1" } }] };
+    await runImport(delivered as never, ON, ctx, s as never);
+    expect(s.attempts[0]).toMatchObject({ deliveredQuestionIds: ["q1"] });
+    expect(s.exposureRebuilds).toEqual(["t1"]);
+  });
+
+  it("выданное, но не отвеченное задание входит в выданный состав", () => {
+    const plan = buildImportPlan({ ...book, rows: [{ ...book.rows[0], answers: { q1: "" } }] } as never, ON);
+    expect(plan.rows[0].deliveredQuestionIds).toEqual(["q1"]);
   });
 
   it("ответ раскладывается по типу вопроса, исход берётся из файла", async () => {

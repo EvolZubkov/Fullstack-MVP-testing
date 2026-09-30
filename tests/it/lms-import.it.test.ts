@@ -52,6 +52,7 @@ function importedRow(over: Partial<Parameters<ScormRepository["upsertImportedAtt
     totalPoints: 0,
     resultPercent: null,
     maxPoints: null,
+    deliveredQuestionIds: [],
     totalQuestions: 14,
     scalesJson: { cel: 29 },
     variablesJson: { lead_margin: "6" },

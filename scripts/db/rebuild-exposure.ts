@@ -1,8 +1,8 @@
 /**
  * @module scripts/db/rebuild-exposure
  * @description PRD-55 (FR-11): пересобирает `question_exposure` из ФАКТОВ — состава веб-попыток
- * (`attempts.variant_json`) и строк телеметрии (`scorm_answers`), — и убирает корзины старше окна
- * наблюдения (FR-05).
+ * (`attempts.variant_json`), строк телеметрии (`scorm_answers`) и выданного состава импорта
+ * (`scorm_attempts.delivered_question_ids`), — и убирает корзины старше окна наблюдения (FR-05).
  *
  * Нужен дважды. Первый раз — разовой засыпкой при внедрении: счётчик начинает копиться только с
  * момента правки кода, а выдачи, сделанные до неё, уже лежат в попытках, и без засыпки веса
@@ -17,9 +17,11 @@
  * выдачи нет. Разница честная: по старой телеметрии восстанавливается «показано и отвечено», а
  * не «показано», и заниженный счётчик лучше выдуманного.
  *
- * ИМПОРТИРОВАННЫЕ ПРОХОЖДЕНИЯ (`origin = 'import'`) ИСКЛЮЧЕНЫ (FR-09): их пустая ячейка ответа
- * неотличима от невыданного задания, поэтому по ним счётчик считал бы выданным весь пакет
- * целиком. Строка вернётся в пересчёт вместе с правкой разбора выгрузки (BR-26-02a).
+ * ИМПОРТИРОВАННЫЕ ПРОХОЖДЕНИЯ (`origin = 'import'`) считаются по их ВЫДАННОМУ составу
+ * (`delivered_question_ids`, FR-08/FR-09): разбор выгрузки отличает невыданное задание (все
+ * четыре подколонки пусты) от выданного без ответа (PRD-66 FR-10a). Их строки идут в источник
+ * `import` — тот, что пересчитывает загрузка партии. Прохождения, загруженные до появления поля,
+ * состава не несут и не считаются; повторная загрузка того же файла его заполнит.
  *
  * Скрипт ЗАМЕЩАЕТ содержимое таблицы целиком и идемпотентен: повторный запуск даёт тот же
  * результат.
@@ -71,7 +73,7 @@ async function rebuild(pool: pg.Pool, windowMonths: number): Promise<{ rows: num
         WHERE a.started_at >= date_trunc('month', now()) - make_interval(months => $1)
       ) AS delivered
       GROUP BY question_id, test_id, bucket_month
-      ON CONFLICT (question_id, test_id, bucket_month)
+      ON CONFLICT (question_id, test_id, bucket_month, source)
       DO UPDATE SET delivered_count = question_exposure.delivered_count + EXCLUDED.delivered_count
     `, [windowMonths]);
 
@@ -92,8 +94,22 @@ async function rebuild(pool: pg.Pool, windowMonths: number): Promise<{ rows: num
           AND at.started_at >= date_trunc('month', now()) - make_interval(months => $1)
       ) AS delivered
       GROUP BY question_id, test_id, bucket_month
-      ON CONFLICT (question_id, test_id, bucket_month)
+      ON CONFLICT (question_id, test_id, bucket_month, source)
       DO UPDATE SET delivered_count = question_exposure.delivered_count + EXCLUDED.delivered_count
+    `, [windowMonths]);
+
+    // Импорт: выданный состав прохождения — см. шапку модуля. Источник свой, `import`.
+    await client.query(`
+      INSERT INTO question_exposure (question_id, test_id, bucket_month, source, delivered_count)
+      SELECT q.question_id, a.test_id, date_trunc('month', a.started_at)::date, 'import',
+             COUNT(DISTINCT a.id)::int
+      FROM scorm_attempts a
+      CROSS JOIN LATERAL jsonb_array_elements_text(a.delivered_question_ids) AS q(question_id)
+      WHERE a.origin = 'import'
+        AND a.test_id IS NOT NULL
+        AND a.delivered_question_ids IS NOT NULL
+        AND a.started_at >= date_trunc('month', now()) - make_interval(months => $1)
+      GROUP BY q.question_id, a.test_id, date_trunc('month', a.started_at)::date
     `, [windowMonths]);
 
     // Уборка: выдачи вне окна в расчёт всё равно не идут, и хранить их незачем.

@@ -78,3 +78,86 @@ describe("счётчик выдач", () => {
     expect(counts.size).toBe(0);
   });
 });
+
+/**
+ * PRD-55 FR-08: вклад импортированных выгрузок — ПЕРЕСЧЁТ среза теста по выданному составу
+ * прохождений. Проверяется на базе: идемпотентность держится на том, что пересчёт заменяет
+ * строки `import`, а живые строки `live` не трогает, — это свойство запроса и ключа таблицы.
+ */
+describe("экспозиция импорта (FR-08)", () => {
+  /** Месяц назад: внутри окна наблюдения при любом дне запуска. */
+  const recent = () => {
+    const at = new Date();
+    at.setMonth(at.getMonth() - 1);
+    return at;
+  };
+
+  async function importedAttempt(id: string, testId: string, delivered: string[] | null, startedAt = recent()) {
+    const { scormAttempts } = await import("@shared/schema");
+    await h.current!.db.insert(scormAttempts).values({
+      id,
+      testId,
+      origin: "import",
+      participantKey: id.padEnd(64, "0"),
+      startedAt,
+      finishedAt: startedAt,
+      lastActivityAt: startedAt,
+      deliveredQuestionIds: delivered,
+    });
+  }
+
+  it("считает выдачи по выданному составу, по одной на прохождение", async () => {
+    await importedAttempt("a1", "t1", ["q1", "q2"]);
+    await importedAttempt("a2", "t1", ["q1"]);
+
+    await repo.rebuildImportExposure("t1");
+
+    const counts = await repo.getDeliveryCountsForTest(["q1", "q2"], "t1", new Date("2000-01-01"));
+    expect(counts.get("q1")).toBe(2);
+    expect(counts.get("q2")).toBe(1);
+  });
+
+  it("повторный пересчёт не удваивает счётчик", async () => {
+    await importedAttempt("a1", "t1", ["q1"]);
+
+    await repo.rebuildImportExposure("t1");
+    await repo.rebuildImportExposure("t1");
+
+    const counts = await repo.getDeliveryCountsForTest(["q1"], "t1", new Date("2000-01-01"));
+    expect(counts.get("q1")).toBe(1);
+  });
+
+  it("живые выдачи пересчёт не трогает, а читатель складывает оба источника", async () => {
+    await repo.recordDeliveries(["q1"], "t1", recent());
+    await importedAttempt("a1", "t1", ["q1"]);
+
+    await repo.rebuildImportExposure("t1");
+
+    const counts = await repo.getDeliveryCountsForTest(["q1"], "t1", new Date("2000-01-01"));
+    expect(counts.get("q1")).toBe(2);
+  });
+
+  it("исчезнувшее прохождение (откат партии) вычитается следующим пересчётом", async () => {
+    const { scormAttempts } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+    await importedAttempt("a1", "t1", ["q1"]);
+    await importedAttempt("a2", "t1", ["q1"]);
+    await repo.rebuildImportExposure("t1");
+
+    await h.current!.db.delete(scormAttempts).where(eq(scormAttempts.id, "a2"));
+    await repo.rebuildImportExposure("t1");
+
+    const counts = await repo.getDeliveryCountsForTest(["q1"], "t1", new Date("2000-01-01"));
+    expect(counts.get("q1")).toBe(1);
+  });
+
+  it("прохождение без выданного состава и чужой тест не считаются", async () => {
+    await importedAttempt("a1", "t1", null);
+    await importedAttempt("a2", "t2", ["q1"]);
+
+    await repo.rebuildImportExposure("t1");
+
+    const counts = await repo.getDeliveryCounts(["q1"], new Date("2000-01-01"));
+    expect(counts.has("q1")).toBe(false);
+  });
+});

@@ -184,6 +184,9 @@ router.delete(
       }
 
       await storage.deleteLmsImportBatch(req.params.id);
+      // PRD-55 FR-08: откат вычитает вклад партии в экспозицию — тем же пересчётом среза теста,
+      // которым загрузка его внесла.
+      await storage.rebuildImportExposure(batches.testId);
       res.json({ ok: true });
     } catch (error) {
       logger.error("LMS batch delete error: " + (error as Error).message, "analytics");

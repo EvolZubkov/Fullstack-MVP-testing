@@ -2283,16 +2283,23 @@ export type InsertAnalyticsSlice = typeof analyticsSlices.$inferInsert;
  * отчёту автору («доля попыток ЭТОГО теста»); взвешивание выдачи берёт СУММУ по всем тестам —
  * утечка не разбирает, из какого теста участник увидел вопрос.
  *
- * Таблица — агрегат, а не журнал: она восстановима пересчётом из состава веб-попыток и строк
- * телеметрии (`npm run exposure:rebuild`), поэтому её потеря не теряет фактов.
+ * Таблица — агрегат, а не журнал: она восстановима пересчётом из состава веб-попыток, строк
+ * телеметрии и выданного состава импортированных прохождений (`npm run exposure:rebuild`),
+ * поэтому её потеря не теряет фактов.
+ *
+ * `source` разделяет ДВА способа пополнения (FR-07, FR-08). `live` — веб и телеметрия, инкрементом
+ * в момент выдачи. `import` — выгрузки LMS, ПЕРЕСЧЁТОМ среза теста: повторная загрузка того же
+ * файла идемпотентна и строк не создаёт, а инкремент удвоил бы счётчик; откат партии вычитает её
+ * вклад тем же пересчётом. Читатели суммируют корзины, и источник для них прозрачен.
  */
 export const questionExposure = pgTable("question_exposure", {
   questionId: varchar("question_id", { length: 36 }).notNull(),
   testId: varchar("test_id", { length: 36 }).notNull(),
   bucketMonth: date("bucket_month").notNull(),
+  source: text("source", { enum: ["live", "import"] }).notNull().default("live"),
   deliveredCount: integer("delivered_count").notNull().default(0),
 }, (table) => ({
-  pk: primaryKey({ columns: [table.questionId, table.testId, table.bucketMonth] }),
+  pk: primaryKey({ columns: [table.questionId, table.testId, table.bucketMonth, table.source] }),
   // Чтение идёт «по списку заданий за окно» — тест в отборе не участвует.
   questionBucketIdx: index("question_exposure_question_bucket_idx").on(table.questionId, table.bucketMonth),
 }));
@@ -2369,6 +2376,14 @@ export const scormAttempts = pgTable("scorm_attempts", {
    * `variant_json.sections[].formId`. NULL = вариантов не было или пакет их не сообщает.
    */
   formsJson: jsonb("forms_json").$type<Record<string, string>>(),
+  /**
+   * PRD-55 FR-08/FR-09: выданный состав ИМПОРТИРОВАННОГО прохождения — задания, блок которых в
+   * выгрузке непуст хотя бы в одной подколонке (PRD-66 FR-10a). Ответы для этого не годятся:
+   * выданное, но не отвеченное оцениваемое задание наблюдением не становится и в `scorm_answers`
+   * не попадает, а показано оно было. Из этого поля экспозиция импорта и пересчитывается.
+   * NULL — строка загружена до появления поля: её выдачи не известны и не считаются.
+   */
+  deliveredQuestionIds: jsonb("delivered_question_ids").$type<string[]>(),
 
   // Данные из LMS
   lmsUserId: text("lms_user_id"),

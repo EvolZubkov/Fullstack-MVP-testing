@@ -45,6 +45,8 @@ export interface ImportedAttemptInput {
   resultPercent: number | null;
   /** Шкала процента (100) рядом с ним; `null` вместе с процентом. */
   maxPoints: number | null;
+  /** PRD-55 FR-08: выданный состав прохождения — из него пересчитывается экспозиция импорта. */
+  deliveredQuestionIds: string[];
   totalQuestions: number | null;
   scalesJson: Record<string, number> | null;
   variablesJson: Record<string, string> | null;
@@ -204,6 +206,7 @@ export class ScormRepository {
           totalPoints: data.totalPoints,
           resultPercent: data.resultPercent,
           maxPoints: data.maxPoints,
+          deliveredQuestionIds: data.deliveredQuestionIds,
           totalQuestions: data.totalQuestions,
           scalesJson: data.scalesJson,
           variablesJson: data.variablesJson,

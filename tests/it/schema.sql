@@ -156,8 +156,9 @@ CREATE TABLE "question_exposure" (
 	"question_id" varchar(36) NOT NULL,
 	"test_id" varchar(36) NOT NULL,
 	"bucket_month" date NOT NULL,
+	"source" text DEFAULT 'live' NOT NULL,
 	"delivered_count" integer DEFAULT 0 NOT NULL,
-	CONSTRAINT "question_exposure_question_id_test_id_bucket_month_pk" PRIMARY KEY("question_id","test_id","bucket_month")
+	CONSTRAINT "question_exposure_question_id_test_id_bucket_month_source_pk" PRIMARY KEY("question_id","test_id","bucket_month","source")
 );
 
 CREATE TABLE "question_measurements" (
@@ -288,6 +289,7 @@ CREATE TABLE "scorm_attempts" (
 	"variables_json" jsonb,
 	"snapshot_id" varchar(36),
 	"forms_json" jsonb,
+	"delivered_question_ids" jsonb,
 	"lms_user_id" text,
 	"lms_user_name" text,
 	"lms_user_email" text,

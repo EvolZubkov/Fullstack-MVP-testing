@@ -344,6 +344,11 @@ export interface IStorage {
    * веб-попытки и при создании прохождения телеметрии — двух однократных событиях.
    */
   recordDeliveries(questionIds: string[], testId: string, at: Date): Promise<void>;
+  /**
+   * PRD-55 (FR-08): пересчитать вклад импортированных выгрузок в счётчик теста — после загрузки
+   * и после отката партии. Пересчёт, а не инкремент: повторная загрузка идемпотентна.
+   */
+  rebuildImportExposure(testId: string): Promise<void>;
   /** PRD-55 (FR-04): сумма выдач заданий за окно, по всем тестам. Задание без выдач в карту не входит. */
   getDeliveryCounts(questionIds: string[], since: Date): Promise<Map<string, number>>;
   /** PRD-55 (FR-31): сумма выдач заданий в ОДНОМ тесте — доля показов для отчёта автору. */
@@ -1198,6 +1203,10 @@ export class DatabaseStorage implements IStorage {
 
   recordDeliveries(questionIds: string[], testId: string, at: Date): Promise<void> {
     return this.exposureRepo.recordDeliveries(questionIds, testId, at);
+  }
+
+  rebuildImportExposure(testId: string): Promise<void> {
+    return this.exposureRepo.rebuildImportExposure(testId);
   }
 
   getDeliveryCounts(questionIds: string[], since: Date): Promise<Map<string, number>> {

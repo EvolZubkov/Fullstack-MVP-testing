@@ -6,13 +6,19 @@
  * сумму по всем тестам, поэтому чтение группирует только по заданию — разбивка по тесту в
  * таблице нужна отчёту автору, а не отбору (FR-06).
  *
- * Таблица — агрегат, а не журнал: она восстановима пересчётом из состава веб-попыток и строк
- * телеметрии (FR-11), поэтому потеря строк теряет точность весов, но не факты.
+ * Таблица — агрегат, а не журнал: она восстановима пересчётом из состава веб-попыток, строк
+ * телеметрии и выданного состава импорта (FR-11), поэтому потеря строк теряет точность весов,
+ * но не факты.
+ *
+ * Два источника пишут по-разному (FR-07, FR-08): живые выдачи — инкрементом в строки `live`,
+ * импорт выгрузок — пересчётом своих строк `import` по тесту. Читатели суммируют корзины, и
+ * источник для них прозрачен.
  *
  * Выставляется через фасад `IStorage`; маршруты этот модуль не импортируют.
  */
 import { and, eq, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "../db";
+import { config } from "../config";
 import { questionExposure, scormAnswers, scormAttempts } from "@shared/schema";
 
 /**
@@ -44,11 +50,49 @@ export class ExposureRepository {
       questionId,
       testId,
       bucketMonth,
+      source: "live" as const,
       deliveredCount: 1,
     }));
     await db.insert(questionExposure).values(rows).onConflictDoUpdate({
-      target: [questionExposure.questionId, questionExposure.testId, questionExposure.bucketMonth],
+      target: [questionExposure.questionId, questionExposure.testId, questionExposure.bucketMonth, questionExposure.source],
       set: { deliveredCount: sql`${questionExposure.deliveredCount} + 1` },
+    });
+  }
+
+  /**
+   * PRD-55 FR-08: пересчитать вклад импортированных выгрузок в счётчик ОДНОГО теста.
+   *
+   * Строки `import` теста удаляются и собираются заново из выданного состава импортированных
+   * прохождений (`scorm_attempts.delivered_question_ids`) — одна выдача на пару «прохождение ×
+   * задание» (FR-03). Пересчёт, а не инкремент: повторная загрузка файла обновляет те же
+   * прохождения, и прибавка удвоила бы счётчик; откат партии удаляет её прохождения, и тот же
+   * пересчёт вычитает их вклад. Строк `live` пересчёт не касается.
+   *
+   * Окно — то же, что у чтения (FR-05): корзины старше в расчёт не идут, и хранить их незачем.
+   *
+   * @param testId тест, срез импорта которого пересчитывается
+   */
+  async rebuildImportExposure(testId: string): Promise<void> {
+    const since = new Date();
+    since.setMonth(since.getMonth() - config.delivery.exposureWindowMonths);
+    const from = bucketOf(since);
+    await db.transaction(async (tx) => {
+      await tx.delete(questionExposure).where(and(
+        eq(questionExposure.testId, testId),
+        eq(questionExposure.source, "import"),
+      ));
+      await tx.execute(sql`
+        INSERT INTO question_exposure (question_id, test_id, bucket_month, source, delivered_count)
+        SELECT q.question_id, a.test_id, date_trunc('month', a.started_at)::date, 'import',
+               COUNT(DISTINCT a.id)::int
+        FROM ${scormAttempts} a
+        CROSS JOIN LATERAL jsonb_array_elements_text(a.delivered_question_ids) AS q(question_id)
+        WHERE a.origin = 'import'
+          AND a.test_id = ${testId}
+          AND a.delivered_question_ids IS NOT NULL
+          AND a.started_at >= ${from}::date
+        GROUP BY q.question_id, a.test_id, date_trunc('month', a.started_at)::date
+      `);
     });
   }
 

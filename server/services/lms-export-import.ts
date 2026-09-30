@@ -88,6 +88,11 @@ export interface PlannedRow {
    */
   resultPercent: number | null;
   maxPoints: number | null;
+  /**
+   * PRD-55 FR-08/FR-09: выданный состав — задания, блок которых непуст хотя бы в одной
+   * подколонке (PRD-66 FR-10a). Шире ответов: выданное, но не отвеченное задание показано.
+   */
+  deliveredQuestionIds: string[];
   scalesJson: Record<string, number>;
   variablesJson: Record<string, string>;
   answers: Array<{ questionId: string; raw: string; result: string; latencyMs: number | null }>;
@@ -167,6 +172,9 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
       totalPoints: r.points,
       resultPercent: percent,
       maxPoints: percent === null ? null : LMS_SCORE_MAX,
+      // Ключи ответов — это и есть выданный состав: разбор кладёт туда только блоки, где
+      // заполнена хотя бы одна подколонка, с пустой строкой у неотвеченного.
+      deliveredQuestionIds: Object.keys(r.answers),
       scalesJson: r.scales,
       variablesJson: r.variables,
       answers: Object.keys(r.answers).map((questionId) => ({
@@ -367,6 +375,9 @@ export async function runImport(
       totalPoints: row.totalPoints,
       resultPercent: row.resultPercent,
       maxPoints: row.maxPoints,
+      // Только задания этого теста: чужой идентификатор завёл бы экспозицию несуществующему
+      // заданию, и он уже назван в предупреждении о чужих вопросах.
+      deliveredQuestionIds: row.deliveredQuestionIds.filter((id) => questionById.has(id)),
       totalQuestions: row.answers.length,
       scalesJson: row.scalesJson,
       variablesJson: row.variablesJson,
@@ -441,6 +452,10 @@ export async function runImport(
     rowsUnmatched,
     warnings,
   };
+
+  // PRD-55 FR-08: экспозиция пополняется ПЕРЕСЧЁТОМ среза теста, а не прибавкой — повторная
+  // загрузка того же файла обновляет те же прохождения и не должна удваивать счётчик.
+  if (!dryRun) await storage.rebuildImportExposure(ctx.testId);
 
   if (!dryRun && batchId) {
     await storage.updateLmsImportBatch(batchId, {
