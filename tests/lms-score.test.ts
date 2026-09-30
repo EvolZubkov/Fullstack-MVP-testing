@@ -49,3 +49,41 @@ describe("lmsScoreFor", () => {
     expect(lmsScoreFor({ percent: 0, possiblePoints: 10 })).toEqual({ raw: 0, max: 100 });
   });
 });
+
+// WebTutor records «Пройден» / «Не пройден» by comparing the reported points with the course's
+// own passing score and ignores the package's success_status and scaled (checked live on
+// testuniver.rt.ru, 2026-09-30). A verdict the score alone does not express — a failed
+// required topic at 90 %, a certification passed by its indicators at 60 % — reaches the
+// LMS only through the points, so they are moved to the threshold exactly when, and only
+// as far as, the two disagree.
+describe("lmsScoreFor — the verdict carried through the points", () => {
+  const graded = { possiblePoints: 64 };
+
+  it("verdict and points agree: the real points go out", () => {
+    expect(lmsScoreFor({ ...graded, percent: 46, passed: false, lmsThreshold: 80 })).toEqual({ raw: 46, max: 100 });
+    expect(lmsScoreFor({ ...graded, percent: 92, passed: true, lmsThreshold: 80 })).toEqual({ raw: 92, max: 100 });
+  });
+
+  it("failed at or above the threshold: one point under it", () => {
+    expect(lmsScoreFor({ ...graded, percent: 90, passed: false, lmsThreshold: 80 })).toEqual({ raw: 79, max: 100 });
+    expect(lmsScoreFor({ ...graded, percent: 80, passed: false, lmsThreshold: 80 })).toEqual({ raw: 79, max: 100 });
+  });
+
+  it("passed below the threshold: exactly the threshold", () => {
+    expect(lmsScoreFor({ ...graded, percent: 60, passed: true, lmsThreshold: 80 })).toEqual({ raw: 80, max: 100 });
+  });
+
+  it("threshold 0: every outcome is a pass for the LMS, the real points go out", () => {
+    expect(lmsScoreFor({ ...graded, percent: 12, passed: false, lmsThreshold: 0 })).toEqual({ raw: 12, max: 100 });
+  });
+
+  it("no verdict or no threshold (adaptive, ungraded, older callers): the real points go out", () => {
+    expect(lmsScoreFor({ ...graded, percent: 90, passed: null, lmsThreshold: 80 })).toEqual({ raw: 90, max: 100 });
+    expect(lmsScoreFor({ ...graded, percent: 90, passed: false })).toEqual({ raw: 90, max: 100 });
+    expect(lmsScoreFor({ ...graded, percent: 90, passed: false, lmsThreshold: null })).toEqual({ raw: 90, max: 100 });
+  });
+
+  it("a measurement run still reports no score, whatever the verdict", () => {
+    expect(lmsScoreFor({ percent: 0, possiblePoints: 0, passed: true, lmsThreshold: 80 })).toBeNull();
+  });
+});

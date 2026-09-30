@@ -318,7 +318,9 @@ function finishAndClose() {
     console.log('🔴 Попытки кончились, принудительно закрываем с passed=true');
     forcePassedHack = true;
     try {
-      SCORM.setValue('cmi.comments_from_learner', 'ATTEMPTS_EXHAUSTED: FAILED (forced close)');
+      // cmi.comments_from_learner is a COLLECTION in SCORM 2004: the bare element was
+      // rejected by the LMS (SetValue -> false), so the note was never written.
+      SCORM.setValue('cmi.comments_from_learner.0.comment', 'ATTEMPTS_EXHAUSTED: FAILED (forced close)');
       SCORM.commit();
       console.log('✅ Comments установлены успешно');
     } catch (e) {
@@ -347,6 +349,10 @@ function finishAndClose() {
     console.log('🎚️ controls_status переопределяет passed:', rcStatus.success);
     bestPassed = rcStatus.success;
   }
+
+  // The package's own verdict, before the forced close replaces it: the points sent to the
+  // LMS are aligned with THIS, so a forced «passed» still records «Не пройден» in WebTutor.
+  var verdictForLms = bestPassed;
 
   // The forced close goes LAST: nothing after it may take the «passed» back.
   if (forcePassedHack) {
@@ -397,13 +403,13 @@ function finishAndClose() {
       }
       state.flatQuestions = bestFlat;
 
-      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation, verdictForLms);
 
       state.answers = savedAnswers;
       state.flatQuestions = savedFlatQuestions;
       state.questionStatuses = savedStatuses;
     } else {
-      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation, verdictForLms);
     }
   }
 
@@ -1246,7 +1252,9 @@ function buildQuestionInteraction(question, answer, fullCorrect) {
 
 // Отправка результата в LMS. Телеметрия к этому моменту уже отправлена вызывающим —
 // `finishAndClose` шлёт её один раз для ТЕКУЩЕЙ попытки, тогда как в LMS уезжает лучшая.
-function finishScormLmsOnly(results, passedForLms, resultComputation, scaleComputation) {
+// `verdictForLms` — настоящий вердикт пакета (без подмены принудительным закрытием): по нему
+// баллы для LMS выравниваются с проходным, см. общий `lmsScoreFor`.
+function finishScormLmsOnly(results, passedForLms, resultComputation, scaleComputation, verdictForLms) {
   var objectives = results.topicResults.map(buildTopicObjective);
 
   var interactions = [];
@@ -1300,7 +1308,15 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
 
   // A run with nothing to grade reports NO score — the same shared decision the adaptive
   // path makes, so the two finish paths cannot drift on what the LMS is told.
-  var lmsScore = window.TBTemplate.lmsScoreFor({ percent: percentScore, possiblePoints: results.possiblePoints });
+  // WebTutor records the outcome by comparing these points with the course's passing score
+  // (the administrator sets it equal to the test's at publication) and ignores
+  // success_status, so the points carry the package's verdict where the two disagree.
+  var lmsScore = window.TBTemplate.lmsScoreFor({
+    percent: percentScore,
+    possiblePoints: results.possiblePoints,
+    passed: (results.gradingComplete === false || typeof verdictForLms !== 'boolean') ? null : verdictForLms,
+    lmsThreshold: TEST_DATA.passPercent
+  });
   SCORM.finish(
     lmsScore ? lmsScore.raw : null,
     lmsScore ? lmsScore.max : null,

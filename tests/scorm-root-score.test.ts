@@ -103,6 +103,15 @@ describe("оба пути завершения решают про балл ОД
     expect(body).toContain("lmsScoreFor");
   });
 
+  it("обычный путь передаёт помощнику настоящий вердикт и проходной теста", () => {
+    // WebTutor ставит «Пройден» / «Не пройден» по баллам против проходного курса и не читает
+    // success_status (стенд, 2026-09-30): вердикт пакета доезжает только через баллы.
+    const start = resultsSrc.indexOf("function finishScormLmsOnly(");
+    const body = resultsSrc.slice(start).match(/^function [^\n]*\n[\s\S]*?\n\}/)![0];
+    expect(body).toContain("passed: (results.gradingComplete === false || typeof verdictForLms !== 'boolean') ? null : verdictForLms");
+    expect(body).toContain("lmsThreshold: TEST_DATA.passPercent");
+  });
+
   it("безусловной отправки процента больше нет ни в одном пути", () => {
     expect(resultsSrc).not.toContain("SCORM.finish(percentScore, 100");
   });

@@ -39,6 +39,8 @@ interface Scenario {
 interface Outcome {
   /** The pass flag handed to the LMS writer. */
   passedForLms: boolean;
+  /** The package's own verdict handed alongside it — what the LMS points are aligned with. */
+  verdictForLms: boolean | undefined;
   /** Values written straight through `SCORM.setValue`. */
   written: Record<string, string>;
 }
@@ -47,6 +49,7 @@ interface Outcome {
 function run(s: Scenario): Outcome {
   const written: Record<string, string> = {};
   let passedForLms: boolean | undefined;
+  let verdictForLms: boolean | undefined;
   const results = {
     percent: 29,
     passed: s.standardPassed,
@@ -83,7 +86,10 @@ function run(s: Scenario): Outcome {
     hasAttemptsLeft: () => !s.attemptsExhausted,
     getBestAttempt: () => null,
     getBestAttemptDetail: () => null,
-    finishScormLmsOnly: (_r: unknown, passed: boolean) => { passedForLms = passed; },
+    finishScormLmsOnly: (_r: unknown, passed: boolean, _rc: unknown, _sc: unknown, verdict: boolean) => {
+      passedForLms = passed;
+      verdictForLms = verdict;
+    },
     finishScormAdaptive: () => { throw new Error("adaptive path must not run"); },
     buildAdaptiveResult: () => null,
     getAdaptiveResultForScorm: () => null,
@@ -99,7 +105,7 @@ function run(s: Scenario): Outcome {
   const finishAndClose = factory(...names.map((n) => deps[n as keyof typeof deps])) as () => void;
   finishAndClose();
   if (passedForLms === undefined) throw new Error("finishScormLmsOnly was not called");
-  return { passedForLms, written };
+  return { passedForLms, verdictForLms, written };
 }
 
 const FORCED = "ATTEMPTS_EXHAUSTED: FAILED (forced close)";
@@ -108,36 +114,39 @@ describe("finishAndClose — the forced close is applied after the indicator ver
   it("attempts spent, indicator says «failed»: the LMS still gets «passed» with the note", () => {
     const out = run({ standardPassed: false, indicator: false, attemptsExhausted: true });
     expect(out.passedForLms).toBe(true);
-    expect(out.written["cmi.comments_from_learner"]).toBe(FORCED);
+    expect(out.written["cmi.comments_from_learner.0.comment"]).toBe(FORCED);
+    // The points follow the REAL verdict, so WebTutor still records «Не пройден».
+    expect(out.verdictForLms).toBe(false);
   });
 
   it("attempts spent, rule passed but indicator failed: the verdict that counts is the indicator's", () => {
     const out = run({ standardPassed: true, indicator: false, attemptsExhausted: true });
     expect(out.passedForLms).toBe(true);
-    expect(out.written["cmi.comments_from_learner"]).toBe(FORCED);
+    expect(out.written["cmi.comments_from_learner.0.comment"]).toBe(FORCED);
   });
 
   it("attempts spent, indicator says «passed»: an honest pass, no forced-close note", () => {
     const out = run({ standardPassed: false, indicator: true, attemptsExhausted: true });
     expect(out.passedForLms).toBe(true);
-    expect(out.written["cmi.comments_from_learner"]).toBeUndefined();
+    expect(out.verdictForLms).toBe(true);
+    expect(out.written["cmi.comments_from_learner.0.comment"]).toBeUndefined();
   });
 
   it("attempts left, indicator says «failed»: the course stays open for a retake", () => {
     const out = run({ standardPassed: true, indicator: false, attemptsExhausted: false });
     expect(out.passedForLms).toBe(false);
-    expect(out.written["cmi.comments_from_learner"]).toBeUndefined();
+    expect(out.written["cmi.comments_from_learner.0.comment"]).toBeUndefined();
   });
 
   it("no indicator: the pass rule decides, and a spent failed attempt is force-closed", () => {
     const out = run({ standardPassed: false, attemptsExhausted: true });
     expect(out.passedForLms).toBe(true);
-    expect(out.written["cmi.comments_from_learner"]).toBe(FORCED);
+    expect(out.written["cmi.comments_from_learner.0.comment"]).toBe(FORCED);
   });
 
   it("time ran out: no forced close, the failure is reported as is", () => {
     const out = run({ standardPassed: false, indicator: false, attemptsExhausted: true, timeExpired: true });
     expect(out.passedForLms).toBe(false);
-    expect(out.written["cmi.comments_from_learner"]).toBeUndefined();
+    expect(out.written["cmi.comments_from_learner.0.comment"]).toBeUndefined();
   });
 });

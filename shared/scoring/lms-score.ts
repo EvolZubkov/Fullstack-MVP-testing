@@ -19,6 +19,18 @@ export interface LmsScoreInput {
    * an older package carries `percent` and no points at all.
    */
   possiblePoints: number | null | undefined;
+  /**
+   * The verdict the package reached by the test's full rule (overall rule, required topics,
+   * status-controlling indicators). `null` / absent — no verdict to carry (the adaptive path,
+   * a run that is not graded, callers that predate it).
+   */
+  passed?: boolean | null;
+  /**
+   * The passing score, 0..100, the LMS compares the points with — the test's overall
+   * threshold, which the administrator sets on the WebTutor course card at publication.
+   * `0` / absent — the LMS counts every outcome as a pass, nothing to carry.
+   */
+  lmsThreshold?: number | null;
 }
 
 /** `cmi.score.raw` out of `cmi.score.max`, or nothing to report at all. */
@@ -49,5 +61,23 @@ export function lmsScoreFor(run: LmsScoreInput): LmsScore | null {
   const points = run.possiblePoints;
   const known = points !== null && points !== undefined;
   if (known && nothingToGrade(points)) return null;
-  return { raw: Math.round(Number(run.percent) || 0), max: 100 };
+  const raw = Math.round(Number(run.percent) || 0);
+  return { raw: alignWithVerdict(raw, run.passed, run.lmsThreshold), max: 100 };
+}
+
+/**
+ * The points moved to the LMS threshold exactly when, and only as far as, they disagree with
+ * the package's verdict. WebTutor records «Пройден» / «Не пройден» by comparing the points
+ * with the course's passing score and ignores `success_status` and `scaled` (checked live on
+ * testuniver.rt.ru, 2026-09-30), so a verdict the score alone does not express — a failed
+ * required topic at 90 %, a certification passed by its indicators at 60 % — reaches it only
+ * this way. The real points stay everywhere else: the report, the results screen, telemetry,
+ * `cmi.objectives` and `cmi.interactions`.
+ */
+function alignWithVerdict(raw: number, passed: boolean | null | undefined, threshold: number | null | undefined): number {
+  const t = Number(threshold);
+  if (typeof passed !== "boolean" || !Number.isFinite(t) || t <= 0) return raw;
+  if (!passed && raw >= t) return Math.max(0, Math.ceil(t) - 1);
+  if (passed && raw < t) return Math.ceil(t);
+  return raw;
 }
