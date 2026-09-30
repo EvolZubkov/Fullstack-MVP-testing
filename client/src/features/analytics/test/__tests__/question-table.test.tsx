@@ -463,6 +463,14 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
     expect(screen.getByText(termOrText("Ростехнадзор 55 % · РТН 30 %"))).toBeTruthy();
   });
 
+  it("у вопроса с выбором в колонке прочерк, а не «мало данных»", () => {
+    // Разброса у выбора нет по устройству: «мало данных» при 60 ответах было бы неправдой.
+    render(<QuestionTable questions={[...WRITTEN, QUESTIONS[0]]} minObservations={10} />);
+    const row = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
+    const spreadCell = within(row).getAllByRole("cell")[1];
+    expect(spreadCell.textContent).toBe("—");
+  });
+
   it("у свободного текста вместо долей — объём и длина", () => {
     render(<QuestionTable questions={WRITTEN} minObservations={10} />);
     expect(screen.getByText(termOrText(/12 ответов · медиана 340 знаков \(от 42 до 3000\)/))).toBeTruthy();

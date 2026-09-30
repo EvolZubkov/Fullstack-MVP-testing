@@ -177,6 +177,9 @@ function sortValue(row: QuestionRow, key: string, psycho?: QuestionPsychometrics
  */
 const SPREAD_VISIBLE: Record<string, number> = { scale: 4, allocation: 2 };
 
+/** Типы, у которых сервер считает разброс ответов (`answer-spread.ts`); у прочих его нет. */
+const SPREAD_TYPES = new Set(["scale", "allocation", "short"]);
+
 /** Предел длины подписи варианта: утверждения опросника бывают в целое предложение. */
 const SPREAD_LABEL_MAX = 44;
 
@@ -394,6 +397,12 @@ export function QuestionTable({
               </Button>
             </Stack>
           );
+        }
+        // Разброс считается только у шкалы, распределения и короткого ответа. У выбора,
+        // сопоставления и ранжирования его нет по устройству: «мало данных» там читалось как
+        // нехватка ответов у вопроса, на который ответили сотни человек.
+        if (!SPREAD_TYPES.has(row.questionType)) {
+          return <Text variant="body-s" tone="muted">—</Text>;
         }
         if (!row.spread || row.totalAnswers < minObservations) {
           return <Text variant="body-s" tone="muted">мало данных</Text>;

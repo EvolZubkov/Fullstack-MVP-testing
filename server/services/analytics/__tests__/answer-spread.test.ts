@@ -120,6 +120,18 @@ describe("answerSpread — короткий ответ (PRD-57 FR-28x)", () => {
   });
 });
 
+describe("answerSpread — текст, похожий на число", () => {
+  it("у текстового задания ответ «42», прочитанный числом, остаётся написанием", () => {
+    const spread = answerSpread({ type: "short", options: [], answers: [42, "42", "сорок два"] });
+    expect(spread?.answered).toBe(3);
+    expect(spread?.options.map((option) => option.label)).toContain("42");
+  });
+
+  it("сводка текста считает и такие ответы", () => {
+    expect(textVolume([42, "сорок два"])?.answered).toBe(2);
+  });
+});
+
 describe("answerSpread — числовое задание (PRD-57 FR-28ag)", () => {
   /** Числовой разброс: тот же вызов, вид ответа приходит из набора правил. */
   const numeric = (answers: unknown[]) =>
@@ -131,6 +143,13 @@ describe("answerSpread — числовое задание (PRD-57 FR-28ag)", ()
     // что три ответа рядом, а один далеко.
     expect(spread?.options.length).toBeLessThan(4);
     expect(spread?.answered).toBe(4);
+  });
+
+  it("ответ, который драйвер прочитал числом, в гистограмму попадает", () => {
+    // drizzle при чтении `jsonb` повторно разбирает строку: «15» из базы приходит числом 15.
+    const spread = numeric([15, "15", 10, 30]);
+    expect(spread?.answered).toBe(4);
+    expect(spread?.options.some((option) => option.label === "не число")).toBe(false);
   });
 
   it("корзин не больше десяти", () => {

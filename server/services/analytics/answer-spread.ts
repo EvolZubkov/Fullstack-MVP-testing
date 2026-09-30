@@ -58,6 +58,22 @@ export interface AnswerSpreadInput {
 }
 
 /** Баллы распределения: ключ — индекс утверждения строкой, значение — сколько отдано. */
+/**
+ * Написанный ответ строкой; `null`, если ответ не текст.
+ *
+ * Набранный ответ хранится в `jsonb` строкой, но драйвер drizzle при чтении ещё раз пробует
+ * `JSON.parse` на каждой строке (`pg-core/columns/jsonb`): «15» приходит числом 15, «true» —
+ * булевым. Без обратного превращения числовой ответ выпадал из гистограммы целиком, а у
+ * текстового задания пропадали все ответы, похожие на число. Написание при этом может
+ * сместиться («1e3» станет «1000»), но сам ответ не теряется.
+ */
+function writtenOf(answer: unknown): string | null {
+  if (typeof answer === "string") return answer;
+  if (typeof answer === "number" && Number.isFinite(answer)) return String(answer);
+  if (typeof answer === "boolean") return String(answer);
+  return null;
+}
+
 function allocationOf(answer: unknown): Record<string, number> | null {
   if (!answer || typeof answer !== "object" || Array.isArray(answer)) return null;
   return answer as Record<string, number>;
@@ -77,8 +93,9 @@ function textSpread(answers: readonly unknown[]): AnswerSpread | null {
   const groups = new Map<string, { total: number; spellings: Map<string, number> }>();
   let counted = 0;
 
-  for (const answer of answers) {
-    if (typeof answer !== "string") continue;
+  for (const raw of answers) {
+    const answer = writtenOf(raw);
+    if (answer === null) continue;
     const key = normalizeForCompare(answer);
     // Пустой ответ знаменателя не меняет: «не ответил» — не написание.
     if (key === "") continue;
@@ -145,8 +162,9 @@ function numericSpread(answers: readonly unknown[]): AnswerSpread | null {
   const values: number[] = [];
   let notNumbers = 0;
 
-  for (const answer of answers) {
-    if (typeof answer !== "string" || answer.trim() === "") continue;
+  for (const raw of answers) {
+    const answer = writtenOf(raw);
+    if (answer === null || answer.trim() === "") continue;
     const parsed = parseNumericAnswer(answer);
     if (parsed === null) notNumbers += 1;
     else values.push(parsed);
@@ -216,8 +234,9 @@ export interface TextVolume {
  */
 export function textVolume(answers: readonly unknown[]): TextVolume | null {
   const lengths: number[] = [];
-  for (const answer of answers) {
-    if (typeof answer !== "string") continue;
+  for (const raw of answers) {
+    const answer = writtenOf(raw);
+    if (answer === null) continue;
     const text = answer.trim();
     if (text === "") continue;
     lengths.push(text.length);
