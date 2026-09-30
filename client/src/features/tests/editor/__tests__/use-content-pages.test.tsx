@@ -141,6 +141,34 @@ describe("useContentPages — local draft + commit/discard", () => {
     expect(spies.reorder).toHaveBeenCalledTimes(1);
   });
 
+  // 2026-10-01: a drag rewrites only `sortOrder`; commit numbered the pages by their place in
+  // the LOADED list and undid the drag — «Как читать отчёт» moved below «Итоги теста» kept
+  // coming back above them after every save.
+  it("commit keeps a drag: the final order follows sortOrder, not the load order", async () => {
+    const spies = installApi([
+      buildPage({ id: "pg-howto", position: "after", sortOrder: 16 }),
+      buildPage({ id: "pg-results", position: "after", kind: "results", type: "summary", templateKey: null, sortOrder: 18 }),
+    ]);
+    const { result } = renderHook(() => useContentPages(TEST_ID, "my-template"), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.pages.length).toBe(2));
+
+    // The drop on «Итоги теста» renumbers the combined zone: results first, the page after.
+    await act(async () => {
+      await result.current.reorder([
+        { id: "pg-results", sortOrder: 0 },
+        { id: "pg-howto", sortOrder: 1 },
+      ]);
+    });
+    await act(async () => {
+      await result.current.commit();
+    });
+
+    expect(spies.reorder).toHaveBeenCalledWith([
+      { id: "pg-results", sortOrder: 0 },
+      { id: "pg-howto", sortOrder: 1 },
+    ]);
+  });
+
   it("replaceVariant migrates shared values locally; commit PUTs the new key", async () => {
     const spies = installApi([buildPage({ id: "pg-1", templateKey: "info.e-migr-1" })]);
     const { result } = renderHook(() => useContentPages(TEST_ID, "my-template"), { wrapper: wrapper() });

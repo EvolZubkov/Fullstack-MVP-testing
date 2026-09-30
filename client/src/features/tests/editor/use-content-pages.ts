@@ -911,7 +911,15 @@ export function useContentPages(
         }
       }
       // 4) Reorder — final order with resolved ids (idempotent; covers add/delete).
-      const finalIds = draft.map((p) => (isDraftId(p.id) ? realId[p.id] : p.id)).filter(Boolean) as string[];
+      // The order is the DRAFT's `sortOrder`, not the array position: a drag in «Структура»
+      // only rewrites `sortOrder` (see `reorder`), and numbering by the array — the order
+      // the list was LOADED in — silently undid every drag on save. That is how «Как читать
+      // отчёт», moved back below «Итоги теста», kept returning above them (2026-10-01).
+      // The sort is stable, so equal numbers keep their array order.
+      const finalIds = [...draft]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((p) => (isDraftId(p.id) ? realId[p.id] : p.id))
+        .filter(Boolean) as string[];
       if (finalIds.length > 0) {
         await putReorder(target, finalIds.map((id, i) => ({ id, sortOrder: i })));
       }
