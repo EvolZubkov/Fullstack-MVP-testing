@@ -250,10 +250,24 @@ describe("POST /analytics/export/excel", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 400 when testIds missing", async () => {
+  it("без условия «Тест» выгружает все доступные тесты — как реестр (PRD-56 FR-04)", async () => {
+    // Выборка реестра по одной группе не несёт testIds: раньше книга отвечала 400
+    // «testIds is required», и такую выборку выгрузить было нельзя.
+    storageMock.getTests.mockResolvedValue([dbTest]);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt()]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.getTopicCourses.mockResolvedValue([]);
+    const res = await asAuthor(request(app).post("/api/export/excel").send({ groupIds: [] }));
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("spreadsheetml");
+  });
+
+  it("без условия «Тест» и без доступных тестов отвечает 400 словами", async () => {
+    storageMock.getTests.mockResolvedValue([]);
     const res = await asAuthor(request(app).post("/api/export/excel").send({}));
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/testIds/);
+    expect(res.body.error).toBe("Нет доступных тестов для выгрузки");
   });
 
   it("returns xlsx with all sheets", async () => {

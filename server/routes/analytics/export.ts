@@ -491,16 +491,18 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       summary: true, attempts: true, answers: true, questionStats: true, levelStats: true, recommendations: true,
     };
 
-    if (!testIds.length) {
-      return res.status(400).json({ error: "testIds is required" });
-    }
-
     // PRD-15 FR-08 (audit F-5): export only the tests within the actor's scope.
     const scope = await analyticsScope(req);
     const tests = await storage.getTests();
-    const selectedTests = tests.filter(t => testIds.includes(t.id) && scope.has(t.id));
+    // PRD-56 FR-04: книга отдаёт то, что отфильтровано в реестре. Без условия «Тест» реестр
+    // показывает прохождения ВСЕХ доступных тестов — и выгрузка обязана брать их же. Раньше
+    // пустой список тестов отвергался («testIds is required»), и выборку по одной группе или
+    // подразделению выгрузить было нельзя вовсе.
+    const selectedTests = tests.filter(t => (testIds.length === 0 || testIds.includes(t.id)) && scope.has(t.id));
     if (selectedTests.length === 0) {
-      return res.status(403).json({ error: "Forbidden" });
+      return testIds.length > 0
+        ? res.status(403).json({ error: "Forbidden" })
+        : res.status(400).json({ error: "Нет доступных тестов для выгрузки" });
     }
     const testTitleMap = new Map(selectedTests.map(t => [t.id, t.title]));
     const testModeMap = new Map(selectedTests.map(t => [t.id, t.mode || "standard"]));
