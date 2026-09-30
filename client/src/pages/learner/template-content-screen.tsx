@@ -214,6 +214,12 @@ export function TemplateContentScreen({
           // placeholders — the same DOM the SCORM runtime builds, so both hosts get
           // the template's content styling around identical markup.
           "page-content": bodyHtml ? built.skeleton + bodyHtml : built.skeleton,
+          // «Введение раздела» prints the author instruction through its OWN slot, as the
+          // package does (`renderSectionIntro`): the layout has no page-content slot, so
+          // without this the instruction never reached the web learner.
+          ...(page.kind === "intro"
+            ? { instruction: String(contentWithAssetBase.values?.instruction ?? "") }
+            : {}),
         }}
         content={contentWithAssetBase}
         className="tbh-fill"
