@@ -15,6 +15,7 @@ import {
   templateManifest,
   templateStyles,
   externalTemplatesDir,
+  externalTemplatesCandidates,
 } from "./template-roots";
 
 describe("реестр корней шаблонов", () => {
@@ -48,6 +49,12 @@ describe("реестр корней шаблонов", () => {
     }
   });
 
+  it("без переменной окружения ищет рядом с продуктом, а не только на диске C:", () => {
+    const candidates = externalTemplatesCandidates();
+    expect(candidates[0]).toBe(path.resolve(process.cwd(), ".."));
+    expect(candidates).toContain(path.join("C:", "Repositories", "skill'um", "templates"));
+  });
+
   it("подкаталоги собираются от корня шаблона", () => {
     expect(templateLayouts("default")).toBe(path.join(templateRoot("default"), "layouts"));
     expect(templateStyles("certification")).toBe(path.join(templateRoot("certification"), "styles"));
@@ -59,8 +66,12 @@ describe("реестр корней шаблонов", () => {
   // Тесты паритета обязаны ПАДАТЬ, а не тихо пропускаться, если вынесенного шаблона
   // нет на месте: молчаливый пропуск превращает зелёный прогон в ничего не значащий.
   it("каждый шаблон действительно доступен по своему пути", () => {
+    // Где искали — в сообщении: без этого падение на чужой машине указывало на диск C:.
+    const where = process.env.SKILLUM_TEMPLATES_DIR
+      ? `SKILLUM_TEMPLATES_DIR=${process.env.SKILLUM_TEMPLATES_DIR}`
+      : `искали в: ${externalTemplatesCandidates().join("; ")}; или задайте SKILLUM_TEMPLATES_DIR`;
     for (const id of TEMPLATE_IDS) {
-      expect(fs.existsSync(templateManifest(id)), `манифест шаблона «${id}» не найден`).toBe(true);
+      expect(fs.existsSync(templateManifest(id)), `манифест шаблона «${id}» не найден (${where})`).toBe(true);
       expect(fs.existsSync(templateLayouts(id)), `макеты шаблона «${id}» не найдены`).toBe(true);
     }
   });

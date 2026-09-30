@@ -9,13 +9,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const source = readFileSync(path.resolve(process.cwd(), "server/routes.ts"), "utf8");
+// Line endings depend on the checkout (CRLF on a Windows working copy, LF elsewhere):
+// normalise them once so the order checks below do not depend on the machine.
+const source = readFileSync(path.resolve(process.cwd(), "server/routes.ts"), "utf8").replace(/\r\n/g, "\n");
 
 describe("magic scope wiring", () => {
   it("registers the guard between the session middleware and the routers", () => {
-    // server/routes.ts is checked out with CRLF line endings on this repo, so the
-    // literal must match "\r\n", not "\n" — otherwise indexOf silently returns -1.
-    const session = source.indexOf("app.use(\r\n    session(");
+    const session = source.indexOf("app.use(\n    session(");
     // Search for the registration call, not the bare identifier: the import
     // statement also contains "magicScopeGuard" and sits before the session
     // middleware, which would make the identifier-only search a false pass.

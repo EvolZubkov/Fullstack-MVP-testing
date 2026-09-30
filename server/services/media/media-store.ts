@@ -62,6 +62,13 @@ export function createFsMediaStore(root: string): MediaStore {
 
   /** Resolves a key inside the root, refusing anything that escapes it. */
   function resolveKey(storageKey: string): string {
+    // A Windows drive or UNC path is refused on EVERY platform. On POSIX `C:\…` is not
+    // absolute but a file name with backslashes, so the root check below would let it
+    // through there and refuse it only on Windows; a key never has that shape anyway
+    // (see `storageKeyFor`), and the store must not answer differently per OS.
+    if (path.win32.isAbsolute(storageKey)) {
+      throw new Error(`storage key resolves outside the media root: ${storageKey}`);
+    }
     const abs = path.resolve(absRoot, storageKey);
     const rootWithSep = absRoot.endsWith(path.sep) ? absRoot : absRoot + path.sep;
     if (abs !== absRoot && !abs.startsWith(rootWithSep)) {
