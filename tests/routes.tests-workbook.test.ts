@@ -65,6 +65,7 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     getContentPages: vi.fn().mockResolvedValue([]),
     createContentPage: vi.fn(),
     updateContentPage: vi.fn(),
+    reorderContentPages: vi.fn(),
     deleteContentPage: vi.fn(),
   },
   // FR-16: the structure pass applies sections via testSettingsService.save.
@@ -766,6 +767,35 @@ describe("POST /:id/workbook/import — предпросмотр обещает 
 
     expect(preview.body.errors.length).toBeGreaterThan(0);
     expect(preview.body.errors).toEqual(applied.body.errors);
+  });
+
+  // Сертификационный тест, 2026-10-01: «Итоги» приёмника стояли на 17, а созданная
+  // книгой «Как читать отчёт» получила номер строки листа — 2 — и ушла ПЕРЕД итогами.
+  it("страница за «Итогами» остаётся за ними: зона нумеруется в одной системе", async () => {
+    const buf = await makeWorkbook({
+      "Страницы": [
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Итоги", "Номер": 1,
+          "Вариант": "results.default", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+        {
+          "Зона": "После теста", "Раздел": "", "Вид": "Авторская", "Номер": 2,
+          "Вариант": "info.wide", "Режим": "Шаблон", "Автопереход": "Нет", "Задержка, мс": "",
+        },
+      ],
+    });
+    storageMock.getContentPages.mockImplementation(async () => [
+      { ...page("p-results", "results", null, "results.default"), sortOrder: 17 },
+    ]);
+    storageMock.createContentPage.mockImplementation(async (created: any) => ({ id: "p-howto", ...created }));
+
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(storageMock.reorderContentPages).toHaveBeenCalledWith([
+      { id: "p-results", sortOrder: 1 },
+      { id: "p-howto", sortOrder: 2 },
+    ]);
   });
 
   it("предпросмотр по-прежнему ничего не пишет", async () => {

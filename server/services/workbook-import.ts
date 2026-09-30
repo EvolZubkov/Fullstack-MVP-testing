@@ -930,6 +930,8 @@ async function applyPageSheets(
   const zoneLabels = new Map<string, string>();
   const updates: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const authorPages: PendingAuthorPage[] = [];
+  /** System rows the book places in a zone, by their ordinal on the sheet. */
+  const systemOrder: Array<{ id: string; zoneKey: string; index: number }> = [];
 
   for (const page of parsed.pages) {
     const where = `Лист «${PAGE_SHEET_NAME}», страница «${formatPageAddress(page)}»`;
@@ -989,6 +991,9 @@ async function applyPageSheets(
     for (const w of built.warnings) result.warnings.push(`${where}: ${w}`);
 
     if (existing) {
+      // The row's place in its zone is renumbered with the author pages below, so the
+      // system row and the pages around it share ONE numbering.
+      systemOrder.push({ id: existing.id, zoneKey, index: page.index });
       const patch: Record<string, unknown> = {};
       if (page.templateKey !== undefined) patch.templateKey = page.templateKey;
       if (page.mode !== undefined) patch.mode = page.mode;
@@ -1061,6 +1066,7 @@ async function applyPageSheets(
     await storage.deleteContentPage(page.id);
     await syncPageUsages(page.id, null);
   }
+  const createdOrder: Array<{ id: string; zoneKey: string; index: number }> = [];
   for (const item of authorPages) {
     const created = await storage.createContentPage({
       testId,
@@ -1082,7 +1088,41 @@ async function applyPageSheets(
       hidden: item.page.hidden ?? false,
     });
     await syncPageUsages(created.id, created);
+    createdOrder.push({ id: created.id, zoneKey: zoneKeyOf(item.page.zone, item.topicId), index: item.page.index });
   }
+  await renumberNamedZones(testId, [...systemOrder, ...createdOrder], zoneKeyOf);
+}
+
+/**
+ * Puts every zone the book named into ONE numbering: the sheet's ordinals.
+ *
+ * A created author page takes its ordinal as `sort_order`, while a system row that already
+ * exists used to keep the number it had in the target — and those two numberings have
+ * nothing in common. A target whose «Итоги теста» sat at 17 received «Как читать отчёт» at
+ * its sheet ordinal 2, and the page the author placed AFTER the results ran BEFORE them
+ * (certification test, 2026-10-01). The run orders a zone by `sort_order`, so the zone has to
+ * be renumbered whole: the rows the book names by their ordinals, and any row of that zone the
+ * book does not mention after them, in the order it had.
+ */
+async function renumberNamedZones(
+  testId: string,
+  placed: Array<{ id: string; zoneKey: string; index: number }>,
+  zoneKeyOf: (position: string, topicId: string | null) => string,
+): Promise<void> {
+  if (placed.length === 0) return;
+  const zones = new Set(placed.map((p) => p.zoneKey));
+  const placedIds = new Set(placed.map((p) => p.id));
+  const updates: Array<{ id: string; sortOrder: number }> = [];
+  for (const zoneKey of zones) {
+    const named = placed.filter((p) => p.zoneKey === zoneKey).sort((a, b) => a.index - b.index);
+    for (const p of named) updates.push({ id: p.id, sortOrder: p.index });
+    let next = named.length > 0 ? named[named.length - 1].index : 0;
+    const rest = (await storage.getContentPages(testId))
+      .filter((p) => zoneKeyOf(p.position, p.topicId) === zoneKey && !placedIds.has(p.id))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    for (const p of rest) updates.push({ id: p.id, sortOrder: ++next });
+  }
+  await storage.reorderContentPages(updates);
 }
 
 // ─── «Оформление» (PRD-48 FR-17/FR-18) ───────────────────────────────────────
