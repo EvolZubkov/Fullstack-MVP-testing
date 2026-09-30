@@ -35,6 +35,20 @@ function blankIdsOf(question: { type: string; correctJson?: unknown }): string[]
  * Признака «файл уже обезличен» здесь нет: готовил ли файл внешний обезличиватель, видно по самой
  * книге — по колонке `external_id` (PRD-54 раздел 4).
  */
+/** Потолок корневого балла, который пакет сообщает LMS: балл — это процент. */
+const LMS_SCORE_MAX = 100;
+
+/**
+ * Процент прохождения из колонки «Баллы»; `null`, если балла нет или он не число.
+ *
+ * Значение вне 0..100 обрезается, а не отбрасывается: процент чужой LMS мог приехать с
+ * округлением за край, и выбросить из-за этого вердикт было бы хуже, чем прижать к границе.
+ */
+function percentOf(points: number | null): number | null {
+  if (points === null || !Number.isFinite(points)) return null;
+  return Math.round(Math.min(LMS_SCORE_MAX, Math.max(0, points)));
+}
+
 export interface ImportOptions {
   anonymize: boolean;
   linkUsers: boolean;
@@ -62,6 +76,18 @@ export interface PlannedRow {
   finishedAt: Date;
   resultPassed: boolean | null;
   totalPoints: number | null;
+  /**
+   * Процент прохождения и шкала, в которой он записан.
+   *
+   * Колонка «Баллы» выгрузки — это `cmi.score.raw`, а пакет отправляет его ПРОЦЕНТОМ при
+   * `cmi.score.max = 100` (`lmsScoreFor`, `shared/scoring/lms-score.ts`). Без этих полей аналитика не
+   * видит у импортированной строки оценивания вовсе: процента нет, вердикт не выносится, и
+   * контрольный тест, пройденный только через LMS, читается как измерительный. Пустые
+   * «Баллы» или ни одного исхода «верно/неверно» в строке — измерительное прохождение: оба поля
+   * `null`.
+   */
+  resultPercent: number | null;
+  maxPoints: number | null;
   scalesJson: Record<string, number>;
   variablesJson: Record<string, string>;
   answers: Array<{ questionId: string; raw: string; result: string; latencyMs: number | null }>;
@@ -115,6 +141,11 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
     // что посчитал внешний обезличиватель. Нет колонки — импорт считает его сам ТЕМ ЖЕ
     // алгоритмом, поэтому один человек получает одно значение, кто бы его ни вычислил.
     const key = r.externalId || participantKey(r.participantName, r.org, r.unit, r.position);
+    // Процент берётся только у ОЦЕНЁННОГО прохождения — с хотя бы одним исходом «верно/неверно».
+    // Пакеты до 2026-09-12 слали измерительному тесту «0 баллов» (PRD-54 §14 п.1), и такие
+    // выгрузки в ходу: без этой проверки опросник стал бы оцененным на ноль.
+    const graded = Object.values(r.results).some((v) => v === "correct" || v === "incorrect");
+    const percent = graded ? percentOf(r.points) : null;
 
     rows.push({
       participantKey: key,
@@ -134,6 +165,8 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
       finishedAt: at,
       resultPassed: r.passed,
       totalPoints: r.points,
+      resultPercent: percent,
+      maxPoints: percent === null ? null : LMS_SCORE_MAX,
       scalesJson: r.scales,
       variablesJson: r.variables,
       answers: Object.keys(r.answers).map((questionId) => ({
@@ -332,6 +365,8 @@ export async function runImport(
       lastActivityAt: row.finishedAt,
       resultPassed: row.resultPassed,
       totalPoints: row.totalPoints,
+      resultPercent: row.resultPercent,
+      maxPoints: row.maxPoints,
       totalQuestions: row.answers.length,
       scalesJson: row.scalesJson,
       variablesJson: row.variablesJson,

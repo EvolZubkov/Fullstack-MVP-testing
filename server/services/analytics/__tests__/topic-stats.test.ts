@@ -64,6 +64,29 @@ describe("summariseTopics", () => {
     expect(topic.passedShare).toBe(50);
   });
 
+  it("прохождение без баллов за вопросы в долю прошедших не входит", () => {
+    // a2 — строка импорта выгрузки LMS: исход «верно/неверно» есть, баллов за вопрос нет.
+    // Порог к ней неприменим, и «не прошёл» про неё было бы выдумкой.
+    const facts = [
+      fact({ attemptId: "a1", earnedPoints: 1, possiblePoints: 1 }),
+      fact({ attemptId: "a2", earnedPoints: null, possiblePoints: null }),
+    ];
+
+    const [topic] = summariseTopics(facts, new Map([["t1", percentRule(75)]]));
+
+    expect(topic.passedShare).toBe(100);
+    expect(topic.correctShare).toBe(100);
+    expect(topic.inSample).toBe(2);
+  });
+
+  it("если баллов нет ни у одного прохождения, доли прошедших нет, а не ноль", () => {
+    const facts = [fact({ earnedPoints: null, possiblePoints: null })];
+
+    const [topic] = summariseTopics(facts, new Map([["t1", percentRule(75)]]));
+
+    expect(topic.passedShare).toBeNull();
+  });
+
   it("без порога темы доли прошедших нет", () => {
     // «Не проверять отдельно» — законная настройка: тема идёт в общий зачёт и своего исхода
     // не имеет. Ноль вместо этого читался бы как «никто не справился».

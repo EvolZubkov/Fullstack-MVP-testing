@@ -166,6 +166,46 @@ const ctx = {
   fileBuffer: Buffer.from("x"), userId: "me",
 };
 
+describe("buildImportPlan — процент прохождения", () => {
+  /** Оцениваемое прохождение: исход «верно/неверно» и «Баллы» — процент пакета. */
+  const graded = (points: number | null) => ({
+    ...book,
+    rows: [{ ...book.rows[0], points, results: { q1: "correct" } }],
+  });
+
+  it("«Баллы» оцениваемого прохождения становятся процентом при потолке 100", () => {
+    const row = buildImportPlan(graded(83) as never, ON).rows[0];
+    expect(row.resultPercent).toBe(83);
+    expect(row.maxPoints).toBe(100);
+    expect(row.totalPoints).toBe(83);
+  });
+
+  it("ноль у оцениваемого прохождения — измеренный ноль, а не отсутствие балла", () => {
+    const row = buildImportPlan(graded(0) as never, ON).rows[0];
+    expect(row.resultPercent).toBe(0);
+    expect(row.maxPoints).toBe(100);
+  });
+
+  it("процент за пределами 0..100 прижимается к границе и округляется", () => {
+    expect(buildImportPlan(graded(104.6) as never, ON).rows[0].resultPercent).toBe(100);
+    expect(buildImportPlan(graded(-3) as never, ON).rows[0].resultPercent).toBe(0);
+    expect(buildImportPlan(graded(66.6) as never, ON).rows[0].resultPercent).toBe(67);
+  });
+
+  it("пустые «Баллы» — процента нет", () => {
+    const row = buildImportPlan(graded(null) as never, ON).rows[0];
+    expect(row.resultPercent).toBeNull();
+    expect(row.maxPoints).toBeNull();
+  });
+
+  it("измерительное прохождение со старым «0 баллов» оцененным не становится (PRD-54 §14 п.1)", () => {
+    // `book` — ровно такая строка: «Пройден», 0 баллов, единственный исход `neutral`.
+    const row = buildImportPlan(book as never, ON).rows[0];
+    expect(row.resultPercent).toBeNull();
+    expect(row.maxPoints).toBeNull();
+  });
+});
+
 describe("runImport", () => {
   it("связывает по external_id из файла против внешнего ключа (BR-54-26)", async () => {
     const s = storageStub({ "9f86d081884c7d65": "user-7" });
@@ -247,6 +287,13 @@ describe("runImport", () => {
     const res = await runImport(book as never, { ...ON, linkUsers: true }, ctx, s as never);
     expect(res.rowsCreated).toBe(1);
     expect(res.rowsLinked).toBe(0);
+  });
+
+  it("процент и потолок доезжают до записи прохождения", async () => {
+    const s = storageStub();
+    const gradedBook = { ...book, rows: [{ ...book.rows[0], points: 72, results: { q1: "incorrect" } }] };
+    await runImport(gradedBook as never, ON, ctx, s as never);
+    expect(s.attempts[0]).toMatchObject({ resultPercent: 72, maxPoints: 100, totalPoints: 72, resultPassed: true });
   });
 
   it("сухой прогон считает, но ничего не создаёт", async () => {

@@ -50,6 +50,8 @@ function importedRow(over: Partial<Parameters<ScormRepository["upsertImportedAtt
     lastActivityAt: new Date("2026-09-09T13:39:00Z"),
     resultPassed: true,
     totalPoints: 0,
+    resultPercent: null,
+    maxPoints: null,
     totalQuestions: 14,
     scalesJson: { cel: 29 },
     variablesJson: { lead_margin: "6" },
@@ -96,6 +98,14 @@ describe("upsertImportedAttempt", () => {
     const all = await h.current!.db.select().from(scormAttempts);
     expect(all).toHaveLength(1);
     expect(all[0].scalesJson).toEqual({ cel: 31 });
+  });
+
+  it("процент прохождения пишется и обновляется повторной загрузкой", async () => {
+    await repo.upsertImportedAttempt(importedRow({ resultPercent: 64, maxPoints: 100, totalPoints: 64 }));
+    await repo.upsertImportedAttempt(importedRow({ resultPercent: 81, maxPoints: 100, totalPoints: 81 }));
+
+    const [row] = await h.current!.db.select().from(scormAttempts);
+    expect(row).toMatchObject({ resultPercent: 81, maxPoints: 100, totalPoints: 81 });
   });
 
   it("другая дата — это другое прохождение", async () => {

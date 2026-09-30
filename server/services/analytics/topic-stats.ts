@@ -81,18 +81,19 @@ function add(bucket: Bucket, fact: TopicAnswerFact): void {
 /** Свести накопленное в показатели разреза. */
 function summarise(bucket: Bucket, rule: ResolvedRule | null): TopicSliceStats {
   const attempts = [...bucket.attempts.values()];
+  // Прохождение без достижимых баллов оценивать нечем: порог к нему неприменим, и в знаменатель
+  // доли оно не идёт. Раньше оно шло туда «не прошедшим» — и выгрузка LMS, которая баллов за
+  // вопрос не несёт (только «верно/неверно»), давала «Прошли тему: 0 %» у любой темы.
+  const judged = attempts.filter(attempt => attempt.possible > 0);
   const passed = rule === null
     ? null
-    : attempts.filter(attempt => {
-      // Прохождение без достижимых баллов оценивать нечем: порог к нему неприменим.
-      if (attempt.possible <= 0) return false;
-      return checkPassRule(rule, (attempt.earned / attempt.possible) * 100, attempt.earned);
-    }).length;
+    : judged.filter(attempt =>
+      checkPassRule(rule, (attempt.earned / attempt.possible) * 100, attempt.earned)).length;
 
   return {
-    passedShare: passed === null || attempts.length === 0
+    passedShare: passed === null || judged.length === 0
       ? null
-      : (passed / attempts.length) * 100,
+      : (passed / judged.length) * 100,
     correctShare: bucket.graded > 0 ? (bucket.correct / bucket.graded) * 100 : null,
     thresholdPercent: rule?.type === "percent" ? rule.value : null,
     inSample: attempts.length,

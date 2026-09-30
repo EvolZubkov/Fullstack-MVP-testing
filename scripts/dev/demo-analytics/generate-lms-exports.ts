@@ -342,7 +342,9 @@ function answerCore(q: PkgQuestion, role: Role, theta: number): Cell4 {
       return singleCell(q, choice, key, rushed ? 0 : seconds(role.t));
     }
     case "fastWrong": {
-      const ok = chance(0.2 + 0.35 * logistic(theta - 0.5));
+      // Доля верных держится ниже 40 % при любой способности: иначе эффект обучения по
+      // календарю вывел бы задание из-под флага «быстро и неверно».
+      const ok = chance(0.15 + 0.2 * logistic(theta - 1));
       const choice = ok ? key : wrongOption(options, key);
       return singleCell(q, choice, key, seconds(role.t));
     }
@@ -413,8 +415,10 @@ interface Attempt {
 
 function knowledgeRow(pkg: Pkg, attempt: Attempt): { row: ExportRow; ids: string[] } {
   const cells = new Map<string, Cell4>();
-  // Пересдача: участник подготовился.
-  const theta = attempt.person.theta + 0.45 * (attempt.attemptNo - 1);
+  // Пересдача: участник подготовился. Плюс эффект обучения по календарю: к концу года
+  // курс доработали, и динамика сдаваемости идёт вверх, а не стоит на месте.
+  const progress = clamp((attempt.at.getTime() - day("2025-10-01").getTime()) / (365 * 86400000), 0, 1);
+  const theta = attempt.person.theta + 0.45 * (attempt.attemptNo - 1) + 0.2 + 1.5 * progress;
   let earned = 0;
   let possible = 0;
   const count = (id: string, cell: Cell4) => {
@@ -446,7 +450,8 @@ function knowledgeRow(pkg: Pkg, attempt: Attempt): { row: ExportRow; ids: string
   }
   cells.set(VARIANT_INTERACTION_ID, { type: "other", seconds: null, result: "neutral", answer: encodeVariantForms([form.id]) });
 
-  return { row: { person: attempt.person, at: attempt.at, passed, points: earned, cells }, ids: [...cells.keys()] };
+  // «Баллы» — корневой `cmi.score.raw`, который пакет шлёт процентом при `max = 100`.
+  return { row: { person: attempt.person, at: attempt.at, passed, points: Math.round(percent), cells }, ids: [...cells.keys()] };
 }
 
 /** Порядок блоков: вопросы разделов подряд, затем показатели и служебные блоки. */

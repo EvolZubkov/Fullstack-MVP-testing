@@ -41,6 +41,10 @@ export interface ImportedAttemptInput {
   lastActivityAt: Date;
   resultPassed: boolean | null;
   totalPoints: number | null;
+  /** Процент из корневого балла выгрузки; `null` — балла нет (измерительный тест). */
+  resultPercent: number | null;
+  /** Шкала процента (100) рядом с ним; `null` вместе с процентом. */
+  maxPoints: number | null;
   totalQuestions: number | null;
   scalesJson: Record<string, number> | null;
   variablesJson: Record<string, string> | null;
@@ -198,6 +202,8 @@ export class ScormRepository {
           lastActivityAt: data.lastActivityAt,
           resultPassed: data.resultPassed,
           totalPoints: data.totalPoints,
+          resultPercent: data.resultPercent,
+          maxPoints: data.maxPoints,
           totalQuestions: data.totalQuestions,
           scalesJson: data.scalesJson,
           variablesJson: data.variablesJson,
