@@ -48,7 +48,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { DrawBlueprint, FormSet, SectionGroup, Topic } from "@shared/schema";
+import type { DrawBlueprint, Folder, FormSet, SectionGroup, Topic } from "@shared/schema";
+import { useOptionalAuth } from "@/lib/auth";
+import { TopicDrawer, type TopicDrawerTarget } from "@/features/topics/topic-drawer";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import { expectedExposure } from "@shared/draw/expected-exposure";
 import {
@@ -277,6 +279,18 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
    */
   const [pickerGroup, setPickerGroup] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  /**
+   * Решение владельца 2026-10-01: недостающую тему создают из ящика теста. Это тот же
+   * ящик темы, что в «Темах и вопросах»; сохранённая тема сразу встаёт в тест — в ту
+   * группу, из которой открывали выбор темы.
+   */
+  const auth = useOptionalAuth();
+  const canCreateTopic = auth?.can("topics.manage") ?? false;
+  const [topicCreate, setTopicCreate] = useState<TopicDrawerTarget | null>(null);
+  const { data: folders = [] } = useQuery<Folder[]>({
+    queryKey: ["/api/folders"],
+    enabled: topicCreate !== null,
+  });
 
   const overrideByQuestion = useMemo(
     () => new Map(model.scoring.questionOverrides.map((o) => [o.questionId, o])),
@@ -682,7 +696,27 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
         topics={availableTopics}
         onPick={addTopic}
         onCancel={() => setPickerOpen(false)}
+        onCreate={
+          canCreateTopic
+            ? (name) => {
+                setPickerOpen(false);
+                setTopicCreate({ mode: "create", name });
+              }
+            : undefined
+        }
       />
+      {/* Монтируется только открытым: ящик темы тянет свои запросы и уведомления, и
+          держать его в ящике теста всё время — плата за редкий случай. */}
+      {topicCreate && (
+        <TopicDrawer
+          target={topicCreate}
+          folders={folders}
+          isAdmin={auth?.can("topics.owner.change") ?? false}
+          onClose={() => setTopicCreate(null)}
+          // Новая тема пуста: вопросы автор добавит в «Вопросах теста».
+          onCreated={(topic) => addTopic({ ...topic, questionCount: 0 })}
+        />
+      )}
     </>
   );
 }
@@ -1581,6 +1615,11 @@ function TopicPickerModal(props: {
   topics: TopicWithQuestionCount[];
   onPick: (topic: TopicWithQuestionCount) => void;
   onCancel: () => void;
+  /**
+   * «Создать тему»: открыть ящик новой темы с набранным в поиске названием. Нет —
+   * кнопки нет (у автора нет права создавать темы).
+   */
+  onCreate?: (name: string) => void;
 }) {
   const [filter, setFilter] = useState("");
   // `String(t?.name ?? "")`, а не `t.name`: строка без имени — это испорченный ответ API,
@@ -1599,14 +1638,28 @@ function TopicPickerModal(props: {
       title="Добавить тему"
       description="Темы, доступные вам и ещё не добавленные в тест"
       footer={
-        <Button
-          variant="ghost"
-          size="m"
-          onClick={props.onCancel}
-          data-testid="topic-picker-cancel"
-        >
-          Отмена
-        </Button>
+        <>
+          {props.onCreate && (
+            <Button
+              variant="secondary"
+              size="m"
+              className="tb-topic-picker__create"
+              leadingIcon={<Plus size={16} aria-hidden="true" />}
+              onClick={() => props.onCreate?.(filter.trim())}
+              data-testid="topic-picker-create"
+            >
+              Создать тему
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="m"
+            onClick={props.onCancel}
+            data-testid="topic-picker-cancel"
+          >
+            Отмена
+          </Button>
+        </>
       }
       data-testid="topic-picker-modal"
     >

@@ -1298,6 +1298,8 @@
  * ──────────────────────────────────────────────────────────────────────────── */
 
 .tb-topic-picker__search { margin-bottom: var(--ou-space-3); }
+/* «Создать тему» — другое действие, чем «Отмена»: слева в подвале, отдельно от неё. */
+.tb-topic-picker__create { margin-right: auto; }
 
 .tb-topic-picker__list {
   list-style: none;

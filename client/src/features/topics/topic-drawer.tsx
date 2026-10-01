@@ -64,7 +64,11 @@ interface NameCheckResponse {
 
 /** Open target: a fresh topic (create) or an existing one (edit). */
 export type TopicDrawerTarget =
-  | { mode: "create"; folderId?: string | null }
+  /**
+   * `name` — начальное название новой темы. Им пользуется ящик теста: автор искал тему
+   * в окне выбора, не нашёл и создаёт её — набранное в поиске переносится сюда.
+   */
+  | { mode: "create"; folderId?: string | null; name?: string }
   | { mode: "edit"; topic: Topic };
 
 const LEVEL_OPTIONS: { value: AccessLevel; label: string }[] = [
@@ -129,6 +133,7 @@ export function TopicDrawer({
   isAdmin,
   initialTab = "props",
   onClose,
+  onCreated,
 }: {
   target: TopicDrawerTarget | null;
   folders: FolderType[];
@@ -136,6 +141,11 @@ export function TopicDrawer({
   isAdmin: boolean;
   initialTab?: TopicTab;
   onClose: () => void;
+  /**
+   * Called with the created topic after a successful CREATE (before `onClose`). The
+   * test editor uses it to add the new topic to the test right away.
+   */
+  onCreated?: (topic: Topic) => void;
 }) {
   const { push: toast } = useToast();
   const queryClient = useQueryClient();
@@ -176,7 +186,7 @@ export function TopicDrawer({
       setFeedback(feedbackOf(target.topic));
       setInterpretation(interpretationOf(target.topic));
     } else {
-      setName("");
+      setName(target.name ?? "");
       setCode("");
       setDescription("");
       setFolderId(target.folderId ?? null);
@@ -254,7 +264,8 @@ export function TopicDrawer({
 
   // ── Save: properties (PUT/POST) + visibility/owner (PATCH, edit only) ─────────
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    /** Resolves to the created topic on CREATE, to `null` on edit. */
+    mutationFn: async (): Promise<Topic | null> => {
       const body = {
         name: name.trim(),
         code: code.trim() || null,
@@ -268,8 +279,8 @@ export function TopicDrawer({
         interpretationJson: interpretation,
       };
       if (!isEdit) {
-        await apiRequest("POST", "/api/topics", body);
-        return;
+        const res = await apiRequest("POST", "/api/topics", body);
+        return (await res.json()) as Topic;
       }
       await apiRequest("PUT", `/api/topics/${topicId}`, body);
       if (access && shared !== (access.visibility === "shared")) {
@@ -290,11 +301,13 @@ export function TopicDrawer({
         });
         if (!res.ok) throw new Error((await res.json()).error || "Не удалось сменить владельца");
       }
+      return null;
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
       refetchAccess();
       toast({ tone: "success", title: isEdit ? "Тема обновлена" : "Тема создана" });
+      if (created) onCreated?.(created);
       onClose();
     },
     onError: (e: Error) => {
