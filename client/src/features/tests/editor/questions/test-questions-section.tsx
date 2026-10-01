@@ -21,7 +21,11 @@ import type { Question } from "@shared/schema";
 import type { QuestionType } from "@shared/questions/question-type";
 import { QuestionPreviewModal } from "@/features/questions/question-preview-modal";
 import { useOptionalAuth } from "@/lib/auth";
-import type { ItemQualityView } from "@/features/analytics/test/item-quality";
+import {
+  reviewHeuristicsOf,
+  type ItemQualityView,
+  type ReviewHeuristicSource,
+} from "@/features/analytics/test/item-quality";
 import { questionAnalyticsHref } from "@/features/analytics/test/question-analytics-link";
 import { useReviewComments } from "../../review/use-review-comments";
 import type { TestEditorModel } from "../test-editor.types";
@@ -81,6 +85,19 @@ export function TestQuestionsSection({
     () => new Map((quality?.items ?? []).map((item) => [item.questionId, item])),
     [quality],
   );
+  // Эвристики ревизии PRD-56 считает сводка теста («Обзор» аналитики). Ключ и адрес — как у
+  // страницы аналитики без фильтров, поэтому признак строки совпадает с признаком вкладки
+  // «Качество вопросов», а повторный заход в любую сторону берёт ответ из кэша.
+  const { data: overview } = useQuery<{ questionStats?: ReviewHeuristicSource[] }>({
+    queryKey: [`/api/analytics/tests/${testId}`, ""],
+    queryFn: async () => {
+      const response = await fetch(`/api/analytics/tests/${testId}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Не удалось загрузить аналитику теста");
+      return response.json();
+    },
+    enabled: canAnalytics,
+  });
+  const heuristics = useMemo(() => reviewHeuristicsOf(overview?.questionStats), [overview]);
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<QuestionRow | null>(null);
 
@@ -193,7 +210,10 @@ export function TestQuestionsSection({
                 excluded: excluded.has(q.id),
                 openComments: openComments.get(q.id) ?? 0,
               });
-              const stats = questionAnalytics(canAnalytics ? itemById.get(q.id) : undefined);
+              const stats = questionAnalytics(
+                canAnalytics ? itemById.get(q.id) : undefined,
+                heuristics[q.id],
+              );
               const qType = q.type as QuestionType;
               const TypeIcon = QUESTION_TYPE_ICON[qType] ?? CircleDot;
               return (

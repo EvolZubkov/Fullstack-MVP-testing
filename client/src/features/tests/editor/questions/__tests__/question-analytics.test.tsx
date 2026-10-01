@@ -53,6 +53,17 @@ describe("questionAnalytics", () => {
     expect(a.flag).toMatchObject({ tone: "info", title: "Мало данных" });
   });
 
+  it("hides values the quality tab hides as «мало данных»", () => {
+    const a = questionAnalytics(item({
+      observations: 2,
+      difficulty: 0.5,
+      itemRest: -1,
+      difficultyConfidence: "insufficient",
+      coefficientConfidence: "insufficient",
+    }));
+    expect(a.line).toBe("2 наблюдения");
+  });
+
   it("takes the strongest flag of the quality tab", () => {
     const a = questionAnalytics(item({
       itemRest: -0.18,
@@ -60,6 +71,14 @@ describe("questionAnalytics", () => {
     }));
     expect(a.line).toContain("дискриминативность −0,18");
     expect(a.flag).toMatchObject({ tone: "error", title: "Сильные ошибаются чаще" });
+  });
+
+  it("puts a PRD-56 review heuristic before the weaker psychometric flags, as the quality tab does", () => {
+    const a = questionAnalytics(
+      item({ flags: { tooHard: false, tooEasy: true, negativeDiscrimination: false, atChanceLevel: false } }),
+      { kinds: ["fast-and-wrong"], exposurePercent: 40, correctPercent: 18, latencyMedianMs: 3000 },
+    );
+    expect(a.flag).toMatchObject({ tone: "warning", title: "Слишком быстрые ответы" });
   });
 
   it("says a pool question was never delivered and offers nothing to open", () => {
@@ -74,6 +93,7 @@ describe("questionAnalytics", () => {
 const QUESTIONS = [
   { id: "q1", topicId: "law", type: "single", orderIndex: 1, prompt: "Первый", tags: [], difficulty: 50 },
   { id: "q2", topicId: "law", type: "single", orderIndex: 2, prompt: "Второй", tags: [], difficulty: 50 },
+  { id: "q3", topicId: "law", type: "single", orderIndex: 3, prompt: "Третий", tags: [], difficulty: 50 },
 ];
 
 function model(): TestEditorModel {
@@ -120,6 +140,19 @@ function renderSection() {
         flags: { tooHard: false, tooEasy: false, negativeDiscrimination: true, atChanceLevel: false },
       }),
       item({ questionId: "q2", neverDelivered: true, observations: 0, difficulty: null, itemRest: null }),
+      item({ questionId: "q3", observations: 60 }),
+    ],
+  });
+  // Сводка теста — тот же ключ, что у страницы аналитики без фильтров.
+  client.setQueryData(["/api/analytics/tests/test-1", ""], {
+    questionStats: [
+      {
+        questionId: "q3",
+        reviewFlags: [{ kind: "hard-and-frequent" }],
+        exposurePercent: 92,
+        correctPercent: 21,
+        latencyMedianMs: null,
+      },
     ],
   });
   return render(
@@ -146,6 +179,12 @@ describe("<TestQuestionsSection /> with analytics", () => {
     expect(flags).toHaveTextContent("задано в тесте");
     expect(screen.getByTestId("test-questions-stats-q2")).toHaveTextContent("Вопрос ещё не выдавался");
     expect(screen.queryByTestId("test-questions-analytics-q2")).toBeNull();
+  });
+
+  it("shows the review heuristic of the test overview, as the quality tab does", () => {
+    auth.value = { can: () => true };
+    renderSection();
+    expect(screen.getByTestId("test-questions-flag-analytics-q3")).toHaveTextContent("Заезжено и трудно");
   });
 
   it("opens the question breakdown in a new browser tab without opening the drawer", () => {

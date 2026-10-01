@@ -4,12 +4,16 @@
  * `s-composition-questions-analytics`).
  *
  * Строка называет величины психометрики теста теми же словами, что вкладка аналитики
- * «Качество вопросов», а признак вопроса берёт её же функцией `flagOf` — второй копии правил
- * нет. Эвристики ревизии PRD-56 сюда не приходят: их считает сводка теста, отдельный и
- * тяжёлый запрос, и строка показывает следующий по силе признак психометрики.
+ * «Качество вопросов», а признак вопроса берёт её же функцией `flagOf` с теми же эвристиками
+ * ревизии PRD-56 (`reviewHeuristicsOf`) — второй копии правил нет, и признак в редакторе
+ * совпадает с признаком во вкладке.
  */
 import { pluralize } from "@/lib/i18n";
-import { flagOf, type ItemQualityRow } from "@/features/analytics/test/item-quality";
+import {
+  flagOf,
+  type ItemQualityRow,
+  type ReviewHeuristic,
+} from "@/features/analytics/test/item-quality";
 import { num } from "@/features/analytics/test/psychometrics-format";
 
 /** Что строка вопроса показывает из аналитики. */
@@ -28,15 +32,26 @@ const NONE: QuestionAnalytics = { line: null, flag: null, canOpen: false };
  * Собрать данные прохождений для строки вопроса.
  *
  * @param item строка психометрики вопроса; нет — по вопросу нечего сказать
+ * @param heuristic эвристики ревизии вопроса из сводки теста, если сработали
  * @returns строка величин, признак и доступность разбора
  */
-export function questionAnalytics(item: ItemQualityRow | undefined): QuestionAnalytics {
+export function questionAnalytics(
+  item: ItemQualityRow | undefined,
+  heuristic?: ReviewHeuristic,
+): QuestionAnalytics {
   if (!item) return NONE;
   if (item.neverDelivered) return { line: "Вопрос ещё не выдавался", flag: null, canOpen: false };
+  // Ниже порога наблюдений вкладка «Качество вопросов» пишет вместо числа «мало данных»:
+  // «дискриминативность −1,00» на двух ответах ничего не утверждает, но пугает. Строка
+  // показывает число только там, где его показывает вкладка; о нехватке говорит признак.
   const parts: string[] = [];
-  if (item.difficulty !== null) parts.push(`трудность ${num(item.difficulty)}`);
-  if (item.itemRest !== null) parts.push(`дискриминативность ${num(item.itemRest)}`);
+  if (item.difficulty !== null && item.difficultyConfidence !== "insufficient") {
+    parts.push(`трудность ${num(item.difficulty)}`);
+  }
+  if (item.itemRest !== null && item.coefficientConfidence !== "insufficient") {
+    parts.push(`дискриминативность ${num(item.itemRest)}`);
+  }
   const n = item.observations;
   parts.push(`${n} ${pluralize(n, "наблюдение", "наблюдения", "наблюдений")}`);
-  return { line: parts.join(" · "), flag: flagOf(item), canOpen: n > 0 };
+  return { line: parts.join(" · "), flag: flagOf(item, heuristic), canOpen: n > 0 };
 }

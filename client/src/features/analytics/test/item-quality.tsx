@@ -276,6 +276,39 @@ export interface ReviewHeuristic {
   latencyMedianMs: number | null;
 }
 
+/** Строка статистики вопроса из ответа «Обзора» — поля, нужные эвристикам. */
+export interface ReviewHeuristicSource {
+  questionId: string;
+  reviewFlags: Array<{ kind: string }>;
+  exposurePercent?: number | null;
+  correctPercent?: number | null;
+  latencyMedianMs?: number | null;
+}
+
+/**
+ * Карта эвристик «Требуют ревизии» по заданиям из `questionStats` ответа «Обзора».
+ *
+ * Одна на страницу аналитики и на «Вопросы теста» в редакторе: признак задания там и тут
+ * должен совпадать. В карту попадают только задания, где эвристика сработала.
+ *
+ * @param questionStats строки статистики вопросов; нет — пустая карта
+ * @returns задание -> его эвристики и числа, которые их вызвали
+ */
+export function reviewHeuristicsOf(
+  questionStats: readonly ReviewHeuristicSource[] | undefined,
+): Record<string, ReviewHeuristic> {
+  return Object.fromEntries(
+    (questionStats ?? [])
+      .filter((question) => question.reviewFlags.length > 0)
+      .map((question) => [question.questionId, {
+        kinds: question.reviewFlags.map((flag) => flag.kind),
+        exposurePercent: question.exposurePercent ?? null,
+        correctPercent: question.correctPercent ?? null,
+        latencyMedianMs: question.latencyMedianMs ?? null,
+      }]),
+  );
+}
+
 /** Процент без десятых — как в подписях PRD-56. */
 function wholePercent(value: number | null): string {
   return value === null ? "—" : `${Math.round(value)} %`;

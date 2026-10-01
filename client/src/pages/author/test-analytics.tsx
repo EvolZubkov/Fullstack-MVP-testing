@@ -27,6 +27,7 @@ import {
 } from "@/features/analytics/test/scale-profile";
 import {
     ItemQualityPanel,
+    reviewHeuristicsOf,
     type ItemQualityView,
 } from "@/features/analytics/test/item-quality";
 import {
@@ -404,16 +405,10 @@ export default function TestAnalyticsPage() {
      * вторую копию правил психометрика не заводит. В карту попадают только задания, где эвристика
      * сработала.
      */
-    const reviewHeuristics = useMemo(() => Object.fromEntries(
-        (analytics?.questionStats ?? [])
-            .filter(question => question.reviewFlags.length > 0)
-            .map(question => [question.questionId, {
-                kinds: question.reviewFlags.map(flag => flag.kind),
-                exposurePercent: question.exposurePercent ?? null,
-                correctPercent: question.correctPercent ?? null,
-                latencyMedianMs: question.latencyMedianMs ?? null,
-            }]),
-    ), [analytics]);
+    const reviewHeuristics = useMemo(
+        () => reviewHeuristicsOf(analytics?.questionStats),
+        [analytics],
+    );
 
     /**
      * PRD-66 FR-24: разбор одного задания — своим запросом и только когда его открыли.
