@@ -14,6 +14,8 @@
  */
 import { Card, CardBody, CardHeader, ProgressBar, ProgressStacked, Stack, Text } from "@skillum/ui-kit";
 
+import { percent } from "../format";
+
 export interface ScaleBandView {
   level: string;
   label: string;
@@ -111,7 +113,7 @@ export function ScaleProfilePanel({ scales, observations }: ScaleProfilePanelPro
                   segments={scale.bands.map(band => ({
                     value: Math.round(band.share),
                     color: band.color,
-                    label: `${band.label} — ${Math.round(band.share)} %`,
+                    label: `${band.label} — ${percent(band.share)}`,
                   }))}
                 />
               </Stack>

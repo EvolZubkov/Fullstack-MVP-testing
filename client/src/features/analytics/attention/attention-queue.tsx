@@ -23,6 +23,8 @@ import {
   type AttentionPeriod,
 } from "@shared/analytics/attention-period";
 
+import { percent } from "../format";
+
 /** Вид дела. Совпадает с `AttentionKind` сервера. */
 export type AttentionKind = "overdue" | "failed" | "abandoned" | "exhausted";
 
@@ -162,8 +164,8 @@ function details(row: AttentionRow): string {
   const parts: string[] = [];
   if (typeof row.percent === "number") {
     parts.push(row.threshold === null || row.threshold === undefined
-      ? `${Math.round(row.percent)} %`
-      : `${Math.round(row.percent)} % при пороге ${Math.round(row.threshold)} %`);
+      ? `${percent(row.percent)}`
+      : `${percent(row.percent)} при пороге ${percent(row.threshold)}`);
   }
   if (row.attemptNumber) {
     parts.push(row.attemptLimit

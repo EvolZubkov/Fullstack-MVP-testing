@@ -14,6 +14,8 @@
  */
 import { Card, CardBody, CardHeader, DataGrid, Stack, Tag, Text } from "@skillum/ui-kit";
 
+import { percent } from "../format";
+
 export interface VariantRowView {
   formId: string;
   label: string;
@@ -38,7 +40,7 @@ export interface VariantTableProps {
 /** Процент для чтения человеком; «мало данных» — не прочерк: это разные причины молчать. */
 function share(value: number | null, lowSample: boolean): string {
   if (lowSample) return "мало данных";
-  return value === null ? "—" : `${Math.round(value)} %`;
+  return percent(value);
 }
 
 /** Расхождение словами: знак, величина и то, с чем сравнивали. */

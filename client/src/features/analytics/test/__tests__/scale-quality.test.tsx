@@ -274,7 +274,8 @@ describe("ScaleQualityPanel", () => {
       const bubble = tip.querySelector(".ou-sr-only")!;
 
       expect(bubble.textContent).toMatch(/^Градации ответа: /);
-      const items = [...bubble.querySelectorAll("ol > li")].map(li => li.textContent);
+      // Пробел перед знаком неразрывный (единый формат процентов, Э1) — здесь важны слова и числа.
+      const items = [...bubble.querySelectorAll("ol > li")].map(li => li.textContent?.replace(/ /g, " "));
       expect(items).toEqual([
         "Никогда — 10 %",
         "Редко — 20 %",

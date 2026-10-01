@@ -70,6 +70,7 @@ import {
     EMPTY_FILTER,
     type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
+import { percent } from "@/features/analytics/format";
 import { useRegistryDictionaries, useTestDictionary } from "@/features/analytics/registry/use-dictionaries";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import {
@@ -229,9 +230,7 @@ interface DeliveryAnalytics {
 const FIRST_ATTEMPT_CHIP = "first-attempt-only";
 
 /** Процент на плитке обзора — целым, как в эскизе: «79 %». */
-function tilePercent(percent: number | null): string {
-    return percent === null ? "—" : `${Math.round(percent)} %`;
-}
+const tilePercent = (value: number | null): string => percent(value);
 
 /** Названия источников для подзаголовка шапки. */
 const SOURCE_NAMES: Record<string, string> = {
@@ -670,7 +669,7 @@ export default function TestAnalyticsPage() {
                                                                 </Cluster>
                                                                 <Cluster justify="between">
                                                                     <Text variant="body-s" tone="muted">Средний %:</Text>
-                                                                    <Text variant="body-s">{level.avgCorrectPercent.toFixed(1)}%</Text>
+                                                                    <Text variant="body-s">{percent(level.avgCorrectPercent)}</Text>
                                                                 </Cluster>
                                                             </Stack>
                                                         </Stack>

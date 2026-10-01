@@ -26,6 +26,8 @@ import { pluralize } from "@/lib/i18n";
 import { QuestionTypeIcon } from "@/features/tests/editor/sections/question-type-icon";
 import type { QuestionType } from "@shared/questions/question-type";
 
+import { percent } from "../format";
+
 export interface ExposureRowView {
   questionId: string;
   prompt: string;
@@ -94,7 +96,7 @@ export function ExposureProfile({ profile, topics, onTopicChange }: ExposureProf
       // Прохождений за окно не было — доли нет, а не ноль.
       render: (row: ExposureRowView) => (row.sharePercent === null
         ? "—"
-        : `${Math.round(row.sharePercent)} %`),
+        : `${percent(row.sharePercent)}`),
     },
     {
       key: "count",

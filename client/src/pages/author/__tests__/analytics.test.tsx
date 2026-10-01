@@ -397,7 +397,8 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByText("Детали попытки")).toBeInTheDocument());
     // Overview tab: percent + points.
-    await waitFor(() => expect(within(dialog).getByText("85%")).toBeInTheDocument());
+    // Единый формат процентов (Э1): «85 %», пробел неразрывный — сравнение его схлопывает.
+    await waitFor(() => expect(within(dialog).getByText("85 %")).toBeInTheDocument());
 
     // Answers tab covers formatUserAnswer / formatCorrectAnswer for all 4 types.
     fireEvent.click(within(dialog).getByRole("tab", { name: /Ответы \(4\)/ }));

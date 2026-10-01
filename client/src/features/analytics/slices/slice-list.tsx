@@ -41,6 +41,7 @@ import {
   type SortDir,
 } from "@skillum/ui-kit";
 
+import { percent } from "../format";
 import { ExportDialog } from "../registry/export-dialog";
 import { RegistryFilterDialog } from "../registry/filter-dialog";
 import { conditionsToFilter, EMPTY_FILTER, type RegistryFilter } from "../registry/filter-state";
@@ -168,10 +169,6 @@ function SliceRowMenu({
   );
 }
 
-/** Процент для чтения человеком: без десятых, которых в таких числах всё равно нет. */
-function percent(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value)} %`;
-}
 
 /** Колонки, по которым сортируется список срезов. */
 type SliceSort = "name" | "assigned" | "started" | "completed" | "passRate" | "avgPercent";
@@ -456,7 +453,7 @@ export function SliceList({
       render: (row: SliceRow) => (row.weakest
         ? `${row.weakest.topicName}${row.weakest.correctShare === null
           ? ""
-          : ` · ${Math.round(row.weakest.correctShare)} %`}`
+          : ` · ${percent(row.weakest.correctShare)}`}`
         : "—"),
     },
     {
@@ -533,7 +530,7 @@ export function SliceList({
                   numeric: true,
                   render: (topic: SliceTopic) => (topic.correctShare === null
                     ? "—"
-                    : `${Math.round(topic.correctShare)} %`),
+                    : `${percent(topic.correctShare)}`),
                 },
                 {
                   key: "sample",

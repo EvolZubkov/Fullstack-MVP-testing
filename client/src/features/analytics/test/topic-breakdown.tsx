@@ -13,6 +13,8 @@
  */
 import { Box, Card, CardBody, CardHeader, DataGrid, Text } from "@skillum/ui-kit";
 
+import { percent } from "../format";
+
 /** Разрез темы или подтемы. */
 export interface TopicSliceView {
   passedShare: number | null;
@@ -36,11 +38,6 @@ interface Row extends TopicSliceView {
   key: string;
   name: string;
   isSubtopic: boolean;
-}
-
-/** Процент для чтения человеком; прочерк там, где величины нет. */
-function percent(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value)} %`;
 }
 
 /** Развернуть темы в плоский список строк: подтема идёт сразу под своей темой. */

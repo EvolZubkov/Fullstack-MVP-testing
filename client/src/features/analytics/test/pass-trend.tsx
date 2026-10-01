@@ -10,6 +10,8 @@
  */
 import { Card, CardBody, CardHeader, LineChart, Text } from "@skillum/ui-kit";
 
+import { percent } from "../format";
+
 /** Точка линии — то, что отдаёт `GET /api/analytics/tests/:testId`. */
 export interface PassTrendPointView {
   key: string;
@@ -55,7 +57,7 @@ export function PassTrend({ points }: PassTrendProps) {
             }]}
             yMin={0}
             yMax={100}
-            yTickFormat={value => `${value} %`}
+            yTickFormat={value => percent(value)}
           />
         )}
       </CardBody>

@@ -27,6 +27,7 @@ import { questionInTopicHref } from "@/features/content/question-link";
 import { QuestionTypeIcon } from "@/features/tests/editor/sections/question-type-icon";
 import { pluralize } from "@/lib/i18n";
 
+import { percent } from "../format";
 import { DeliveryExclusionDialog, type ExclusionTarget } from "./delivery-exclusion-dialog";
 import { COEFFICIENT_MIN, DIFFICULTY_HINT, ITEM_REST_HINT, num } from "./psychometrics-format";
 import { QuestionRowMenu } from "./question-row-menu";
@@ -151,11 +152,6 @@ type SortDir = "asc" | "desc";
 /** Где браузер помнит, что пояснение о смене числа уже прочитано (FR-02). */
 const DIFFICULTY_NOTICE_KEY = "tb.analytics.difficulty-notice-hidden";
 
-/** Процент для чтения человеком; прочерк там, где величины нет. */
-function percent(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value)} %`;
-}
-
 /** Время на задание: минуты и секунды, как их читают. */
 function duration(ms: number | null): string {
   if (ms === null) return "—";
@@ -218,7 +214,7 @@ function spreadLabel(
       : option.label;
     // Верный вариант помечается: у оцениваемого задания разброс читают как «куда уходят
     // ошибившиеся», и без пометки лидирующий неверный вариант не отличить от верного.
-    return `${option.correct ? "✓ " : ""}${label}${dash}${Math.round(option.share)} %`;
+    return `${option.correct ? "✓ " : ""}${label}${dash}${percent(option.share)}`;
   };
 
   const ranked = [...options].sort((a, b) => b.share - a.share);
@@ -581,7 +577,7 @@ export function QuestionTable({
               caption: [
                 row.topicName,
                 row.exposurePercent !== null && row.correctPercent !== null
-                  ? `${Math.round(row.exposurePercent)} % показов при ${Math.round(row.correctPercent)} % верных`
+                  ? `${percent(row.exposurePercent)} показов при ${percent(row.correctPercent)} верных`
                   : "",
               ].filter(Boolean).join(" · "),
             })

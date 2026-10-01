@@ -34,6 +34,10 @@ import { DeliveryExclusionDialog, type ExclusionTarget } from "./delivery-exclus
 import { COEFFICIENT_MIN, DIFFICULTY_HINT, ITEM_REST_HINT, num } from "./psychometrics-format";
 import { QuestionRowMenu } from "./question-row-menu";
 import { TermHint } from "./term-hint";
+import { percent, percentNumber, percentOfShare } from "../format";
+
+/** Порог и его интервал — десятая там значима: «65,8 %» и «66 %» говорят о разных участниках. */
+const PRECISE = { precise: true } as const;
 
 /** Уровень доверия к числу — то же, что считает движок. */
 type Confidence = "insufficient" | "tentative" | "reliable";
@@ -201,8 +205,7 @@ const SOURCE_TITLE: Record<string, string> = {
  */
 function missingText(share: number | undefined): string | null {
   if (share === undefined) return null;
-  const percent = Math.round(share * 100);
-  return percent < 1 ? null : `не выдано ${percent} %`;
+  return Math.round(share * 100) < 1 ? null : `не выдано ${percentOfShare(share)}`;
 }
 
 /**
@@ -222,11 +225,6 @@ function forecastOf(forecast: { target: number; itemsDelta: number } | null | un
   return `надёжность выше цели ${target}: ${count} ${pluralize(count, "вопрос", "вопроса", "вопросов")} можно снять`;
 }
 
-/** Процент для текста баннера: «70 %», «65,8 %» — десятая, только когда она есть. */
-function percentText(value: number): string {
-  const rounded = Math.round(value * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1).replace(".", ",");
-}
 
 /** Оценка альфы словами — ориентиры FR-19. */
 function alphaVerdict(alpha: number): string {
@@ -310,9 +308,7 @@ export function reviewHeuristicsOf(
 }
 
 /** Процент без десятых — как в подписях PRD-56. */
-function wholePercent(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value)} %`;
-}
+const wholePercent = (value: number | null): string => percent(value);
 
 /** Признак-эвристика словами и числами; подписи — из эскизов PRD-66 и PRD-56. */
 function heuristicFlag(heuristic: ReviewHeuristic | undefined): { tone: "warning"; title: string; detail: string } | null {
@@ -595,7 +591,7 @@ export function ItemQualityPanel({
     ? ""
     : within === 0
       ? "Пока в него не попал никто."
-      : `Внутри интервала ${within} ${pluralize(within, "участник", "участника", "участников")}${bandBase > 0 ? ` (${Math.round((within / bandBase) * 100)} %)` : ""}.`;
+      : `Внутри интервала ${within} ${pluralize(within, "участник", "участника", "участников")}${bandBase > 0 ? ` (${percentOfShare(within / bandBase)})` : ""}.`;
   /**
    * Что делать (эскиз): сколько вопросов нужно для надёжности 0,90. Лечится ненадёжное решение
    * не порогом, а длиной теста; уже достаточно надёжному тесту совет не нужен.
@@ -605,7 +601,7 @@ export function ItemQualityPanel({
     : "";
   const cutBandText = view.cutBand && view.cutBand.cutPercent !== undefined
     && view.cutBand.lowPercent !== undefined && view.cutBand.highPercent !== undefined
-    ? `Порог ${percentText(view.cutBand.cutPercent)} %, интервал ${percentText(view.cutBand.lowPercent)} — ${percentText(view.cutBand.highPercent)} %.`
+    ? `Порог ${percent(view.cutBand.cutPercent, PRECISE)}, интервал ${percentNumber(view.cutBand.lowPercent, PRECISE)} — ${percent(view.cutBand.highPercent, PRECISE)}.`
     : "";
 
   /**
@@ -620,7 +616,7 @@ export function ItemQualityPanel({
     biasReasons.push("Выдача неоднородна: участники видели разные наборы вопросов, и корреляции считаются по пересекающимся, но разным выборкам.");
   }
   if ((view.bias?.importShare ?? 0) >= 0.2) {
-    biasReasons.push(`Заметная доля наблюдений пришла из импорта (${Math.round((view.bias?.importShare ?? 0) * 100)} %): там исход бинарный вместо доли балла, а редакция вопроса неизвестна.`);
+    biasReasons.push(`Заметная доля наблюдений пришла из импорта (${percentOfShare(view.bias?.importShare ?? 0)}): там исход бинарный вместо доли балла, а редакция вопроса неизвестна.`);
   }
 
   const columns = [

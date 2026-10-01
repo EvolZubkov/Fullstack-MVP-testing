@@ -98,8 +98,9 @@ describe("ItemBreakdownPanel", () => {
     // 27 % — не четверть, и подменять число словом нельзя (FR-26).
     render(<ItemBreakdownPanel view={view()} onBack={() => {}} />);
 
-    expect(screen.getByText(termOrText(/Слабые 27 %/))).toBeTruthy();
-    expect(screen.getByText(termOrText(/Сильные 27 %/))).toBeTruthy();
+    // Пробел перед знаком неразрывный (единый формат процентов, Э1).
+    expect(screen.getByText(termOrText(/Слабые 27\s%/))).toBeTruthy();
+    expect(screen.getByText(termOrText(/Сильные 27\s%/))).toBeTruthy();
   });
 
   it("сравнивает замысел автора с наблюдением в ОДНОЙ шкале и делает вывод (FR-18a)", () => {

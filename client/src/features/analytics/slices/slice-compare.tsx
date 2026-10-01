@@ -17,6 +17,8 @@ import { Button, EmptyState, Stack, Text } from "@skillum/ui-kit";
 import { conditionsToFilter, describeConditions } from "../registry/filter-state";
 import { useRegistryDictionaries } from "../registry/use-dictionaries";
 
+import { percent } from "../format";
+
 import type { SliceRow, SliceTopic } from "./slice-list";
 import { SliceSlots } from "./slice-slots";
 
@@ -61,7 +63,7 @@ function cell(slice: SliceRow, key: keyof SliceRow, share: boolean): string {
   if (share && !slice.enoughData) return "мало данных";
   const value = slice[key];
   if (value === null || value === undefined) return "—";
-  return share ? `${Math.round(Number(value))} %` : String(value);
+  return share ? percent(Number(value)) : String(value);
 }
 
 /** Разница в процентных пунктах словами, со знаком. */
@@ -337,7 +339,7 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
                                   ? <Text variant="body-s" tone="muted">мало данных</Text>
                                   : share === undefined || share.correctShare === null
                                     ? "—"
-                                    : `${Math.round(share.correctShare)} %`}
+                                    : `${percent(share.correctShare)}`}
                               </td>
                             ))}
                             {showDifference && (

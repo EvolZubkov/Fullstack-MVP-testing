@@ -11,6 +11,8 @@ import { BarChart, Card, CardBody, CardHeader, Text } from "@skillum/ui-kit";
 
 import { pluralize } from "@/lib/i18n";
 
+import { percent } from "../format";
+
 /** Корзина распределения — то, что отдаёт `GET /api/analytics/tests/:testId`. */
 export interface ScoreBucketView {
   label: string;
@@ -66,7 +68,7 @@ export function ScoreDistribution({ buckets, completed, thresholdPercent }: Scor
     `${completed} ${pluralize(completed, "завершённое прохождение", "завершённых прохождения", "завершённых прохождений")}`,
     thresholdPercent === null
       ? "проходного балла нет: тест не выносит вердикта"
-      : `проходной балл ${Math.round(thresholdPercent)} %`,
+      : `проходной балл ${percent(thresholdPercent)}`,
   ].join(" · ");
 
   const axis = shareAxis(Math.max(0, ...buckets.map(bucket => Math.round(bucket.share))));
@@ -97,15 +99,15 @@ export function ScoreDistribution({ buckets, completed, thresholdPercent }: Scor
               color: TONE_COLOR.neutral,
               colors: buckets.map(bucket => TONE_COLOR[bucket.tone]),
               labels: "outside",
-              labelFormat: value => `${value} %`,
+              labelFormat: value => percent(value),
             }]}
-            yTickFormat={value => `${value} %`}
+            yTickFormat={value => percent(value)}
             // FR-13a: порог, не кратный ширине корзины, проходит ВНУТРИ столбика — и показать
             // его можно только вертикалью на своём месте. Позиция — доля шкалы 0…100 %,
             // потому что корзины покрывают её целиком и равными долями.
             xMarker={thresholdPercent === null ? undefined : {
               position: thresholdPercent / 100,
-              label: `порог ${Math.round(thresholdPercent)} %`,
+              label: `порог ${percent(thresholdPercent)}`,
             }}
           />
         )}

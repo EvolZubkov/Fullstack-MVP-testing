@@ -33,6 +33,8 @@ import {
   type RegistrySource,
 } from "./filter-state";
 
+import { percent } from "../format";
+
 /** Строка реестра — то, что отдаёт `GET /api/analytics/registry`. */
 export interface RegistryRow {
   /**
@@ -265,7 +267,7 @@ export function PassageRegistry({
       header: "Результат",
       numeric: true,
       // Прочерк, а не ноль: у прохождения без оценивания результата нет (PRD-29 §6.7).
-      render: (row: RegistryRow) => (row.percent === null ? "—" : `${Math.round(row.percent)} %`),
+      render: (row: RegistryRow) => (row.percent === null ? "—" : `${percent(row.percent)}`),
     },
     {
       key: "outcome",

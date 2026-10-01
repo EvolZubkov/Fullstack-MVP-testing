@@ -24,6 +24,7 @@ import {
   EMPTY_FILTER,
   type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
+import { percent } from "@/features/analytics/format";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import { SlicesTab } from "@/features/analytics/slices/slices-tab";
 import { AttentionQueue, type AttentionData, type AttentionRow } from "@/features/analytics/attention/attention-queue";
@@ -484,7 +485,7 @@ function AttemptDetailsDialog({
             ) : (
               <Cluster gap={4}>
                 <Stack gap={1} align="center">
-                  <Text variant="display-m" weight="bold">{details.overallPercent?.toFixed(0)}%</Text>
+                  <Text variant="display-m" weight="bold">{percent(details.overallPercent)}</Text>
                   <Text variant="body-s" tone="muted">{details.earnedPoints} / {details.possiblePoints} баллов</Text>
                 </Stack>
                 <Box grow>
@@ -679,7 +680,7 @@ function AttemptDetailsDialog({
                         <Text variant="body-s" tone="muted">{topic.earnedPoints} / {topic.possiblePoints} баллов</Text>
                       </Stack>
                       <Cluster gap={1}>
-                        <Text variant="display-s" weight="bold">{(topic.percent ?? 0).toFixed(0)}%</Text>
+                        <Text variant="display-s" weight="bold">{percent(topic.percent ?? 0)}</Text>
                         {topic.passed !== null && (
                           topic.passed
                             ? <CheckCircle size={24} color="var(--ou-success-600)" />

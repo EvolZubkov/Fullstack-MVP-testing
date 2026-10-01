@@ -22,6 +22,7 @@ import { TermHint } from "./term-hint";
 // Общий формат чисел: типографский минус (U+2212). Своя копия без него печатала «-0,33» на
 // плитке поправки — дефис в колонке чисел читается как прочерк (приёмка 5.5).
 import { num } from "./psychometrics-format";
+import { percentOfShare } from "../format";
 
 import { QuestionTypeIcon } from "@/features/tests/editor/sections/question-type-icon";
 import type { QuestionType } from "@shared/questions/question-type";
@@ -97,10 +98,8 @@ export interface ItemBreakdownPanelProps {
 }
 
 
-/** Доля как процент для чтения. */
-function percent(value: number | null): string {
-  return value === null ? "—" : `${Math.round(value * 100)} %`;
-}
+/** Доля как процент для чтения: сервер отдаёт здесь доли 0-1, а не проценты. */
+const percent = percentOfShare;
 
 /** Время в минутах и секундах — так его и читают. */
 function duration(ms: number | null): string {
@@ -277,7 +276,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
     `${item.observations} ${pluralize(item.observations, "наблюдение", "наблюдения", "наблюдений")}`,
   ].filter(Boolean).join(" · ");
   // Размер крайних групп — в заголовке колонки: 27 % не четверть, и число не подменяется словом.
-  const groupPercent = Math.round((groups?.share ?? 0.27) * 100);
+  const groupPercent = percentOfShare(groups?.share ?? 0.27);
 
   const columns = [
     {
@@ -305,13 +304,13 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
     {
       key: "bottom",
       width: "17%",
-      header: <TermHint term={`Слабые ${groupPercent} %`} hint={HINT.bottom} />,
+      header: <TermHint term={`Слабые ${groupPercent}`} hint={HINT.bottom} />,
       render: (row: OptionRow) => <ShareScale value={row.bottomShare} />,
     },
     {
       key: "top",
       width: "17%",
-      header: <TermHint term={`Сильные ${groupPercent} %`} hint={HINT.top} />,
+      header: <TermHint term={`Сильные ${groupPercent}`} hint={HINT.top} />,
       render: (row: OptionRow) => <ShareScale value={row.topShare} />,
     },
     {
@@ -398,7 +397,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 {/* Эскиз: «крайние четверти, 27 % · хорошо 0,30 — 0,39» — расшифровка из FR-14a
                     и полоса FR-14, в которую попало число. */}
                 {groups
-                  ? `крайние четверти, ${Math.round(groups.share * 100)} %${item.discrimination === null ? "" : ` · ${discriminationBand(item.discrimination)}`}`
+                  ? `крайние четверти, ${percentOfShare(groups.share)}${item.discrimination === null ? "" : ` · ${discriminationBand(item.discrimination)}`}`
                   : "крайние группы не сложились"}
               </Text>
             </Stack>

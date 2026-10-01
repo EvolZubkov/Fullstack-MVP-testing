@@ -28,6 +28,7 @@ import { pluralize } from "@/lib/i18n";
 import { FloatingHint } from "./floating-hint";
 import { num } from "./psychometrics-format";
 import { TermHint } from "./term-hint";
+import { percent, percentOfShare } from "../format";
 
 /** Пункт шкалы с его психометрикой. */
 export interface ScaleItemRow {
@@ -224,8 +225,8 @@ function GradeHistogram({ distribution, labels }: { distribution: number[]; labe
     <ol className="tb-psy-hist__list">
       {distribution.map((share, i) => {
         const label = labels[i]?.trim();
-        const percent = `${Math.round(share * 100)} %`;
-        return <li key={i}>{label ? `${label} — ${percent}` : percent}</li>;
+        const shareText = percentOfShare(share);
+        return <li key={i}>{label ? `${label} — ${shareText}` : shareText}</li>;
       })}
     </ol>
   );
@@ -445,7 +446,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
                     <Tag tone="warning" size="s">Мёртвый пункт</Tag>
                     {/* FR-50: признак несёт число, которое его вызвало. */}
                     <Text variant="body-xs" tone="muted">
-                      {topGradeShare(row.distribution)} % в одной градации
+                      {percent(topGradeShare(row.distribution))} в одной градации
                     </Text>
                   </Stack>
                 );

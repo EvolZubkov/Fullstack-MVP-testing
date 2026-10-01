@@ -12,6 +12,8 @@
  */
 import { Card, CardBody, CardHeader, DataGrid, Stack, Tag, Text } from "@skillum/ui-kit";
 
+import { percent } from "../format";
+
 export interface VersionRowView {
   snapshotId: string | null;
   version: number | null;
@@ -33,7 +35,7 @@ const date = (value: string | null): string =>
 
 function share(value: number | null, lowSample: boolean): string {
   if (lowSample) return "мало данных";
-  return value === null ? "—" : `${Math.round(value)} %`;
+  return percent(value);
 }
 
 /** Период действия версии: от публикации до публикации следующей. */
