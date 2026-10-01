@@ -163,9 +163,11 @@ export function buildQuestionSummary(input: QuestionSummaryInput): QuestionSumma
   }
 
   if (section.formSet) {
+    // Варианты часто называют «Вариант 1», «Вариант 2»: слово уже стоит перед списком,
+    // и без этой правки сводка печатала «варианты Вариант 1, Вариант 3».
     const labels = section.formSet.forms
       .filter((f) => f.questionIds.includes(question.id))
-      .map((f) => f.label);
+      .map((f) => f.label.replace(/^вариант\s+/i, "") || f.label);
     if (labels.length > 0) {
       meta.push(`${labels.length === 1 ? "вариант" : "варианты"} ${labels.join(", ")}`);
     } else {

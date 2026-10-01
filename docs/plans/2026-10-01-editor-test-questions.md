@@ -43,61 +43,65 @@
 
 ## Task 1: Сводка вопроса в тесте — чистая функция
 
-- [ ] **Step 1:** падающие тесты на `buildQuestionSummary` — подтема, сложность (с учётом
+- [x] **Step 1:** падающие тесты на `buildQuestionSummary` — подтема, сложность (с учётом
       переопределения в тесте), балл и его источник, цена ответа, вклады в шкалы, обратная
       связь, варианты; отметки: «задано в тесте», «Настройка устарела», «вне квот», «не входит
       в варианты», «исключён из выдачи», число открытых комментариев.
-- [ ] **Step 2:** `client/src/features/tests/editor/questions/question-summary.ts` — без DOM,
+- [x] **Step 2:** `client/src/features/tests/editor/questions/question-summary.ts` — без DOM,
       на входе вопрос и срез модели теста; разрешение балла — через
       `shared/scoring/effective-scoring`, покрытие квотой — через нормализацию тегов из
       `shared/tags.ts`.
-- [ ] **Step 3:** `npm test -- client/src/features/tests/editor/questions`
+- [x] **Step 3:** `npm test -- client/src/features/tests/editor/questions`
 
 ## Task 2: Признак «исключён из выдачи» в модели редактора
 
-- [ ] **Step 1:** падающий тест маппера: поле `excludedFromDelivery` из `questionScoring`
+- [x] **Step 1:** падающий тест маппера: поле `excludedFromDelivery` из `questionScoring`
       ответа `GET /api/tests/:id` доходит до `model.scoring.questionOverrides`.
-- [ ] **Step 2:** расширить `QuestionScoringOverride` и `buildQuestionOverridesFromApi`
+- [x] **Step 2:** расширить `QuestionScoringOverride` и `buildQuestionOverridesFromApi`
       (`test-editor.mappers.ts`). Обратная запись поля из редактора не добавляется — им
       по-прежнему управляет аналитика.
 
 ## Task 3: Пункт рейла «Вопросы теста»
 
-- [ ] **Step 1:** падающий тест: группа видна, когда в тесте есть темы; дочерние пункты —
+- [x] **Step 1:** падающий тест: группа видна, когда в тесте есть темы; дочерние пункты —
       темы в порядке теста, с номерами; выбор пункта открывает тему.
-- [ ] **Step 2:** `sections/editor-tabs.tsx`, `CompositionTab` — группа между «Составом» и
+- [x] **Step 2:** `sections/editor-tabs.tsx`, `CompositionTab` — группа между «Составом» и
       «Сценарием», тем же приёмом, что группа «Обратная связь». Пустой тест — группы нет.
 
 ## Task 4: Список вопросов темы
 
-- [ ] **Step 1:** падающие тесты: поиск по фрагменту без учёта регистра; строка показывает
+- [x] **Step 1:** падающие тесты: поиск по фрагменту без учёта регистра; строка показывает
       пиктограмму типа, текст, сводку и отметки; щелчок по строке и карандаш открывают ящик
       вопроса; глаз открывает просмотр глазами участника; «Добавить вопрос» открывает ящик
       нового вопроса с темой по умолчанию.
-- [ ] **Step 2:** `client/src/features/tests/editor/questions/test-questions-section.tsx` —
+- [x] **Step 2:** `client/src/features/tests/editor/questions/test-questions-section.tsx` —
       данные из `["/api/questions"]`, `["/api/topics"]`, модели теста и
       `useReviewComments`; ящик вопроса — через уже существующий механизм `reviewQuestionId`
       в `test-editor.tsx`, дополненный режимом создания; просмотр — `QuestionPreviewModal`.
-- [ ] **Step 3:** стили строки — в проектном слое `tb-components.css`, классы `tb-qlist*`
+- [x] **Step 3:** стили строки — в проектном слое `tb-components.css`, классы `tb-qlist*`
       из эскиза.
 
 ## Task 5: Создание темы из ящика теста
 
-- [ ] **Step 1:** падающий тест: «Создать тему» в окне выбора темы открывает ящик новой темы
+- [x] **Step 1:** падающий тест: «Создать тему» в окне выбора темы открывает ящик новой темы
       с названием из поиска; после сохранения тема добавлена в черновик теста.
-- [ ] **Step 2:** `TopicDrawer` получает обратный вызов о сохранении с созданной темой
+- [x] **Step 2:** `TopicDrawer` получает обратный вызов о сохранении с созданной темой
       (`client/src/features/topics/topic-drawer.tsx`); `TopicPickerModal`
       (`sections/topics-structure-section.tsx`) — кнопка «Создать тему» слева в подвале.
-- [ ] **Step 3:** доступ: кнопка видна только при праве создавать темы.
+- [x] **Step 3:** доступ: кнопка видна только при праве создавать темы.
 
 ## Task 6: Приёмка
 
-- [ ] **Step 1:** сверка с эскизом в браузере, гейт `npm run check:editor-ui`; при
+- [x] **Step 1:** сверка с эскизом в браузере, гейт `npm run check:editor-ui`; при
       необходимости — строки в `scripts/check/editor-conformance/map.json`.
-- [ ] **Step 2:** `npm run check`, точечные прогоны затронутых тестов. Полный прогон — только
+- [x] **Step 2:** `npm run check`, точечные прогоны затронутых тестов. Полный прогон — только
       по явному разрешению.
-- [ ] **Step 3:** документация: руководство автора (`docs/guides/`), спецификация редактора,
-      сравнительные анализы `docs/reports/ANALYSIS_*.md` — новой строкой.
+- [x] **Step 3:** документация: руководство автора (`docs/guides/`: §2, §8, §8.1, новый
+      §8.7, снимки `02-home.png` и `11a-editor-test-questions.png`), сравнительный анализ
+      `ANALYSIS_STARTEXAM_MATRIX.md` — новой строкой. Спецификация редактора — эскиз
+      `editor-settings-target.html`, он обновлён первым коммитом трека.
+- [ ] **Step 4:** пересобрать PDF руководства (`npm run docs:pdf`, около 7 минут) — после
+      слияния, вместе с другими правками руководства.
 
 ---
 

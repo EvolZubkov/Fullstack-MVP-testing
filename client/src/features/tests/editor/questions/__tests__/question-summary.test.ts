@@ -153,6 +153,17 @@ describe("buildQuestionSummary: meta line", () => {
     const one = { forms: [formSet.forms[0], { id: "b", label: "B", questionIds: ["q2"] }] };
     expect(build({ section: section({ formSet: one }) }).meta).toContain("вариант A");
   });
+
+  it("does not repeat the word in variants named «Вариант N»", () => {
+    const formSet = {
+      forms: [
+        { id: "a", label: "Вариант 1", questionIds: ["q1"] },
+        { id: "b", label: "вариант 3", questionIds: ["q1"] },
+        { id: "c", label: "Вариант", questionIds: ["q2"] },
+      ],
+    };
+    expect(build({ section: section({ formSet }) }).meta).toContain("варианты 1, 3");
+  });
 });
 
 describe("buildQuestionSummary: flags", () => {
