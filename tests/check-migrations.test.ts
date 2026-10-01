@@ -72,6 +72,20 @@ describe("что осталось применить", () => {
     expect(pendingFromJournal(new Set(), root)).toHaveLength(1);
   });
 
+  it("применённое с другим текстом узнаётся по времени из журнала", () => {
+    // Миграцию накатили на dev до финальной правки текста: хеш в строке журнала другой, но
+    // её `created_at` равен `when` из журнала — мигратор считает её применённой, и проверка
+    // обязана думать так же, иначе требует повторить уже сделанное (0037/0038, 2026-10-01).
+    const root = makeRepo([{ tag: "0001_a", sql: added }, { tag: "0002_b", sql: dropped }]);
+    expect(pendingFromJournal(new Set(["старый-хеш"]), root, new Set([1000]))
+      .map((p) => p.tag)).toEqual(["0002_b"]);
+  });
+
+  it("строка журнала с чужим временем миграцию не закрывает", () => {
+    const root = makeRepo([{ tag: "0001_a", sql: dropped }]);
+    expect(pendingFromJournal(new Set(), root, new Set([999, 1001]))).toHaveLength(1);
+  });
+
   it("всё применено — список пуст", () => {
     const root = makeRepo([{ tag: "0001_a", sql: added }]);
     expect(pendingFromJournal(new Set([hashOf(added)]), root)).toEqual([]);

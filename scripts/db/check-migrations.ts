@@ -11,8 +11,12 @@
  *
  * ЧТО ДЕЛАЕТ. Сверяет `drizzle/meta/_journal.json` с журналом применения в базе ПО ХЕШУ
  * файла (так же, как `reconcile-migration-ledger`: `migrate` сравнивает время, а хеш —
- * единственный надёжный признак того, какая именно миграция лежит в строке). Непримененные
- * аддитивные миграции применяет сам, о разрушительных — сообщает и НЕ применяет.
+ * единственный надёжный признак того, какая именно миграция лежит в строке) ИЛИ по
+ * времени: строка журнала с `created_at`, равным `when` миграции, — та же миграция,
+ * применённая из текста до финальной правки. Без второго признака проверка требовала
+ * повторить уже сделанное, к ней привыкали отключать её, и тогда пропускалась и настоящая
+ * миграция (2026-10-01: ложные 0037/0038 прятали действительно неприменённую 0045).
+ * Непримененные аддитивные миграции применяет сам, о разрушительных — сообщает и НЕ применяет.
  *
  * ПОЧЕМУ РАЗРУШИТЕЛЬНЫЕ НЕ АВТОМАТОМ. Dev-БД одна на все параллельные сессии и рабочие
  * копии. `ADD COLUMN` со значением по умолчанию совместим со старым кодом — соседняя сессия
@@ -69,13 +73,20 @@ export function classifyMigration(sqlText: string): { destructive: boolean; reas
  *
  * @param appliedHashes Хеши, уже лежащие в журнале применения базы.
  * @param root Корень репозитория (там лежит каталог `drizzle`).
+ * @param appliedWhens `created_at` строк журнала применения: совпадение с `when` миграции
+ *   значит, что она применена, даже если её текст потом поправили.
  */
-export function pendingFromJournal(appliedHashes: Set<string>, root = process.cwd()): PendingMigration[] {
+export function pendingFromJournal(
+  appliedHashes: Set<string>,
+  root = process.cwd(),
+  appliedWhens: ReadonlySet<number> = new Set(),
+): PendingMigration[] {
   const journalPath = path.join(root, "drizzle", "meta", "_journal.json");
   if (!existsSync(journalPath)) return [];
   const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: JournalEntry[] };
   const out: PendingMigration[] = [];
   for (const entry of journal.entries) {
+    if (appliedWhens.has(entry.when)) continue;
     const file = path.join(root, "drizzle", `${entry.tag}.sql`);
     if (!existsSync(file)) continue;
     const text = readFileSync(file, "utf8");
@@ -133,8 +144,14 @@ export function describeError(error: unknown): string {
   return parts.join(" | ") || String(error);
 }
 
-/** Хеши применённых миграций; пустое множество, если журнала в базе ещё нет. */
-async function readAppliedHashes(): Promise<Set<string>> {
+/** Что журнал применения знает о миграциях: их хеши и время применения. */
+interface AppliedLedger {
+  hashes: Set<string>;
+  whens: Set<number>;
+}
+
+/** Журнал применённых миграций; пустой, если журнала в базе ещё нет. */
+async function readAppliedLedger(): Promise<AppliedLedger> {
   // Окружение и конфиг поднимаются так же, как в `reconcile-migration-ledger`: без них
   // подключение к базе не собирается, а молча возвращённое «ничего не применено» было бы
   // худшим из исходов — проверка объявила бы отставшей полностью актуальную схему.
@@ -145,15 +162,21 @@ async function readAppliedHashes(): Promise<Set<string>> {
   const { db } = await import("../../server/db");
   const { sql } = await import("drizzle-orm");
   try {
-    const result = await db.execute(sql.raw(`SELECT hash FROM ${LEDGER}`));
-    const rows = (result as unknown as { rows: Array<{ hash: string }> }).rows;
-    return new Set(rows.map((r) => r.hash));
+    const result = await db.execute(sql.raw(`SELECT hash, created_at FROM ${LEDGER}`));
+    const rows = (result as unknown as {
+      rows: Array<{ hash: string; created_at: string | number | null }>;
+    }).rows;
+    return {
+      hashes: new Set(rows.map((r) => r.hash)),
+      // `created_at` — bigint, драйвер отдаёт его строкой.
+      whens: new Set(rows.map((r) => Number(r.created_at)).filter((n) => Number.isFinite(n))),
+    };
   } catch (e) {
     // Журнала нет — база либо пустая, либо старше эпохи migrate. Решать это должен
     // человек, а не стартовая проверка: она сообщает и не мешает поднять сервер.
     if (isMissingLedgerError(e)) {
       console.warn(`[db] журнал миграций отсутствует: ${describeError(e)}`);
-      return new Set();
+      return { hashes: new Set(), whens: new Set() };
     }
     // Любая другая ошибка — не ответ «применено ничего», а отсутствие ответа вовсе.
     // Пусть её увидит внешний обработчик и скажет о недоступной базе.
@@ -168,9 +191,9 @@ export async function checkMigrations(): Promise<number> {
   if (process.env.NODE_ENV === "production") return 0;
   if (process.env.SKIP_MIGRATION_CHECK === "1") return 0;
 
-  let applied: Set<string>;
+  let applied: AppliedLedger;
   try {
-    applied = await readAppliedHashes();
+    applied = await readAppliedLedger();
   } catch (e) {
     // База недоступна — это отдельная беда, и сообщит о ней сам сервер. Проверка схемы
     // не должна быть тем, что мешает его запустить.
@@ -178,7 +201,7 @@ export async function checkMigrations(): Promise<number> {
     return 0;
   }
 
-  const pending = pendingFromJournal(applied);
+  const pending = pendingFromJournal(applied.hashes, process.cwd(), applied.whens);
   if (pending.length === 0) return 0;
 
   const destructive = pending.filter((p) => p.destructive);
