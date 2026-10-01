@@ -14,7 +14,8 @@ import type { QuickAction } from "@shared/home/contract";
 const CANDIDATES: ReadonlyArray<QuickAction & { perm: Capability }> = [
   { id: "test-create", label: "Создать тест", href: "/author/tests", perm: "tests.create" },
   { id: "content-add", label: "Добавить вопрос", href: "/author/content", perm: "topics.manage" },
-  { id: "import", label: "Импорт из Excel", href: "/author/import", perm: "questions.importExport" },
+  // Подпись — как у раздела: «Импорт из Excel» прятал выгрузку отчёта LMS (Э1 UX-аудита).
+  { id: "import", label: "Импорт", href: "/author/import", perm: "questions.importExport" },
   { id: "assign", label: "Назначить тест", href: "/author/tests", perm: "assignments.manage" },
   { id: "user-create", label: "Добавить пользователя", href: "/author/users", perm: "users.create" },
 ];

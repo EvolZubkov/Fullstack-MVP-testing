@@ -290,14 +290,14 @@ describe("QuickActions", () => {
       <QuickActions
         actions={[
           { id: "test-create", label: "Создать тест", href: "/author/tests" },
-          { id: "import", label: "Импорт из Excel", href: "/author/import" },
+          { id: "import", label: "Импорт", href: "/author/import" },
         ]}
       />,
     );
 
     expect(screen.getByTestId("home-quick-actions")).toBeInTheDocument();
     expect(screen.getByText("Создать тест")).toBeInTheDocument();
-    expect(screen.getByText("Импорт из Excel")).toBeInTheDocument();
+    expect(screen.getByText("Импорт")).toBeInTheDocument();
     expect(screen.queryByText("Добавить пользователя")).not.toBeInTheDocument();
   });
 

@@ -112,14 +112,14 @@ function xlsx(name = "book.xlsx"): File {
 describe("<ImportPage /> — empty", () => {
   it("renders the uploader and the download-template action", async () => {
     renderPage();
-    expect(await screen.findByText("Импорт из Excel")).toBeInTheDocument();
+    expect(await screen.findByText("Импорт")).toBeInTheDocument();
     expect(screen.getByText("Перетащите файл .xlsx или выберите")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Скачать шаблон" })).toBeInTheDocument();
   });
 
   it("скачивает руководство по заполнению шаблона с /api/workbook/docs/guide", async () => {
     renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Импорт");
 
     // The handler builds a detached <a> and clicks it; capture the click target.
     const clicked: string[] = [];
@@ -140,7 +140,7 @@ describe("<ImportPage /> — empty", () => {
 describe("<ImportPage /> — wrong file type", () => {
   it("rejects a non-.xlsx file without inspecting", async () => {
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Импорт");
     fireEvent.change(fileInput(container), { target: { files: [xlsx("data.txt")] } });
 
     // No inspect call was made; the uploader is still shown.
@@ -154,7 +154,7 @@ describe("<ImportPage /> — wrong file type", () => {
 describe("<ImportPage /> — questions-only path", () => {
   it("inspects, previews the dry-run, then imports to the done banner", async () => {
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Импорт");
 
     fireEvent.change(fileInput(container), { target: { files: [xlsx("questions.xlsx")] } });
 
@@ -186,7 +186,7 @@ describe("<ImportPage /> — workbook path (requires test)", () => {
   it("gates the actions until a target test is chosen and previews the workbook plan", async () => {
     inspectResult = workbookInspect;
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Импорт");
 
     fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
 
@@ -218,7 +218,7 @@ describe("<ImportPage /> — workbook path (requires test)", () => {
   it("requires a name when creating a new test", async () => {
     inspectResult = workbookInspect;
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Импорт");
     fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
     await screen.findByText("В файле есть шкалы/показатели/вклады — укажите целевой тест.");
 
@@ -244,7 +244,7 @@ describe("<ImportPage /> — предупреждения импорта", () =>
       "Оценка взята с листа «Оценка» (строк: 0); колонки «Балл»/«Цена ответа» листа «Вопросы» не читались.",
     ];
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Импорт");
 
     fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
     await waitFor(() =>
@@ -269,7 +269,7 @@ describe("<ImportPage /> — предупреждения импорта", () =>
   it("без предупреждений блок не рендерится", async () => {
     inspectResult = workbookInspect;
     const { container } = renderPage();
-    await screen.findByText("Импорт из Excel");
+    await screen.findByText("Импорт");
 
     fireEvent.change(fileInput(container), { target: { files: [xlsx("workbook.xlsx")] } });
     await waitFor(() =>
