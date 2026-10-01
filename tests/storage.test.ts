@@ -732,18 +732,44 @@ describe("DatabaseStorage — test question scoring overrides", () => {
     expect(chain.onConflictDoUpdate).toHaveBeenCalled();
   });
 
+  /** Цепочка `update().set().where().returning()`; `rows` — строки, которые она «обновила». */
+  function setupUpdateReturning(rows: unknown[]) {
+    const chain: any = {};
+    chain.set = vi.fn().mockReturnValue(chain);
+    chain.where = vi.fn().mockReturnValue(chain);
+    chain.returning = vi.fn().mockResolvedValue(rows);
+    dbMock.update.mockReturnValue(chain);
+    return chain;
+  }
+
   it("deleteTestQuestionScoring — true when a row was removed, false otherwise", async () => {
+    // Не исключённая из выдачи строка: обновлять нечего, строка удаляется.
+    setupUpdateReturning([]);
     setupDeleteReturning(1);
     expect(await storage.deleteTestQuestionScoring("test1", "q1")).toBe(true);
     setupDeleteReturning(0);
     expect(await storage.deleteTestQuestionScoring("test1", "q1")).toBe(false);
   });
 
+  it("deleteTestQuestionScoring — keeps an excluded-from-delivery row, clearing only scoring", async () => {
+    const update = setupUpdateReturning([{}]);
+    dbMock.delete.mockClear();
+    expect(await storage.deleteTestQuestionScoring("test1", "q1")).toBe(true);
+    expect(update.set).toHaveBeenCalledWith(
+      expect.objectContaining({ points: null, scoringJson: null, difficulty: null, pinnedContentHash: null }),
+    );
+    expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+
   it("replaceTestQuestionScoring — delete-then-insert in a transaction", async () => {
     const deleteChain: any = {};
     deleteChain.where = vi.fn().mockResolvedValue(undefined);
+    const selectChain: any = {};
+    selectChain.from = vi.fn().mockReturnValue(selectChain);
+    selectChain.where = vi.fn().mockResolvedValue([]);
     const insertChain = makeChain([dbOverride]);
     const tx = {
+      select: vi.fn().mockReturnValue(selectChain),
       delete: vi.fn().mockReturnValue(deleteChain),
       insert: vi.fn().mockReturnValue(insertChain),
     };
@@ -762,7 +788,14 @@ describe("DatabaseStorage — test question scoring overrides", () => {
   it("replaceTestQuestionScoring — an empty set clears all overrides", async () => {
     const deleteChain: any = {};
     deleteChain.where = vi.fn().mockResolvedValue(undefined);
-    const tx = { delete: vi.fn().mockReturnValue(deleteChain), insert: vi.fn() };
+    const selectChain: any = {};
+    selectChain.from = vi.fn().mockReturnValue(selectChain);
+    selectChain.where = vi.fn().mockResolvedValue([]);
+    const tx = {
+      select: vi.fn().mockReturnValue(selectChain),
+      delete: vi.fn().mockReturnValue(deleteChain),
+      insert: vi.fn(),
+    };
     (dbMock as any).transaction = vi.fn(async (cb: any) => cb(tx));
 
     const rows = await storage.replaceTestQuestionScoring("test1", []);
