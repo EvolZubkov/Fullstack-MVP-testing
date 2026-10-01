@@ -120,11 +120,17 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
 
     // PRD-54: у импортированного прохождения пакета нет — тест берётся не отсюда.
     const pkg = attempt.packageId ? await storage.getScormPackage(attempt.packageId) : undefined;
+    // Тест строки — её собственный `test_id` (PRD-54); у старых строк телеметрии его нет, и тест
+    // известен только через пакет — тот же порядок, что в слое наблюдений. Раньше тест брался
+    // ТОЛЬКО через пакет: импортированное прохождение автору отвечало 403, а администратору
+    // показывалось «Удалённым тестом» (дефект D5, найден приёмкой D3).
+    const testId = attempt.testId ?? pkg?.testId ?? null;
+    const test = testId ? await storage.getTest(testId) : undefined;
 
     // PRD-15 FR-08 (audit F-5): a single LMS attempt is readable only within
     // the analytics scope of its test.
     const scope = await analyticsScope(req);
-    if (!scope.has(pkg?.testId ?? null)) {
+    if (!scope.has(testId)) {
       return { status: 403, error: "Forbidden" };
     }
 
@@ -134,8 +140,8 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
     // attempt-level summary. Recomputed from the test's CURRENT config from the
     // stored answers — may drift if the test changed after the attempt (unlike
     // baked points, contributions are not persisted). Empty for a deleted test.
-    const scoringConfig = pkg?.testId
-      ? await loadScoringConfig(pkg.testId)
+    const scoringConfig = testId
+      ? await loadScoringConfig(testId)
       : { scales: [], measurements: [], resultVariables: [], budgets: {} };
     const rawAnswers: Record<string, Answer> = {};
     const questionTypes: Record<string, QuestionType> = {};
@@ -152,6 +158,10 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
       : [];
     const tagsByQuestion = new Map(answeredQuestions.map((q) => [q.id, q.tags]));
     const breakdowns = computeBreakdowns(scormBreakdownItems(answers, tagsByQuestion));
+    const questionById = new Map(answeredQuestions.map((q) => [q.id, q]));
+    // Темы читаются один раз: и подпись строки ответа, и код темы для показателей ниже.
+    const topics = (await storage.getTopics()) as Array<{ id: string; name: string; code?: string | null }>;
+    const topicNameById = new Map(topics.map((t) => [t.id, t.name] as const));
 
     const duration = attempt.startedAt && attempt.finishedAt
       ? (new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000
@@ -193,16 +203,22 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
       // baked points (contributions are recomputed, points/ratio are as delivered).
       const contribs = computeAnswerContributions(scoringConfig.measurements, a.questionId, a.userAnswerJson as Answer, a.questionType as QuestionType);
       const ratio = (a.maxPoints || 0) > 0 ? (a.points || 0) / (a.maxPoints as number) : (a.isCorrect ? 1 : 0);
+      // Варианты, с которыми участник отвечал, — снимок, приехавший с ответом. Импорт выгрузки
+      // его не несёт (в отчёте LMS вариантов нет), и тогда ответ переводится в слова по вопросу,
+      // как он лежит сейчас, — иначе окно и протокол показывали «0» вместо варианта.
+      const question = questionById.get(a.questionId);
+      const hasSnapshot = !!(a.optionsJson || a.leftItemsJson || a.itemsJson);
 
       return {
         questionId: a.questionId,
         questionPrompt: a.questionPrompt,
         questionType: a.questionType,
         topicId: a.topicId,
-        topicName: a.topicName,
+        topicName: a.topicName ?? (a.topicId ? topicNameById.get(a.topicId) ?? null : null),
         difficulty: a.difficulty,
         userAnswer: a.userAnswerJson,
-        correctAnswer: a.correctAnswerJson,
+        correctAnswer: a.correctAnswerJson ?? question?.correctJson ?? null,
+        ...(!hasSnapshot && question ? { questionData: question.dataJson } : {}),
         isCorrect: a.isCorrect,
         // PRD-54: измерительный ответ — третье состояние, а не «неверно».
         measurementOnly: a.result === "neutral",
@@ -234,11 +250,7 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
     // the topic id, so the code is read from the topic bank as it stands TODAY — the same
     // drift this route already accepts for scale contributions. Was hardcoded to null, which
     // left `tag("law::ПДн")` at zero even once the breakdowns were fed in.
-    const topicCodeById = new Map(
-      ((await storage.getTopics()) as Array<{ id: string; code?: string | null }>).map(
-        (t) => [t.id, t.code ?? null] as const,
-      ),
-    );
+    const topicCodeById = new Map(topics.map((t) => [t.id, t.code ?? null] as const));
 
     // PRD-5/PRD-2: attempt-level scale results + result variables (показатели).
     const gradedBase: AttemptResultBase = {
@@ -275,9 +287,10 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
       lmsUserId: attempt.lmsUserId,
       lmsUserName: attempt.lmsUserName,
       lmsUserEmail: attempt.lmsUserEmail,
-      testId: pkg?.testId || null,
-      testTitle: pkg?.testTitle || "Удалённый тест",
-      testMode: pkg?.testMode || "standard",
+      testId,
+      // Название и режим — у самого теста; снимок в пакете — запасной путь для удалённого теста.
+      testTitle: test?.title ?? pkg?.testTitle ?? "Удалённый тест",
+      testMode: test?.mode ?? pkg?.testMode ?? "standard",
       startedAt: attempt.startedAt?.toISOString() || null,
       finishedAt: attempt.finishedAt?.toISOString() || null,
       duration,

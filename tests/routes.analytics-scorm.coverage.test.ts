@@ -37,6 +37,8 @@ const { storageMock } = vi.hoisted(() => ({
     // stubs made every detail route answer 500 again.
     getQuestionsByIds: vi.fn().mockResolvedValue([]),
     getTopics: vi.fn().mockResolvedValue([]),
+    // D5: тест строки читается по её собственному `test_id`, а не только через пакет.
+    getTest: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -89,6 +91,7 @@ beforeEach(() => {
   storageMock.getUser.mockResolvedValue(authorUser);
   storageMock.getQuestionsByIds.mockResolvedValue([]);
   storageMock.getTopics.mockResolvedValue([]);
+  storageMock.getTest.mockResolvedValue(undefined);
   app = makeApp();
 });
 
@@ -243,6 +246,91 @@ describe("GET /scorm-attempts/:attemptId", () => {
     const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1"));
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("Failed to get attempt details");
+  });
+});
+
+/**
+ * D5: импортированное прохождение пакета не имеет — тест у него свой (`scorm_attempts.test_id`),
+ * а вариантов в отчёте LMS нет. Раньше тест искался только через пакет: автору такое
+ * прохождение отвечало 403, администратору показывалось «Удалённым тестом», ответ — «0».
+ */
+describe("GET /scorm-attempts/:attemptId — импортированное прохождение (D5)", () => {
+  const imported = {
+    ...baseAttempt, id: "imp1", packageId: null, testId: "test1", origin: "import",
+    lmsUserName: "Иванов Пётр",
+  };
+  const answerRow = {
+    questionId: "q1", questionPrompt: "Срок хранения?", questionType: "single", topicId: "t1", topicName: null,
+    difficulty: null, userAnswerJson: 1, correctAnswerJson: null, isCorrect: false, result: "incorrect",
+    points: null, maxPoints: null,
+    optionsJson: null, leftItemsJson: null, rightItemsJson: null, itemsJson: null,
+    levelIndex: null, levelName: null, answeredAt: new Date(),
+  };
+
+  beforeEach(() => {
+    storageMock.getScormAttempt.mockResolvedValue(imported);
+    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Охрана труда", mode: "standard" });
+    storageMock.getScormAnswersByAttempt.mockResolvedValue([answerRow]);
+    storageMock.getQuestionsByIds.mockResolvedValue([{
+      id: "q1", type: "single", tags: null,
+      dataJson: { options: ["Один год", "Десять лет"] }, correctJson: { correctIndex: 1 },
+    }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "Документы", code: null }]);
+  });
+
+  it("открывается автору теста — область видимости по тесту строки, а не пакета", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTestIdsByOwner.mockResolvedValue(["test1"]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/imp1"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.testId).toBe("test1");
+    expect(res.body.testTitle).toBe("Охрана труда");
+    expect(storageMock.getScormPackage).not.toHaveBeenCalled();
+  });
+
+  it("закрыт автору чужого теста", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTestIdsByOwner.mockResolvedValue(["other"]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/imp1"));
+
+    expect(res.status).toBe(403);
+  });
+
+  it("без снимка вариантов отдаёт данные вопроса, эталон и тему", async () => {
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/imp1"));
+
+    const answer = res.body.answers[0];
+    expect(answer.questionData).toEqual({ options: ["Один год", "Десять лет"] });
+    expect(answer.correctAnswer).toEqual({ correctIndex: 1 });
+    expect(answer.topicName).toBe("Документы");
+  });
+
+  it("со снимком вариантов данные вопроса не подменяют то, что видел участник", async () => {
+    storageMock.getScormAnswersByAttempt.mockResolvedValue([{ ...answerRow, optionsJson: ["Год", "Десятилетие"] }]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/imp1"));
+
+    expect(res.body.answers[0].questionData).toBeUndefined();
+    expect(res.body.answers[0].options).toEqual(["Год", "Десятилетие"]);
+  });
+
+  it("протокол пишет ответ словами, а пустые баллы — пустой ячейкой", async () => {
+    const binary = (r: any, cb: (err: Error | null, body: Buffer) => void) => {
+      const chunks: Buffer[] = [];
+      r.on("data", (chunk: Buffer) => chunks.push(chunk));
+      r.on("end", () => cb(null, Buffer.concat(chunks)));
+    };
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/imp1/export/excel"))
+      .buffer(true).parse(binary);
+
+    const { readWorkbookFromBuffer, sheetToArrays } = await import("../server/utils/excel");
+    const workbook = await readWorkbookFromBuffer(res.body as Buffer);
+    const row = sheetToArrays(workbook.getWorksheet("Ответы")!)[1];
+    expect(row.slice(1, 7)).toEqual(["Документы", "Один ответ", "2) Десять лет", "2) Десять лет", "Неверно", ""]);
   });
 });
 

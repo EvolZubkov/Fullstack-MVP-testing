@@ -75,9 +75,11 @@ function durationText(seconds: unknown): string {
  *
  * У веб-попытки это текущие данные вопроса; у строки LMS — снимок вариантов, приехавший вместе
  * с ответом: вопрос с тех пор могли поправить, а протокол обязан показать то, что видел участник.
+ * Импорт выгрузки снимка не несёт — тогда разбор отдаёт текущие данные вопроса.
  */
 function questionDataOf(answer: DetailAnswer, source: ProtocolSource): unknown {
   if (source === "web") return answer.questionData ?? {};
+  if (!answer.options && !answer.leftItems && !answer.items) return answer.questionData ?? {};
   return {
     options: answer.options,
     left: answer.leftItems,
@@ -114,7 +116,11 @@ export function answerRows(answers: readonly DetailAnswer[], source: ProtocolSou
         ? ""
         : formatCorrectAnswerText(type, data, correct),
       measurement ? "Измерение" : answer.isCorrect ? "Верно" : "Неверно",
-      measurement ? "" : `${round2(answer.earnedPoints ?? 0)} / ${round2(answer.possiblePoints ?? 0)}`,
+      // Баллов нет у ответа из импорта выгрузки: отчёт LMS их не несёт, и «0 / 0» читалось бы
+      // как ноль за вопрос.
+      measurement || (answer.earnedPoints == null && answer.possiblePoints == null)
+        ? ""
+        : `${round2(answer.earnedPoints ?? 0)} / ${round2(answer.possiblePoints ?? 0)}`,
       answer.difficulty ?? "",
       measurement || typeof answer.ratio !== "number" ? "" : percentText(answer.ratio * 100),
       (answer.contribs ?? [])
