@@ -550,12 +550,22 @@
                 </div>
               </div>
             
+            <!-- PRD-59: поле «Описание» с режимами ввода — разметка из согласованного эскиза
+                 docs/wireframes/prd59-description-field.html (состояние s-plain). -->
             <div class="ou-formfield">
-              <label class="ou-formfield__lbl" for="b-desc">Описание</label>
-              <div class="ou-textarea ou-textarea--full">
-                <div class="ou-textarea__box">
-                  <textarea class="ou-textarea__input" id="b-desc" rows="3">Что нужно, чтобы стать успешным лидером конкретно в «Ростелекоме»?</textarea>
+              <div class="ou-rte ou-rte--full">
+                <label class="ou-rte__lbl" for="b-desc">Описание</label>
+                <div class="ou-rte__bar">
+                  <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                    <button type="button" class="ou-seg__item is-active">Простой текст</button>
+                    <button type="button" class="ou-seg__item">Форматированный</button>
+                    <button type="button" class="ou-seg__item">HTML</button>
+                  </div>
                 </div>
+                <div class="ou-rte__box">
+                  <textarea class="ou-rte__input" id="b-desc" rows="3">Что нужно, чтобы стать успешным лидером конкретно в «Ростелекоме»?</textarea>
+                </div>
+                <span class="ou-rte__msg">Опишите цели теста и аудиторию</span>
               </div>
             </div>
             <div class="ou-formfield">
@@ -1820,7 +1830,7 @@
                   <div class="ou-formfield">
                     <label class="ou-switch-field">
                       <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
-                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать правильные ответы после прохождения</span></span>
+                      <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать правильные ответы после ответа</span></span>
                     </label>
                   </div>
                 </div>
@@ -2763,12 +2773,22 @@
                 </div>
               </div>
             
+            <!-- PRD-59: поле «Описание» с режимами ввода — разметка из согласованного эскиза
+                 docs/wireframes/prd59-description-field.html (состояние s-plain). -->
             <div class="ou-formfield">
-              <label class="ou-formfield__lbl" for="b-desc">Описание</label>
-              <div class="ou-textarea ou-textarea--full">
-                <div class="ou-textarea__box">
-                  <textarea class="ou-textarea__input" id="b-desc" rows="3">Что нужно, чтобы стать успешным лидером конкретно в «Ростелекоме»?</textarea>
+              <div class="ou-rte ou-rte--full">
+                <label class="ou-rte__lbl" for="b-desc">Описание</label>
+                <div class="ou-rte__bar">
+                  <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                    <button type="button" class="ou-seg__item is-active">Простой текст</button>
+                    <button type="button" class="ou-seg__item">Форматированный</button>
+                    <button type="button" class="ou-seg__item">HTML</button>
+                  </div>
                 </div>
+                <div class="ou-rte__box">
+                  <textarea class="ou-rte__input" id="b-desc" rows="3">Что нужно, чтобы стать успешным лидером конкретно в «Ростелекоме»?</textarea>
+                </div>
+                <span class="ou-rte__msg">Опишите цели теста и аудиторию</span>
               </div>
             </div>
             <div class="ou-formfield">
@@ -4608,6 +4628,17 @@
                       </tr>
                     </tbody>
                   </table>
+                  <!-- PRD-67: последнее поле раздела — разметка из согласованного эскиза
+                       docs/wireframes/approved/prd67-section-close-on-leave.html (s-off). -->
+                  <div class="ou-formfield">
+                    <label class="ou-switch-field">
+                      <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                      <span class="ou-switch-field__text">
+                        <span class="ou-switch-field__label">Закрывать раздел при выходе</span>
+                        <span class="ou-switch-field__desc">Выключено — при выходе время замирает, а по возвращении ученик продолжает с того же места.</span>
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
               <div class="ou-formsection ou-formsection--stacked">
@@ -6050,12 +6081,22 @@
               <span class="ou-field__msg ou-field__msg--error" role="alert">Название обязательно.</span>
               </div>
             
+            <!-- PRD-59: поле «Описание» с режимами ввода — разметка из согласованного эскиза
+                 docs/wireframes/prd59-description-field.html (состояние s-plain). -->
             <div class="ou-formfield">
-              <label class="ou-formfield__lbl" for="b-desc">Описание</label>
-              <div class="ou-textarea ou-textarea--full">
-                <div class="ou-textarea__box">
-                  <textarea class="ou-textarea__input" id="b-desc" rows="3">Что нужно, чтобы стать успешным лидером конкретно в «Ростелекоме»?</textarea>
+              <div class="ou-rte ou-rte--full">
+                <label class="ou-rte__lbl" for="b-desc">Описание</label>
+                <div class="ou-rte__bar">
+                  <div class="ou-seg ou-seg--s" role="group" aria-label="Режим ввода">
+                    <button type="button" class="ou-seg__item is-active">Простой текст</button>
+                    <button type="button" class="ou-seg__item">Форматированный</button>
+                    <button type="button" class="ou-seg__item">HTML</button>
+                  </div>
                 </div>
+                <div class="ou-rte__box">
+                  <textarea class="ou-rte__input" id="b-desc" rows="3">Что нужно, чтобы стать успешным лидером конкретно в «Ростелекоме»?</textarea>
+                </div>
+                <span class="ou-rte__msg">Опишите цели теста и аудиторию</span>
               </div>
             </div>
             <div class="ou-formfield">
