@@ -26,6 +26,8 @@ vi.mock("../../server/db", () => ({
 
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
 import { loadObservations } from "../../server/services/analytics/observations";
+// eslint-disable-next-line import/first -- must import AFTER vi.mock
+import { storage } from "../../server/storage";
 
 const ALL_TESTS = { all: true, ids: new Set<string>() };
 
@@ -445,5 +447,32 @@ describe("сортировка по номеру попытки и группе"
     expect(asc.rows.map(r => r.id)).toEqual([inAlpha.id, inBeta.id, inGamma.id, none.id]);
     const desc = await loadObservations({ sort: "group", dir: "desc" }, ALL_TESTS);
     expect(desc.rows.map(r => r.id)).toEqual([inGamma.id, inBeta.id, inAlpha.id, none.id]);
+  });
+});
+
+/**
+ * PRD-56 FR-17: «ошиблись на вопросе» приходит в выборку списком прохождений — правилами
+ * оценивания его считает сервис, а запрос лишь отбирает названные строки обоих источников.
+ */
+describe("поимённый отбор прохождений", () => {
+  it("отбирает названные строки обоих источников и считает только их", async () => {
+    const web = await webAttempt();
+    await webAttempt();
+    const lms = await lmsAttempt();
+    await lmsAttempt();
+
+    const page = await storage.selectObservations({ attemptIds: [web.id, lms.id] });
+
+    expect(page.total).toBe(2);
+    expect(page.order.map(row => row.id).sort()).toEqual([web.id, lms.id].sort());
+  });
+
+  it("пустой список — ни одной строки, а не снятое условие", async () => {
+    await webAttempt();
+    await lmsAttempt();
+
+    const page = await storage.selectObservations({ attemptIds: [] });
+
+    expect(page.total).toBe(0);
   });
 });

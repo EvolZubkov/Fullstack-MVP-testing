@@ -34,6 +34,12 @@ const { storageMock } = vi.hoisted(() => ({
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 
+// FR-17: правила оценивания проверены тестами сбора ответов; здесь важна проводка условия.
+const { answerFactsMock } = vi.hoisted(() => ({ answerFactsMock: vi.fn() }));
+vi.mock("../server/services/analytics/test-answer-facts", () => ({
+  loadTestAnswerFacts: answerFactsMock,
+}));
+
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
 import registryRouter from "../server/routes/analytics/registry";
 
@@ -82,6 +88,54 @@ beforeEach(() => {
     startedAt: new Date("2026-09-10T09:00:00Z"), finishedAt: new Date("2026-09-10T09:30:00Z"),
     resultPercent: 64, resultPassed: false, maxPoints: 20, totalPoints: 13,
   }]);
+});
+
+describe("GET /api/analytics/registry — ошибка в вопросе (FR-17)", () => {
+  const fact = (attemptId: string, questionId: string, result: string) =>
+    ({ attemptId, questionId, result });
+
+  it("отбирает прохождения обоих источников, где ошиблись на вопросе", async () => {
+    answerFactsMock.mockResolvedValue({
+      facts: [
+        fact("web-1", "q1", "incorrect"),
+        fact("lms-1", "q1", "incorrect"),
+        fact("web-1", "q2", "correct"),
+      ],
+    });
+
+    const res = await ask("?testId=test1&wrongQuestionId=q1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.rows.map((row: { id: string }) => row.id).sort()).toEqual(["lms-1", "web-1"]);
+    expect(storageMock.selectObservations.mock.calls.at(-1)![0].attemptIds.sort())
+      .toEqual(["lms-1", "web-1"]);
+  });
+
+  it("не считает ошибкой верный и измерительный ответ", async () => {
+    answerFactsMock.mockResolvedValue({
+      facts: [fact("web-1", "q1", "correct"), fact("lms-1", "q1", "neutral")],
+    });
+
+    const res = await ask("?testId=test1&wrongQuestionId=q1");
+
+    expect(res.body.rows).toEqual([]);
+    expect(res.body.total).toBe(0);
+  });
+
+  it("собирает ответы по завершённым веб-попыткам теста условия", async () => {
+    answerFactsMock.mockResolvedValue({ facts: [] });
+
+    await ask("?testId=test1&wrongQuestionId=q1");
+
+    expect(answerFactsMock).toHaveBeenCalledWith("test1", [expect.objectContaining({ id: "web-1" })]);
+  });
+
+  it("без теста в условиях не отбирает ничего, а не всё подряд", async () => {
+    const res = await ask("?wrongQuestionId=q1");
+
+    expect(answerFactsMock).not.toHaveBeenCalled();
+    expect(res.body.total).toBe(0);
+  });
 });
 
 describe("GET /api/analytics/registry — оргструктура (FR-06b)", () => {

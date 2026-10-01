@@ -147,7 +147,11 @@ export function PassageRegistry({
   const dictionaries = useRegistryDictionaries();
   // Вариант и версия называются по справочнику ТОГО теста, что стоит в условиях: у разных
   // тестов они свои, и общего перечня для них не существует.
-  const testDictionary = useTestDictionary(filter.testIds.length === 1 ? filter.testIds[0] : null);
+  const testDictionary = useTestDictionary(
+    filter.testIds.length === 1 ? filter.testIds[0] : null,
+    true,
+    filter.wrongQuestionIds,
+  );
 
   /** Номер запроса: ответ на устаревшие условия не должен затирать свежий список. */
   const request = useRef(0);
@@ -210,6 +214,9 @@ export function PassageRegistry({
     else if (kind === "form") onFilterChange({ ...filter, formIds: filter.formIds.filter(x => x !== value) });
     else if (kind === "snapshot") {
       onFilterChange({ ...filter, snapshotIds: filter.snapshotIds.filter(x => x !== value) });
+    }
+    else if (kind === "wrongQuestion") {
+      onFilterChange({ ...filter, wrongQuestionIds: (filter.wrongQuestionIds ?? []).filter(x => x !== value) });
     }
     else if (ORG_CONDITIONS.some(condition => condition.param === kind)) {
       // Оргусловие: префикс чипа — параметр адреса, значение — имя как есть (в нём бывают «:»).

@@ -114,6 +114,7 @@ function conditionsOf(raw: unknown): ObservationFilter {
     ...(list(source.organizations).length ? { organizations: list(source.organizations) } : {}),
     ...(list(source.units).length ? { units: list(source.units) } : {}),
     ...(list(source.positions).length ? { positions: list(source.positions) } : {}),
+    ...(list(source.wrongQuestionIds).length ? { wrongQuestionIds: list(source.wrongQuestionIds) } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
   };
@@ -162,6 +163,7 @@ function groupIdsOf(raw: unknown): string[] | null {
   // срез «Розница + Отдел продаж» получил бы число всей Розницы.
   const hasOther = [
     "sources", "outcomes", "testIds", "formIds", "snapshotIds", "organizations", "units", "positions",
+    "wrongQuestionIds",
   ].some(key =>
     Array.isArray(source[key]) && (source[key] as unknown[]).length > 0)
     || typeof source.from === "string"

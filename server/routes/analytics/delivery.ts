@@ -17,6 +17,8 @@ import { logger } from "../../logger";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
+import { renderBlanksText } from "@shared/questions/blanks-render";
+import { plainPromptOf } from "@shared/questions/prompt-format";
 import { loadObservations } from "../../services/analytics/observations";
 import { loadDeliveryPool } from "../../services/delivery-pool";
 import {
@@ -45,9 +47,14 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { testId } = req.params;
-      const [sections, snapshots] = await Promise.all([
+      // Подписи вопросов — только запрошенных: чипу «Ошибка в вопросе» (FR-17) нужен текст
+      // одного вопроса, а не весь банк теста.
+      const questionIds = (Array.isArray(req.query.questionId) ? req.query.questionId : [req.query.questionId])
+        .filter((id): id is string => typeof id === "string" && id.trim() !== "");
+      const [sections, snapshots, questions] = await Promise.all([
         storage.getTestSections(testId),
         storage.getSnapshotsForTest(testId),
+        questionIds.length ? storage.getQuestionsByIds(questionIds) : Promise.resolve([]),
       ]);
 
       res.json({
@@ -60,6 +67,13 @@ router.get(
         versions: snapshots.map(snapshot => ({
           id: snapshot.id,
           version: snapshot.version,
+        })),
+        questions: questions.map(question => ({
+          id: question.id,
+          label: plainPromptOf({
+            ...question,
+            prompt: renderBlanksText(question.prompt, { mode: "dash" }),
+          }),
         })),
       });
     } catch (error) {

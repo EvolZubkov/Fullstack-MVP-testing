@@ -601,9 +601,15 @@ export default function TestAnalyticsPage() {
             minObservations={analytics.minObservations}
             onDeliveryChange={changeDelivery}
             onOpenRegistry={questionId => {
-                // FR-17: переход в реестр к прохождениям, где на задании ошиблись. Условия
-                // отбора живут в адресе реестра (FR-03), поэтому это обычная ссылка.
-                window.location.href = `/author/analytics?testId=${testId}&outcome=failed&questionId=${questionId}`;
+                // FR-17: переход в реестр к прохождениям, где на вопросе ошиблись. Условия
+                // отбора живут в адресе реестра (FR-03), поэтому это обычная ссылка. Фильтр
+                // страницы едет с ней: иначе реестр показал бы ошибки за всё время по всем
+                // группам, а таблица вопросов — по отобранным.
+                window.location.href = `/author/analytics${filterToSearch({
+                    ...filter,
+                    testIds: testId ? [testId] : [],
+                    wrongQuestionIds: [questionId],
+                })}`;
             }}
             psychometrics={questionPsychometrics}
             onOpenQuality={questionId => {

@@ -10,6 +10,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  conditionsToFilter,
+  countConditions,
   describeConditions,
   filterToSearch,
   isEmptyFilter,
@@ -113,6 +115,56 @@ describe("filter-state", () => {
       );
 
       expect(items.map(item => item.label)).toEqual(["Вариант: удалённый", "Версия: публикации"]);
+    });
+
+    it("называет вопрос условия «ошибка в вопросе» его текстом, длинный — обрезает по слову", () => {
+      const prompt = "Какие из перечисленных документов обязательны при оформлении сделки с юридическим лицом";
+      const items = describeConditions(
+        { ...EMPTY_FILTER, wrongQuestionIds: ["q1"] },
+        { tests: [], groups: [], questions: [{ id: "q1", label: prompt }] },
+      );
+
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe("wrongQuestion:q1");
+      expect(items[0].label.startsWith("Ошибка в вопросе: Какие из перечисленных документов")).toBe(true);
+      expect(items[0].label.endsWith("…")).toBe(true);
+      // Обрезка по слову: последнее слово перед многоточием целое.
+      expect(prompt).toContain(items[0].label.replace("Ошибка в вопросе: ", "").slice(0, -1));
+    });
+  });
+
+  /** FR-17: прохождения, где ошиблись на вопросе, — переход из строки вопроса теста. */
+  describe("условие «ошибка в вопросе»", () => {
+    it("переживает круговой рейс через адрес", () => {
+      const filter: RegistryFilter = { ...EMPTY_FILTER, testIds: ["t1"], wrongQuestionIds: ["q1"] };
+
+      expect(filterToSearch(filter)).toBe("?testId=t1&wrongQuestionId=q1");
+      expect(parseFilter(filterToSearch(filter))).toEqual(filter);
+    });
+
+    it("отсутствует в разобранном фильтре, когда его нет в адресе", () => {
+      expect("wrongQuestionIds" in parseFilter("?testId=t1")).toBe(false);
+    });
+
+    it("делает фильтр непустым и считается на кнопке", () => {
+      const filter = parseFilter("?wrongQuestionId=q1");
+
+      expect(isEmptyFilter(filter)).toBe(false);
+      expect(countConditions(filter)).toBe(1);
+    });
+
+    it("доезжает из сохранённых условий", () => {
+      expect(conditionsToFilter({ wrongQuestionIds: ["q1", 7] }).wrongQuestionIds).toEqual(["q1"]);
+      expect("wrongQuestionIds" in conditionsToFilter({})).toBe(false);
+    });
+
+    it("без справочника называет вопрос «удалённым», а не идентификатором", () => {
+      const items = describeConditions(
+        { ...EMPTY_FILTER, wrongQuestionIds: ["q-x"] },
+        { tests: [], groups: [] },
+      );
+
+      expect(items.map(item => item.label)).toEqual(["Ошибка в вопросе: удалённый"]);
     });
   });
 });

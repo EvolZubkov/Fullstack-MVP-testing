@@ -18,6 +18,7 @@ import { ORG_FIELDS, normalizeOrgValue, orgValueKey, type OrgField } from "@shar
 import { storage } from "../../storage";
 import type { ObservationSort } from "../../storage/analytics-repository";
 import { attemptParticipant, attemptTestId } from "./attempt-row";
+import { loadTestAnswerFacts } from "./test-answer-facts";
 
 /** Откуда приехало прохождение. Фильтр экрана говорит ровно в этих терминах. */
 export type ObservationSource = "web" | "telemetry" | "import";
@@ -333,6 +334,14 @@ export interface ObservationFilter {
   organizations?: string[];
   units?: string[];
   positions?: string[];
+  /**
+   * PRD-56 FR-17: прохождения, где ОШИБЛИСЬ на одном из этих вопросов.
+   *
+   * Условие внутри теста: верность ответа задают правила оценивания теста, и без теста в
+   * условиях ни одно прохождение не подходит. Измерительный ответ (`neutral`) ошибкой не
+   * считается — у него нет верного варианта.
+   */
+  wrongQuestionIds?: string[];
   /** Период по дате НАЧАЛА прохождения. */
   from?: Date;
   to?: Date;
@@ -382,6 +391,9 @@ export async function loadObservations(
     : (testIds ?? [...scope.ids]).filter(id => scope.ids.has(id));
 
   const orgValues = await orgSpellingsOf(filter);
+  const attemptIds = filter.wrongQuestionIds?.length
+    ? await attemptsWrongOn(allowed ?? [], filter.wrongQuestionIds)
+    : undefined;
 
   const { web, lms, order, total } = await storage.selectObservations({
     testIds: allowed,
@@ -391,6 +403,7 @@ export async function loadObservations(
     formIds: filter.formIds,
     snapshotIds: filter.snapshotIds,
     ...(orgValues ? { orgValues } : {}),
+    ...(attemptIds ? { attemptIds } : {}),
     from: filter.from,
     to: filter.to,
     limit: filter.limit,
@@ -406,6 +419,34 @@ export async function loadObservations(
     rows: order.map(k => byId.get(k.id)).filter((o): o is Observation => !!o),
     total,
   };
+}
+
+/**
+ * Прохождения тестов отбора, где ошиблись хотя бы на одном из вопросов, — по идентификаторам.
+ *
+ * Считается сбором ответов теста (`loadTestAnswerFacts`), а не запросом: верность веб-ответа в
+ * базе не хранится, её определяют правила оценивания, и второй их экземпляр в SQL разошёлся бы
+ * с долей верных в таблице вопросов. Веб-попытки берутся завершёнными — так же их читает
+ * таблица вопросов, и число строк реестра совпадает с числом ошибок в ней.
+ *
+ * @param testIds тесты, внутри которых действует условие; пусто — ни одно прохождение не подходит
+ * @param questionIds вопросы условия
+ * @returns идентификаторы веб-попыток и строк LMS вперемешку
+ */
+async function attemptsWrongOn(testIds: string[], questionIds: string[]): Promise<string[]> {
+  const wanted = new Set(questionIds);
+  const out = new Set<string>();
+  for (const testId of testIds) {
+    const { web } = await storage.selectObservations({ testIds: [testId], sources: ["web"] });
+    const completed = web.filter(attempt => attempt.resultJson !== null);
+    const { facts } = await loadTestAnswerFacts(testId, completed);
+    for (const fact of facts) {
+      if (fact.result === "incorrect" && wanted.has(fact.questionId) && fact.attemptId) {
+        out.add(fact.attemptId);
+      }
+    }
+  }
+  return [...out];
 }
 
 /** Условие отбора фильтра для каждого оргполя. */

@@ -40,6 +40,13 @@ export interface RegistryFilter {
   organizations: string[];
   units: string[];
   positions: string[];
+  /**
+   * FR-17: прохождения, где ошиблись на этих вопросах. Условие внутри теста — верность ответа
+   * задают правила оценивания теста; приходит переходом из строки вопроса аналитики теста.
+   * Необязательно: окно отбора этого условия не предлагает, и собирающим фильтр целиком
+   * незачем о нём знать.
+   */
+  wrongQuestionIds?: string[];
   /** Границы периода в формате `ГГГГ-ММ-ДД`; каждая необязательна. */
   from?: string;
   to?: string;
@@ -103,6 +110,7 @@ export function parseFilter(search: string): RegistryFilter {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const from = dateOf(params.get("from"));
   const to = dateOf(params.get("to"));
+  const wrongQuestionIds = valuesOf(params, "wrongQuestionId");
 
   return {
     testIds: valuesOf(params, "testId"),
@@ -114,6 +122,7 @@ export function parseFilter(search: string): RegistryFilter {
     organizations: repeatedOf(params, "organization"),
     units: repeatedOf(params, "unit"),
     positions: repeatedOf(params, "position"),
+    ...(wrongQuestionIds.length ? { wrongQuestionIds } : {}),
     ...(from ? { from } : {}),
     ...(to ? { to } : {}),
   };
@@ -136,6 +145,7 @@ export function filterToSearch(filter: Partial<RegistryFilter>): string {
   for (const { key, param } of ORG_CONDITIONS) {
     for (const value of filter[key] ?? []) params.append(param, value);
   }
+  for (const id of filter.wrongQuestionIds ?? []) params.append("wrongQuestionId", id);
   if (filter.from) params.set("from", filter.from);
   if (filter.to) params.set("to", filter.to);
 
@@ -152,6 +162,7 @@ export function isEmptyFilter(filter: RegistryFilter): boolean {
     && filter.sources.length === 0
     && filter.outcomes.length === 0
     && ORG_CONDITIONS.every(({ key }) => (filter[key] ?? []).length === 0)
+    && (filter.wrongQuestionIds ?? []).length === 0
     && !filter.from
     && !filter.to;
 }
@@ -177,6 +188,20 @@ export interface ConditionDictionaries {
   /** Варианты и версии ОДНОГО теста: их подписи живут внутри теста, а не в общем списке. */
   forms?: Array<{ id: string; label: string }>;
   versions?: Array<{ id: string; version: number }>;
+  /** Тексты вопросов условия «ошибка в вопросе» — тоже из справочника ОДНОГО теста. */
+  questions?: Array<{ id: string; label: string }>;
+}
+
+/** Сколько знаков текста вопроса уходит в чип: дальше чип перестаёт помещаться в строку. */
+const QUESTION_LABEL_MAX = 60;
+
+/** Текст вопроса для чипа: обрезанный по слову, с многоточием. */
+function shortQuestionLabel(label: string): string {
+  const flat = label.replace(/\s+/g, " ").trim();
+  if (flat.length <= QUESTION_LABEL_MAX) return flat;
+  const cut = flat.slice(0, QUESTION_LABEL_MAX);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > QUESTION_LABEL_MAX / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
 }
 
 /**
@@ -220,6 +245,13 @@ export function describeConditions(
   for (const { key, param, label } of ORG_CONDITIONS) {
     for (const value of filter[key] ?? []) items.push({ id: `${param}:${value}`, label: `${label}: ${value}` });
   }
+  for (const id of filter.wrongQuestionIds ?? []) {
+    const label = dictionaries.questions?.find(question => question.id === id)?.label;
+    items.push({
+      id: `wrongQuestion:${id}`,
+      label: `Ошибка в вопросе: ${label ? shortQuestionLabel(label) : "удалённый"}`,
+    });
+  }
   if (filter.from || filter.to) {
     items.push({ id: "period", label: `Период: ${filter.from ?? "…"} — ${filter.to ?? "…"}` });
   }
@@ -250,6 +282,9 @@ export function conditionsToFilter(raw: unknown): RegistryFilter {
     organizations: strings(source.organizations),
     units: strings(source.units),
     positions: strings(source.positions),
+    ...(strings(source.wrongQuestionIds).length
+      ? { wrongQuestionIds: strings(source.wrongQuestionIds) }
+      : {}),
     ...(date(source.from) ? { from: date(source.from) } : {}),
     ...(date(source.to) ? { to: date(source.to) } : {}),
   };
@@ -264,5 +299,6 @@ export function countConditions(filter: RegistryFilter): number {
     + filter.sources.length
     + filter.outcomes.length
     + ORG_CONDITIONS.reduce((sum, { key }) => sum + (filter[key] ?? []).length, 0)
+    + (filter.wrongQuestionIds ?? []).length
     + (filter.from || filter.to ? 1 : 0);
 }

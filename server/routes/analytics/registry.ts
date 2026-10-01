@@ -200,6 +200,8 @@ router.get("/registry", requirePermission("analytics.read"), async (req: Request
     const organizations = repeated(req.query.organization);
     const units = repeated(req.query.unit);
     const positions = repeated(req.query.position);
+    // FR-17: «ошиблись на вопросе» — переход из строки вопроса аналитики теста.
+    const wrongQuestionIds = listOf(req.query.wrongQuestionId);
 
     // Столбец сортировки принимается только из перечня: незнакомое имя — это опечатка в
     // чужой ссылке, и отвечать на неё ошибкой незачем, реестр просто встаёт по умолчанию.
@@ -217,6 +219,7 @@ router.get("/registry", requirePermission("analytics.read"), async (req: Request
         ...(organizations.length ? { organizations } : {}),
         ...(units.length ? { units } : {}),
         ...(positions.length ? { positions } : {}),
+        ...(wrongQuestionIds.length ? { wrongQuestionIds } : {}),
         ...(sources.length ? { sources } : {}),
         ...(outcomes.length ? { outcomes } : {}),
         ...(dateOf(req.query.from, "start") ? { from: dateOf(req.query.from, "start") } : {}),

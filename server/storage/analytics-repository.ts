@@ -78,6 +78,15 @@ export interface ObservationQuery {
    * выборка обязана вернуть ноль строк, а не снять условие.
    */
   orgValues?: Partial<Record<OrgField, string[]>>;
+  /**
+   * Прохождения, отобранные поимённо, — обоих источников вперемешку: идентификаторы веб-попыток
+   * и строк LMS не пересекаются.
+   *
+   * Так приходят условия, которые запросом не выразить: «ошиблись на вопросе» требует правил
+   * оценивания (`test-answer-facts`), и сервис заранее переводит его в список прохождений.
+   * Присутствие поля — уже условие: пустой список значит «ни одно не подошло».
+   */
+  attemptIds?: string[];
   from?: Date;
   to?: Date;
   limit?: number;
@@ -209,7 +218,11 @@ export class AnalyticsRepository {
       where ${userGroups.userId} = ${userIdColumn}
         and ${userGroups.groupId} in ${ids}
     )`;
-    const { testIds, groupIds, sources, outcomes, formIds, snapshotIds } = query;
+    const { testIds, groupIds, sources, outcomes, formIds, snapshotIds, attemptIds } = query;
+
+    /** Поимённый отбор: пустой список — ни одной строки, а не снятое условие. */
+    const inAttemptIds = (column: typeof attempts.id | typeof scormAttempts.id) =>
+      (attemptIds!.length ? inArray(column, attemptIds!) : NOTHING);
 
     /**
      * Прохождение выдано одним из отобранных вариантов.
@@ -278,6 +291,7 @@ export class AnalyticsRepository {
       ...(groupIds?.length ? [inGroups(attempts.userId, groupIds)] : []),
       ...(formIds?.length ? [webInForms(formIds)] : []),
       ...(snapshotIds?.length ? [inArray(attempts.snapshotId, snapshotIds)] : []),
+      ...(attemptIds ? [inAttemptIds(attempts.id)] : []),
       ...(sources?.length && !sources.includes("web") ? [NOTHING] : []),
       ...(query.impossible ? [NOTHING] : []),
     );
@@ -321,6 +335,7 @@ export class AnalyticsRepository {
       ...(outcomes?.length ? [inArray(lmsOutcome, outcomes)] : []),
       ...(formIds?.length ? [lmsInForms(formIds)] : []),
       ...(snapshotIds?.length ? [inArray(scormAttempts.snapshotId, snapshotIds)] : []),
+      ...(attemptIds ? [inAttemptIds(scormAttempts.id)] : []),
       ...(lmsOrigins.length ? [inArray(scormAttempts.origin, lmsOrigins)] : [NOTHING]),
       ...(query.impossible ? [NOTHING] : []),
     );

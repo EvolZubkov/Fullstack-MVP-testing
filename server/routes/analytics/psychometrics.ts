@@ -387,6 +387,7 @@ function conditionsOf(raw: unknown): ObservationFilter {
     ...(list(source.organizations).length ? { organizations: list(source.organizations) } : {}),
     ...(list(source.units).length ? { units: list(source.units) } : {}),
     ...(list(source.positions).length ? { positions: list(source.positions) } : {}),
+    ...(list(source.wrongQuestionIds).length ? { wrongQuestionIds: list(source.wrongQuestionIds) } : {}),
   };
 }
 

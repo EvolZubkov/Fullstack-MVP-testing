@@ -54,12 +54,16 @@ export function observationsDouble(storage: Sources) {
     // `variant_json` посекционно и проверяется на настоящей выборке).
     const matchesSnapshot = (row: Record<string, unknown>) =>
       !query.snapshotIds?.length || query.snapshotIds.includes(row.snapshotId as string);
+    // Поимённый отбор: присутствие поля — уже условие, пустой список — ни одной строки.
+    const matchesIds = (row: Record<string, unknown>) =>
+      !query.attemptIds || query.attemptIds.includes(row.id as string);
 
     const web = wantsWeb
       ? (await rowsOf(storage.getAllAttempts)).filter(
           row => (!query.testIds || query.testIds.includes(row.testId as string))
             && matchesOutcome(row, "web")
-            && matchesSnapshot(row),
+            && matchesSnapshot(row)
+            && matchesIds(row),
         )
       : [];
     // PRD-54: у части старых строк телеметрии своего `test_id` нет — тест известен через
@@ -71,7 +75,8 @@ export function observationsDouble(storage: Sources) {
           const testId = (row.testId as string) ?? testOfPackage.get(row.packageId as string);
           return (!query.testIds || query.testIds.includes(testId))
             && matchesOutcome(row, "lms")
-            && matchesSnapshot(row);
+            && matchesSnapshot(row)
+            && matchesIds(row);
         })
       : [];
 

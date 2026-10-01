@@ -82,43 +82,62 @@ export function useRegistryDictionaries(enabled = true): RegistryDictionaries {
  *
  * @param testId тест условий; `null` — спрашивать нечего
  * @param enabled окно отбора закрыто — запросов нет
+ * @param questionIds вопросы условия «ошибка в вопросе» (FR-17), чьи тексты нужны чипу
  */
 export function useTestDictionary(
   testId: string | null,
   enabled = true,
-): { forms: Array<{ id: string; label: string }>; versions: Array<{ id: string; version: number }> } {
-  const [dictionary, setDictionary] = useState<{
-    forms: Array<{ id: string; label: string }>;
-    versions: Array<{ id: string; version: number }>;
-  }>({ forms: [], versions: [] });
+  questionIds: readonly string[] = NO_QUESTIONS,
+): TestDictionary {
+  const [dictionary, setDictionary] = useState<TestDictionary>(EMPTY_TEST_DICTIONARY);
+  // Ключ, а не массив: новый массив с теми же вопросами на каждом рендере не должен
+  // перезапрашивать справочник.
+  const questionKey = questionIds.join(",");
 
   useEffect(() => {
     if (!enabled || !testId) {
-      setDictionary({ forms: [], versions: [] });
+      setDictionary(EMPTY_TEST_DICTIONARY);
       return;
     }
     let alive = true;
 
     void (async () => {
       try {
-        const response = await fetch(`/api/analytics/tests/${testId}/dictionary`, {
-          credentials: "include",
-        });
+        const query = new URLSearchParams();
+        for (const id of questionKey ? questionKey.split(",") : []) query.append("questionId", id);
+        const search = query.toString();
+        const response = await fetch(
+          `/api/analytics/tests/${testId}/dictionary${search ? `?${search}` : ""}`,
+          { credentials: "include" },
+        );
         if (!response.ok) throw new Error(String(response.status));
-        const data = await response.json() as {
-          forms?: Array<{ id: string; label: string }>;
-          versions?: Array<{ id: string; version: number }>;
-        };
-        if (alive) setDictionary({ forms: data.forms ?? [], versions: data.versions ?? [] });
+        const data = await response.json() as Partial<TestDictionary>;
+        if (alive) {
+          setDictionary({
+            forms: data.forms ?? [],
+            versions: data.versions ?? [],
+            questions: data.questions ?? [],
+          });
+        }
       } catch {
         // Справочник не доехал — условие просто не предлагается: выпадающий список с
         // идентификаторами вместо названий хуже, чем его отсутствие.
-        if (alive) setDictionary({ forms: [], versions: [] });
+        if (alive) setDictionary(EMPTY_TEST_DICTIONARY);
       }
     })();
 
     return () => { alive = false; };
-  }, [testId, enabled]);
+  }, [testId, enabled, questionKey]);
 
   return dictionary;
 }
+
+/** Справочник условий одного теста: варианты, версии и тексты вопросов условия. */
+export interface TestDictionary {
+  forms: Array<{ id: string; label: string }>;
+  versions: Array<{ id: string; version: number }>;
+  questions: Array<{ id: string; label: string }>;
+}
+
+const NO_QUESTIONS: readonly string[] = [];
+const EMPTY_TEST_DICTIONARY: TestDictionary = { forms: [], versions: [], questions: [] };

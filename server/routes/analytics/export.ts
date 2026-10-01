@@ -567,6 +567,8 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
     const organizations = stringsOf(config?.organizations);
     const units = stringsOf(config?.units);
     const positions = stringsOf(config?.positions);
+    // FR-17: «ошиблись на вопросе» — условие реестра, как и остальные.
+    const wrongQuestionIds = stringsOf(config?.wrongQuestionIds);
     const observed = (await loadObservations(
       {
         testIds: [...selectedTestIds],
@@ -578,6 +580,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         ...(organizations.length ? { organizations } : {}),
         ...(units.length ? { units } : {}),
         ...(positions.length ? { positions } : {}),
+        ...(wrongQuestionIds.length ? { wrongQuestionIds } : {}),
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
       },
@@ -590,7 +593,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
     // Листы по веб-попыткам сужаются тем же отбором, что лист прохождений: веб-наблюдение и
     // попытка делят идентификатор, а второе толкование «варианта» в экспорте разошлось бы с
     // реестром.
-    if (formIds.length || snapshotIds.length) {
+    if (formIds.length || snapshotIds.length || wrongQuestionIds.length) {
       const matched = new Set(observed.filter(o => o.source === "web").map(o => o.id));
       completed = completed.filter(a => matched.has(a.id));
     }
