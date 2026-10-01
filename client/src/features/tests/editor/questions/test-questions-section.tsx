@@ -15,15 +15,19 @@
 import { useMemo, useState } from "react";
 import type * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CircleDot, Eye, Pencil, Plus, Search } from "lucide-react";
+import { BarChart3, CircleDot, Eye, Pencil, Plus, Search } from "lucide-react";
 import { Button, EmptyState, FormSection, IconButton, Input, Tag } from "@skillum/ui-kit";
 import type { Question } from "@shared/schema";
 import type { QuestionType } from "@shared/questions/question-type";
 import { QuestionPreviewModal } from "@/features/questions/question-preview-modal";
+import { useOptionalAuth } from "@/lib/auth";
+import type { ItemQualityView } from "@/features/analytics/test/item-quality";
+import { questionAnalyticsHref } from "@/features/analytics/test/question-analytics-link";
 import { useReviewComments } from "../../review/use-review-comments";
 import type { TestEditorModel } from "../test-editor.types";
 import { QUESTION_TYPE_ICON, QUESTION_TYPE_LABEL } from "../sections/question-type-icon";
 import { buildQuestionSummary } from "./question-summary";
+import { questionAnalytics } from "./question-analytics";
 
 type QuestionRow = Question & { topicName?: string };
 
@@ -64,6 +68,19 @@ export function TestQuestionsSection({
     queryKey: ["/api/questions"],
   });
   const { threads } = useReviewComments(testId ?? "", { enabled: Boolean(testId) });
+  // Данные прохождений — только с правом на аналитику и только у сохранённого теста. Ключ
+  // запроса тот же, что у страницы аналитики без фильтров: числа не расходятся, а переход
+  // туда и обратно не платит за второй расчёт.
+  const auth = useOptionalAuth();
+  const canAnalytics = Boolean(testId) && (auth?.can("analytics.read") ?? false);
+  const { data: quality } = useQuery<ItemQualityView>({
+    queryKey: [`/api/analytics/psychometrics/${testId}`],
+    enabled: canAnalytics,
+  });
+  const itemById = useMemo(
+    () => new Map((quality?.items ?? []).map((item) => [item.questionId, item])),
+    [quality],
+  );
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<QuestionRow | null>(null);
 
@@ -176,6 +193,7 @@ export function TestQuestionsSection({
                 excluded: excluded.has(q.id),
                 openComments: openComments.get(q.id) ?? 0,
               });
+              const stats = questionAnalytics(canAnalytics ? itemById.get(q.id) : undefined);
               const qType = q.type as QuestionType;
               const TypeIcon = QUESTION_TYPE_ICON[qType] ?? CircleDot;
               return (
@@ -194,8 +212,24 @@ export function TestQuestionsSection({
                         {q.prompt}
                       </span>
                       <span className="tb-qlist__meta">{summary.meta.join(" · ")}</span>
-                      {summary.flags.length > 0 && (
+                      {stats.line && (
+                        <span className="tb-qlist__meta" data-testid={`test-questions-stats-${q.id}`}>
+                          {stats.line}
+                        </span>
+                      )}
+                      {(stats.flag || summary.flags.length > 0) && (
                         <span className="tb-qlist__flags">
+                          {/* Решение владельца 2026-10-01: признак из аналитики — первым. */}
+                          {stats.flag && (
+                            <Tag
+                              tone={stats.flag.tone}
+                              size="s"
+                              title={stats.flag.detail}
+                              data-testid={`test-questions-flag-analytics-${q.id}`}
+                            >
+                              {stats.flag.title}
+                            </Tag>
+                          )}
                           {summary.flags.map((f) => (
                             <Tag
                               key={f.key}
@@ -214,6 +248,20 @@ export function TestQuestionsSection({
                     {/* Кнопки не должны открывать строку второй раз: щелчок по ним
                         гасится, иначе «глаз» открывал бы ещё и ящик вопроса. */}
                     <div className="tb-qlist__actions" onClick={(e) => e.stopPropagation()}>
+                      {canAnalytics && testId && stats.canOpen && (
+                        // Новая вкладка браузера: в этой открыт ящик теста с черновиком.
+                        <IconButton
+                          icon={<BarChart3 width={14} height={14} aria-hidden="true" />}
+                          variant="ghost"
+                          size="s"
+                          aria-label="Открыть в аналитике"
+                          title="Разбор вопроса в аналитике — в новой вкладке"
+                          onClick={() =>
+                            window.open(questionAnalyticsHref(testId, q.id), "_blank", "noopener")
+                          }
+                          data-testid={`test-questions-analytics-${q.id}`}
+                        />
+                      )}
                       <IconButton
                         icon={<Eye width={14} height={14} aria-hidden="true" />}
                         variant="ghost"

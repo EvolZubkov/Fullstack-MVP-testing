@@ -308,8 +308,11 @@ function heuristicFlag(heuristic: ReviewHeuristic | undefined): { tone: "warning
  * Порядок проверок — это и есть «сила подозрения»: прямой дефект вперёд, спокойное задание в
  * конец. Первым идёт отрицательная дискриминативность: сильные, ошибающиеся чаще слабых, почти
  * всегда означают испорченный ключ, и это чинят раньше всего остального.
+ *
+ * Экспортируется для «Вопросов теста» в редакторе: строка вопроса там показывает тот же
+ * признак теми же словами, второй копии правил нет.
  */
-function flagOf(row: ItemQualityRow, heuristic?: ReviewHeuristic): { tone: "error" | "warning" | "info"; title: string; detail: string } | null {
+export function flagOf(row: ItemQualityRow, heuristic?: ReviewHeuristic): { tone: "error" | "warning" | "info"; title: string; detail: string } | null {
   if (row.flags.negativeDiscrimination) {
     return {
       tone: "error",

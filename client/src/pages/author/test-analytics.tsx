@@ -58,6 +58,7 @@ import {
     Text,
 } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
+import { readQuestionAnalyticsLink } from "@/features/analytics/test/question-analytics-link";
 import { pluralize } from "@/lib/i18n";
 import { LmsImportDialog } from "@/features/analytics/lms-import/lms-import-dialog";
 import { RegistryFilterDialog } from "@/features/analytics/registry/filter-dialog";
@@ -266,7 +267,12 @@ export default function TestAnalyticsPage() {
     const [, params] = useRoute("/author/tests/:testId/analytics");
     const testId = params?.testId;
 
-    const [activeTab, setActiveTab] = useState("overview");
+    // Ссылка «Открыть в аналитике» из редактора теста приходит с `?tab=quality&questionId=…`:
+    // вкладка и раскрытый разбор берутся из адреса один раз, при открытии страницы.
+    const [deepLink] = useState(() =>
+        readQuestionAnalyticsLink(typeof window === "undefined" ? "" : window.location.search),
+    );
+    const [activeTab, setActiveTab] = useState<string>(deepLink.tab);
     /** PRD-54: окно загрузки выгрузки отчёта LMS. Тест здесь задан страницей. */
     const [lmsImportOpen, setLmsImportOpen] = useState(false);
     /**
@@ -415,7 +421,7 @@ export default function TestAnalyticsPage() {
      * Дистракторный разбор требует ответов КАЖДОГО участника по этому заданию, и считать его
      * для всех строк таблицы заранее значило бы платить за сорок разборов ради одного.
      */
-    const [breakdownId, setBreakdownId] = useState<string | null>(null);
+    const [breakdownId, setBreakdownId] = useState<string | null>(deepLink.questionId);
     /**
      * Выбранная редакция вопроса: `undefined` — автор ещё не выбирал, и сервер считает карточку по
      * текущей редакции (FR-49a); `null` — «версия неизвестна».
