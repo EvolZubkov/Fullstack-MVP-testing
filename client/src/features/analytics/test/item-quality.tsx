@@ -1,6 +1,6 @@
 /**
  * @module features/analytics/test/item-quality
- * @description PRD-66: вкладка «Качество заданий» — годится ли задание как измерительный
+ * @description PRD-66: вкладка «Качество вопросов» — годится ли задание как измерительный
  * инструмент.
  *
  * Соседняя вкладка «Вопросы» отвечает на другой вопрос — что с заданием ПРОИСХОДИТ: сколько
@@ -541,7 +541,7 @@ function compareRows(
   return sign * (valueA - valueB);
 }
 
-/** Вкладка «Качество заданий». */
+/** Вкладка «Качество вопросов». */
 export function ItemQualityPanel({
   view, exportHref, matrixHref, onOpenItem, onRestoreFirstAttempt, heuristics = {},
   onDeliveryChange, testId, excluded = {},
