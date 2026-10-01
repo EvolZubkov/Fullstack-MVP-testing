@@ -465,6 +465,7 @@
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s active" onclick="showState(this, 'basic')">s-basic</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'composition')">s-composition</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'composition-questions')">s-composition-questions</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'composition-questions-analytics')">s-composition-questions-analytics</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'adaptive')">s-adaptive</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'scenario')">s-scenario</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'rules')">s-rules</button>
@@ -1083,6 +1084,181 @@
                         </td>
                         <td>
                           <div class="tb-qlist__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Посмотреть глазами участника"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть вопрос"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" disabled>Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Применить</button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ═══════════ STATE: s-composition-questions-analytics — «Вопросы теста» с данными прохождений ═══════════
+         Предложение следующей итерации (план 2026-10-01, раздел «Следующая итерация»). Третья
+         строка — величины из психометрики теста теми же словами, что в аналитике; признак
+         вопроса — та же функция, что во вкладке аналитики «Качество вопросов» (один признак,
+         самый сильный), он стоит ПЕРВЫМ среди отметок (решение владельца 2026-10-01). Кнопка
+         «Открыть в аналитике» ведёт к разбору этого вопроса во вкладке «Качество вопросов» и
+         открывает его в НОВОЙ вкладке браузера, чтобы не потерять черновик теста. Видно только
+         с правом на аналитику; без прохождений строки и кнопки нет. -->
+    <div id="wf-composition-questions-analytics" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v8</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы состава и сценария">
+                <button type="button" class="ou-drawer__rail-item">Состав</button>
+                <span class="ou-drawer__rail-grouplbl" id="rail-test-questions-a">Вопросы теста</span>
+                <div class="ou-drawer__rail-group" role="group" aria-labelledby="rail-test-questions-a">
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child is-active" aria-current="page">1. О компании</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">2. Корпоративные финансы</button>
+                  <button type="button" class="ou-drawer__rail-item ou-drawer__rail-item--child">3. Технологии</button>
+                </div>
+                <button type="button" class="ou-drawer__rail-item">Сценарий</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked tb-qlist">
+                <div class="ou-formsection__intro tb-section-head">
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+                    <h3 class="ou-formsection__title">1. О компании</h3>
+                    <span class="ou-tag ou-tag--neutral ou-tag--outline">выдача 16 из 41</span>
+                  </span>
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить вопрос</span></button>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="cqa-qsearch">Поиск по тексту вопроса</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="cqa-qsearch" type="text" value="" /><span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span></div></div>
+                  </div>
+                  <table class="tb-table" aria-label="Вопросы темы «1. О компании»">
+                    <thead>
+                      <tr>
+                        <th>Вопрос и его настройки в тесте</th>
+                        <th aria-label="Действия"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="tb-qlist__row">
+                        <td>
+                          <div class="tb-qlist__cell">
+                            <span class="tb-qlist__text"><span class="tb-qscoring__qtype" title="Один ответ"><svg width="16" height="16" aria-hidden="true"><use href="#i-circle-dot" /></svg></span>Сотрудники из кросс-функциональных подразделений разработали для сервисных центров виртуальную игру. Какую ценность компании проявили сотрудники?</span>
+                            <span class="tb-qlist__meta">Корпоративная культура · сложность 50 · балл 1 · цена ответа «Точное» · обратная связь: верно / неверно · варианты A, B</span>
+                            <span class="tb-qlist__meta">трудность 0,62 · дискриминативность 0,41 · 87 наблюдений</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="tb-qlist__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть в аналитике" title="Разбор вопроса в аналитике — в новой вкладке"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chart-column" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Посмотреть глазами участника"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть вопрос"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr class="tb-qlist__row">
+                        <td>
+                          <div class="tb-qlist__cell">
+                            <span class="tb-qlist__text"><span class="tb-qscoring__qtype" title="Несколько ответов"><svg width="16" height="16" aria-hidden="true"><use href="#i-check-square" /></svg></span>«Ростелеком» стремится наращивать долю цифровых сервисов в портфеле Группы. Какая доля запланирована к 2030 году?</span>
+                            <span class="tb-qlist__meta">Стратегия компании · сложность 50 · балл 1 · цена ответа «Точное» · шкала «Цифровое мышление» +1 · обратная связь: общая · вариант A</span>
+                            <span class="tb-qlist__meta">трудность 0,93 · дискриминативность 0,12 · 87 наблюдений</span>
+                            <span class="tb-qlist__flags">
+                              <span class="ou-tag ou-tag--warning ou-tag--s" title="трудность 0,93">Слишком лёгкий</span>
+                              <span class="ou-tag ou-tag--info ou-tag--s">1 открытый комментарий</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="tb-qlist__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть в аналитике" title="Разбор вопроса в аналитике — в новой вкладке"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chart-column" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Посмотреть глазами участника"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть вопрос"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr class="tb-qlist__row">
+                        <td>
+                          <div class="tb-qlist__cell">
+                            <span class="tb-qlist__text"><span class="tb-qscoring__qtype" title="Ранжирование"><svg width="16" height="16" aria-hidden="true"><use href="#i-list-ordered" /></svg></span>«Ростелеком» — ключевой партнёр государства в цифровизации. Какие проекты и продукты компания реализует для B2G-сегмента?</span>
+                            <span class="tb-qlist__meta">Продукты компании · сложность 70 · балл 2 · цена ответа «Ступени» · без обратной связи · варианты A, B</span>
+                            <span class="tb-qlist__meta">трудность 0,48 · дискриминативность −0,18 · 64 наблюдения</span>
+                            <span class="tb-qlist__flags">
+                              <span class="ou-tag ou-tag--error ou-tag--s" title="вероятна ошибка в ключе: r = −0,18, D = −0,11">Сильные ошибаются чаще</span>
+                              <span class="ou-tag ou-tag--warning ou-tag--s">задано в тесте</span>
+                              <span class="ou-tag ou-tag--error ou-tag--s">Настройка устарела</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="tb-qlist__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть в аналитике" title="Разбор вопроса в аналитике — в новой вкладке"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chart-column" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Посмотреть глазами участника"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть вопрос"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr class="tb-qlist__row">
+                        <td>
+                          <div class="tb-qlist__cell">
+                            <span class="tb-qlist__text"><span class="tb-qscoring__qtype" title="Распределение баллов"><svg width="16" height="16" aria-hidden="true"><use href="#i-sliders-horizontal" /></svg></span>Совместно с подчинённым вы составляете его траекторию развития. Какой метод обучения порекомендуете?</span>
+                            <span class="tb-qlist__meta">без подтемы · сложность не задана · балл 1 · цена ответа «Точное» · шкалы «Лидерство» +2, «Коммуникация» +1 · без обратной связи</span>
+                            <span class="tb-qlist__meta">Вопрос ещё не выдавался</span>
+                            <span class="tb-qlist__flags">
+                              <span class="ou-tag ou-tag--warning ou-tag--s">вне квот</span>
+                              <span class="ou-tag ou-tag--warning ou-tag--s">не входит в варианты</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="tb-qlist__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Посмотреть глазами участника"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть вопрос"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr class="tb-qlist__row">
+                        <td>
+                          <div class="tb-qlist__cell">
+                            <span class="tb-qlist__text"><span class="tb-qscoring__qtype" title="Один ответ"><svg width="16" height="16" aria-hidden="true"><use href="#i-circle-dot" /></svg></span>В каком году образована компания в её нынешнем виде?</span>
+                            <span class="tb-qlist__meta">Стратегия компании · сложность 20 · балл 1 · цена ответа «Точное» · обратная связь: общая · варианты A, B</span>
+                            <span class="tb-qlist__meta">трудность 0,55 · 12 наблюдений</span>
+                            <span class="tb-qlist__flags">
+                              <span class="ou-tag ou-tag--info ou-tag--s" title="12 из 30 · нужно ещё 18 наблюдений">Мало данных</span>
+                              <span class="ou-tag ou-tag--neutral ou-tag--s">исключён из выдачи</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="tb-qlist__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть в аналитике" title="Разбор вопроса в аналитике — в новой вкладке"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chart-column" /></svg></span></button>
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Посмотреть глазами участника"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Открыть вопрос"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
                           </div>
@@ -6198,6 +6374,7 @@
       <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
       <symbol id="i-more-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" /></symbol>
       <symbol id="i-scissors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3" /><path d="M8.12 8.12 12 12" /><path d="M20 4 8.12 15.88" /><circle cx="6" cy="18" r="3" /><path d="M14.8 14.8 20 20" /></symbol>
+      <symbol id="i-chart-column" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></symbol>
       <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /><circle cx="12" cy="12" r="3" /></symbol>
       <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></symbol>
       <symbol id="i-chevron-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6" /></symbol>
