@@ -22,7 +22,9 @@
                   mismatch (чужой тест; только там, где тест задан страницей), failed (сбой записи);
       предупреждения — duplicate (тот же файл уже грузили), skipped (строки без даты пропущены);
       загрузки  — batches, batches-empty;
-      хост      — modal (та же форма в окне обеих страниц аналитики).
+      хост      — modal (та же форма в окне обеих страниц аналитики),
+                  modal-all-imports (то же окно со ссылкой «Все виды импорта» в подвале —
+                  этап Э1 UX-аудита аналитики, принцип П4).
 
     Флажка «Данные уже обезличены» нет (решение владельца 2026-09-25): обезличенный файл узнаётся
     по колонке external_id, и вместе с флажком ушло состояние anon-mismatch.
@@ -108,6 +110,7 @@
       <button type="button" onclick="impState(this, 'batches-empty')">загрузок нет</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'modal')">в окне (аналитика)</button>
+      <button type="button" onclick="showState(this, 'modal-all-imports')">в окне + «Все виды импорта»</button>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="toggleTheme(this)">Dark</button>
@@ -499,6 +502,57 @@
       </div>
     </div>
 
+    <!-- ════════════════ modal-all-imports: окно со ссылкой на раздел «Импорт» (Э1) ════════════════
+         Окно — короткий путь к одной задаче импорта; ссылка ведёт в раздел, где собраны все.
+         В теле окна под формой, а не в подвале: в окне среднего размера ссылка и три кнопки
+         в одну строку не помещаются, а подвал остаётся только для действий над файлом. -->
+    <div id="wf-modal-all-imports" class="wf-state">
+      <div class="wf-doc wf-modal-stage">
+        <div class="ou-modal-root">
+          <div class="ou-modal__backdrop"></div>
+          <div class="ou-modal ou-modal--m" role="dialog" aria-modal="true" aria-labelledby="wf-modal-all-title">
+            <div class="ou-modal__head">
+              <div class="ou-modal__head-text">
+                <h2 class="ou-modal__title" id="wf-modal-all-title">Загрузка выгрузки LMS</h2>
+                <p class="ou-modal__desc">Определение ведущего стиля человекоцентричного лидерства</p>
+              </div>
+              <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+            </div>
+            <div class="ou-modal__body">
+              <label class="ou-uploader" tabindex="0">
+                <span class="ou-uploader__icon" aria-hidden="true"><svg width="20" height="20"><use href="#i-upload" /></svg></span>
+                <span class="ou-uploader__title">Перетащите файл .xlsx или выберите</span>
+                <span class="ou-uploader__sub">Только выгрузка отчёта LMS этого теста</span>
+                <span class="ou-uploader__cta">Выбрать файл</span>
+              </label>
+              <div class="ou-formfield wf-mt-3">
+                <label class="ou-formfield__lbl" for="imp-group-a">Группа</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box">
+                  <input class="ou-field__input" id="imp-group-a" type="text" value="Без группы" readonly />
+                  <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
+                </div></div>
+              </div>
+              <div class="ou-check-group wf-mt-4">
+                <label class="ou-check ou-check--s">
+                  <input class="ou-check__input" type="checkbox" />
+                  <span class="ou-check__box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+                  <span class="ou-check__text"><span class="ou-check__lbl">Связать с пользователями по ключу</span></span>
+                </label>
+              </div>
+              <div class="wf-mt-4">
+                <a class="ou-btn ou-btn--ghost ou-btn--s" href="/author/import"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-upload" /></svg></span><span>Все виды импорта</span></a>
+              </div>
+            </div>
+            <div class="ou-modal__foot">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Проверить</button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Импортировать</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ════════════════ docs: Пояснения + DS Mapping ════════════════ -->
     <div id="wf-docs" class="wf-state">
       <div class="wf-doc">
@@ -520,6 +574,7 @@
               <tr><td>Загрузки и откат</td><td><code>GET /api/analytics/lms-import/batches/:testId</code>, <code>DELETE .../batches/:id</code></td><td>Откат удаляет строки партии целиком</td></tr>
               <tr><td>«В расчётах» (PRD-66 FR-12, дельта 2026-09-25)</td><td><code>PATCH .../batches/:id</code> с <code>counted</code>; действует сразу, без подтверждения; у снятой загрузки в подписи «не учитывается в расчётах — данные сохранены»</td><td>Обратимое решение рядом с необратимым откатом: сомнительную выгрузку убирают из чисел, не теряя данных</td></tr>
               <tr><td>Право</td><td><code>analytics.import</code> + область теста</td><td>Выдаётся тем же ролям, что <code>analytics.export</code></td></tr>
+              <tr><td>«Все виды импорта» (Э1, 2026-10-02)</td><td>Ссылка на <code>/author/import</code> в теле окна под формой; только в окне, на странице «Импорт» её нет — там пользователь уже в разделе. Не в подвале: ссылка и три кнопки в одну строку окна <code>--m</code> не помещаются</td><td>Окно — короткий путь к одной задаче, раздел «Импорт» — полный перечень (UX-аудит, принцип П4). Ссылка видна тем, кому открыт раздел «Импорт»: пока менеджер его не видит (техдолг D4), ему её не показываем, чтобы не вести в 403</td></tr>
             </tbody>
           </table>
         </div>
@@ -531,6 +586,7 @@
             <tbody>
               <tr><td>Карточка (экран «Импорт»)</td><td><code>Card variant="outlined"</code> (<code>ou-card</code>)</td><td><code>--ou-border-soft</code></td><td>Та же, что у книги теста</td></tr>
               <tr><td>Окно (обе аналитики)</td><td><code>ModalDialog</code> (<code>ou-modal--m</code>)</td><td><code>--ou-modal-*</code></td><td>Образец — <code>AttemptDetailModal</code></td></tr>
+              <tr><td>Ссылка «Все виды импорта» (Э1)</td><td><code>Button variant="ghost" size="s"</code> с <code>leadingIcon</code> (<code>Upload</code> из lucide), переход — <code>navigate("/author/import")</code></td><td><code>--ou-space-4</code> над ссылкой</td><td>В теле окна под формой; подвал не меняется</td></tr>
               <tr><td>Загрузчик</td><td><code>FileUploader</code> (<code>ou-uploader</code>)</td><td><code>--ou-border-default</code></td><td></td></tr>
               <tr><td>Выбранный файл</td><td><code>FileItem</code> (<code>ou-file</code>, <code>--xls</code>)</td><td><code>--ou-border-soft</code></td><td></td></tr>
               <tr><td>Опознанный тест</td><td><code>Banner</code> info subtle</td><td><code>--ou-info-soft</code></td><td>Подтверждение, не поле выбора</td></tr>
