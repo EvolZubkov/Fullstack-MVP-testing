@@ -26,6 +26,21 @@ export type QuestionScoringOverride = {
   pinnedContentHash: string | null;
 };
 
+/**
+ * Does the override actually set anything in SCORING?
+ *
+ * Analytics creates an override row only to carry the PRD-56 «excluded from delivery» flag,
+ * with every scoring value empty. Such a row sets nothing: it must not be marked «задано в
+ * тесте» nor offered «Сбросить» — before the server kept that flag on reset, the reset
+ * silently returned the excluded question to delivery.
+ */
+export function overridesScoring(override: QuestionScoringOverride | null | undefined): boolean {
+  return (
+    !!override &&
+    (override.points != null || override.scoringJson != null || override.difficulty != null)
+  );
+}
+
 /** Values sent on save; each is an independent link of the effective chain. */
 export type QuestionScoringPatch = {
   points: number | null;

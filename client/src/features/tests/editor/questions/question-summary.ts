@@ -23,7 +23,7 @@ import {
   type ScaleModel,
   type TestMode,
 } from "../test-editor.types";
-import type { QuestionScoringOverride } from "../scoring-api";
+import { overridesScoring, type QuestionScoringOverride } from "../scoring-api";
 
 /** Поля вопроса из банка, которые нужны сводке. */
 export type SummaryQuestion = Pick<
@@ -69,16 +69,6 @@ const KIND_LABEL: Record<string, string> = {
   weighted: "Веса",
   tiered: "Ступени",
 };
-
-/** Есть ли в переопределении хоть одно значение оценки. */
-function overridesScoring(override: QuestionScoringOverride | undefined): boolean {
-  // Аналитика заводит строку переопределения ради одного признака «исключён из выдачи»,
-  // и все значения оценки в ней пусты — такая строка ничего в оценке не задаёт.
-  return (
-    !!override &&
-    (override.points != null || override.scoringJson != null || override.difficulty != null)
-  );
-}
 
 function feedbackLabel(q: SummaryQuestion): string {
   if (q.feedbackMode === "conditional") {

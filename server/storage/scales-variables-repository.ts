@@ -271,13 +271,32 @@ export class ScalesVariablesRepository {
     return row;
   }
 
+  /**
+   * Сбросить переопределение ОЦЕНКИ задания в тесте.
+   *
+   * Строку удаляет, только если в ней нет признака «исключён из выдачи» (PRD-56): он живёт в
+   * той же строке, и удаление целиком молча возвращало скомпрометированный вопрос участникам.
+   * У исключённого задания обнуляются значения оценки, а сама строка остаётся.
+   *
+   * @returns была ли у задания строка настроек
+   */
   async deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
-    const result = await db.delete(testQuestionScoring)
-      .where(and(
-        eq(testQuestionScoring.testId, testId),
-        eq(testQuestionScoring.questionId, questionId),
-      ))
+    const where = and(
+      eq(testQuestionScoring.testId, testId),
+      eq(testQuestionScoring.questionId, questionId),
+    );
+    const kept = await db.update(testQuestionScoring)
+      .set({
+        points: null,
+        scoringJson: null,
+        difficulty: null,
+        pinnedContentHash: null,
+        updatedAt: new Date(),
+      })
+      .where(and(where, eq(testQuestionScoring.excludedFromDelivery, true)))
       .returning();
+    if (kept.length > 0) return true;
+    const result = await db.delete(testQuestionScoring).where(where).returning();
     return result.length > 0;
   }
 
@@ -286,17 +305,34 @@ export class ScalesVariablesRepository {
    * a transaction) — the workbook «Оценка» sheet is authoritative for the
    * test's override set (PRD-14/PRD-15 FR-36 round-trip). An empty `rows`
    * clears every override.
+   *
+   * The sheet is authoritative for SCORING only. The PRD-56 «excluded from delivery» flag
+   * shares the row but is set by analytics, and the sheet does not carry it: every question
+   * excluded before the import stays excluded — its row is re-created with empty scoring
+   * when the sheet does not mention it.
    */
   async replaceTestQuestionScoring(
     testId: string,
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]> {
     return db.transaction(async (tx) => {
+      const excludedRows = await tx.select({ questionId: testQuestionScoring.questionId })
+        .from(testQuestionScoring)
+        .where(and(
+          eq(testQuestionScoring.testId, testId),
+          eq(testQuestionScoring.excludedFromDelivery, true),
+        ));
+      const excluded = new Set(excludedRows.map((r) => r.questionId));
       await tx.delete(testQuestionScoring).where(eq(testQuestionScoring.testId, testId));
-      if (rows.length === 0) return [];
-      return tx.insert(testQuestionScoring)
-        .values(rows.map((r) => ({ ...r, testId })))
-        .returning();
+      const inSheet = new Set(rows.map((r) => r.questionId));
+      const values = [
+        ...rows.map((r) => ({ ...r, testId, excludedFromDelivery: excluded.has(r.questionId) })),
+        ...[...excluded]
+          .filter((questionId) => !inSheet.has(questionId))
+          .map((questionId) => ({ testId, questionId, excludedFromDelivery: true })),
+      ];
+      if (values.length === 0) return [];
+      return tx.insert(testQuestionScoring).values(values).returning();
     });
   }
 }

@@ -110,3 +110,46 @@ describe("setQuestionDelivery", () => {
     expect(otherRows).toEqual([]);
   });
 });
+
+/**
+ * Очистка ОЦЕНКИ не должна возвращать задание в выдачу: признак исключения живёт в той же
+ * строке, что и переопределения цены, и удаление строки целиком молча снимало его. Так
+ * «Сбросить» в «Оценке ответа» и лист «Оценка» книги Excel возвращали скомпрометированный
+ * вопрос участникам (найдено 2026-10-01).
+ */
+describe("очистка оценки не трогает исключение из выдачи", () => {
+  it("сброс оценки исключённого задания оставляет строку с одним признаком", async () => {
+    await h.current!.db.insert(testQuestionScoring).values({
+      testId, questionId, points: 5, difficulty: 80, excludedFromDelivery: true,
+    } as never);
+
+    expect(await repo.deleteTestQuestionScoring(testId, questionId)).toBe(true);
+
+    expect(await row()).toMatchObject({
+      points: null, scoringJson: null, difficulty: null, excludedFromDelivery: true,
+    });
+  });
+
+  it("сброс оценки обычного задания удаляет строку, как раньше", async () => {
+    await h.current!.db.insert(testQuestionScoring).values({ testId, questionId, points: 5 } as never);
+
+    expect(await repo.deleteTestQuestionScoring(testId, questionId)).toBe(true);
+    expect(await row()).toBeUndefined();
+  });
+
+  it("лист «Оценка» сохраняет исключение у задания, которого в листе нет", async () => {
+    await repo.setQuestionDelivery(testId, questionId, true);
+
+    await repo.replaceTestQuestionScoring(testId, []);
+
+    expect(await row()).toMatchObject({ points: null, excludedFromDelivery: true });
+  });
+
+  it("лист «Оценка» сохраняет исключение у задания, которое в листе есть", async () => {
+    await repo.setQuestionDelivery(testId, questionId, true);
+
+    await repo.replaceTestQuestionScoring(testId, [{ questionId, points: 3 } as never]);
+
+    expect(await row()).toMatchObject({ points: 3, excludedFromDelivery: true });
+  });
+});

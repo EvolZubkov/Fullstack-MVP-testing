@@ -39,6 +39,7 @@ import type { Question } from "@shared/schema";
 import type { TestEditorModel } from "../test-editor.types";
 import {
   makeQuestionOverride,
+  overridesScoring,
   type QuestionScoringOverride,
   type QuestionScoringPatch,
 } from "../scoring-api";
@@ -252,6 +253,9 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                 <tbody>
                   {questions.map((q) => {
                     const override: QuestionScoringOverride | undefined = overrideByQuestion.get(q.id);
+                    // Строка, заведённая аналитикой ради «исключён из выдачи», в оценке ничего
+                    // не задаёт: ни отметки, ни «Сбросить» у неё быть не должно.
+                    const configured = overridesScoring(override);
                     const effective = resolveEffectiveScoring({
                       override: override
                         ? {
@@ -283,7 +287,7 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                     return (
                       <tr
                         key={q.id}
-                        className={override ? "tb-qscoring__row--override" : undefined}
+                        className={configured ? "tb-qscoring__row--override" : undefined}
                         data-testid={`scoring-row-${q.id}`}
                       >
                         <td>
@@ -325,7 +329,7 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                             >
                               Настройка устарела
                             </Tag>
-                          ) : override ? (
+                          ) : configured ? (
                             <Tag tone="warning" data-testid={`scoring-override-${q.id}`}>
                               задано в тесте
                             </Tag>
@@ -337,12 +341,12 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                               icon={<Pencil width={14} height={14} aria-hidden="true" />}
                               variant="ghost"
                               size="s"
-                              aria-label={override ? "Изменить оценку вопроса" : "Настроить оценку вопроса"}
+                              aria-label={configured ? "Изменить оценку вопроса" : "Настроить оценку вопроса"}
                               disabled={readOnly}
                               onClick={openModal}
                               data-testid={`scoring-edit-${q.id}`}
                             />
-                            {override && (
+                            {configured && (
                               <IconButton
                                 icon={<RotateCcw width={14} height={14} aria-hidden="true" />}
                                 variant="ghost"
@@ -372,7 +376,10 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
         <QuestionScoringModal
           question={modalState.question}
           sectionName={modalState.sectionName}
-          override={overrideByQuestion.get(modalState.question.id) ?? null}
+          override={(() => {
+            const o = overrideByQuestion.get(modalState.question.id);
+            return overridesScoring(o) ? o! : null;
+          })()}
           sectionDefaultPoints={modalState.sectionDefaultPoints}
           testDefaultPoints={model.scoring.defaultQuestionPoints}
           readOnly={readOnly}

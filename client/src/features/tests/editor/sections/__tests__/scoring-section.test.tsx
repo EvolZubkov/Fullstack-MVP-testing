@@ -208,6 +208,27 @@ describe("<ScoringSection />", () => {
     expect(screen.queryByTestId("scoring-reset-q2")).toBeNull();
   });
 
+  it("a row that only carries the delivery exclusion is not an override", async () => {
+    // Analytics creates the row to exclude the question from delivery; scoring stays empty.
+    // Marking it «задано в тесте» and offering «Сбросить» used to return the question to
+    // delivery on save (the reset deleted the whole row).
+    const exclusionOnly: QuestionScoringOverride = {
+      id: "ov2", testId: "test-1", questionId: "q2",
+      points: null, scoringJson: null, difficulty: null, pinnedContentHash: null,
+    };
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: [exclusionOnly] },
+    });
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+
+    const row2 = await screen.findByTestId("scoring-row-q2");
+    expect(row2).not.toHaveClass("tb-qscoring__row--override");
+    expect(screen.queryByTestId("scoring-override-q2")).toBeNull();
+    expect(screen.queryByTestId("scoring-reset-q2")).toBeNull();
+    expect(screen.getByTestId("scoring-edit-q2")).toHaveAttribute("aria-label", "Настроить оценку вопроса");
+  });
+
   it("reset icon removes the override from the draft (no network)", async () => {
     const model = baseModel({
       sections: [buildSection()],
