@@ -881,101 +881,32 @@ export default function AnalyticsPage() {
     });
   };
 
+  /**
+   * «Скачать детали»: протокол попытки книгой Excel (дефект D3 UX-аудита).
+   *
+   * Книгу собирает сервер из того же разбора, что показывает окно, — ответ и эталон в ней
+   * словами, а не сырым JSON, как было в прежнем CSV, собранном в браузере.
+   */
   const handleExportAttempt = async (attempt: CombinedAttempt) => {
     try {
       const endpoint = attempt.source === "web"
-        ? `/api/analytics/attempts/${attempt.id}`
-        : `/api/analytics/scorm-attempts/${attempt.id}`;
+        ? `/api/analytics/attempts/${attempt.id}/export/excel`
+        : `/api/analytics/scorm-attempts/${attempt.id}/export/excel`;
 
       const res = await fetch(endpoint, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
-      const details = await res.json();
+      const blob = await res.blob();
 
-      const rows: any[][] = [
-        ["Попытка", attempt.id],
-        ["Пользователь", attempt.username || attempt.lmsUserName || "—"],
-        ["Email", attempt.userEmail || attempt.lmsUserEmail || "—"],
-        ["Тест", attempt.testTitle],
-        ["Источник", attempt.source === "web" ? "Web" : "LMS"],
-        ["Дата", attempt.finishedAt ? new Date(attempt.finishedAt).toLocaleString("ru-RU") : "—"],
-        [],
-      ];
-
-      // Расчётная информация (баллы, вклады в шкалы) в выгрузке протокола.
-      const round2 = (n: unknown) => (typeof n === "number" ? String(Math.round(n * 100) / 100) : "");
-      const fmtContribs = (contribs: Array<{ scaleKey: string; delta: number }> | undefined) =>
-        (contribs || []).map(c => `${c.scaleKey} ${c.delta >= 0 ? "+" : ""}${c.delta}`).join(" | ");
-      const fmtVar = (v: unknown) =>
-        typeof v === "boolean" ? (v ? "да" : "нет") : typeof v === "number" ? round2(v) : String(v ?? "");
-
-      if (attempt.isAdaptive) {
-        rows.push(["Режим", "Адаптивный"]);
-        rows.push([]);
-        rows.push(["Тема", "Достигнутый уровень"]);
-        for (const level of details.achievedLevels || []) {
-          rows.push([level.topicName, level.levelName || "Не достигнут"]);
-        }
-      } else {
-        rows.push(["Результат", `${details.overallPercent?.toFixed(1)}%`]);
-        rows.push(["Баллы", `${details.earnedPoints} / ${details.possiblePoints}`]);
-        rows.push(["Статус", details.passed ? "Сдан" : "Не сдан"]);
-        rows.push([]);
-        rows.push(["Вопрос", "Тема", "Тип", "Ответ", "Правильный", "Результат", "Баллы", "Сложность", "Доля", "Вклады в шкалы"]);
-        for (const ans of details.answers || []) {
-          rows.push([
-            ans.questionPrompt,
-            ans.topicName,
-            ans.questionType,
-            JSON.stringify(ans.userAnswer),
-            JSON.stringify(ans.correctAnswer),
-            ans.isCorrect ? "Верно" : "Неверно",
-            `${ans.earnedPoints}/${ans.possiblePoints}`,
-            ans.difficulty ?? "",
-            typeof ans.ratio === "number" ? `${Math.round(ans.ratio * 100)}%` : "",
-            fmtContribs(ans.contribs),
-          ]);
-        }
-      }
-
-      // Итоги по шкалам (PRD-5) — абсолютное значение (raw) + интерпретационный
-      // уровень (bands). Процент не выгружаем: это вспомогательное значение для
-      // формул показателей, а не результат шкалы.
-      const scaleEntries = Object.entries(details.scaleResults || {}) as Array<[string, {
-        raw?: number; level?: string; label?: string; hasValue?: boolean;
-      }]>;
-      if (scaleEntries.length) {
-        rows.push([]);
-        rows.push(["Шкалы"]);
-        rows.push(["Шкала", "Значение", "Уровень"]);
-        for (const [key, sc] of scaleEntries) {
-          rows.push([
-            key,
-            sc.hasValue ? round2(sc.raw) : "",
-            sc.label || sc.level || "",
-          ]);
-        }
-      }
-
-      // Показатели (PRD-2, result variables).
-      const varEntries = Object.entries(details.resultVariables || {});
-      if (varEntries.length) {
-        rows.push([]);
-        rows.push(["Показатели"]);
-        rows.push(["Показатель", "Значение"]);
-        for (const [name, val] of varEntries) {
-          rows.push([name, fmtVar(val)]);
-        }
-      }
-
-      // Создаём xlsx через динамический импорт не нужен — используем CSV
-      const csv = rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
-      const bom = "﻿";
-      const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+      // Имя файла задаёт сервер; без заголовка — запасное, по участнику и дате.
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const named = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+      const userName = (attempt.username || attempt.lmsUserName || "user").replace(/[^a-zA-Zа-яА-Я0-9]/g, "_");
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const userName = (attempt.username || attempt.lmsUserName || "user").replace(/[^a-zA-Zа-яА-Я0-9]/g, "_");
-      a.download = `attempt_${userName}_${new Date().toISOString().split("T")[0]}.csv`;
+      a.download = named
+        ? decodeURIComponent(named)
+        : `attempt_${userName}_${new Date().toISOString().split("T")[0]}.xlsx`;
       document.body.appendChild(a);
       a.click();
       URL.revokeObjectURL(url);

@@ -237,3 +237,69 @@ describe("GET /attempts/:attemptId — data branches", () => {
     expect(res.body.answers[0].levelName).toBe("База");
   });
 });
+
+/** D3: протокол попытки книгой — из того же разбора, что окно, с ответом словами. */
+describe("GET /attempts/:attemptId/export/excel — протокол попытки", () => {
+  /** Ответ supertest как буфер: книга — двоичный файл, а не текст. */
+  const binary = (res: any, cb: (err: Error | null, body: Buffer) => void) => {
+    const chunks: Buffer[] = [];
+    res.on("data", (chunk: Buffer) => chunks.push(chunk));
+    res.on("end", () => cb(null, Buffer.concat(chunks)));
+  };
+
+  it("отдаёт книгу с ответом и эталоном словами", async () => {
+    storageMock.getAttempt.mockResolvedValue({
+      id: "atmp1", testId: "test1", userId: "u1", snapshotId: null,
+      startedAt: new Date("2026-09-30T10:00:00Z"), finishedAt: new Date("2026-09-30T10:05:00Z"),
+      variantJson: { sections: [{ topicId: "t1", questionIds: ["q1"] }] },
+      answersJson: { q1: 1 },
+      resultJson: { overallPercent: 0, overallPassed: false, totalPossiblePoints: 1, totalEarnedPoints: 0 },
+    });
+    storageMock.getTest.mockResolvedValue({
+      id: "test1", title: "T", mode: "standard", ownerId: null, overallPassRuleJson: { type: "percent", value: 70 },
+    });
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([{
+      id: "q1", topicId: "t1", type: "single", prompt: "Что выведет?", dataJson: { options: ["1", "2"] },
+      correctJson: { correctIndex: 0 }, difficulty: 40, contentHash: "h1",
+    }]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1/export/excel"))
+      .buffer(true).parse(binary);
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("spreadsheetml");
+    expect(res.headers["content-disposition"]).toContain(".xlsx");
+    const { readWorkbookFromBuffer, sheetToArrays } = await import("../server/utils/excel");
+    const workbook = await readWorkbookFromBuffer(res.body as Buffer);
+    const answers = sheetToArrays(workbook.getWorksheet("Ответы")!);
+    expect(answers[1].slice(3, 6)).toEqual(["2) 2", "1) 1", "Неверно"]);
+  });
+
+  it("не отдаёт попытку теста вне области видимости", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getAttempt.mockResolvedValue({ id: "atmp1", testId: "test1", userId: "u1" });
+    storageMock.getTest.mockResolvedValue({ id: "test1", title: "T", mode: "standard", ownerId: "someoneelse" });
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1/export/excel"));
+
+    expect(res.status).toBe(403);
+  });
+
+  it("закрыта без права выгрузки", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["learner"]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1/export/excel"));
+
+    expect(res.status).toBe(403);
+    expect(storageMock.getAttempt).not.toHaveBeenCalled();
+  });
+
+  it("отвечает 404 на несуществующую попытку", async () => {
+    storageMock.getAttempt.mockResolvedValue(undefined);
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/x/export/excel"));
+
+    expect(res.status).toBe(404);
+  });
+});

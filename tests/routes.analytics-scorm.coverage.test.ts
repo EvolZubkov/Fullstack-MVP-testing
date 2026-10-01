@@ -245,3 +245,58 @@ describe("GET /scorm-attempts/:attemptId", () => {
     expect(res.body.error).toBe("Failed to get attempt details");
   });
 });
+
+/** D3: протокол прохождения из LMS книгой — варианты из снимка, пришедшего с ответом. */
+describe("GET /scorm-attempts/:attemptId/export/excel", () => {
+  const binary = (res: any, cb: (err: Error | null, body: Buffer) => void) => {
+    const chunks: Buffer[] = [];
+    res.on("data", (chunk: Buffer) => chunks.push(chunk));
+    res.on("end", () => cb(null, Buffer.concat(chunks)));
+  };
+
+  it("отдаёт книгу с ответом словами и вердиктом прохождения", async () => {
+    storageMock.getScormAttempt.mockResolvedValue(baseAttempt);
+    storageMock.getScormPackage.mockResolvedValue(pkgOwned);
+    storageMock.getScormAnswersByAttempt.mockResolvedValue([
+      { questionId: "q1", questionPrompt: "A?", questionType: "single", topicId: "t1", topicName: "JS",
+        difficulty: 50, userAnswerJson: 1, correctAnswerJson: { correctIndex: 0 }, isCorrect: false,
+        result: "incorrect", points: 0, maxPoints: 1,
+        optionsJson: ["Да", "Нет"], leftItemsJson: null, rightItemsJson: null, itemsJson: null,
+        levelIndex: null, levelName: null, answeredAt: new Date() },
+    ]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1/export/excel"))
+      .buffer(true).parse(binary);
+
+    expect(res.status).toBe(200);
+    const { readWorkbookFromBuffer, sheetToArrays } = await import("../server/utils/excel");
+    const workbook = await readWorkbookFromBuffer(res.body as Buffer);
+    expect(sheetToArrays(workbook.getWorksheet("Ответы")!)[1].slice(3, 6)).toEqual(["2) Нет", "1) Да", "Неверно"]);
+    const summary = Object.fromEntries(sheetToArrays(workbook.getWorksheet("Попытка")!) as Array<[string, unknown]>);
+    expect(summary["Участник"]).toBe("LMS User");
+    expect(summary["Статус"]).toBe("Сдан");
+  });
+
+  it("не выносит вердикт, которого пакет не прислал", async () => {
+    storageMock.getScormAttempt.mockResolvedValue({ ...baseAttempt, resultPassed: null });
+    storageMock.getScormPackage.mockResolvedValue(pkgOwned);
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1/export/excel"))
+      .buffer(true).parse(binary);
+
+    const { readWorkbookFromBuffer, sheetToArrays } = await import("../server/utils/excel");
+    const workbook = await readWorkbookFromBuffer(res.body as Buffer);
+    const summary = Object.fromEntries(sheetToArrays(workbook.getWorksheet("Попытка")!) as Array<[string, unknown]>);
+    expect(summary["Статус"]).toBe("Без вердикта");
+  });
+
+  it("не отдаёт прохождение вне области видимости", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getScormAttempt.mockResolvedValue({ ...baseAttempt, packageId: "missing" });
+    storageMock.getScormPackage.mockResolvedValue(undefined);
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1/export/excel"));
+
+    expect(res.status).toBe(403);
+  });
+});

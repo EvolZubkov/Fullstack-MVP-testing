@@ -161,6 +161,7 @@ beforeEach(() => {
     json: async () => body,
     text: async () => JSON.stringify(body),
     blob: async () => new Blob([JSON.stringify(body)]),
+    headers: new Headers(),
   });
   fetchMock = vi.fn(async (input: string) => {
     const u = String(input);
@@ -443,7 +444,11 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     await waitFor(() => expect(within(dialog).getByText("Нет данных об ответах")).toBeInTheDocument());
   });
 
-  it("downloads a single passage as CSV from the details window", async () => {
+  /**
+   * D3: протокол попытки собирает сервер книгой Excel — содержимое книги проверяется тестами
+   * `attempt-protocol`, здесь — что окно спрашивает нужную ручку и отдаёт файл.
+   */
+  it("скачивает протокол веб-попытки книгой с сервера", async () => {
     await renderLoaded();
     await openAttemptsTab();
     fireEvent.click(screen.getByText("Иван Петров").closest("tr")!);
@@ -451,37 +456,12 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /Скачать детали/ }));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    expect(fetchMock.mock.calls.map(call => String(call[0])))
+      .toContainEqual(expect.stringMatching(/^\/api\/analytics\/attempts\/[^/]+\/export\/excel$/));
+    expect(alert).not.toHaveBeenCalled();
   });
 
-  it("includes points, scale contributions and computed sections in the attempt CSV", async () => {
-    let captured: Blob | null = null;
-    (URL.createObjectURL as ReturnType<typeof vi.fn>).mockImplementation((b: Blob) => {
-      captured = b;
-      return "blob:test";
-    });
-    await renderLoaded();
-    await openAttemptsTab();
-    fireEvent.click(screen.getByText("Иван Петров").closest("tr")!);
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /Скачать детали/ }));
-    await waitFor(() => expect(captured).not.toBeNull());
-    const csv = await (captured as unknown as Blob).text();
-
-    // Per-question computed columns.
-    expect(csv).toContain("Вклады в шкалы");
-    expect(csv).toContain("ee +2"); // q1 single contribution
-    expect(csv).toContain("ee +3 | oc -1"); // q2 multi contributions, one entry per fired unit
-    expect(csv).toContain("50%"); // q2 ratio (доля верности)
-    // Attempt-level scale summary (raw / percent / уровень).
-    expect(csv).toContain("Шкалы");
-    expect(csv).toContain("Высокий");
-    // Показатели (result variables), incl. boolean formatting.
-    expect(csv).toContain("Показатели");
-    expect(csv).toContain("verdict");
-    expect(csv).toContain("да"); // flag: true → «да»
-  });
-
-  it("downloads an adaptive passage as CSV (achieved-levels branch)", async () => {
+  it("скачивает протокол прохождения из LMS своей ручкой", async () => {
     await renderLoaded();
     await openAttemptsTab();
     fireEvent.click(screen.getByText("Мария Сидорова").closest("tr")!);
@@ -489,6 +469,20 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: /Скачать детали/ }));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+    expect(fetchMock.mock.calls.map(call => String(call[0])))
+      .toContainEqual(expect.stringMatching(/^\/api\/analytics\/scorm-attempts\/[^/]+\/export\/excel$/));
+  });
+
+  it("сообщает, что скачать не удалось, когда сервер отказал", async () => {
+    await renderLoaded();
+    await openAttemptsTab();
+    fireEvent.click(screen.getByText("Иван Петров").closest("tr")!);
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: /Скачать детали/ })).toBeInTheDocument());
+
+    fetchMock.mockImplementationOnce(async () => ({ ok: false, status: 403 }) as never);
+    fireEvent.click(within(dialog).getByRole("button", { name: /Скачать детали/ }));
+    await waitFor(() => expect(alert).toHaveBeenCalledWith("Не удалось скачать данные попытки"));
   });
 
   it("отдельной вкладки «Экспорт» нет: выгрузка — кнопкой в реестре (FR-04)", async () => {

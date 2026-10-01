@@ -8,6 +8,8 @@ import { computeAttemptResult, type AttemptResultBase } from "../../services/res
 import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
 import { computeBreakdowns } from "@shared/breakdown/compute";
 import type { BreakdownItem } from "@shared/breakdown/types";
+import type { AttemptDetailOutcome } from "./attempts";
+import { sendAttemptProtocol } from "../../services/analytics/attempt-protocol";
 
 const router = Router();
 
@@ -101,12 +103,19 @@ router.get("/scorm-attempts", requirePermission("analytics.read"), async (req: R
   }
 });
 
-// GET /api/analytics/scorm-attempts/:attemptId - Детали SCORM попытки
-router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
-  try {
-    const attempt = await storage.getScormAttempt(req.params.attemptId);
+/**
+ * Разбор ОДНОГО прохождения из LMS — то, что видит окно «Детали попытки».
+ *
+ * Вынесен из обработчика по той же причине, что разбор веб-попытки: его же выгружает протокол
+ * (`attempt-protocol`), и второй сбор разошёлся бы с окном.
+ *
+ * @param req запрос: область видимости теста читается по нему
+ * @param attemptId строка `scorm_attempts`
+ */
+export async function loadScormAttemptDetail(req: Request, attemptId: string): Promise<AttemptDetailOutcome> {
+    const attempt = await storage.getScormAttempt(attemptId);
     if (!attempt) {
-      return res.status(404).json({ error: "Attempt not found" });
+      return { status: 404, error: "Attempt not found" };
     }
 
     // PRD-54: у импортированного прохождения пакета нет — тест берётся не отсюда.
@@ -116,7 +125,7 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
     // the analytics scope of its test.
     const scope = await analyticsScope(req);
     if (!scope.has(pkg?.testId ?? null)) {
-      return res.status(403).json({ error: "Forbidden" });
+      return { status: 403, error: "Forbidden" };
     }
 
     const answers = await storage.getScormAnswersByAttempt(attempt.id);
@@ -195,6 +204,8 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
         userAnswer: a.userAnswerJson,
         correctAnswer: a.correctAnswerJson,
         isCorrect: a.isCorrect,
+        // PRD-54: измерительный ответ — третье состояние, а не «неверно».
+        measurementOnly: a.result === "neutral",
         ratio,
         earnedPoints: a.points,
         possiblePoints: a.maxPoints,
@@ -259,7 +270,7 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
       }
     }
 
-    res.json({
+    return { detail: {
       attemptId: attempt.id,
       lmsUserId: attempt.lmsUserId,
       lmsUserName: attempt.lmsUserName,
@@ -274,17 +285,46 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
       earnedPoints: attempt.totalPoints || 0,
       possiblePoints: attempt.maxPoints || 0,
       passed: attempt.resultPassed || false,
+      // `passed` выше сводит «вердикта нет» к «не сдал»; протоколу нужна разница (PRD-29 §6.7).
+      // Вердикт строки LMS вынесен, когда пакет его прислал; оценивалось — когда есть баллы
+      // или процент (то же правило оценённости, что в слое наблюдений).
+      scored: (attempt.maxPoints ?? 0) > 0 || attempt.resultPercent !== null,
+      verdictPronounced: attempt.resultPassed !== null && attempt.resultPassed !== undefined,
       answers: detailedAnswers,
       topicResults,
       scaleResults: graded.scaleResults,
       resultVariables: graded.resultVariables,
       achievedLevels,
       source: "lms",
-    });
+    } };
+}
+
+// GET /api/analytics/scorm-attempts/:attemptId - Детали SCORM попытки
+router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
+  try {
+    const outcome = await loadScormAttemptDetail(req, req.params.attemptId);
+    if ("error" in outcome) return res.status(outcome.status).json({ error: outcome.error });
+    res.json(outcome.detail);
   } catch (error) {
     logger.error("Get SCORM attempt details error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get attempt details" });
   }
 });
+
+// GET /api/analytics/scorm-attempts/:attemptId/export/excel — протокол прохождения книгой (D3)
+router.get(
+  "/scorm-attempts/:attemptId/export/excel",
+  requirePermission("analytics.export"),
+  async (req: Request, res: Response) => {
+    try {
+      const outcome = await loadScormAttemptDetail(req, req.params.attemptId);
+      if ("error" in outcome) return res.status(outcome.status).json({ error: outcome.error });
+      await sendAttemptProtocol(res, outcome.detail, "lms");
+    } catch (error) {
+      logger.error("SCORM attempt protocol export error: " + (error as Error).message);
+      res.status(500).json({ error: "Failed to export attempt" });
+    }
+  },
+);
 
 export default router;

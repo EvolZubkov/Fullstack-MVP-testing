@@ -21,6 +21,7 @@ import {
 } from "./helpers";
 import { isMeasurementOnly } from "@shared/questions/question-type";
 import { plainPromptOf } from "@shared/questions/prompt-format";
+import { sendAttemptProtocol } from "../../services/analytics/attempt-protocol";
 
 /**
  * The measurements of ONE run, as they were STORED at finish.
@@ -51,19 +52,30 @@ const router = Router();
  * Разбор ОДНОГО прохождения (ниже) остался: в него ведут и реестр, и очередь дел.
  */
 
-// GET /api/analytics/attempts/:attemptId - Детали попытки
-router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
-  try {
-    const attemptId = req.params.attemptId;
+/** Разбор прохождения либо причина, по которой его не отдать. */
+export type AttemptDetailOutcome =
+  | { detail: Record<string, any> }
+  | { status: number; error: string };
+
+/**
+ * Разбор ОДНОЙ веб-попытки — то, что видит окно «Детали попытки».
+ *
+ * Вынесен из обработчика, потому что тот же разбор выгружается протоколом (`attempt-protocol`):
+ * второй сбор разошёлся бы с окном, и в файле стояло бы не то, что автор видел на экране.
+ *
+ * @param req запрос: роли и пользователь решают, доступна ли попытка (область видимости теста)
+ * @param attemptId попытка
+ */
+export async function loadWebAttemptDetail(req: Request, attemptId: string): Promise<AttemptDetailOutcome> {
     const attempt = await storage.getAttempt(attemptId);
 
     if (!attempt) {
-      return res.status(404).json({ error: "Attempt not found" });
+      return { status: 404, error: "Attempt not found" };
     }
 
     const test = await storage.getTest(attempt.testId);
     if (!test) {
-      return res.status(404).json({ error: "Test not found" });
+      return { status: 404, error: "Test not found" };
     }
 
     // PRD-15 FR-08 (audit F-5): a single attempt is readable only within the
@@ -74,7 +86,7 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       test,
     );
     if (!allowed) {
-      return res.status(403).json({ error: "Forbidden" });
+      return { status: 403, error: "Forbidden" };
     }
 
     const user = await storage.getUser(attempt.userId);
@@ -301,9 +313,10 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       ? (await storage.getSnapshot(attempt.snapshotId))?.version ?? null
       : null;
 
-    res.json({
+    return { detail: {
       attemptId: attempt.id,
       userId: attempt.userId,
+      userEmail: user?.email ?? null,
       username: user?.name || user?.email || "Unknown",
       testId: test.id,
       testTitle: test.title,
@@ -336,12 +349,35 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       indicatorViews: buildIndicatorViews(rvRows, graded.resultVariables),
       trajectory,
       achievedLevels,
-    });
+    } };
+}
 
+// GET /api/analytics/attempts/:attemptId - Детали попытки
+router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
+  try {
+    const outcome = await loadWebAttemptDetail(req, req.params.attemptId);
+    if ("error" in outcome) return res.status(outcome.status).json({ error: outcome.error });
+    res.json(outcome.detail);
   } catch (error) {
     logger.error("Attempt detail error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch attempt details" });
   }
 });
+
+// GET /api/analytics/attempts/:attemptId/export/excel — протокол попытки книгой (дефект D3)
+router.get(
+  "/attempts/:attemptId/export/excel",
+  requirePermission("analytics.export"),
+  async (req: Request, res: Response) => {
+    try {
+      const outcome = await loadWebAttemptDetail(req, req.params.attemptId);
+      if ("error" in outcome) return res.status(outcome.status).json({ error: outcome.error });
+      await sendAttemptProtocol(res, outcome.detail, "web");
+    } catch (error) {
+      logger.error("Attempt protocol export error: " + (error as Error).message);
+      res.status(500).json({ error: "Failed to export attempt" });
+    }
+  },
+);
 
 export default router;
