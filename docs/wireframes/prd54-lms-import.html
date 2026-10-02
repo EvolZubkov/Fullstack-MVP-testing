@@ -22,9 +22,7 @@
                   mismatch (чужой тест; только там, где тест задан страницей), failed (сбой записи);
       предупреждения — duplicate (тот же файл уже грузили), skipped (строки без даты пропущены);
       загрузки  — batches, batches-empty;
-      хост      — modal (та же форма в окне обеих страниц аналитики),
-                  modal-section-link / modal-workbook (переход в раздел «Импорт» из окна —
-                  этап Э1 UX-аудита аналитики, принцип П4; два варианта, выбирает владелец).
+      хост      — modal (та же форма в окне обеих страниц аналитики).
 
     Флажка «Данные уже обезличены» нет (решение владельца 2026-09-25): обезличенный файл узнаётся
     по колонке external_id, и вместе с флажком ушло состояние anon-mismatch.
@@ -84,9 +82,7 @@
       <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></symbol>
       <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></symbol>
       <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
-      <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
-      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
-      <symbol id="i-trash"viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
     </svg>
 
     <nav class="wf-nav" aria-label="Wireframe state switcher">
@@ -112,8 +108,6 @@
       <button type="button" onclick="impState(this, 'batches-empty')">загрузок нет</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'modal')">в окне (аналитика)</button>
-      <button type="button" onclick="showState(this, 'modal-section-link')">в окне: ссылка (В1)</button>
-      <button type="button" onclick="showState(this, 'modal-workbook')">в окне: принесли книгу (В2)</button>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="toggleTheme(this)">Dark</button>
@@ -505,99 +499,6 @@
       </div>
     </div>
 
-    <!-- ════════════════ modal-section-link: вариант В1 — постоянная ссылка на раздел «Импорт» (Э1) ════════════════
-         Окно — короткий путь к одной задаче импорта; ссылка ведёт в раздел, где собраны все.
-         В теле окна под формой, а не в подвале: в окне среднего размера ссылка и три кнопки
-         в одну строку не помещаются, а подвал остаётся только для действий над файлом. -->
-    <div id="wf-modal-section-link" class="wf-state">
-      <div class="wf-doc wf-modal-stage">
-        <div class="ou-modal-root">
-          <div class="ou-modal__backdrop"></div>
-          <div class="ou-modal ou-modal--m" role="dialog" aria-modal="true" aria-labelledby="wf-modal-all-title">
-            <div class="ou-modal__head">
-              <div class="ou-modal__head-text">
-                <h2 class="ou-modal__title" id="wf-modal-all-title">Загрузка выгрузки LMS</h2>
-                <p class="ou-modal__desc">Определение ведущего стиля человекоцентричного лидерства</p>
-              </div>
-              <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
-            </div>
-            <div class="ou-modal__body">
-              <label class="ou-uploader" tabindex="0">
-                <span class="ou-uploader__icon" aria-hidden="true"><svg width="20" height="20"><use href="#i-upload" /></svg></span>
-                <span class="ou-uploader__title">Перетащите файл .xlsx или выберите</span>
-                <span class="ou-uploader__sub">Только выгрузка отчёта LMS этого теста</span>
-                <span class="ou-uploader__cta">Выбрать файл</span>
-              </label>
-              <div class="ou-formfield wf-mt-3">
-                <label class="ou-formfield__lbl" for="imp-group-a">Группа</label>
-                <div class="ou-field ou-field--m"><div class="ou-field__box">
-                  <input class="ou-field__input" id="imp-group-a" type="text" value="Без группы" readonly />
-                  <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
-                </div></div>
-              </div>
-              <div class="ou-check-group wf-mt-4">
-                <label class="ou-check ou-check--s">
-                  <input class="ou-check__input" type="checkbox" />
-                  <span class="ou-check__box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
-                  <span class="ou-check__text"><span class="ou-check__lbl">Связать с пользователями по ключу</span></span>
-                </label>
-              </div>
-              <div class="wf-mt-4">
-                <a class="ou-btn ou-btn--ghost ou-btn--s" href="/author/import"><span>Открыть раздел «Импорт»</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right" /></svg></span></a>
-              </div>
-            </div>
-            <div class="ou-modal__foot">
-              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
-              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Проверить</button>
-              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Импортировать</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ════════════════ modal-workbook: вариант В2 — переход только там, где он нужен (Э1) ════════════════
-         Постоянной ссылки нет. В окно положили книгу с вопросами: сейчас окно отвечает «Файл не
-         распознан», хотя сервер его распознал (kind: "workbook"). Вместо этого окно говорит,
-         что это за файл, и ведёт туда, где его примут. -->
-    <div id="wf-modal-workbook" class="wf-state">
-      <div class="wf-doc wf-modal-stage">
-        <div class="ou-modal-root">
-          <div class="ou-modal__backdrop"></div>
-          <div class="ou-modal ou-modal--m" role="dialog" aria-modal="true" aria-labelledby="wf-modal-wb-title">
-            <div class="ou-modal__head">
-              <div class="ou-modal__head-text">
-                <h2 class="ou-modal__title" id="wf-modal-wb-title">Загрузка выгрузки LMS</h2>
-                <p class="ou-modal__desc">Определение ведущего стиля человекоцентричного лидерства</p>
-              </div>
-              <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
-            </div>
-            <div class="ou-modal__body">
-              <div class="ou-file">
-                <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
-                <div class="ou-file__main"><span class="ou-file__name">лидерство-вопросы.xlsx</span><span class="ou-file__meta">книга с вопросами · 42 вопроса, 3 шкалы · 18 КБ</span></div>
-                <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
-              </div>
-              <div class="ou-banner ou-banner--info ou-banner--subtle wf-mt-3" role="status">
-                <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-info" /></svg></span>
-                <div class="ou-banner__body">
-                  <div class="ou-banner__title">Это книга с вопросами, а не выгрузка LMS</div>
-                  <div class="ou-banner__desc">42 вопроса и 3 шкалы — такую книгу принимает раздел «Импорт».</div>
-                </div>
-                <div class="ou-banner__actions">
-                  <a class="ou-btn ou-btn--secondary ou-btn--s" href="/author/import"><span>Загрузить в разделе «Импорт»</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-right" /></svg></span></a>
-                </div>
-              </div>
-            </div>
-            <div class="ou-modal__foot">
-              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
-              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Выбрать другой файл</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- ════════════════ docs: Пояснения + DS Mapping ════════════════ -->
     <div id="wf-docs" class="wf-state">
       <div class="wf-doc">
@@ -619,9 +520,6 @@
               <tr><td>Загрузки и откат</td><td><code>GET /api/analytics/lms-import/batches/:testId</code>, <code>DELETE .../batches/:id</code></td><td>Откат удаляет строки партии целиком</td></tr>
               <tr><td>«В расчётах» (PRD-66 FR-12, дельта 2026-09-25)</td><td><code>PATCH .../batches/:id</code> с <code>counted</code>; действует сразу, без подтверждения; у снятой загрузки в подписи «не учитывается в расчётах — данные сохранены»</td><td>Обратимое решение рядом с необратимым откатом: сомнительную выгрузку убирают из чисел, не теряя данных</td></tr>
               <tr><td>Право</td><td><code>analytics.import</code> + область теста</td><td>Выдаётся тем же ролям, что <code>analytics.export</code></td></tr>
-              <tr><td>Переход в раздел «Импорт» (Э1, 2026-10-02)</td><td>Окно — короткий путь к одной задаче, раздел «Импорт» — полный перечень (UX-аудит, принцип П4). Подпись «Все виды импорта» владелец отклонил. Два варианта на выбор</td><td>Переход виден тем, кому открыт раздел «Импорт»: пока менеджер его не видит (техдолг D4), ему не показываем, чтобы не вести в 403. На самой странице «Импорт» перехода нет — человек уже в разделе</td></tr>
-              <tr><td>В1 — постоянная ссылка</td><td>«Открыть раздел «Импорт»» в теле окна под формой, всегда</td><td>Просто, но в обычном случае — человек принёс выгрузку — ссылка никому не нужна и занимает место. Не в подвале: ссылка и три кнопки в одну строку окна <code>--m</code> не помещаются</td></tr>
-              <tr><td>В2 — переход по месту</td><td>Только когда разбор файла отдал <code>kind: "workbook"</code>: строка файла, баннер «Это книга с вопросами, а не выгрузка LMS» с её числами и действие «Загрузить в разделе «Импорт»»; в подвале «Выбрать другой файл»</td><td>Заодно чинит неправду: сейчас книга в этом окне получает «Файл не распознан», хотя сервер её распознал. Для файла, не распознанного вовсе, остаётся прежний отказ. Файл в раздел не переносится — его выбирают там заново. Рекомендован</td></tr>
             </tbody>
           </table>
         </div>
@@ -633,8 +531,6 @@
             <tbody>
               <tr><td>Карточка (экран «Импорт»)</td><td><code>Card variant="outlined"</code> (<code>ou-card</code>)</td><td><code>--ou-border-soft</code></td><td>Та же, что у книги теста</td></tr>
               <tr><td>Окно (обе аналитики)</td><td><code>ModalDialog</code> (<code>ou-modal--m</code>)</td><td><code>--ou-modal-*</code></td><td>Образец — <code>AttemptDetailModal</code></td></tr>
-              <tr><td>В1: «Открыть раздел «Импорт»»</td><td><code>Button variant="ghost" size="s"</code> с <code>trailingIcon</code> (<code>ArrowRight</code> из lucide), переход — <code>navigate("/author/import")</code></td><td><code>--ou-space-4</code> над ссылкой</td><td>В теле окна под формой; подвал не меняется</td></tr>
-              <tr><td>В2: книга вместо выгрузки</td><td><code>FileItem</code> + <code>Banner tone="info" variant="subtle"</code> с <code>actions</code>: <code>Button variant="secondary" size="s"</code> «Загрузить в разделе «Импорт»» (<code>ArrowRight</code>)</td><td><code>--ou-space-3</code> между файлом и баннером</td><td>Тот же набор, что у отказов «тест не найден» и «чужой тест»; в подвале вместо «Проверить / Импортировать» — «Выбрать другой файл»</td></tr>
               <tr><td>Загрузчик</td><td><code>FileUploader</code> (<code>ou-uploader</code>)</td><td><code>--ou-border-default</code></td><td></td></tr>
               <tr><td>Выбранный файл</td><td><code>FileItem</code> (<code>ou-file</code>, <code>--xls</code>)</td><td><code>--ou-border-soft</code></td><td></td></tr>
               <tr><td>Опознанный тест</td><td><code>Banner</code> info subtle</td><td><code>--ou-info-soft</code></td><td>Подтверждение, не поле выбора</td></tr>
