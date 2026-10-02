@@ -21,8 +21,8 @@
       из меню теста — выгрузка LMS выбранного теста, файл другого теста (грузится в свой тест);
       менеджер      — пусто; пользователи (строка с ролью автора отклоняется до записи);
                       отказ по праву (принёс книгу);
-      вход          — меню теста с пунктом «Загрузить выгрузку LMS»; шапка аналитики теста
-                      без кнопки загрузки;
+      вход          — строка списка тестов с открытым меню «Действия» и пунктом
+                      «Загрузить выгрузку LMS»;
       docs          — пояснения и DS-маппинг.
     -->
     <title>Э6 — Импорт: единая точка</title>
@@ -31,6 +31,8 @@
     <script defer src="/docs/wireframes/prd7-shared.js"></script>
     <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
     <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <!-- Строка списка тестов и меню «Действия» — стили самого приложения, как в эскизах редактора. -->
+    <link rel="stylesheet" href="/client/src/styles/tb-tests-list.css" />
     <style>
       body { --wf-nav-offset: var(--wf-size-100); }
       .wf-sprite { display: none; }
@@ -132,6 +134,14 @@
       <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></symbol>
       <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
       <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+      <symbol id="i-key-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/></symbol>
+      <symbol id="i-bug-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.765 21.522a.5.5 0 0 1-.765-.424v-8.196a.5.5 0 0 1 .765-.424l5.878 4.098a.5.5 0 0 1 0 .848z"/><path d="M14.12 3.88 16 2"/><path d="M8 2l1.88 1.88"/><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"/><path d="M18 11a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v3a6.1 6.1 0 0 0 2 4.5"/></symbol>
+      <symbol id="i-message-square" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+      <symbol id="i-package-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22v-9"/><path d="M15.17 2.21a1.67 1.67 0 0 1 1.63 0L21 4.57a1.93 1.93 0 0 1 0 3.36L8.82 14.79a1.66 1.66 0 0 1-1.64 0L3 12.43a1.93 1.93 0 0 1 0-3.36z"/><path d="M20 13v3.87a2.06 2.06 0 0 1-1.11 1.83l-6 3.08a1.93 1.93 0 0 1-1.78 0l-6-3.08A2.06 2.06 0 0 1 4 16.87V13"/><path d="M21 12.43a1.93 1.93 0 0 0 0-3.36L8.83 2.2a1.64 1.64 0 0 0-1.63 0L3 4.57a1.93 1.93 0 0 0 0 3.36l12.18 6.86a1.64 1.64 0 0 0 1.63 0z"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+      <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
+      <symbol id="i-chart-bars" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
     </svg>
 
     <nav class="wf-nav" aria-label="Wireframe state switcher">
@@ -154,7 +164,6 @@
       <span class="wf-nav-sep"></span>
       <span class="wf-nav-title">Вход:</span>
       <button type="button" onclick="showState(this, 'test-menu')">меню теста</button>
-      <button type="button" onclick="showState(this, 'analytics')">аналитика теста</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
       <span class="wf-nav-sep"></span>
@@ -795,39 +804,88 @@
       </div>
     </div>
 
-    <!-- ════════════════ Вход: меню «Действия» строки теста ════════════════
-         Фрагмент меню вокруг выгрузок: пункт «Загрузить выгрузку LMS» встаёт после экспорта и
-         ведёт в раздел «Импорт» с этим тестом (/author/import?testId=…). Своего окна у пункта нет. -->
+    <!-- ════════════════ Вход: строка списка тестов с открытым меню «Действия» ════════════════
+         Разметка и стили — из нынешнего tests-list.tsx и tb-tests-list.css. Новое — один пункт
+         «Загрузить выгрузку LMS» после пунктов экспорта: ведёт в раздел «Импорт» с этим тестом
+         (/author/import?testId=…), своего окна у пункта нет. Остальные пункты — как сейчас. -->
     <div id="wf-test-menu" class="wf-state">
-      <div class="wf-doc">
-        <div class="wf-menu-stage">
-          <div class="ou-menu" role="menu">
-            <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span class="ou-menu__item-text"><span class="ou-menu__item-title">Экспорт SCORM</span></span></button>
-            <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg width="14" height="14"><use href="#i-file-spreadsheet" /></svg></span><span class="ou-menu__item-text"><span class="ou-menu__item-title">Экспорт в Excel</span></span></button>
-            <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg width="14" height="14"><use href="#i-package" /></svg></span><span class="ou-menu__item-text"><span class="ou-menu__item-title">Экспорт пакета (.tbtest)</span></span></button>
-            <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg width="14" height="14"><use href="#i-upload" /></svg></span><span class="ou-menu__item-text"><span class="ou-menu__item-title">Загрузить выгрузку LMS</span></span></button>
-            <div class="ou-menu__divider" role="separator"></div>
-            <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg width="14" height="14"><use href="#i-globe" /></svg></span><span class="ou-menu__item-text"><span class="ou-menu__item-title">Опубликовать</span></span></button>
-          </div>
+      <div class="ou-shell">
+        <div class="ou-shell__side">
+          <aside class="ou-side">
+            <div class="ou-side__brand">
+              <span class="ou-shell__brand-mark"><svg width="16" height="16"><use href="#i-book" /></svg></span>
+              <span class="font-semibold">Skill'Ум</span>
+            </div>
+            <nav class="ou-side__nav">
+              <div class="ou-side__group">
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-home" /></svg></span><span class="ou-side__lbl">Главная</span></button>
+                <button type="button" class="ou-side__item is-active" aria-current="page"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-clipboard" /></svg></span><span class="ou-side__lbl">Тесты</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-folder-tree" /></svg></span><span class="ou-side__lbl">Темы и вопросы</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-layout" /></svg></span><span class="ou-side__lbl">Шаблоны</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-chart" /></svg></span><span class="ou-side__lbl">Аналитика</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users" /></svg></span><span class="ou-side__lbl">Пользователи</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users-round" /></svg></span><span class="ou-side__lbl">Группы</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-import" /></svg></span><span class="ou-side__lbl">Импорт</span></button>
+              </div>
+            </nav>
+          </aside>
         </div>
-      </div>
-    </div>
-
-    <!-- ════════════════ Вход: шапка аналитики теста без кнопки загрузки ════════════════ -->
-    <div id="wf-analytics" class="wf-state">
-      <div class="wf-doc">
-        <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4">
-          <div class="ou-stack ou-stack--gap-1">
-            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-arrow-left" /></svg></span><span>Все тесты</span></button>
-            <h1 class="ou-text ou-text--heading-l">Определение ведущего стиля человекоцентричного лидерства</h1>
-            <p class="ou-text ou-text--tone-muted">486 завершённых прохождений · веб, телеметрия LMS и импортированные выгрузки</p>
+        <header class="ou-shell__header">
+          <span></span>
+          <div class="ou-shell__actions">
+            <button class="ou-shell__user" type="button">
+              <span class="ou-shell__avatar" aria-hidden="true">А</span>
+              <span class="ou-shell__user-meta"><span class="ou-shell__user-name">Алексей Иванов</span><span class="ou-shell__user-role">Администратор</span></span>
+            </button>
           </div>
-          <div class="wf-row">
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Экспорт Excel</span></button>
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Прохождения теста</span></button>
-            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Обновить"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-refresh" /></svg></span></button>
+        </header>
+        <main class="ou-shell__main">
+          <div class="wf-pagehead">
+            <h1 class="ou-text ou-text--heading-l">Тесты</h1>
           </div>
-        </div>
+          <div class="tb-tests-list">
+            <div class="tree-area" role="tree" aria-label="Список тестов">
+              <div class="tree-header" aria-hidden="true">
+                <div>Название</div><div>Владелец</div><div>Статус</div><div>Режим</div><div>Сценарий</div><div>Тем</div><div>Вопросов</div><div>Назначений</div><div></div>
+              </div>
+              <div class="tree-test" role="treeitem" aria-level="2">
+                <div class="tree-test-name"><div class="test-info"><div class="test-name">Определение ведущего стиля человекоцентричного лидерства</div></div></div>
+                <div class="tree-test-owner"><span>Алексей Иванов</span></div>
+                <div class="tb-status-cell"><span class="ou-tag ou-tag--success ou-tag--s">Опубликован</span></div>
+                <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
+                <div><span class="flow-chip">По темам</span></div>
+                <div class="tree-num">4</div>
+                <div class="tree-num">14</div>
+                <div class="tree-num">2</div>
+                <div class="tree-test-actions is-open">
+                  <button type="button" class="action-btn" title="Редактировать" aria-label="Редактировать"><svg width="14" height="14"><use href="#i-pencil" /></svg></button>
+                  <button type="button" class="action-btn" title="Назначить" aria-label="Назначить"><svg width="14" height="14"><use href="#i-users" /></svg></button>
+                  <button type="button" class="action-btn" title="Аналитика" aria-label="Аналитика"><svg width="14" height="14"><use href="#i-chart-bars" /></svg></button>
+                  <div class="more-btn-wrap">
+                    <button type="button" class="action-btn" aria-label="Ещё действия"><svg width="14" height="14"><use href="#i-more" /></svg></button>
+                    <div class="dropdown-menu" role="menu" aria-label="Действия с тестом">
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-pencil" /></svg>Редактировать</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-key-round" /></svg>Общий доступ</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-bug-play" /></svg>Выполнить отладку</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-message-square" /></svg>Отправить на рецензирование</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-download" /></svg>Экспорт SCORM</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-file-spreadsheet" /></svg>Экспорт в Excel</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-package-open" /></svg>Экспорт пакета (.tbtest)</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-upload" /></svg>Загрузить выгрузку LMS</button>
+                      <hr class="dropdown-sep" />
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-globe" /></svg>Снять с публикации</button>
+                      <hr class="dropdown-sep" />
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-folder" /></svg>Переместить в папку</button>
+                      <button type="button" class="dropdown-item" role="menuitem"><svg width="14" height="14"><use href="#i-archive" /></svg>Архивировать</button>
+                      <hr class="dropdown-sep" />
+                      <button type="button" class="dropdown-item danger" role="menuitem"><svg width="14" height="14"><use href="#i-trash" /></svg>Удалить тест...</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
 
@@ -848,7 +906,7 @@
               <tr><td>Отказ по праву</td><td>Файл распознан, права на вид нет: строка файла и отказ «Недостаточно прав для выполнения операции» — без пояснений и без перечня доступного</td><td>Решение владельца 2026-10-02: отказ не объясняет. Без «Импортировать» — делать нечего</td></tr>
               <tr><td>Загрузки выгрузок LMS</td><td>Часть шага выгрузки LMS, а не раздела: после распознавания файла — загрузки его теста; при входе из меню теста — загрузки этого теста сразу, без файла. «В расчётах» и откат — <code>PATCH</code> и <code>DELETE /api/analytics/lms-import/batches/:id</code>, список — <code>GET .../batches/:testId</code></td><td>Решение владельца 2026-10-02: на общей странице раздела списку не место — он не относится к другим видам файлов. В аналитике теста списка больше нет</td></tr>
               <tr><td>Вход из меню теста</td><td>Пункт «Загрузить выгрузку LMS» в меню «Действия» строки теста → <code>/author/import?testId=…</code>. Раздел встаёт сразу на выгрузку LMS этого теста: подзаголовок — название теста, ниже — его загрузки, без файла. Тест задаёт ФАЙЛ: выгрузка другого теста грузится в свой тест, подзаголовок и загрузки переключаются на него — это не ошибка</td><td>Окно в аналитике теста отвергало чужой файл (<code>fixedTestId</code>, ответ 422): там на экране была аналитика конкретного теста. Здесь её нет, и тест из меню — только начальный вид. Обычный вид раздела — пунктом «Импорт» бокового меню</td></tr>
-              <tr><td>Аналитика</td><td>Кнопка «Загрузить выгрузку LMS» и окно <code>LmsImportDialog</code> уходят с обеих страниц аналитики</td><td>Шапка аналитики теста: «Экспорт Excel», «Прохождения теста», «Обновить»</td></tr>
+              <tr><td>Аналитика</td><td>Кнопка «Загрузить выгрузку LMS» и окно <code>LmsImportDialog</code> уходят с обеих страниц аналитики</td><td>Отдельного состояния нет: удаление на эскизе не рисуется. Шапка аналитики теста остаётся с «Экспорт Excel», «Прохождения теста», «Обновить»</td></tr>
               <tr><td>Формы видов</td><td>Не изобретаются: книга — согласованный эскиз prd14; выгрузка LMS — prd54; пользователи — окно «Массовая загрузка пользователей»; пакет — окно «Импорт теста»; шаблон — окно «Загрузка шаблона». Формы выносятся в общие компоненты и встают и в своё окно, и на страницу</td><td>В эскизе каждый вид показан одним характерным состоянием; прочие состояния — в согласованных эскизах и в коде окон</td></tr>
             </tbody>
           </table>
@@ -870,7 +928,7 @@
               <tr><td>Пакет теста</td><td><code>Checkbox</code> частей, <code>CardKpi</code></td><td>—</td><td>Таблица тем и переключатели режимов — как в окне «Импорт теста»</td></tr>
               <tr><td>Отказы и результаты</td><td><code>Banner</code> error / success, <code>subtle</code></td><td>—</td><td>Отказ по праву — иконка <code>Ban</code> из lucide</td></tr>
                             <tr><td>Строка загрузки</td><td>как в prd54: <code>Text</code>, <code>Tag</code>, <code>Switch</code>, <code>Button ghost</code></td><td><code>--ou-border-soft</code></td><td>—</td></tr>
-              <tr><td>Пункт меню теста</td><td>строка <code>dropdown-item</code> меню «Действия» (как соседние) с иконкой <code>Upload</code></td><td>—</td><td>В эскизе меню показано классами <code>ou-menu</code></td></tr>
+              <tr><td>Пункт меню теста</td><td>строка <code>dropdown-item</code> меню «Действия» (как соседние) с иконкой <code>Upload</code> из lucide</td><td>—</td><td>Состояние нарисовано разметкой и стилями нынешнего списка тестов (<code>tb-tests-list.css</code>)</td></tr>
             </tbody>
           </table>
         </div>
