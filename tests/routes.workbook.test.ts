@@ -162,6 +162,71 @@ describe("POST /api/workbook/inspect", () => {
     expect(res.body.code).toBe("too_large");
   });
 
+  // Э6: единая точка импорта — разбор открыт любым правом на импорт, отказ — по виду файла.
+  const usersRow = { email: "ivanova@example.ru", name: "Иванова Мария", role: "learner" };
+
+  it("список пользователей в .xlsx → kind=users с числом строк", async () => {
+    const buf = await makeWorkbook({ "Лист1": [usersRow, { ...usersRow, email: "petrov@example.ru" }] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ kind: "users", rows: 2 });
+  });
+
+  it("список пользователей в .csv (UTF-8 с BOM, «;») → kind=users", async () => {
+    const csv = Buffer.from("﻿Email;ФИО;role\r\nivanova@example.ru;Иванова Мария;learner\r\n", "utf8");
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", csv, "users.csv");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ kind: "users", rows: 1 });
+  });
+
+  it("список пользователей в .csv windows-1251 → kind=users", async () => {
+    // «Иванова» в windows-1251 — байты, которые не являются корректным UTF-8.
+    const name = Buffer.from([0xc8, 0xe2, 0xe0, 0xed, 0xee, 0xe2, 0xe0]);
+    const csv = Buffer.concat([Buffer.from("email;name\r\nivanova@example.ru;"), name, Buffer.from("\r\n")]);
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", csv, "users.csv");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ kind: "users", rows: 1 });
+  });
+
+  it("менеджер: книга с вопросами → 403 без пояснений, вид назван", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["manager"]);
+    const buf = await makeWorkbook({ "Вопросы": [questionRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ kind: "workbook", error: "Недостаточно прав для выполнения операции" });
+  });
+
+  it("менеджер: список пользователей разбирается", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["manager"]);
+    const buf = await makeWorkbook({ "Лист1": [usersRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.body.kind).toBe("users");
+  });
+
+  it("автор: список пользователей → 403", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    const buf = await makeWorkbook({ "Лист1": [usersRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(403);
+    expect(res.body.kind).toBe("users");
+  });
+
+  it("участник без прав на импорт → 403 до разбора", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["learner"]);
+    const buf = await makeWorkbook({ "Лист1": [usersRow] });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "users.xlsx");
+
+    expect(res.status).toBe(403);
+    expect(res.body.kind).toBeUndefined();
+  });
+
   it("zip с испорченной частью книги → 400 с кодом unparsable", async () => {
     const zip = new JSZip();
     zip.file("[Content_Types].xml", '<?xml version="1.0"?><Types/>');

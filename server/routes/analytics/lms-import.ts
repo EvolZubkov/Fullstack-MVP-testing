@@ -15,7 +15,7 @@ import { requireTestScope } from "../../middleware/test-scope";
 import { respondWorkbookReadError, workbookUploadSingle } from "../../middleware/upload";
 import { readWorkbookFromBuffer } from "../../utils/excel";
 import { canReadTestAnalytics } from "../../services/test-access";
-import { detectLmsExport } from "../workbook";
+import { detectLmsExport, IMPORT_DENIED_ERROR } from "../workbook";
 import { resolveTestByQuestionIds } from "../../services/lms-test-resolver";
 import { runImport } from "../../services/lms-export-import";
 import { resetPsychometricsCache } from "./psychometrics";
@@ -52,23 +52,12 @@ async function handleUpload(req: Request, res: Response, dryRun: boolean) {
     });
   }
 
-  // Страница аналитики КОНКРЕТНОГО теста присылает свой идентификатор. Несовпадение — единственная
-  // защита от загрузки чужой выгрузки в открытую перед глазами аналитику.
-  const fixedTestId = String(req.body?.fixedTestId ?? "").trim();
-  if (fixedTestId && fixedTestId !== resolved.testId) {
-    const [expected, actual] = await Promise.all([
-      storage.getTest(fixedTestId),
-      storage.getTest(resolved.testId),
-    ]);
-    return res.status(422).json({
-      error: `Это выгрузка другого теста: «${actual?.title ?? resolved.testId}». Открыта аналитика теста «${expected?.title ?? fixedTestId}».`,
-    });
-  }
-
+  // Тест определяет ФАЙЛ, а не страница, с которой пришли (Э6, 2026-10-02): выгрузка другого теста
+  // ложится в свой тест, а не отвергается. Поэтому «открытого» теста запрос больше не несёт.
   const test = await storage.getTest(resolved.testId);
   if (!test) return res.status(404).json({ error: "Тест не найден" });
   if (!(await canReadTestAnalytics(req.effectiveRoles!, req.currentUser!.id, test))) {
-    return res.status(403).json({ error: "Forbidden" });
+    return res.status(403).json({ error: IMPORT_DENIED_ERROR });
   }
 
   // Новая группа заводится ДО импорта: строки должны лечь уже с меткой, иначе при отказе на

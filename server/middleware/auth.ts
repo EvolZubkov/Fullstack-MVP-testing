@@ -66,6 +66,19 @@ export async function requireUserContext(req: Request, res: Response, next: Next
  * are migrated to it in a later phase (PRD-13 implementation plan, Phase 3).
  */
 export function requirePermission(capability: Capability) {
+  return requireAnyPermission([capability]);
+}
+
+/**
+ * Middleware factory: require ANY of the given capabilities.
+ *
+ * For endpoints shared by several tasks, where the precise right is known only after the
+ * request is read — e.g. the «Импорт» file inspection, open to whoever may import any kind of
+ * file, which then refuses a kind the caller has no right to (stage E6, 2026-10-02).
+ *
+ * @param capabilities one of them is enough
+ */
+export function requireAnyPermission(capabilities: readonly Capability[]) {
   return async function (req: Request, res: Response, next: NextFunction) {
     if (!req.session.userId) {
       return res.status(401).json({ error: "Unauthorized" });
@@ -76,7 +89,7 @@ export function requirePermission(capability: Capability) {
         return res.status(403).json({ error: "Forbidden" });
       }
       const roles = await getEffectiveRoles(user);
-      if (!hasPermission(roles, capability)) {
+      if (!capabilities.some(capability => hasPermission(roles, capability))) {
         return res.status(403).json({ error: "Forbidden" });
       }
       req.currentUser = user;

@@ -165,7 +165,8 @@ describe("POST /api/users/bulk-preview", () => {
   });
 
   it("returns 400 with a reason code for an unreadable file, not 500", async () => {
-    const notAZip = Buffer.from("email;name\na@a.com;Тест\n", "utf8");
+    // Text without an «email» column: read as CSV, but not a users list.
+    const notAZip = Buffer.from("Ключ строки;Текст вопроса\nQ1;Первый\n", "utf8");
     const res = await asAuthor(
       request(makeApp()).post("/api/users/bulk-preview").attach("file", notAZip, "users.xlsx"),
     );
@@ -233,6 +234,32 @@ describe("POST /api/users/bulk-preview", () => {
     const buf = await makeXlsx([["email", "name"]]); // only header, no data rows
     const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(400);
+  });
+
+  it("reads a .csv list (Excel «;», UTF-8 with BOM)", async () => {
+    storageMock.getGroups.mockResolvedValue([]);
+    storageMock.getUserByEmail.mockResolvedValue(undefined);
+    const csv = Buffer.from("﻿email;name;role\r\nalice@test.com;Алиса;learner\r\n", "utf8");
+    const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", csv, "users.csv"));
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({ email: "alice@test.com", name: "Алиса", status: "new" });
+  });
+
+  it("manager: a new «author» row is an error in the preview, a «learner» row is not", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["manager"]);
+    storageMock.getGroups.mockResolvedValue([]);
+    storageMock.getUserByEmail.mockResolvedValue(undefined);
+    const buf = await makeXlsx([
+      ["email", "name", "role"],
+      ["a@test.com", "A", "author"],
+      ["l@test.com", "L", "learner"],
+    ]);
+    const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({ status: "error", error: "роль «Автор» вам назначать нельзя" });
+    expect(res.body[1].status).toBe("new");
   });
 
   it("group matching is case-insensitive", async () => {

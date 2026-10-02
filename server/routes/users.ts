@@ -11,15 +11,23 @@ import multer from "multer";
 import ExcelJS from "exceljs";
 import {
   addAoaSheet,
-  readWorkbookFromBuffer,
+  readTableFromBuffer,
   sheetToObjects,
   workbookToBuffer,
 } from "../utils/excel";
 import { randomBytes, createHash } from "crypto";
 import { ORG_FIELDS, normalizeOrgValue } from "@shared/org-fields";
 import { readOrgColumns, readLmsLearnerIdColumn } from "../utils/org-columns";
+import { detectUsersList, isZipUpload } from "../utils/users-list";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+/**
+ * Preview error of a users-list row whose role the uploader may not assign. A list carries only
+ * «author» or «learner», and «learner» is within every ceiling that opens the upload at all, so
+ * the refused role is always «Автор».
+ */
+export const ROLE_NOT_ASSIGNABLE_ERROR = "роль «Автор» вам назначать нельзя";
 
 /**
  * Lifetime of the password-setup token carried by an invitation letter. Longer
@@ -757,7 +765,12 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
   try {
     if (!req.file) return res.status(400).json({ error: "File required" });
 
-    const wb = await readWorkbookFromBuffer(req.file.buffer);
+    // .csv as well as .xlsx: the dialog has always promised both, the server read only the book.
+    const wb = await readTableFromBuffer(req.file.buffer);
+    // Any text reads as CSV, so a text that is not a users list keeps the "not an .xlsx" answer.
+    if (!isZipUpload(req.file.buffer) && detectUsersList(wb) === null) {
+      return res.status(400).json({ error: "Failed to read file", code: "not_a_zip" });
+    }
     const ws = wb.worksheets[0];
     if (!ws) return res.status(400).json({ error: "File is empty" });
     const rows: any[] = sheetToObjects(ws, { defval: "" });
@@ -782,6 +795,21 @@ router.post("/bulk-preview", requirePermission("users.create"), upload.single("f
 
       const validRole = role === "author" ? "author" : "learner";
       const existing = await storage.getUserByEmail(email);
+
+      // Э6 (2026-10-02): a new row with a role above the uploader's ceiling is an error IN THE
+      // PREVIEW, not a surprise in the import report — a manager sees it before anything is written.
+      // An existing account's roles are never touched by a list, so only new rows are checked.
+      if (!existing && !validateRoleChange({
+        actorRoles: req.effectiveRoles ?? [],
+        currentRoles: [],
+        requestedRoles: [validRole],
+        atCreation: true,
+      }).ok) {
+        return {
+          idx, email, name, role: validRole, groupName, groupId: null, groupFound: false,
+          status: "error", error: ROLE_NOT_ASSIGNABLE_ERROR,
+        };
+      }
 
       // PRD-54: ключ, занятый ДРУГИМ пользователем, — ошибка строки, а не повод перезаписать:
       // на уникальности ключа держится связывание, и тихая перезапись порвала бы готовые связи.
