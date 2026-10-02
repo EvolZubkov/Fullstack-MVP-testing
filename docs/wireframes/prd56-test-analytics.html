@@ -24,8 +24,8 @@
       вопросы  — items (все), items-review (вид «требуют ревизии»),
                  items-exclude (подтверждение исключения из выдачи),
                  items-measurement (измерительный тест: разброс вместо доли верных),
-                 items-answers-a / items-answers-b (колонка «Что отвечали» оцениваемого
-                 теста, два варианта полосы — этап Э1 UX-аудита, выбирает владелец);
+                 items-answers (колонка «Что отвечали» оцениваемого теста: полоса из
+                 сегментов по всем вариантам — этап Э1 UX-аудита, решение владельца 2026-10-02);
       выдача   — delivery;
       шкалы    — scales;
       docs     — пояснения и DS-маппинг.
@@ -240,8 +240,7 @@
       <button type="button" onclick="showState(this, 'items-review')">требуют ревизии</button>
       <button type="button" onclick="showState(this, 'items-exclude')">исключение из выдачи</button>
       <button type="button" onclick="showState(this, 'items-measurement')">измерительный тест</button>
-      <button type="button" onclick="showState(this, 'items-answers-a')">что отвечали: А</button>
-      <button type="button" onclick="showState(this, 'items-answers-b')">что отвечали: Б</button>
+      <button type="button" onclick="showState(this, 'items-answers')">что отвечали</button>
       <button type="button" onclick="showState(this, 'delivery')">выдача</button>
       <button type="button" onclick="showState(this, 'scales')">шкалы</button>
       <span class="wf-nav-sep"></span>
@@ -923,85 +922,11 @@
       </div>
     </div>
 
-    <!-- ════════════════ Вопросы оцениваемого теста: «Что отвечали», вариант А ════════════════
-         Полоса одна — доля самого частого ответа, — но окрашена по его верности: зелёная, когда
-         чаще всего отвечают верно, красная, когда чаще всего выбирают неверный вариант. -->
-    <div id="wf-items-answers-a" class="wf-state" data-tab="items">
-      <div class="ou-shell">
-        <div class="ou-shell__side" data-wf-side></div>
-        <header class="ou-shell__header" data-wf-header></header>
-        <main class="ou-shell__main">
-          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
-          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
-          <div data-wf-filter></div>
-
-          <section class="ou-card ou-card--outlined" role="tabpanel">
-            <header class="ou-card__header">
-              <div class="ou-card__heading">
-                <h2 class="ou-card__title">Вопросы</h2>
-                <p class="ou-card__subtitle">3 вопроса · 60 прохождений</p>
-              </div>
-            </header>
-            <div class="ou-card__body">
-              <div class="ou-grid">
-                <div class="ou-grid__scroll">
-                  <table class="ou-grid__table">
-                    <thead>
-                      <tr>
-                        <th class="col-stick col-stick--shadow"><div class="ou-grid__th is-sortable">Вопрос<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th">Что отвечали</div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Трудность<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Пропуски<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Время, медиана<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th class="ou-grid__control-cell" aria-label="Действия"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Один ответ" aria-label="Один ответ"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Какой срок хранения журнала инструктажей?<span class="ou-grid__cell-sub">Охрана труда</span></td>
-                        <td>
-                          <div class="ou-progress ou-progress--s ou-progress--success"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 67%"></span></span></div>
-                          <span class="ou-grid__cell-sub">✓ Десять лет — 67 % · Один год — 33 % · ещё 2</span>
-                        </td>
-                        <td class="is-numeric">0,67</td>
-                        <td class="is-numeric">0 %</td>
-                        <td class="is-numeric">0:41</td>
-                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
-                      </tr>
-                      <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Один ответ" aria-label="Один ответ"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Что делать при получении подарка от контрагента?<span class="ou-grid__cell-sub">Комплаенс</span></td>
-                        <td>
-                          <div class="ou-progress ou-progress--s ou-progress--error"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 45%"></span></span></div>
-                          <span class="ou-grid__cell-sub">Принять подарок — 45 % · ✓ Уведомить комплаенс — 40 % · Передать коллеге — 15 %</span>
-                        </td>
-                        <td class="is-numeric">0,40</td>
-                        <td class="is-numeric">2 %</td>
-                        <td class="is-numeric">0:58</td>
-                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
-                      </tr>
-                      <tr>
-                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Один ответ" aria-label="Один ответ"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-single" /></svg></span>Кто утверждает график отпусков?<span class="ou-grid__cell-sub">добавлено 28.09.2026</span></td>
-                        <td class="is-muted">мало данных</td>
-                        <td class="is-numeric is-muted">—</td>
-                        <td class="is-numeric is-muted">—</td>
-                        <td class="is-numeric is-muted">—</td>
-                        <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </section>
-        </main>
-      </div>
-    </div>
-
-    <!-- ════════════════ Вопросы оцениваемого теста: «Что отвечали», вариант Б ════════════════
+    <!-- ════════════════ Вопросы оцениваемого теста: «Что отвечали» ════════════════
          Полоса из сегментов по ВСЕМ вариантам в порядке подписи: верный — зелёный, прочие —
          нейтральные с чередованием, чтобы соседние не сливались. Это компактный вид будущего
          общего компонента распределения ответов (этап Э4). -->
-    <div id="wf-items-answers-b" class="wf-state" data-tab="items">
+    <div id="wf-items-answers" class="wf-state" data-tab="items">
       <div class="ou-shell">
         <div class="ou-shell__side" data-wf-side></div>
         <header class="ou-shell__header" data-wf-header></header>
@@ -1520,17 +1445,12 @@
                 <tr>
                   <td>«Что отвечали» у оцениваемого теста (этап Э1, 2026-10-02)</td>
                   <td><code>questionStats[].spread.options[]</code>: <code>label</code>, <code>share</code>, <code>correct</code></td>
-                  <td>Сегодня полоса показывает долю САМОГО ЧАСТОГО ответа нейтральным цветом, и 80 % читается как «80 % верных», даже когда лидирует неверный вариант (UX-аудит, §3.2). Два варианта на выбор владельца. Остальные колонки таблицы в этих состояниях не показаны и не меняются</td>
+                  <td>Прежняя полоса показывала долю САМОГО ЧАСТОГО ответа нейтральным цветом, и 80 % читалось как «80 % верных», даже когда лидировал неверный вариант (UX-аудит, §3.2). Владелец 2026-10-02 выбрал полосу из сегментов; одна полоса доли лидера с тоном его верности отклонена. У «нескольких ответов» доли в сумме больше 100 %, и шкала полосы берётся по сумме. Остальные колонки таблицы в этом состоянии не показаны и не меняются</td>
                 </tr>
                 <tr>
-                  <td>Вариант А — одна полоса с тоном</td>
-                  <td>полоса = доля самого частого ответа; тон — его верность</td>
-                  <td>Зелёная, когда чаще всего отвечают верно; красная, когда чаще всего выбирают неверный вариант. Правка минимальная, но доля верного ответа по-прежнему видна только в подписи, а полоса говорит лишь «лидер верный или нет»</td>
-                </tr>
-                <tr>
-                  <td>Вариант Б — полоса из сегментов</td>
+                  <td>Полоса из сегментов</td>
                   <td>сегмент на каждый вариант, порядок — как в подписи (по убыванию доли)</td>
-                  <td>Верный вариант — зелёный, прочие — нейтральные с чередованием двух оттенков, чтобы соседние не сливались. Видно и долю верного, и куда уходят остальные. Это компактный вид будущего общего компонента распределения ответов (этап Э4) — переделывать его там не придётся. Рекомендован</td>
+                  <td>Верный вариант — зелёный, прочие — нейтральные с чередованием двух оттенков, чтобы соседние не сливались. Видно и долю верного, и куда уходят остальные. Это компактный вид будущего общего компонента распределения ответов (этап Э4) — переделывать его там не придётся</td>
                 </tr>
                 <tr>
                   <td>Подпись под полосой</td>
@@ -1557,8 +1477,7 @@
                 <tr><td>Признак ревизии</td><td><code>Tag</code> <code>--error</code> / <code>--warning</code></td><td>—</td><td>Под тегом — числа, из которых признак сложился</td></tr>
                 <tr><td>Пиктограмма типа вопроса</td><td><code>QuestionTypeIcon</code> <code>tb-qscoring__qtype</code> + иконки lucide</td><td><code>--ou-fg-muted</code>, метка исключения — <code>--ou-error-default</code></td><td>Классом и набором иконок совпадает с деревом контента и таблицей «Оценка» в редакторе теста; правило <code>.tb-qscoring__qtype</code> перенесено в копию <code>tb-components.css</code> для эскизов, где его не было</td></tr>
                 <tr><td>Полосы шкал и разброса</td><td><code>ProgressBar</code> <code>ou-progress--s</code></td><td><code>--ou-accent-default</code> (умолчание компонента)</td><td>Акцент, а не тона «успех/предупреждение»: у измерительного теста эталона нет, и высокое значение шкалы не «хорошо», а низкое не «плохо» — тон выносил бы оценку, которой не существует (решение владельца 2026-09-13)</td></tr>
-                <tr><td>«Что отвечали», вариант А</td><td><code>ProgressBar</code> <code>ou-progress--s</code> + <code>tone</code> <code>success</code> / <code>error</code></td><td><code>--ou-success-default</code>, <code>--ou-error-default</code> (тона компонента)</td><td>Тон здесь законен, в отличие от разброса измерительного теста: у оцениваемого вопроса эталон есть, и «верно / неверно» — факт, а не оценка</td></tr>
-                <tr><td>«Что отвечали», вариант Б</td><td><code>ProgressStacked</code> <code>ou-progress--s</code> (<code>ou-progress__stack-seg</code>), без легенды</td><td><code>--ou-success-default</code> — верный; <code>--ou-border-strong</code> / <code>--ou-fg-subtle</code> — прочие, через один</td><td>Тот же компонент уже рисует полосы шкал (<code>scale-profile.tsx</code>); легенду заменяет подпись под полосой</td></tr>
+                <tr><td>«Что отвечали»</td><td><code>ProgressStacked</code> <code>ou-progress--s</code> (<code>ou-progress__stack-seg</code>), без легенды</td><td><code>--ou-success-default</code> — верный; <code>--ou-border-strong</code> / <code>--ou-fg-subtle</code> — прочие, через один</td><td>Тот же компонент уже рисует полосы шкал (<code>scale-profile.tsx</code>); легенду заменяет подпись под полосой</td></tr>
                 <tr><td>Столбчатые диаграммы</td><td><code>Charts</code> (столбцы): <code>ou-chart__bar</code>, <code>ou-chart__bar-label</code>, оси <code>ou-chart__axis-x/y</code></td><td>—</td><td>Распределение результатов. Над столбцом печатается ДОЛЯ УЧАСТНИКОВ: вопрос звучит как «сколько процентов сдали на 70», а не «сколько человек попало в корзину». `Histogram` не подошёл — у него нет подписей значений. Профиль экспозиции банка столбцами НЕ рисуется: пояснения выше требуют список, потому что у столбца подпись помещается только номером, а «1, 2, 3…» читателю не говорит ничего. Так он и реализован (PRD-56 Э5)</td></tr>
                 <tr><td>Линия динамики</td><td><code>Charts</code> <code>ou-chart</code> + <code>ou-chart__svg</code></td><td>—</td><td>Сетка, линия, точки и ось — элементы компонента; подписи месяцев с объёмом выборки идут по оси X</td></tr>
               </tbody>

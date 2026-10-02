@@ -18,7 +18,7 @@ import { Ban } from "lucide-react";
 import { useLocation } from "wouter";
 
 import {
-  Banner, Button, Card, CardBody, CardHeader, DataGrid, ModalDialog, ProgressBar,
+  Banner, Button, Card, CardBody, CardHeader, DataGrid, ModalDialog, ProgressBar, ProgressStacked,
   SegmentedControl, Stack, Text,
 } from "@skillum/ui-kit";
 
@@ -228,6 +228,37 @@ function spreadLabel(
   };
 }
 
+/** Цвет сегмента верного варианта и два чередующихся оттенка прочих — эскиз, items-answers-b. */
+const CORRECT_SEGMENT = "var(--ou-success-default)";
+const OTHER_SEGMENTS = ["var(--ou-border-strong)", "var(--ou-fg-subtle)"] as const;
+
+/**
+ * Полоса «Что отвечали» оцениваемого вопроса: сегмент на каждый вариант (этап Э1 UX-аудита).
+ *
+ * Прежняя полоса показывала долю САМОГО ЧАСТОГО ответа нейтральным цветом, и 80 % читалось как
+ * «80 % верных», даже когда лидировал неверный вариант. Теперь видно и долю верного (зелёный
+ * сегмент), и куда уходят остальные. Порядок — как в подписи под полосой, по убыванию доли;
+ * прочие варианты красятся через один, чтобы соседние не сливались.
+ *
+ * У «нескольких ответов» доли в сумме больше 100 % (каждый отмечает несколько вариантов): шкала
+ * тогда берётся по сумме, иначе сегменты вылезли бы за край полосы.
+ *
+ * @param options доли вариантов из разброса ответов
+ * @returns сегменты и масштаб для `ProgressStacked`
+ */
+export function answerSegments(
+  options: ReadonlyArray<{ share: number; correct?: boolean }>,
+): { segments: Array<{ value: number; color: string }>; max: number } {
+  const ranked = [...options].filter(option => option.share > 0).sort((a, b) => b.share - a.share);
+  let other = 0;
+  const segments = ranked.map(option => ({
+    value: option.share,
+    color: option.correct ? CORRECT_SEGMENT : OTHER_SEGMENTS[other++ % OTHER_SEGMENTS.length],
+  }));
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
+  return { segments, max: Math.max(100, total) };
+}
+
 export function QuestionTable({
   questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 0,
   psychometrics, onOpenQuality, passages,
@@ -375,7 +406,9 @@ export function QuestionTable({
     // FR-22: у опросника эталона нет, и доля верных заменяется разбросом ответов — полосой
     // с долей лидирующего варианта и полным перечнем долей подписью. Полоса АКЦЕНТНАЯ, без
     // тонов «успех / предупреждение»: высокая доля градации не хороша и не плоха, оценивать
-    // её не относительно чего (FR-21b).
+    // её не относительно чего (FR-21b). У оцениваемого теста эталон есть, и колонка «Что
+    // отвечали» рисует полосу из сегментов по всем вариантам с верным зелёным
+    // (`answerSegments`, эскиз prd56-test-analytics, состояние items-answers-b).
     ...(measurement || hasWrittenAnswers ? [{
       key: "spread",
       header: measurement ? "Разброс ответов" : "Что отвечали",
@@ -416,14 +449,29 @@ export function QuestionTable({
         if (!row.spread || row.totalAnswers < minObservations) {
           return <Text variant="body-s" tone="muted">мало данных</Text>;
         }
-        const leader = row.spread.options.reduce(
-          (top, option) => (option.share > top.share ? option : top),
-          row.spread.options[0],
-        );
         const label = spreadLabel(row.spread.options, row.questionType);
+        if (measurement) {
+          const leader = row.spread.options.reduce(
+            (top, option) => (option.share > top.share ? option : top),
+            row.spread.options[0],
+          );
+          return (
+            <Stack gap={1} className="ou-grid__cell-wrap">
+              <ProgressBar size="s" value={Math.round(leader.share)} hideHeader />
+              <Text variant="body-xs" tone="muted" title={label.full}>
+                {label.short}
+              </Text>
+            </Stack>
+          );
+        }
         return (
           <Stack gap={1} className="ou-grid__cell-wrap">
-            <ProgressBar size="s" value={Math.round(leader.share)} hideHeader />
+            <ProgressStacked
+              size="s"
+              role="img"
+              aria-label={label.full}
+              {...answerSegments(row.spread.options)}
+            />
             <Text variant="body-xs" tone="muted" title={label.full}>
               {label.short}
             </Text>

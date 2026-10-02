@@ -16,7 +16,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { QuestionTable } from "../question-table";
+import { answerSegments, QuestionTable } from "../question-table";
 import { termOrText } from "./term-text";
 
 /**
@@ -508,6 +508,53 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
     };
     render(<QuestionTable questions={[choice]} minObservations={10} />);
     expect(screen.getByText(termOrText("Подарок партнёру — 45 % · ✓ Проверка контрагента — 40 % · Скидка — 15 %"))).toBeTruthy();
+  });
+
+  /**
+   * Этап Э1 UX-аудита: полоса — сегменты по всем вариантам, верный зелёный. Прежняя полоса
+   * показывала долю лидера, и 45 % неверного «Подарка» читались как 45 % верных.
+   */
+  it("рисует полосу сегментами по всем вариантам, верный — зелёным", () => {
+    const choice = {
+      ...QUESTIONS[0],
+      spread: {
+        answered: 60,
+        options: [
+          { label: "Проверка контрагента", share: 40, correct: true },
+          { label: "Подарок партнёру", share: 45, correct: false },
+          { label: "Скидка", share: 15, correct: false },
+        ],
+      },
+    };
+    render(<QuestionTable questions={[choice]} minObservations={10} />);
+
+    const bar = screen.getByRole("img", { name: /Подарок партнёру/ });
+    expect(bar.querySelectorAll(".ou-progress__stack-seg")).toHaveLength(3);
+  });
+
+  it("answerSegments: по убыванию доли, верный зелёный, прочие чередуются", () => {
+    const { segments, max } = answerSegments([
+      { share: 40, correct: true },
+      { share: 45, correct: false },
+      { share: 15, correct: false },
+    ]);
+
+    expect(segments).toEqual([
+      { value: 45, color: "var(--ou-border-strong)" },
+      { value: 40, color: "var(--ou-success-default)" },
+      { value: 15, color: "var(--ou-fg-subtle)" },
+    ]);
+    expect(max).toBe(100);
+  });
+
+  it("answerSegments: у нескольких ответов шкала по сумме, полоса не вылезает за край", () => {
+    const { max } = answerSegments([{ share: 70, correct: true }, { share: 60 }, { share: 20 }]);
+
+    expect(max).toBe(150);
+  });
+
+  it("answerSegments: сегментов нулевой доли нет", () => {
+    expect(answerSegments([{ share: 100, correct: true }, { share: 0 }]).segments).toHaveLength(1);
   });
 
   it("у свободного текста вместо долей — объём и длина", () => {
