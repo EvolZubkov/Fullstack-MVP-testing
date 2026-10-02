@@ -18,7 +18,7 @@
 
     Состояния:
       администратор — пусто; книга; выгрузка LMS; пользователи; пакет теста; шаблон;
-      из меню теста — выгрузка LMS выбранного теста, чужой файл;
+      из меню теста — выгрузка LMS выбранного теста, файл другого теста (грузится в свой тест);
       менеджер      — пусто; пользователи (строка с ролью автора отклоняется до записи);
                       отказ по праву (принёс книгу);
       вход          — меню теста с пунктом «Загрузить выгрузку LMS»; шапка аналитики теста
@@ -127,7 +127,7 @@
       <span class="wf-nav-sep"></span>
       <span class="wf-nav-title">Из меню теста:</span>
       <button type="button" onclick="impState(this, 'admin', 'from-test')">выгрузка теста</button>
-      <button type="button" onclick="impState(this, 'admin', 'from-test-mismatch')">чужой файл</button>
+      <button type="button" onclick="impState(this, 'admin', 'from-test-mismatch')">файл другого теста</button>
       <span class="wf-nav-sep"></span>
       <span class="wf-nav-title">Менеджер:</span>
       <button type="button" onclick="impState(this, 'manager', 'empty')">пусто</button>
@@ -469,7 +469,7 @@
                   <label class="ou-uploader" tabindex="0">
                     <span class="ou-uploader__icon" aria-hidden="true"><svg width="20" height="20"><use href="#i-upload" /></svg></span>
                     <span class="ou-uploader__title">Перетащите файл .xlsx или выберите</span>
-                    <span class="ou-uploader__sub">Только выгрузка отчёта LMS этого теста</span>
+                    <span class="ou-uploader__sub">Выгрузка отчёта LMS — тест определится по файлу</span>
                     <span class="ou-uploader__cta">Выбрать файл</span>
                   </label>
                   <div class="wf-mt-4">
@@ -490,29 +490,58 @@
               </section>
             </div>
 
-            <!-- ── из меню теста, но файл другого теста ── -->
+            <!-- ── из меню теста, а файл — выгрузка другого теста: грузится в свой тест, это не ошибка ── -->
             <div id="admin-from-test-mismatch" class="wf-imp">
               <section class="ou-card ou-card--outlined">
                 <header class="ou-card__header"><div class="ou-card__heading">
                   <h3 class="ou-card__title">Загрузка выгрузки LMS</h3>
-                  <p class="ou-card__subtitle">Определение ведущего стиля человекоцентричного лидерства</p>
+                  <p class="ou-card__subtitle">Опросник выгорания (MBI)</p>
                 </div></header>
                 <div class="ou-card__body">
                   <div class="ou-file">
                     <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
-                    <div class="ou-file__main"><span class="ou-file__name">другой-тест.xlsx</span><span class="ou-file__meta">выгрузка отчёта LMS · 3 строки</span></div>
+                    <div class="ou-file__main"><span class="ou-file__name">другой-тест.xlsx</span><span class="ou-file__meta">выгрузка отчёта LMS · 3 строки · 9 КБ</span></div>
                     <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
                   </div>
-                  <div class="ou-banner ou-banner--error ou-banner--subtle wf-mt-3" role="alert">
-                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                  <div class="ou-banner ou-banner--info ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
                     <div class="ou-banner__body">
-                      <p class="ou-banner__title">Это выгрузка другого теста</p>
-                      <p class="ou-banner__desc">В файле — «Опросник выгорания (MBI)». Выбран тест «Определение ведущего стиля человекоцентричного лидерства».</p>
+                      <p class="ou-banner__title">Опросник выгорания (MBI)</p>
+                      <p class="ou-banner__desc">22 вопроса, 3 шкалы. Тест определён по файлу — выбирать не нужно.</p>
                     </div>
                   </div>
+                  <div class="ou-formfield wf-mt-3">
+                    <label class="ou-formfield__lbl" for="imp-group-ft">Группа</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box">
+                      <input class="ou-field__input" id="imp-group-ft" type="text" value="Без группы" readonly />
+                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
+                    </div></div>
+                  </div>
+                  <div class="ou-check-group wf-mt-4">
+                    <label class="ou-check ou-check--s">
+                      <input class="ou-check__input" type="checkbox" />
+                      <span class="ou-check__box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+                      <span class="ou-check__text"><span class="ou-check__lbl">Связать с пользователями по ключу</span></span>
+                    </label>
+                  </div>
                   <div class="wf-card-foot">
-                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Выбрать другой файл</button>
-                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true" title="Файл относится к другому тесту">Импортировать</button>
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Проверить</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true" title="Сначала проверьте файл">Импортировать</button>
+                  </div>
+                  <div class="wf-mt-4">
+                    <p class="wf-batch__name">Загрузки этого теста</p>
+                    <div class="wf-batch">
+                      <div class="wf-batch__main">
+                        <span class="wf-batch__name">mbi-июль.xlsx</span>
+                        <span class="wf-batch__meta">03.07.2026, 14:05 · Приёмка · группа «Розница»</span>
+                      </div>
+                      <span class="ou-tag ou-tag--neutral ou-tag--outline">40 строк</span>
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--s is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
+                      </label>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -756,7 +785,7 @@
               <tr><td>Роль в предпросмотре</td><td>Названием роли, а не кодом: «Участник», «Автор»</td><td>Сейчас окно «Массовая загрузка пользователей» печатает код роли (<code>learner</code>, <code>author</code>) — исправляется вместе с переносом формы</td></tr>
               <tr><td>Отказ по праву</td><td>Файл распознан, права на вид нет: строка файла с видом и отказ «Книги с вопросами вам загружать нельзя» с перечнем доступных видов</td><td>Без «Импортировать» — делать нечего</td></tr>
               <tr><td>Загрузки выгрузок LMS</td><td>Часть шага выгрузки LMS, а не раздела: после распознавания файла — загрузки его теста; при входе из меню теста — загрузки этого теста сразу, без файла. «В расчётах» и откат — <code>PATCH</code> и <code>DELETE /api/analytics/lms-import/batches/:id</code>, список — <code>GET .../batches/:testId</code></td><td>Решение владельца 2026-10-02: на общей странице раздела списку не место — он не относится к другим видам файлов. В аналитике теста списка больше нет</td></tr>
-              <tr><td>Вход из меню теста</td><td>Пункт «Загрузить выгрузку LMS» в меню «Действия» строки теста → <code>/author/import?testId=…</code>. Раздел встаёт сразу на выгрузку LMS этого теста: подзаголовок — название теста, ниже — его загрузки; файл другого теста отвергается</td><td>То, что делал <code>fixedTestId</code> окна. Обычный вид раздела — пунктом «Импорт» бокового меню (адрес без теста)</td></tr>
+              <tr><td>Вход из меню теста</td><td>Пункт «Загрузить выгрузку LMS» в меню «Действия» строки теста → <code>/author/import?testId=…</code>. Раздел встаёт сразу на выгрузку LMS этого теста: подзаголовок — название теста, ниже — его загрузки, без файла. Тест задаёт ФАЙЛ: выгрузка другого теста грузится в свой тест, подзаголовок и загрузки переключаются на него — это не ошибка</td><td>Окно в аналитике теста отвергало чужой файл (<code>fixedTestId</code>, ответ 422): там на экране была аналитика конкретного теста. Здесь её нет, и тест из меню — только начальный вид. Обычный вид раздела — пунктом «Импорт» бокового меню</td></tr>
               <tr><td>Аналитика</td><td>Кнопка «Загрузить выгрузку LMS» и окно <code>LmsImportDialog</code> уходят с обеих страниц аналитики</td><td>Шапка аналитики теста: «Экспорт Excel», «Прохождения теста», «Обновить»</td></tr>
               <tr><td>Формы видов</td><td>Не изобретаются: книга — согласованный эскиз prd14; выгрузка LMS — prd54; пользователи — окно «Массовая загрузка пользователей»; пакет — окно «Импорт теста»; шаблон — окно «Загрузка шаблона». Формы выносятся в общие компоненты и встают и в своё окно, и на страницу</td><td>В эскизе каждый вид показан одним характерным состоянием; прочие состояния — в согласованных эскизах и в коде окон</td></tr>
             </tbody>
