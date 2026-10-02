@@ -370,10 +370,6 @@
                         <span class="wf-batch__meta">14.08.2026, 10:12 · Приёмка · без группы</span>
                       </div>
                       <span class="ou-tag ou-tag--neutral ou-tag--outline">18 строк</span>
-                      <label class="ou-switch-field">
-                        <span class="ou-switch ou-switch--s is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
-                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
-                      </label>
                       <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
                     </div>
                   </div>
@@ -536,10 +532,6 @@
                         <span class="wf-batch__name">7684237229762827328-1.xlsx</span>
                         <span class="wf-batch__meta">11.09.2026, 23:40 · добавлено 3, обновлено 0</span>
                       </div>
-                      <label class="ou-switch-field">
-                        <span class="ou-switch ou-switch--s is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
-                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
-                      </label>
                       <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
                     </div>
                   </div>
@@ -608,10 +600,6 @@
                         <span class="wf-batch__meta">03.07.2026, 14:05 · Приёмка · группа «Розница»</span>
                       </div>
                       <span class="ou-tag ou-tag--neutral ou-tag--outline">40 строк</span>
-                      <label class="ou-switch-field">
-                        <span class="ou-switch ou-switch--s is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
-                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
-                      </label>
                       <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
                     </div>
                   </div>
@@ -904,7 +892,7 @@
               <tr><td>Менеджер и пользователи</td><td>Строка с ролью выше участника помечается ошибкой «роль «Автор» вам назначать нельзя» уже в предпросмотре, в счёт «Ошибок» и не в число импортируемых</td><td>Сервер и сегодня отклоняет такую строку (потолок ролей PRD-13), но только после записи</td></tr>
               <tr><td>Роль в предпросмотре</td><td>Названием роли, а не кодом: «Участник», «Автор»</td><td>Сейчас окно «Массовая загрузка пользователей» печатает код роли (<code>learner</code>, <code>author</code>) — исправляется вместе с переносом формы</td></tr>
               <tr><td>Отказ по праву</td><td>Файл распознан, права на вид нет: строка файла и отказ «Недостаточно прав для выполнения операции» — без пояснений и без перечня доступного</td><td>Решение владельца 2026-10-02: отказ не объясняет. Без «Импортировать» — делать нечего</td></tr>
-              <tr><td>Загрузки выгрузок LMS</td><td>Часть шага выгрузки LMS, а не раздела: после распознавания файла — загрузки его теста; при входе из меню теста — загрузки этого теста сразу, без файла. «В расчётах» и откат — <code>PATCH</code> и <code>DELETE /api/analytics/lms-import/batches/:id</code>, список — <code>GET .../batches/:testId</code></td><td>Решение владельца 2026-10-02: на общей странице раздела списку не место — он не относится к другим видам файлов. В аналитике теста списка больше нет</td></tr>
+              <tr><td>Загрузки выгрузок LMS</td><td>Часть шага выгрузки LMS, а не раздела: после распознавания файла — загрузки его теста; при входе из меню теста — загрузки этого теста сразу, без файла. откат — <code>DELETE /api/analytics/lms-import/batches/:id</code>, список — <code>GET .../batches/:testId</code>. Переключателя «В расчётах» нет: владелец 2026-10-02 снял его (PRD-66 FR-12) — ошибочная загрузка исправляется откатом и повторной загрузкой</td><td>Решение владельца 2026-10-02: на общей странице раздела списку не место — он не относится к другим видам файлов. В аналитике теста списка больше нет</td></tr>
               <tr><td>Вход из меню теста</td><td>Пункт «Загрузить выгрузку LMS» в меню «Действия» строки теста → <code>/author/import?testId=…</code>. Раздел встаёт сразу на выгрузку LMS этого теста: подзаголовок — название теста, ниже — его загрузки, без файла. Тест задаёт ФАЙЛ: выгрузка другого теста грузится в свой тест, подзаголовок и загрузки переключаются на него — это не ошибка</td><td>Окно в аналитике теста отвергало чужой файл (<code>fixedTestId</code>, ответ 422): там на экране была аналитика конкретного теста. Здесь её нет, и тест из меню — только начальный вид. Обычный вид раздела — пунктом «Импорт» бокового меню</td></tr>
               <tr><td>Аналитика</td><td>Кнопка «Загрузить выгрузку LMS» и окно <code>LmsImportDialog</code> уходят с обеих страниц аналитики</td><td>Отдельного состояния нет: удаление на эскизе не рисуется. Шапка аналитики теста остаётся с «Экспорт Excel», «Прохождения теста», «Обновить»</td></tr>
               <tr><td>Формы видов</td><td>Не изобретаются: книга — согласованный эскиз prd14; выгрузка LMS — prd54; пользователи — окно «Массовая загрузка пользователей»; пакет — окно «Импорт теста»; шаблон — окно «Загрузка шаблона». Формы выносятся в общие компоненты и встают и в своё окно, и на страницу</td><td>В эскизе каждый вид показан одним характерным состоянием; прочие состояния — в согласованных эскизах и в коде окон</td></tr>
@@ -928,7 +916,7 @@
               <tr><td>Пользователи</td><td><code>Tag dot</code>, <code>DataGrid</code>, <code>Select</code> действия, <code>Checkbox</code></td><td>—</td><td>Колонки окна сокращены в эскизе; в продукте — все колонки нынешнего окна</td></tr>
               <tr><td>Пакет теста</td><td><code>Checkbox</code> частей, <code>CardKpi</code></td><td>—</td><td>Таблица тем и переключатели режимов — как в окне «Импорт теста»</td></tr>
               <tr><td>Отказы и результаты</td><td><code>Banner</code> error / success, <code>subtle</code></td><td>—</td><td>Отказ по праву — иконка <code>Ban</code> из lucide</td></tr>
-                            <tr><td>Строка загрузки</td><td>как в prd54: <code>Text</code>, <code>Tag</code>, <code>Switch</code>, <code>Button ghost</code></td><td><code>--ou-border-soft</code></td><td>—</td></tr>
+                            <tr><td>Строка загрузки</td><td>как в prd54, без <code>Switch</code>: <code>Text</code>, <code>Tag</code>, <code>Button ghost</code> «Откатить»</td><td><code>--ou-border-soft</code></td><td>—</td></tr>
               <tr><td>Пункт меню теста</td><td>строка <code>dropdown-item</code> меню «Действия» (как соседние) с иконкой <code>Upload</code> из lucide</td><td>—</td><td>Состояние нарисовано разметкой и стилями нынешнего списка тестов (<code>tb-tests-list.css</code>)</td></tr>
             </tbody>
           </table>
