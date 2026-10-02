@@ -326,7 +326,7 @@
                     <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
                     <div class="ou-banner__body">
                       <p class="ou-banner__title">Определение ведущего стиля человекоцентричного лидерства</p>
-                      <p class="ou-banner__desc">14 вопросов, 4 шкалы, 4 показателя. Тест определён по файлу — выбирать не нужно.</p>
+                      <p class="ou-banner__desc">14 вопросов, 4 шкалы, 4 показателя.</p>
                     </div>
                   </div>
                   <!-- Группа: Select searchable — один выбор, поиск по части названия. Меню раскрыто. -->
@@ -564,7 +564,7 @@
                     <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
                     <div class="ou-banner__body">
                       <p class="ou-banner__title">Опросник выгорания (MBI)</p>
-                      <p class="ou-banner__desc">22 вопроса, 3 шкалы. Тест определён по файлу — выбирать не нужно.</p>
+                      <p class="ou-banner__desc">22 вопроса, 3 шкалы.</p>
                     </div>
                   </div>
                   <!-- Группа: Select searchable — один выбор, поиск по части названия. Меню раскрыто. -->
@@ -922,6 +922,7 @@
               <tr><td>Зона загрузки</td><td><code>FileUploader</code> (<code>ou-uploader</code>) с <code>accept</code> по правам читателя</td><td>—</td><td>Подпись перечисляет только доступные форматы</td></tr>
               <tr><td>«Что можно загрузить»</td><td><code>DataGrid</code> (<code>ou-grid</code>), кнопки <code>Button variant="ghost" size="s"</code></td><td>—</td><td>Шаблон и руководство — как нынешние кнопки под загрузчиком</td></tr>
               <tr><td>Целевой тест книги</td><td><code>Select searchable</code> (<code>ou-select</code> + <code>ou-select__search</code>), один выбор, поиск по подстроке названия с подсветкой; первым пунктом «＋ Создать новый тест»</td><td>—</td><td>Сейчас на странице <code>Combobox</code> — по соглашению проекта (2026-09-22) он для множественного выбора; одиночный выбор с поиском — <code>Select searchable</code>, как поле «Тема» вопроса</td></tr>
+              <tr><td>Баннер распознанной выгрузки</td><td><code>Banner tone="info" variant="subtle"</code>: название теста и числа файла</td><td>—</td><td>Фраза «Тест определён по файлу — выбирать не нужно» снимается и в <code>lms-import-form.tsx</code>: технический комментарий, а не данные (владелец 2026-10-02)</td></tr>
               <tr><td>Группа выгрузки LMS</td><td><code>Select searchable</code>, один выбор, поиск по подстроке; первыми — «Без группы» и «＋ Создать новую группу»</td><td>—</td><td>Сейчас в <code>lms-import-form.tsx</code> — <code>Select</code> без поиска; групп бывают десятки</td></tr>
               <tr><td>Выбранный файл</td><td><code>FileItem</code> (<code>ou-file</code>)</td><td>—</td><td>В подписи — распознанный вид файла</td></tr>
               <tr><td>Пользователи</td><td><code>Tag dot</code>, <code>DataGrid</code>, <code>Select</code> действия, <code>Checkbox</code></td><td>—</td><td>Колонки окна сокращены в эскизе; в продукте — все колонки нынешнего окна</td></tr>
