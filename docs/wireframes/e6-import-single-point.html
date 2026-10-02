@@ -18,7 +18,6 @@
 
     Состояния:
       администратор — пусто; книга; выгрузка LMS; пользователи; пакет теста; шаблон;
-                      загрузки LMS по тесту;
       из меню теста — выгрузка LMS выбранного теста, чужой файл;
       менеджер      — пусто; пользователи (строка с ролью автора отклоняется до записи);
                       отказ по праву (принёс книгу);
@@ -125,7 +124,6 @@
       <button type="button" onclick="impState(this, 'admin', 'users')">пользователи</button>
       <button type="button" onclick="impState(this, 'admin', 'package')">пакет теста</button>
       <button type="button" onclick="impState(this, 'admin', 'template')">шаблон</button>
-      <button type="button" onclick="impState(this, 'admin', 'batches')">загрузки LMS</button>
       <span class="wf-nav-sep"></span>
       <span class="wf-nav-title">Из меню теста:</span>
       <button type="button" onclick="impState(this, 'admin', 'from-test')">выгрузка теста</button>
@@ -242,18 +240,6 @@
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                </div>
-              </section>
-              <section class="ou-card ou-card--outlined">
-                <header class="ou-card__header"><div class="ou-card__heading"><h3 class="ou-card__title">Загрузки выгрузок LMS</h3></div></header>
-                <div class="ou-card__body">
-                  <div class="ou-formfield wf-field-narrow">
-                    <label class="ou-formfield__lbl" for="adm-batches-test">Тест</label>
-                    <div class="ou-field ou-field--m"><div class="ou-field__box">
-                      <input class="ou-field__input" id="adm-batches-test" type="text" placeholder="Выберите тест" readonly />
-                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
-                    </div></div>
                   </div>
                 </div>
               </section>
@@ -472,48 +458,6 @@
               </section>
             </div>
 
-            <!-- ── загрузки LMS по выбранному тесту ── -->
-            <div id="admin-batches" class="wf-imp">
-              <section class="ou-card ou-card--outlined">
-                <header class="ou-card__header"><div class="ou-card__heading"><h3 class="ou-card__title">Загрузки выгрузок LMS</h3></div></header>
-                <div class="ou-card__body">
-                  <div class="ou-formfield wf-field-narrow">
-                    <label class="ou-formfield__lbl" for="adm-batches-test2">Тест</label>
-                    <div class="ou-field ou-field--m"><div class="ou-field__box">
-                      <input class="ou-field__input" id="adm-batches-test2" type="text" value="Определение ведущего стиля человекоцентричного лидерства" readonly />
-                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
-                    </div></div>
-                  </div>
-                  <div class="wf-mt-3">
-                    <div class="wf-batch">
-                      <div class="wf-batch__main">
-                        <span class="wf-batch__name">7684237229762827328-1.xlsx</span>
-                        <span class="wf-batch__meta">11.09.2026, 23:40 · Приёмка · группа «Поток сентябрь 2026»</span>
-                      </div>
-                      <span class="ou-tag ou-tag--neutral ou-tag--outline">3 строки</span>
-                      <label class="ou-switch-field">
-                        <span class="ou-switch ou-switch--s is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
-                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
-                      </label>
-                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
-                    </div>
-                    <div class="wf-batch">
-                      <div class="wf-batch__main">
-                        <span class="wf-batch__name">выгрузка-август.xlsx</span>
-                        <span class="wf-batch__meta">14.08.2026, 10:12 · Приёмка · без группы · не учитывается в расчётах — данные сохранены</span>
-                      </div>
-                      <span class="ou-tag ou-tag--neutral ou-tag--outline">18 строк</span>
-                      <label class="ou-switch-field">
-                        <span class="ou-switch ou-switch--s" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
-                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">В расчётах</span></span>
-                      </label>
-                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-
             <!-- ── пришли из меню теста: тест задан адресом ── -->
             <div id="admin-from-test" class="wf-imp">
               <section class="ou-card ou-card--outlined">
@@ -655,18 +599,6 @@
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                </div>
-              </section>
-              <section class="ou-card ou-card--outlined">
-                <header class="ou-card__header"><div class="ou-card__heading"><h3 class="ou-card__title">Загрузки выгрузок LMS</h3></div></header>
-                <div class="ou-card__body">
-                  <div class="ou-formfield wf-field-narrow">
-                    <label class="ou-formfield__lbl" for="mgr-batches-test">Тест</label>
-                    <div class="ou-field ou-field--m"><div class="ou-field__box">
-                      <input class="ou-field__input" id="mgr-batches-test" type="text" placeholder="Выберите тест" readonly />
-                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
-                    </div></div>
                   </div>
                 </div>
               </section>
@@ -823,7 +755,7 @@
               <tr><td>Менеджер и пользователи</td><td>Строка с ролью выше участника помечается ошибкой «роль «Автор» вам назначать нельзя» уже в предпросмотре, в счёт «Ошибок» и не в число импортируемых</td><td>Сервер и сегодня отклоняет такую строку (потолок ролей PRD-13), но только после записи</td></tr>
               <tr><td>Роль в предпросмотре</td><td>Названием роли, а не кодом: «Участник», «Автор»</td><td>Сейчас окно «Массовая загрузка пользователей» печатает код роли (<code>learner</code>, <code>author</code>) — исправляется вместе с переносом формы</td></tr>
               <tr><td>Отказ по праву</td><td>Файл распознан, права на вид нет: строка файла с видом и отказ «Книги с вопросами вам загружать нельзя» с перечнем доступных видов</td><td>Без «Импортировать» — делать нечего</td></tr>
-              <tr><td>Загрузки выгрузок LMS</td><td>Карточка «Загрузки выгрузок LMS»: выбор теста (по области видимости) без файла → список загрузок с «В расчётах» и откатом; <code>GET /api/analytics/lms-import/batches/:testId</code>, <code>PATCH</code> и <code>DELETE .../batches/:id</code></td><td>Только здесь — решение владельца; в аналитике теста списка больше нет</td></tr>
+              <tr><td>Загрузки выгрузок LMS</td><td>Часть шага выгрузки LMS, а не раздела: после распознавания файла — загрузки его теста; при входе из меню теста — загрузки этого теста сразу, без файла. «В расчётах» и откат — <code>PATCH</code> и <code>DELETE /api/analytics/lms-import/batches/:id</code>, список — <code>GET .../batches/:testId</code></td><td>Решение владельца 2026-10-02: на общей странице раздела списку не место — он не относится к другим видам файлов. В аналитике теста списка больше нет</td></tr>
               <tr><td>Вход из меню теста</td><td>Пункт «Загрузить выгрузку LMS» в меню «Действия» строки теста → <code>/author/import?testId=…</code>. Раздел встаёт сразу на выгрузку LMS этого теста: подзаголовок — название теста, ниже — его загрузки; файл другого теста отвергается</td><td>То, что делал <code>fixedTestId</code> окна. Обычный вид раздела — пунктом «Импорт» бокового меню (адрес без теста)</td></tr>
               <tr><td>Аналитика</td><td>Кнопка «Загрузить выгрузку LMS» и окно <code>LmsImportDialog</code> уходят с обеих страниц аналитики</td><td>Шапка аналитики теста: «Экспорт Excel», «Прохождения теста», «Обновить»</td></tr>
               <tr><td>Формы видов</td><td>Не изобретаются: книга — согласованный эскиз prd14; выгрузка LMS — prd54; пользователи — окно «Массовая загрузка пользователей»; пакет — окно «Импорт теста»; шаблон — окно «Загрузка шаблона». Формы выносятся в общие компоненты и встают и в своё окно, и на страницу</td><td>В эскизе каждый вид показан одним характерным состоянием; прочие состояния — в согласованных эскизах и в коде окон</td></tr>
@@ -837,15 +769,14 @@
             <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Токены</th><th>Примечания</th></tr></thead>
             <tbody>
               <tr><td>Заголовок страницы</td><td><code>PageHeader</code> проекта (<code>Text h1 heading-l</code> + описание <code>muted</code>)</td><td><code>--ou-space-6</code> под ним</td><td>Как сейчас в <code>import.tsx</code></td></tr>
-              <tr><td>Карточки</td><td><code>Card variant="outlined"</code></td><td><code>--ou-space-5</code> между карточками</td><td>«Загрузка файла» и «Загрузки выгрузок LMS»</td></tr>
+              <tr><td>Карточки</td><td><code>Card variant="outlined"</code></td><td><code>--ou-space-5</code> между карточками</td><td>«Загрузка файла»; при входе из меню теста — «Загрузка выгрузки LMS»</td></tr>
               <tr><td>Зона загрузки</td><td><code>FileUploader</code> (<code>ou-uploader</code>) с <code>accept</code> по правам читателя</td><td>—</td><td>Подпись перечисляет только доступные форматы</td></tr>
               <tr><td>«Что можно загрузить»</td><td><code>DataGrid</code> (<code>ou-grid</code>), кнопки <code>Button variant="ghost" size="s"</code></td><td>—</td><td>Шаблон и руководство — как нынешние кнопки под загрузчиком</td></tr>
               <tr><td>Выбранный файл</td><td><code>FileItem</code> (<code>ou-file</code>)</td><td>—</td><td>В подписи — распознанный вид файла</td></tr>
               <tr><td>Пользователи</td><td><code>Tag dot</code>, <code>DataGrid</code>, <code>Select</code> действия, <code>Checkbox</code></td><td>—</td><td>Колонки окна сокращены в эскизе; в продукте — все колонки нынешнего окна</td></tr>
               <tr><td>Пакет теста</td><td><code>Checkbox</code> частей, <code>CardKpi</code></td><td>—</td><td>Таблица тем и переключатели режимов — как в окне «Импорт теста»</td></tr>
               <tr><td>Отказы и результаты</td><td><code>Banner</code> error / success, <code>subtle</code></td><td>—</td><td>Отказ по праву — иконка <code>Ban</code> из lucide</td></tr>
-              <tr><td>Выбор теста загрузок</td><td><code>Combobox</code> с поиском</td><td>—</td><td>Тестов бывает сотни</td></tr>
-              <tr><td>Строка загрузки</td><td>как в prd54: <code>Text</code>, <code>Tag</code>, <code>Switch</code>, <code>Button ghost</code></td><td><code>--ou-border-soft</code></td><td>—</td></tr>
+                            <tr><td>Строка загрузки</td><td>как в prd54: <code>Text</code>, <code>Tag</code>, <code>Switch</code>, <code>Button ghost</code></td><td><code>--ou-border-soft</code></td><td>—</td></tr>
               <tr><td>Пункт меню теста</td><td>строка <code>dropdown-item</code> меню «Действия» (как соседние) с иконкой <code>Upload</code></td><td>—</td><td>В эскизе меню показано классами <code>ou-menu</code></td></tr>
             </tbody>
           </table>
