@@ -65,6 +65,11 @@
       #admin-workbook .wf-open-static { position: relative; }
       /* В продукте меню выводится порталом поверх карточки; в эскизе карточка его не обрезает. */
       #admin-workbook .ou-card { overflow: visible; }
+      #admin-lms .wf-open-static .ou-select__menu { display: flex; }
+      #admin-lms .wf-open-static .ou-select__trigger { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
+      #admin-lms .wf-open-static .ou-select__chev { transform: rotate(180deg); }
+      #admin-lms .wf-open-static { position: relative; }
+      #admin-lms .ou-card { overflow: visible; }
       .wf-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--ou-space-3); }
       /* Меню строки теста открыто «как есть», без портала. */
       .wf-menu-stage { position: relative; max-width: var(--wf-size-320); }
@@ -310,12 +315,27 @@
                       <p class="ou-banner__desc">14 вопросов, 4 шкалы, 4 показателя. Тест определён по файлу — выбирать не нужно.</p>
                     </div>
                   </div>
-                  <div class="ou-formfield wf-mt-3">
-                    <label class="ou-formfield__lbl" for="imp-group">Группа</label>
-                    <div class="ou-field ou-field--m"><div class="ou-field__box">
-                      <input class="ou-field__input" id="imp-group" type="text" value="Без группы" readonly />
-                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
-                    </div></div>
+                  <!-- Группа: Select searchable — один выбор, поиск по части названия. Меню раскрыто. -->
+                  <div class="ou-select ou-field--m ou-field--full wf-open-static wf-mt-3 wf-field-narrow">
+                    <label class="ou-field__lbl" for="imp-group">Группа</label>
+                    <div class="ou-select__control">
+                      <button type="button" class="ou-field__box ou-select__trigger" id="imp-group" aria-haspopup="listbox" aria-expanded="true">
+                        <span class="ou-select__value">Без группы</span>
+                        <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                    </div>
+                    <div class="ou-select__menu">
+                      <div class="ou-select__search">
+                        <svg class="ou-select__search-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <input class="ou-select__search-input" type="text" value="розн" aria-label="Поиск по названию группы" autocomplete="off">
+                      </div>
+                      <ul class="ou-select__list" role="listbox" aria-labelledby="imp-group">
+                        <li class="ou-select__opt is-selected" role="option" aria-selected="true">Без группы</li>
+                        <li class="ou-select__opt" role="option" aria-selected="false">＋ Создать новую группу</li>
+                        <li class="ou-select__opt is-active" role="option" aria-selected="false"><mark>Розн</mark>ица</li>
+                        <li class="ou-select__opt" role="option" aria-selected="false"><mark>Розн</mark>ичные продажи — Поволжье</li>
+                      </ul>
+                    </div>
                   </div>
                   <div class="ou-check-group wf-mt-4">
                     <label class="ou-check ou-check--s">
@@ -398,7 +418,7 @@
                             <td><span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Участник</span></td>
                             <td><span class="ou-tag ou-tag--success ou-tag--s">Розница</span></td>
                             <td><span class="ou-tag ou-tag--warning ou-tag--s">Дубль</span></td>
-                            <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Пропустить" readonly aria-label="Действие" /><svg width="14" height="14" class="wf-sel-chev"><use href="#i-chevron-down" /></svg></div></div></td>
+                            <td><div class="ou-select ou-field--s"><div class="ou-select__control"><button type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Действие"><span class="ou-select__value">Пропустить</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></div></div></td>
                           </tr>
                         </tbody>
                       </table>
@@ -533,12 +553,14 @@
                       <p class="ou-banner__desc">22 вопроса, 3 шкалы. Тест определён по файлу — выбирать не нужно.</p>
                     </div>
                   </div>
-                  <div class="ou-formfield wf-mt-3">
-                    <label class="ou-formfield__lbl" for="imp-group-ft">Группа</label>
-                    <div class="ou-field ou-field--m"><div class="ou-field__box">
-                      <input class="ou-field__input" id="imp-group-ft" type="text" value="Без группы" readonly />
-                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
-                    </div></div>
+                  <div class="ou-select ou-field--m ou-field--full wf-mt-3 wf-field-narrow">
+                    <label class="ou-field__lbl" for="imp-group-ft">Группа</label>
+                    <div class="ou-select__control">
+                      <button type="button" class="ou-field__box ou-select__trigger" id="imp-group-ft" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ou-select__value">Без группы</span>
+                        <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                    </div>
                   </div>
                   <div class="ou-check-group wf-mt-4">
                     <label class="ou-check ou-check--s">
@@ -707,7 +729,7 @@
                             <td><span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Участник</span></td>
                             <td><span class="ou-tag ou-tag--success ou-tag--s">Розница</span></td>
                             <td><span class="ou-tag ou-tag--warning ou-tag--s">Дубль</span></td>
-                            <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Пропустить" readonly aria-label="Действие" /><svg width="14" height="14" class="wf-sel-chev"><use href="#i-chevron-down" /></svg></div></div></td>
+                            <td><div class="ou-select ou-field--s"><div class="ou-select__control"><button type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Действие"><span class="ou-select__value">Пропустить</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></div></div></td>
                           </tr>
                         </tbody>
                       </table>
@@ -825,6 +847,7 @@
               <tr><td>Зона загрузки</td><td><code>FileUploader</code> (<code>ou-uploader</code>) с <code>accept</code> по правам читателя</td><td>—</td><td>Подпись перечисляет только доступные форматы</td></tr>
               <tr><td>«Что можно загрузить»</td><td><code>DataGrid</code> (<code>ou-grid</code>), кнопки <code>Button variant="ghost" size="s"</code></td><td>—</td><td>Шаблон и руководство — как нынешние кнопки под загрузчиком</td></tr>
               <tr><td>Целевой тест книги</td><td><code>Select searchable</code> (<code>ou-select</code> + <code>ou-select__search</code>), один выбор, поиск по подстроке названия с подсветкой; первым пунктом «＋ Создать новый тест»</td><td>—</td><td>Сейчас на странице <code>Combobox</code> — по соглашению проекта (2026-09-22) он для множественного выбора; одиночный выбор с поиском — <code>Select searchable</code>, как поле «Тема» вопроса</td></tr>
+              <tr><td>Группа выгрузки LMS</td><td><code>Select searchable</code>, один выбор, поиск по подстроке; первыми — «Без группы» и «＋ Создать новую группу»</td><td>—</td><td>Сейчас в <code>lms-import-form.tsx</code> — <code>Select</code> без поиска; групп бывают десятки</td></tr>
               <tr><td>Выбранный файл</td><td><code>FileItem</code> (<code>ou-file</code>)</td><td>—</td><td>В подписи — распознанный вид файла</td></tr>
               <tr><td>Пользователи</td><td><code>Tag dot</code>, <code>DataGrid</code>, <code>Select</code> действия, <code>Checkbox</code></td><td>—</td><td>Колонки окна сокращены в эскизе; в продукте — все колонки нынешнего окна</td></tr>
               <tr><td>Пакет теста</td><td><code>Checkbox</code> частей, <code>CardKpi</code></td><td>—</td><td>Таблица тем и переключатели режимов — как в окне «Импорт теста»</td></tr>
