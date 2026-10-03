@@ -524,6 +524,26 @@ describe("срезы на уровне теста (Э3)", () => {
     expect(storageMock.updateSlice).not.toHaveBeenCalled();
   });
 
+  it("разбивка по оси считается в выборке с условиями уровня теста (Э3.2)", async () => {
+    const conditions = encodeURIComponent(JSON.stringify({ sources: ["web"], groupIds: ["g1"] }));
+    await ask(`?testId=test1&axis=source&conditions=${conditions}`);
+
+    const query = storageMock.selectObservations.mock.calls[0][0];
+    expect(query.testIds).toEqual(["test1"]);
+    expect(query.sources).toEqual(["web"]);
+    expect(query.groupIds).toEqual(["g1"]);
+  });
+
+  it("меню «Сохранённые» получает срезы теста без расчёта (Э3.2)", async () => {
+    const res = await request(makeApp()).get("/api/analytics/slices/saved?testId=test1").set("x-test-user", "u-owner");
+
+    expect(res.status).toBe(200);
+    expect(res.body.slices).toEqual([{ id: "s1", name: "Отдел продаж", conditions: { groupIds: ["g1"] } }]);
+    expect(storageMock.getSlices).toHaveBeenCalledWith("u-owner", "slice", "test1");
+    // Без расчёта: наблюдения не читаются.
+    expect(storageMock.selectObservations).not.toHaveBeenCalled();
+  });
+
   it("несуществующий тест — 404", async () => {
     storageMock.getTest.mockResolvedValue(undefined);
     const res = await ask("?testId=nope");

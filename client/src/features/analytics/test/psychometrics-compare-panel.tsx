@@ -1,6 +1,6 @@
 /**
  * @module features/analytics/test/psychometrics-compare-panel
- * @description PRD-66 FR-04b: режим сравнения срезов на вкладке «Качество вопросов».
+ * @description PRD-66 FR-04b: сравнение срезов по качеству вопросов.
  *
  * Слоты, выбор сохранённого среза, условия, их правка и предел в четыре взяты у раздела
  * «Аналитика» (PRD-56 FR-07, FR-07g) БЕЗ изменений — тем же компонентом
@@ -11,48 +11,42 @@
  * отдельной сущности «эталон» в продукте нет, и вопрос «а как у всех?» решается тем же
  * механизмом, что сравнение двух групп.
  *
- * Эскиз: docs/wireframes/prd66-item-quality.html, состояние `compare`. Весь режим — одна
- * карточка «Сравнение срезов»: в подзаголовке названо, что сравнивается и сколько в каждом
- * прохождений, в шапке — переключатель «Одна выборка / Сравнение», которым из режима выходят.
+ * Э3.2 (эскиз approved/e3-test-and-question.html, состояние test-compare-quality): сравнение
+ * переехало с «Качества вопросов» во вкладку «Срезы» теста — сравнение одно, а «Качество
+ * вопросов» — второй вид его метрик рядом с «Результатом и темами». Карточку, режимы и
+ * переключатель метрик держит вкладка; здесь — слоты и таблицы. Слоты общие с «Результатом и
+ * темами» (управляемые снаружи): переключение метрик не сбрасывает выбор.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import {
-  Card, CardBody, CardHeader, SegmentedControl, Stack, Text,
-} from "@skillum/ui-kit";
+import { Stack, Text } from "@skillum/ui-kit";
 
 import { conditionsToFilter, describeConditions } from "../registry/filter-state";
 import { useRegistryDictionaries } from "../registry/use-dictionaries";
 import { SliceSlots } from "../slices/slice-slots";
 import { PsychometricsCompare, passagesLabel, type PsychometricsSlice } from "./psychometrics-compare";
 
-export interface PsychometricsComparePanelProps {
+export interface PsychometricsCompareBodyProps {
   testId: string;
   /** Режим попыток: он меняет числа сильнее любого фильтра и едет в запрос как есть. */
   firstAttemptOnly?: boolean;
-  /** Выйти из сравнения к одной выборке — переключателем в шапке карточки. */
-  onExit: () => void;
+  /** Выбранные срезы — общие с «Результатом и темами» вкладки «Срезы». */
+  slots: Array<string | null>;
+  onSlotsChange: (slots: Array<string | null>) => void;
+  /** Что стоит между слотами и таблицами — переключатель метрик вкладки. */
+  between?: ReactNode;
 }
-
-/** Сколько срезов словами — для подзаголовка «Два набора условий на одном тесте». */
-const COUNT_WORD: Record<number, string> = { 2: "Два", 3: "Три", 4: "Четыре" };
 
 /**
- * Подзаголовок карточки: что сравнивается и сколько в каждом прохождений.
+ * Слоты и таблицы сравнения по качеству вопросов.
  *
- * Единица названа один раз, у первого среза, как в эскизе: «— 214 прохождений, «Офис» — 272».
+ * @param props - тест, режим попыток, выбранные срезы и то, что встаёт между слотами и таблицами
+ * @returns слоты, переключатель метрик вкладки и таблицы сравнения
  */
-function subtitleOf(selected: readonly PsychometricsSlice[]): string {
-  if (selected.length < 2) return "Выберите хотя бы два среза — тогда появятся таблицы сравнения";
-  const parts = selected.map((slice, index) => (index === 0
-    ? `«${slice.name}» — ${passagesLabel(slice.respondents)}`
-    : `«${slice.name}» — ${slice.respondents}`));
-  return `${COUNT_WORD[selected.length] ?? selected.length} набора условий на одном тесте: ${parts.join(", ")}`;
-}
-
-export function PsychometricsComparePanel({ testId, firstAttemptOnly = true, onExit }: PsychometricsComparePanelProps) {
+export function PsychometricsCompareBody({
+  testId, firstAttemptOnly = true, slots, onSlotsChange, between,
+}: PsychometricsCompareBodyProps) {
   const [available, setAvailable] = useState<PsychometricsSlice[]>([]);
-  const [slots, setSlots] = useState<Array<string | null>>(["whole", null]);
   const [failed, setFailed] = useState(false);
   /** Счётчик перезагрузок: правка условий меняет числа, и срезы надо пересчитать. */
   const [reloads, setReloads] = useState(0);
@@ -72,7 +66,7 @@ export function PsychometricsComparePanel({ testId, firstAttemptOnly = true, onE
         );
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json() as { slices: PsychometricsSlice[] };
-        if (alive) setAvailable(data.slices);
+        if (alive) setAvailable(data.slices ?? []);
       } catch {
         if (alive) setFailed(true);
       }
@@ -91,47 +85,27 @@ export function PsychometricsComparePanel({ testId, firstAttemptOnly = true, onE
   const conditionsOf = useMemo(
     () => new Map(available.map(slice => [
       slice.id,
-      describeConditions(conditionsToFilter(slice.conditions ?? {}), dictionaries),
+      // Тест в подписи не называется: он задан страницей, у всех срезов сравнения один.
+      describeConditions({ ...conditionsToFilter(slice.conditions ?? {}), testIds: [] }, dictionaries),
     ])),
     [available, dictionaries],
   );
 
+  if (failed) return <Text tone="error">Не удалось загрузить срезы. Обновите страницу.</Text>;
+
   return (
-    <Card variant="outlined">
-      <CardHeader
-        title="Сравнение срезов"
-        subtitle={subtitleOf(selected)}
-        trail={(
-          <SegmentedControl
-            size="s"
-            aria-label="Режим вкладки"
-            value="compare"
-            onChange={value => { if (value === "sample") onExit(); }}
-            items={[
-              { value: "sample", label: "Одна выборка" },
-              { value: "compare", label: "Сравнение" },
-            ]}
-          />
-        )}
+    <Stack gap={4}>
+      <SliceSlots
+        slots={slots}
+        onSlotsChange={onSlotsChange}
+        available={available}
+        conditionsOf={conditionsOf}
+        countLabel={slice => passagesLabel(slice.respondents)}
+        onConditionsSaved={() => setReloads(value => value + 1)}
+        minSlots={2}
       />
-      <CardBody>
-        {failed ? (
-          <Text tone="error">Не удалось загрузить срезы. Обновите страницу.</Text>
-        ) : (
-          <Stack gap={4}>
-            <SliceSlots
-              slots={slots}
-              onSlotsChange={setSlots}
-              available={available}
-              conditionsOf={conditionsOf}
-              countLabel={slice => passagesLabel(slice.respondents)}
-              onConditionsSaved={() => setReloads(value => value + 1)}
-              minSlots={2}
-            />
-            <PsychometricsCompare slices={selected} />
-          </Stack>
-        )}
-      </CardBody>
-    </Card>
+      {between}
+      <PsychometricsCompare slices={selected} />
+    </Stack>
   );
 }

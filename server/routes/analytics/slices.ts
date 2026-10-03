@@ -168,6 +168,25 @@ function withinFrame(
 }
 
 /**
+ * Условия из параметра `conditions` (JSON на языке реестра); испорченные — как отсутствующие.
+ *
+ * Условия приезжают из адреса и могут быть испорчены при пересылке: экран аналитики не место
+ * для разбора чужих ссылок, поэтому плохой JSON читается как «условий нет».
+ */
+function conditionsParam(value: unknown): Record<string, unknown> | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Группы, которыми описан срез, — основание считать ему «назначено» (FR-06).
  *
  * Пустой список значит «срез без условий», то есть тест целиком: назначено там всем, кому тест
@@ -217,6 +236,29 @@ router.get("/filters", requirePermission("analytics.read"), async (req: Request,
   }
 });
 
+/**
+ * GET /api/analytics/slices/saved?testId= — сохранённые срезы теста БЕЗ расчёта (Э3.2).
+ *
+ * Меню «Сохранённые» фильтра уровня теста подставляет условия среза в фильтр — считать для этого
+ * величины каждого среза (как `GET /slices`) незачем: меню открывают, чтобы выбрать, а не сравнить.
+ */
+router.get("/slices/saved", requirePermission("analytics.read"), async (req: Request, res: Response) => {
+  try {
+    const testId = typeof req.query.testId === "string" ? req.query.testId.trim() : "";
+    if (!testId) return res.status(400).json({ error: "Нужен тест: срезы живут на уровне теста" });
+    const denied = await denyOutsideTest(req, testId);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
+
+    const saved = await storage.getSlices(req.currentUser?.id ?? "", "slice", testId);
+    res.json({
+      slices: saved.map(item => ({ id: item.id, name: item.name, conditions: item.conditionsJson })),
+    });
+  } catch (error) {
+    logger.error("List saved slices error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to list slices" });
+  }
+});
+
 // GET /api/analytics/slices — сохранённые срезы с посчитанными величинами
 router.get("/slices", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
@@ -243,8 +285,10 @@ router.get("/slices", requirePermission("analytics.read"), async (req: Request, 
     }
 
     if (axis) {
+      // Э3.2: разбивка стоит на «Обзоре» теста и подчиняется его фильтру — условия уровня теста
+      // приходят параметром `conditions` и сужают выборку, которую режет ось.
       const { rows } = await loadObservations(
-        { testIds: [testId], ...(from ? { from } : {}), ...(to ? { to } : {}) },
+        withinFrame(conditionsOf(conditionsParam(req.query.conditions) ?? {}), testId, from, to),
         scope,
       );
       const buckets = splitByAxis(rows, axis as SliceAxis, await axisContext(testId));
@@ -310,20 +354,7 @@ router.get("/slices", requirePermission("analytics.read"), async (req: Request, 
      * обычный вопрос, а заставлять ради него придумывать имя и заводить строку в списке
      * значит копить мусор из срезов, нужных на одну минуту.
      */
-    const adhoc = ((): Record<string, unknown> | null => {
-      const raw = typeof req.query.conditions === "string" ? req.query.conditions.trim() : "";
-      if (!raw) return null;
-      try {
-        const parsed = JSON.parse(raw) as unknown;
-        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-          ? parsed as Record<string, unknown>
-          : null;
-      } catch {
-        // Условия приезжают из адреса и могут быть испорчены при пересылке: молча считаем,
-        // что их нет, — экран аналитики не место для разбора чужих ссылок.
-        return null;
-      }
-    })();
+    const adhoc = conditionsParam(req.query.conditions);
 
     // Временный срез из строки списка несёт своё имя («Розница»); отбор из реестра имени не
     // имеет и остаётся «Текущим отбором». Длина ограничена: имя приезжает из адреса.
@@ -419,11 +450,9 @@ router.get("/slices/topics", requirePermission("analytics.read"), async (req: Re
     const scope = await analyticsScope(req);
     const from = dateOf(req.query.from, "start");
     const to = dateOf(req.query.to, "end");
-    const frame = {
-      testIds: [testId],
-      ...(from ? { from } : {}),
-      ...(to ? { to } : {}),
-    };
+    // Э3.2: разворот строки разбивки считается в той же выборке, что сама строка, — с условиями
+    // уровня теста.
+    const frame = withinFrame(conditionsOf(conditionsParam(req.query.conditions) ?? {}), testId, from, to);
 
     /** Прохождения ЭТОГО среза: разбиением по оси либо условиями сохранённого среза. */
     let observations;

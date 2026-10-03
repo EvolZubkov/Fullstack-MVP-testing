@@ -10,7 +10,7 @@
  * Оттуда же порядок: сначала слоты срезов, затем «Прохождения и результат», затем «Доля
  * верных ответов» — объёмы отвечают на «кого сравниваем», доли по темам на «где расходятся».
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Button, EmptyState, Stack, Text } from "@skillum/ui-kit";
 
@@ -38,6 +38,14 @@ export interface SliceCompareProps {
    * не «Текущий отбор»: безымянная колонка заставила бы гадать, какую строку сюда принесли.
    */
   adhocName?: string | null;
+  /**
+   * Э3.2: выбранные срезы — снаружи, общие с «Качеством вопросов» вкладки «Срезы»: смена метрик
+   * не должна сбрасывать выбор. Без них компонент держит выбор сам.
+   */
+  slots?: Array<string | null>;
+  onSlotsChange?: (slots: Array<string | null>) => void;
+  /** Что стоит между слотами и таблицами — переключатель метрик вкладки (эскиз). */
+  between?: ReactNode;
 }
 
 /** Сколько условий видно в подписи столбца до свёртки в «ещё N» (FR-07f). */
@@ -148,10 +156,14 @@ function ColumnHead(props: { name: string; conditions: Array<{ id: string; label
   );
 }
 
-export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompareProps) {
+export function SliceCompare({
+  testId, from, to, adhoc, adhocName, slots: outerSlots, onSlotsChange, between,
+}: SliceCompareProps) {
   const [available, setAvailable] = useState<SliceRow[]>([]);
   /** Слоты сравнения: по одному на срез, пустой слот — «не выбран» (эскиз, состояние compare). */
-  const [slots, setSlots] = useState<Array<string | null>>([null]);
+  const [ownSlots, setOwnSlots] = useState<Array<string | null>>([null]);
+  const slots = outerSlots ?? ownSlots;
+  const setSlots = onSlotsChange ?? setOwnSlots;
   const [failed, setFailed] = useState(false);
   /** Счётчик перезагрузок: правка условий меняет числа, и список надо пересчитать. */
   const [reloads, setReloads] = useState(0);
@@ -177,7 +189,7 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
         });
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json() as { slices: SliceRow[] };
-        if (alive) setAvailable(data.slices);
+        if (alive) setAvailable(data.slices ?? []);
       } catch {
         if (alive) setFailed(true);
       }
@@ -194,7 +206,9 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
    */
   useEffect(() => {
     if (!adhoc) return;
-    setSlots(prev => (prev.length === 1 && prev[0] === null ? ["adhoc"] : prev));
+    if (slots.length === 1 && slots[0] === null) setSlots(["adhoc"]);
+    // Только при приходе отбора: дальше выбор — дело читателя.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adhoc]);
 
   const selected = useMemo(
@@ -207,7 +221,8 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
   const conditionsOf = useMemo(
     () => new Map(available.map(slice => [
       slice.id,
-      describeConditions(conditionsToFilter(slice.conditions), dictionaries),
+      // Тест в подписи не называется: он задан страницей, у всех срезов сравнения один.
+      describeConditions({ ...conditionsToFilter(slice.conditions), testIds: [] }, dictionaries),
     ])),
     [available, dictionaries],
   );
@@ -248,6 +263,7 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
         countLabel={slice => `${slice.completed} завершённых`}
         onConditionsSaved={() => setReloads(value => value + 1)}
       />
+      {between}
 
       {selected.length === 0 ? (
         // Срезов может не быть вовсе: тогда сравнивать нечего, и экран обязан сказать, где их
@@ -258,7 +274,7 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
             ? "Сохранённых срезов пока нет"
             : "Выберите срезы, которые нужно сравнить"}
           description={available.length === 0
-            ? "Срез сохраняют на вкладке «Прохождения»: отберите нужные условия в фильтре и нажмите «Сохранить как срез»."
+            ? "Срез сохраняют из фильтра теста: отберите нужные условия и нажмите «Сохранить как срез»."
             : "Выберите два среза — тогда появится столбец «Разница»."}
         />
       ) : (

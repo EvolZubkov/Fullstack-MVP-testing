@@ -286,7 +286,7 @@ describe("PassageRegistry — сортировка по попытке и гру
   }
 });
 
-describe("PassageRegistry — сохранение среза", () => {
+describe("PassageRegistry — сохранение фильтра", () => {
   it("показывает НОМЕР ПОПЫТКИ, а где его нет — прочерк", async () => {
     // Строка «45 %» не отвечает на вопрос, первый это заход или четвёртый после трёх
     // провалов. У импортированного прохождения истории участника может не быть вовсе, и
@@ -311,58 +311,57 @@ describe("PassageRegistry — сохранение среза", () => {
     expect(within(withoutNumber).getAllByText("—").length).toBeGreaterThan(0);
   });
 
-  it("при нескольких тестах СПРАШИВАЕТ, по какому сохранять срез", async () => {
-    // Срез — выборка ОДНОГО теста (решение владельца 2026-09-25), но заставлять автора
-    // пересобирать отбор незачем: условия он уже набрал, не хватает только теста.
+  // Э3.2 (решение владельца 2026-10-03): срез без теста существовать не может, и сохранение
+  // среза ушло в фильтр уровня теста. Здесь остаётся сохранённый ФИЛЬТР — набор условий реестра.
+  it("сохранить отбор срезом здесь нельзя — только фильтром (Э3.2)", async () => {
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1", "t2"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["web"], outcomes: [] }}
+        filter={{ testIds: ["t1"], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
 
     await screen.findByText("Морозова Анна");
-    await userEvent.click(screen.getByRole("button", { name: /Сохранить как срез/ }));
-
-    // Выбор — только из тестов ВЫБОРКИ: срез сужает уже отобранное, а не открывает каталог.
-    expect(await screen.findByText(/по какому тесту/i)).toBeTruthy();
-    expect(screen.getByText(/прочие тесты в условия среза не войдут/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Сохранить как срез/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Сохранить фильтр/ })).toBeEnabled();
   });
 
-  it("срез сохраняется по ВЫБРАННОМУ тесту, прочие условия переносятся", async () => {
+  it("не предлагает сохранить фильтр, когда условий нет", async () => {
     render(
       <PassageRegistry
-        filter={{ testIds: ["t1", "t2"], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["web"], outcomes: [] }}
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
         onFilterChange={() => {}}
       />,
     );
 
     await screen.findByText("Морозова Анна");
-    await userEvent.click(screen.getByRole("button", { name: /Сохранить как срез/ }));
-    await userEvent.type(screen.getByLabelText(/Название среза/i), "Розница по сертификации");
+    expect(screen.getByRole("button", { name: /Сохранить фильтр/ })).toBeDisabled();
+  });
+
+  it("сохраняет отбор фильтром со всеми тестами выборки", async () => {
+    render(
+      <PassageRegistry
+        filter={{ testIds: ["t1", "t2"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["import"], outcomes: [] }}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /Сохранить фильтр/ }));
+    // Фильтр — условия, а не состав: сказано там, где нажимают «сохранить».
+    expect(screen.getByText(/Фильтр хранит УСЛОВИЯ отбора/)).toBeTruthy();
+
+    await userEvent.type(screen.getByLabelText(/Название фильтра/), "Импорт по двум тестам");
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
-    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/analytics/slices"));
-    const body = JSON.parse(String((call?.[1] as RequestInit | undefined)?.body ?? "{}"));
-    expect(body.kind).toBe("slice");
-    // Тест ровно один — выбранный; группы и источники остаются как были.
-    expect(body.conditions.testIds).toHaveLength(1);
-    expect(body.conditions.groupIds).toEqual(["g1"]);
-    expect(body.conditions.sources).toEqual(["web"]);
-  });
-
-  it("без теста в выборке срез сохранить нельзя: выбирать не из чего", async () => {
-    render(
-      <PassageRegistry
-        filter={{ testIds: [], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
-        onFilterChange={() => {}}
-      />,
-    );
-
-    await screen.findByText("Морозова Анна");
-    expect(screen.getByRole("button", { name: /Сохранить как срез/ })).toBeDisabled();
-    // Фильтром — можно: он и существует ради выборок шире одного теста.
-    expect(screen.getByRole("button", { name: /Сохранить фильтр/ })).toBeEnabled();
+    await waitFor(() => {
+      const saved = fetchMock.mock.calls.find(call => String(call[0]).endsWith("/api/analytics/slices"));
+      expect(saved).toBeTruthy();
+      expect(JSON.parse(String((saved![1] as RequestInit).body))).toMatchObject({
+        name: "Импорт по двум тестам",
+        kind: "filter",
+        conditions: { testIds: ["t1", "t2"], sources: ["import"] },
+      });
+    });
   });
 
   it("сохранённый фильтр можно применить к реестру", async () => {
@@ -385,42 +384,4 @@ describe("PassageRegistry — сохранение среза", () => {
     );
   });
 
-  it("не предлагает сохранить срез, когда условий нет", async () => {
-    render(
-      <PassageRegistry
-        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
-        onFilterChange={() => {}}
-      />,
-    );
-
-    await screen.findByText("Морозова Анна");
-    expect(screen.getByRole("button", { name: /Сохранить как срез/ })).toBeDisabled();
-  });
-
-  it("сохраняет отбор срезом и говорит, что хранятся условия, а не состав", async () => {
-    render(
-      <PassageRegistry
-        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: ["import"], outcomes: [] }}
-        onFilterChange={() => {}}
-      />,
-    );
-
-    await userEvent.click(await screen.findByRole("button", { name: /Сохранить как срез/ }));
-
-    // FR-07d: срез — это условия, а не снимок состава. Сказать об этом нужно там, где
-    // человек нажимает «сохранить», иначе он примет срез за список людей.
-    expect(screen.getByText(/пересчитывается при каждом открытии/i)).toBeTruthy();
-
-    await userEvent.type(screen.getByLabelText(/Название среза/), "Импорт по тесту");
-    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
-
-    await waitFor(() => {
-      const saved = fetchMock.mock.calls.find(call => String(call[0]).endsWith("/api/analytics/slices"));
-      expect(saved).toBeTruthy();
-      expect(JSON.parse(String((saved![1] as RequestInit).body))).toMatchObject({
-        name: "Импорт по тесту",
-        conditions: { testIds: ["t1"], sources: ["import"] },
-      });
-    });
-  });
 });

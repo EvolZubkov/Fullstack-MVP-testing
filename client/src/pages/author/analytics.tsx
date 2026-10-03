@@ -17,8 +17,6 @@ import { ExportDialog } from "@/features/analytics/registry/export-dialog";
 import { PassageRegistry, type RegistryRow } from "@/features/analytics/registry/passage-registry";
 
 import {
-  conditionsToFilter,
-  countConditions,
   EMPTY_FILTER,
   type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
@@ -31,10 +29,10 @@ import { AnalyticsHeader } from "@/features/analytics/levels/analytics-header";
 
 /** Вкладки общего уровня. Первая — по умолчанию. */
 // Э3.0: «Тесты» — первая вкладка и вкладка по умолчанию: единая точка входа в аналитику теста.
-const GENERAL_ANALYTICS_TABS = ["tests", "attempts", "slices", "attention"] as const;
+// Э3.2: «Срезы» ушли на уровень теста — срез без теста существовать не может.
+const GENERAL_ANALYTICS_TABS = ["tests", "attempts", "attention"] as const;
 import { percent } from "@/features/analytics/format";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
-import { SlicesTab } from "@/features/analytics/slices/slices-tab";
 import { AttentionQueue, type AttentionData, type AttentionRow } from "@/features/analytics/attention/attention-queue";
 import { DEFAULT_ATTENTION_PERIOD, type AttentionPeriod } from "@shared/analytics/attention-period";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -74,13 +72,6 @@ export default function AnalyticsPage() {
   /** PRD-56 FR-04: окно выгрузки отфильтрованного — открывается из панели фильтра реестра. */
   const [exportOpen, setExportOpen] = useState(false);
   /**
-   * Отбор, отправленный из реестра в сравнение (FR-07b).
-   *
-   * Держится состоянием страницы, а не адресом: это не выборка, а НАМЕРЕНИЕ сравнить —
-   * пересылать его ссылкой незачем, а вкладка «Срезы» о нём должна узнать сразу.
-   */
-  const [compareWith, setCompareWith] = useState<RegistryFilter | null>(null);
-  /**
    * Открытая вкладка. Держится состоянием, а не умолчанием, ради FR-08: переход из строки
    * среза открывает реестр и должен ПЕРЕКЛЮЧИТЬ экран, а не только подставить условия.
    */
@@ -102,16 +93,6 @@ export default function AnalyticsPage() {
   // считали — средний балл и pass rate ПО ВСЕМ тестам, тренды и проблемные темы вне контекста
   // теста, — неинтерпретируемы: смешивают разные пороги, шкалы и популяции. Их место заняли
   // срезы и очередь «требует внимания».
-
-  const { data: tests } = useQuery<{ id: string; title: string }[]>({
-    queryKey: ["/api/tests-list"],
-    queryFn: async () => {
-      const response = await fetch("/api/tests", { credentials: "include" });
-      if (!response.ok) throw new Error("Failed to fetch");
-      const data = await response.json();
-      return data.map((t: any) => ({ id: t.id, title: t.title }));
-    },
-  });
 
   const handleViewDetails = (attempt: CombinedAttempt) => {
     setSelectedAttempt(attempt);
@@ -241,63 +222,12 @@ export default function AnalyticsPage() {
                 // набора галочек для состава строк книги в продукте быть не должно — два
                 // описания одной выборки однажды разойдутся, и книга перестанет отвечать
                 // экрану (эскиз prd56-analytics-section.html, состояние reg-export).
+                // Э3.2: «Сравнить со срезом» ушло на уровень теста вместе со срезами.
                 actions={(
-                  <>
-                    {/* FR-07b: сравнить набранный отбор со срезом можно НЕ СОХРАНЯЯ его —
-                        сохранение нужно, когда срезом будут пользоваться и завтра, а вопрос
-                        «чем эти хуже тех» живёт одну минуту. */}
-                    <Button
-                      variant="secondary"
-                      size="s"
-                      disabled={countConditions(registryFilter) === 0}
-                      onClick={() => {
-                        setCompareWith(registryFilter);
-                        setTab("slices");
-                      }}
-                    >
-                      Сравнить со срезом
-                    </Button>
-                    <Button variant="secondary" size="s" onClick={() => setExportOpen(true)}>
-                      Экспорт
-                    </Button>
-                  </>
+                  <Button variant="secondary" size="s" onClick={() => setExportOpen(true)}>
+                    Экспорт
+                  </Button>
                 )}
-              />
-            ),
-          },
-          {
-            id: "slices",
-            label: "Срезы",
-            content: (
-              <SlicesTab
-                tests={tests ?? []}
-                // Условия уходят в сравнение БЕЗ теста: он там рамка расчёта, а не условие
-                // отбора (FR-07e), и приезжает отдельным полем.
-                adhoc={compareWith
-                  ? {
-                    groupIds: compareWith.groupIds,
-                    sources: compareWith.sources,
-                    outcomes: compareWith.outcomes,
-                    // Вариант и версия — такие же условия отбора: без них отбор «Вариант Б»
-                    // сравнивался бы как тест целиком.
-                    formIds: compareWith.formIds,
-                    snapshotIds: compareWith.snapshotIds,
-                    organizations: compareWith.organizations,
-                    units: compareWith.units,
-                    positions: compareWith.positions,
-                    ...(compareWith.from ? { from: compareWith.from } : {}),
-                    ...(compareWith.to ? { to: compareWith.to } : {}),
-                  }
-                  : null}
-                adhocTestId={compareWith?.testIds[0] ?? null}
-                onOpenRegistry={handleOpenSliceInRegistry}
-                // FR-24, переход «группа → тест»: условия среза едут в адрес аналитики теста,
-                // где их читает тот же разбор, что у реестра. Тест в условия не входит — он
-                // задан адресом страницы.
-                onOpenTestAnalytics={(openTestId, conditions) => {
-                  // Условия среза относятся к этому тесту: варианты и версии в них — его.
-                  openTestLevel(openTestId, { ...EMPTY_FILTER, ...conditionsToFilter(conditions), testIds: [openTestId] });
-                }}
               />
             ),
           },

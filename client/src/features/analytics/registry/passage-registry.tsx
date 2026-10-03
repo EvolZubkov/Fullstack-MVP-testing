@@ -18,7 +18,7 @@ import { BarChart3 } from "lucide-react";
 
 import {
   Button, Card, CardBody, CardHeader, DataGrid, FilterBar, IconButton, Input, Menu, MenuItem, MenuTrigger,
-  ModalDialog, Select, Stack, Tag, Text,
+  ModalDialog, Stack, Tag, Text,
   type SortDir,
 } from "@skillum/ui-kit";
 
@@ -147,12 +147,13 @@ export function PassageRegistry({
   /** Условия запроса: внутри теста к ним добавляется сам тест (Э3.1). */
   const scoped = useMemo(() => (testId ? { ...filter, testIds: [testId] } : filter), [filter, testId]);
   const [filterOpen, setFilterOpen] = useState(false);
-  /** Что именно сохраняем: `null` — окно закрыто (решение владельца 2026-09-25). */
-  const [saveOpen, setSaveOpen] = useState<"slice" | "filter" | null>(null);
+  /**
+   * Окно «Сохранить фильтр» открыто. Э3.2: «Сохранить как срез» с окном выбора теста ушло на
+   * уровень теста — срез без теста существовать не может, а здесь теста нет.
+   */
+  const [saveOpen, setSaveOpen] = useState(false);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [sliceName, setSliceName] = useState("");
-  /** Тест, по которому сохраняется срез: спрашивается, когда в выборке их несколько. */
-  const [sliceTestId, setSliceTestId] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [rows, setRows] = useState<RegistryRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -348,34 +349,23 @@ export function PassageRegistry({
   // Внутри теста сам тест условием отбора не считается: он задан страницей.
   const conditionCount = countConditions(testId ? { ...filter, testIds: [] } : filter);
 
-  /**
-   * Сохранить текущий отбор — фильтром или срезом (FR-07c и решение владельца 2026-09-25).
-   *
-   * Тест в теле не передаётся: сервер берёт его ИЗ УСЛОВИЙ, и второе поле рядом значило бы,
-   * что подпись среза и его выборка могут разойтись.
-   */
-  const saveSelection = async (kind: "slice" | "filter") => {
+  /** Сохранить текущий отбор фильтром (решение владельца 2026-09-25). */
+  const saveFilter = async () => {
     setSaveError(null);
     try {
-      // У СРЕЗА тест ровно один — выбранный в окне (решение владельца 2026-09-25, вариант Б).
-      // Прочие условия переносятся как есть: автор уже собрал их, и заставлять пересобирать
-      // отбор ради сужения по тесту незачем.
-      const conditions = kind === "slice"
-        ? { ...filter, testIds: [sliceTestId || filter.testIds[0]] }
-        : filter;
       const response = await fetch("/api/analytics/slices", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: sliceName.trim(), kind, conditions }),
+        body: JSON.stringify({ name: sliceName.trim(), kind: "filter", conditions: filter }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(data.error ?? "Не удалось сохранить");
       }
-      setSaveOpen(null);
+      setSaveOpen(false);
       setSliceName("");
-      if (kind === "filter") void loadFilters();
+      void loadFilters();
     } catch (error) {
       setSaveError((error as Error).message);
     }
@@ -440,27 +430,9 @@ export function PassageRegistry({
                   // FR-07c: сохранять нечего, пока не отобрано ничего. Кнопка выключена, а не
                   // спрятана: спрятанная не объясняет, почему действия нет.
                   disabled={conditionCount === 0}
-                  onClick={() => setSaveOpen("filter")}
+                  onClick={() => setSaveOpen(true)}
                 >
                   Сохранить фильтр
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="s"
-                  // СРЕЗ — ВЫБОРКА ОДНОГО ТЕСТА. Когда в выборке их несколько, окно спросит,
-                  // по какому сохранять: условия автор уже набрал, и пересобирать отбор ради
-                  // сужения незачем. А вот когда теста нет вовсе, выбирать не из чего —
-                  // выборка охватывает все доступные тесты, и это уже не сужение.
-                  disabled={filter.testIds.length === 0}
-                  title={filter.testIds.length === 0
-                    ? "Срез считается внутри одного теста: добавьте условие по тесту"
-                    : undefined}
-                  onClick={() => {
-                    setSliceTestId(filter.testIds[0] ?? "");
-                    setSaveOpen("slice");
-                  }}
-                >
-                  Сохранить как срез
                 </Button>
               </>
             }
@@ -471,23 +443,20 @@ export function PassageRegistry({
           />
 
           <ModalDialog
-            open={saveOpen !== null}
-            onClose={() => setSaveOpen(null)}
+            open={saveOpen}
+            onClose={() => setSaveOpen(false)}
             size="s"
-            title={saveOpen === "filter" ? "Сохранить фильтр" : "Сохранить как срез"}
-            // Обе роли хранят УСЛОВИЯ, а не состав участников, — и обе об этом говорят. Разница
-            // в том, что с ними потом делают: фильтр подставляется в реестр, срез считается.
-            description={saveOpen === "filter"
-              ? "Фильтр хранит УСЛОВИЯ отбора и подставляется в список прохождений. Тестов в нём может быть сколько угодно"
-              : "Срез хранит УСЛОВИЯ отбора одного теста и пересчитывается при каждом открытии: это не снимок состава участников"}
+            title="Сохранить фильтр"
+            // Фильтр хранит УСЛОВИЯ, а не состав участников, и подставляется в реестр.
+            description="Фильтр хранит УСЛОВИЯ отбора и подставляется в список прохождений. Тестов в нём может быть сколько угодно"
             footer={
               <>
-                <Button variant="ghost" size="m" onClick={() => setSaveOpen(null)}>Отмена</Button>
+                <Button variant="ghost" size="m" onClick={() => setSaveOpen(false)}>Отмена</Button>
                 <Button
                   variant="primary"
                   size="m"
                   disabled={!sliceName.trim()}
-                  onClick={() => void saveSelection(saveOpen ?? "slice")}
+                  onClick={() => void saveFilter()}
                 >
                   Сохранить
                 </Button>
@@ -499,7 +468,7 @@ export function PassageRegistry({
             <Stack gap={4}>
               <Stack gap={1}>
                 <label htmlFor="slice-name">
-                  <Text variant="body-s">{saveOpen === "filter" ? "Название фильтра" : "Название среза"}</Text>
+                  <Text variant="body-s">Название фильтра</Text>
                 </label>
                 <Input
                   id="slice-name"
@@ -508,32 +477,9 @@ export function PassageRegistry({
                   placeholder="Например: Розница, не сдали"
                 />
               </Stack>
-              {/*
-                Тест спрашивается, только когда их в выборке несколько: при одном он уже
-                определён, и выбор из одного пункта — лишний вопрос. Список — ТОЛЬКО тесты
-                выборки: срез сужает уже отобранное, а не открывает каталог заново.
-              */}
-              {saveOpen === "slice" && filter.testIds.length > 1 ? (
-                <Stack gap={1}>
-                  <Select
-                    size="s"
-                    label="По какому тесту сохранить срез"
-                    value={sliceTestId}
-                    onChange={value => setSliceTestId(String(value))}
-                    options={filter.testIds.map(id => ({
-                      value: id,
-                      label: dictionaries.tests.find(test => test.id === id)?.title ?? id,
-                    }))}
-                  />
-                  <Text variant="body-xs" tone="muted">
-                    Прочие тесты в условия среза не войдут; остальной отбор — группы, источники,
-                    период — сохранится как есть.
-                  </Text>
-                </Stack>
-              ) : null}
               <Text variant="body-xs" tone="muted">
                 Условий в отборе: {conditionCount}. Под них сейчас подходит {total} прохождений —
-                завтра число может быть другим, потому что срез считается заново.
+                завтра число может быть другим, потому что фильтр отбирает заново.
               </Text>
               {saveError && <Text tone="error">{saveError}</Text>}
           </Stack>

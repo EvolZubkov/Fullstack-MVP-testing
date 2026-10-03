@@ -41,7 +41,6 @@ import {
     ScaleQualityPanel,
     type ScaleQualityRow,
 } from "@/features/analytics/test/scale-quality";
-import { PsychometricsComparePanel } from "@/features/analytics/test/psychometrics-compare-panel";
 import { invalidateAnalytics } from "@/features/analytics/invalidate-analytics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "wouter";
@@ -79,9 +78,13 @@ import {
     filterToSearch,
     EMPTY_FILTER,
     ORG_CONDITIONS,
+    conditionsToFilter,
     type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
 import { PassageRegistry, type RegistryRow } from "@/features/analytics/registry/passage-registry";
+import { TestSlicesTab } from "@/features/analytics/slices/test-slices-tab";
+import { ResultsByAxis } from "@/features/analytics/slices/results-by-axis";
+import { SaveSliceDialog } from "@/features/analytics/slices/save-slice-dialog";
 import { ExportDialog } from "@/features/analytics/registry/export-dialog";
 import {
     AttemptDetailsDialog,
@@ -97,7 +100,6 @@ import {
     HelpCircle,
     Layers,
     FileSpreadsheet,
-    ChevronRight,
     RefreshCw,
 } from "lucide-react";
 
@@ -321,6 +323,23 @@ export default function TestAnalyticsPage() {
     const queryClient = useQueryClient();
 
     const filterSearch = filterToSearch({ ...filter, testIds: [] });
+    /** Условия фильтра уровня теста на языке среза — без теста: он задан страницей. */
+    const filterConditions: Record<string, unknown> = (({ testIds: _testIds, ...rest }) => rest)(filter);
+    const hasFilterConditions = countConditions({ ...filter, testIds: [] }) > 0;
+    /**
+     * Э3.2: «Прохождения» этого теста с условиями среза — одним переходом (условия и вкладка),
+     * состояние истории сохраняется для крошки «Аналитика».
+     */
+    const openPassages = (conditions: Record<string, unknown>) => {
+        navigate(testHref(testId!, { ...EMPTY_FILTER, ...conditionsToFilter(conditions) }, "passages"), {
+            state: typeof window === "undefined" ? undefined : window.history.state,
+        });
+    };
+    /** Э3.2: во вкладку «Срезы», в сравнение — с присланным отбором в первом слоте. */
+    const compareInSlices = (conditions: Record<string, unknown>, name: string | null) => {
+        setCompareAdhoc({ conditions, name });
+        setActiveTab("slices");
+    };
     /**
      * PRD-66 FR-51: психометрика по умолчанию считает только первую попытку каждого участника —
      * повторные попытки того же человека не независимы. Условие живёт здесь, а не в общем фильтре
@@ -453,12 +472,20 @@ export default function TestAnalyticsPage() {
      */
     const [breakdownVersion, setBreakdownVersion] = useState<string | null | undefined>(undefined);
     /**
-     * PRD-66 FR-04b: режим вкладки — выборка целиком или сравнение срезов.
-     *
-     * Переключатель берётся у раздела «Аналитика» без изменений: один механизм обязан
-     * выглядеть одинаково на обоих экранах.
+     * Э3.2: отбор, присланный во вкладку «Срезы» кнопкой «Сравнить со срезом» или строкой
+     * «Результатов по группам». Сравнение срезов переехало туда с «Качества вопросов».
      */
-    const [qualityMode, setQualityMode] = useState<"sample" | "compare">("sample");
+    const [compareAdhoc, setCompareAdhoc] = useState<{ conditions: Record<string, unknown>; name: string | null } | null>(null);
+    /** Э3.2: окно «Сохранить как срез» фильтра уровня теста. */
+    const [saveSliceOpen, setSaveSliceOpen] = useState(false);
+    /**
+     * Э3.2: сохранённые срезы теста — меню «Сохранённые» фильтра. Без расчёта: меню выбирает
+     * условия, а не сравнивает.
+     */
+    const { data: savedSlices, refetch: refetchSavedSlices } = useQuery<{ slices: Array<{ id: string; name: string; conditions: Record<string, unknown> }> }>({
+        queryKey: [`/api/analytics/slices/saved?testId=${testId}`],
+        enabled: !!testId,
+    });
     const { data: breakdown } = useQuery<ItemBreakdownView>({
         queryKey: [psychometricsUrl(
             `/api/analytics/psychometrics/${testId}/items/${breakdownId}`,
@@ -563,6 +590,15 @@ export default function TestAnalyticsPage() {
             />
             <TopicBreakdown topics={topicStats} />
             <PassTrend points={passTrend} />
+            {/* Э3.2: разбивка по полю участника — бывший «Список срезов» по оси. Это не срез:
+                строку можно сохранить срезом, сравнить или открыть её прохождения. */}
+            <ResultsByAxis
+                testId={testId!}
+                conditions={filterConditions}
+                completed={summary.completedAttempts}
+                onOpenPassages={openPassages}
+                onCompare={(conditions, name) => compareInSlices(conditions, name)}
+            />
         </Stack>
     );
 
@@ -756,24 +792,40 @@ export default function TestAnalyticsPage() {
                 // FR-51: снимается крестиком; путь назад — кнопка в предупреждении вкладки.
                 ...(showsAttemptChip ? [{ id: FIRST_ATTEMPT_CHIP, label: "Только первая попытка" }] : []),
             ]}
-            // FR-04b, эскиз: вход в сравнение срезов — рядом с фильтром, потому что
-            // сравнение и есть несколько фильтров рядом. Только на «Качестве вопросов» и
-            // только вне режима: внутри него выход — переключатель в шапке карточки.
-            actions={activeTab === "quality" && qualityMode === "sample" ? (
-                <Button
-                    variant="ghost"
-                    size="s"
-                    trailingIcon={<ChevronRight size={14} />}
-                    onClick={() => setQualityMode("compare")}
-                >
-                    Сравнить срезы
-                </Button>
-            ) : activeTab === "passages" ? (
-                // Э3.1: выгрузка списка прохождений — там же, где список, по тем же условиям.
-                <Button variant="secondary" size="s" onClick={() => setExportOpen(true)}>
-                    Экспорт
-                </Button>
-            ) : undefined}
+            // Э3.2 (замечание владельца 2026-10-03): срез создаётся из фильтра теста. Отобранное
+            // сравнивается со срезом без сохранения или сохраняется срезом этого теста; пока
+            // условий нет, обе кнопки выключены, а не спрятаны — спрятанная не объясняет, почему.
+            savedSets={(savedSlices?.slices ?? []).map(slice => ({ id: slice.id, name: slice.name }))}
+            onApplySet={(id: string) => {
+                const slice = savedSlices?.slices.find(item => item.id === id);
+                if (slice) setFilter({ ...EMPTY_FILTER, ...conditionsToFilter(slice.conditions), testIds: [] });
+            }}
+            actions={(
+                <>
+                    <Button
+                        variant="secondary"
+                        size="s"
+                        disabled={!hasFilterConditions}
+                        onClick={() => compareInSlices(filterConditions, null)}
+                    >
+                        Сравнить со срезом
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="s"
+                        disabled={!hasFilterConditions}
+                        onClick={() => setSaveSliceOpen(true)}
+                    >
+                        Сохранить как срез
+                    </Button>
+                    {activeTab === "passages" && (
+                        // Э3.1: выгрузка списка прохождений — там же, где список, по тем же условиям.
+                        <Button variant="secondary" size="s" onClick={() => setExportOpen(true)}>
+                            Экспорт
+                        </Button>
+                    )}
+                </>
+            )}
             onOpenFilter={() => setFilterOpen(true)}
             onRemove={(id: string) => {
                 const [kind, value] = [id.slice(0, id.indexOf(":")), id.slice(id.indexOf(":") + 1)];
@@ -932,16 +984,7 @@ export default function TestAnalyticsPage() {
                         label: "Качество вопросов",
                         content: underFilter(qualityLoading
                             ? <LoadingState message="Считаем психометрику..." />
-                            : qualityMode === "compare"
-                            ? (
-                                // FR-04b, эскиз: режим — одна карточка, выход из него —
-                                // переключатель «Одна выборка / Сравнение» в её шапке.
-                                <PsychometricsComparePanel
-                                    testId={testId!}
-                                    firstAttemptOnly={firstAttemptOnly}
-                                    onExit={() => setQualityMode("sample")}
-                                />
-                            )
+                            // Э3.2: сравнение срезов переехало во вкладку «Срезы».
                             // Э2: разбор вопроса — свой уровень (ранний возврат выше), здесь — таблица.
                             : itemQuality?.measurementOnly
                                     // FR-52, эскиз wf-scales: у измерительного теста вкладка —
@@ -972,6 +1015,23 @@ export default function TestAnalyticsPage() {
                                     )
                                     : <EmptyState title="Психометрика недоступна" description="Не удалось посчитать показатели по этому тесту" />),
                     },
+                    {
+                        // Э3.2: сохранённые срезы теста и их сравнение. Фильтра уровня теста над
+                        // вкладкой нет: у каждого среза свои условия, рамка — только период.
+                        id: "slices",
+                        label: "Срезы",
+                        content: (
+                            <TestSlicesTab
+                                // Присланный отбор пересоздаёт вкладку: она открывается в сравнении.
+                                key={compareAdhoc ? JSON.stringify(compareAdhoc) : "slices"}
+                                testId={testId!}
+                                adhoc={compareAdhoc?.conditions ?? null}
+                                adhocName={compareAdhoc?.name ?? null}
+                                firstAttemptOnly={firstAttemptOnly}
+                                onOpenPassages={openPassages}
+                            />
+                        ),
+                    },
                     // PRD-56: «Уровни» отдельной вкладкой больше нет — они внутри «Выдачи».
                     { id: "delivery", label: "Выдача", content: underFilter(deliveryPanel) },
                     // Вкладка есть только у теста со шкалами: оцениваемому тесту без них она
@@ -991,6 +1051,15 @@ export default function TestAnalyticsPage() {
                 ]}
             />
 
+            <SaveSliceDialog
+                open={saveSliceOpen}
+                onClose={() => setSaveSliceOpen(false)}
+                testId={testId!}
+                conditions={filterConditions}
+                labels={describeConditions({ ...filter, testIds: [] }, { ...dictionaries, ...testDictionary })}
+                total={summary.completedAttempts}
+                onSaved={() => void refetchSavedSlices()}
+            />
             <ExportDialog
                 open={exportOpen}
                 onClose={() => setExportOpen(false)}

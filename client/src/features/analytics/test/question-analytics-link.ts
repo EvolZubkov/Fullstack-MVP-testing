@@ -10,7 +10,8 @@ import { questionHref } from "../levels/analytics-routes";
 
 /** Вкладки уровня теста, на которые можно сослаться. Первая — по умолчанию. */
 // Э3.1: «Прохождения» — вторая, сразу за «Обзором» (эскиз approved/e3-test-and-question.html).
-export const TEST_ANALYTICS_TABS = ["overview", "passages", "questions", "quality", "delivery", "scales"] as const;
+// Э3.2: «Срезы» — за «Качеством вопросов»: сравнение срезов там и переехало.
+export const TEST_ANALYTICS_TABS = ["overview", "passages", "questions", "quality", "slices", "delivery", "scales"] as const;
 
 /** Вкладка уровня теста. */
 export type TestAnalyticsTab = (typeof TEST_ANALYTICS_TABS)[number];

@@ -9,8 +9,8 @@
  * «общее среднее», просто невидимое.
  *
  * Остальное — договор экрана: первой открывается вкладка «Тесты» — вход в аналитику теста (Э3.0),
- * реестр — на соседней вкладке, срезы считаются только внутри выбранного
- * теста, очередь дел на своей вкладке, а окно разбора прохождения (все четыре типа ответов, веб и
+ * реестр — на соседней вкладке, срезов здесь нет — они живут в тесте (Э3.2), очередь дел на
+ * своей вкладке, а окно разбора прохождения (все четыре типа ответов, веб и
  * адаптивный из LMS) и экспорт работают как прежде.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -220,22 +220,6 @@ async function openAttemptsTab() {
   await waitFor(() => expect(screen.getByText("Иван Петров")).toBeInTheDocument());
 }
 
-/** Открыть вкладку «Срезы» и выбрать тест рамки — без него срезы не считаются (FR-07e). */
-async function openSlicesForTest() {
-  fireEvent.click(screen.getByRole("tab", { name: "Срезы" }));
-  fireEvent.click(screen.getByLabelText("Тест"));
-  // Список тестов приходит запросом: до его ответа выбирать нечего.
-  fireEvent.click(await screen.findByText("Тест по финансам"));
-  await waitFor(() => expect(screen.getByText("Розница")).toBeInTheDocument());
-}
-
-/** Open a labelled DS Select (its trigger button is a sibling of the label). */
-function openSelectByLabel(labelText: string) {
-  const label = screen.getByText(labelText);
-  const trigger = label.parentElement!.querySelector("button");
-  fireEvent.click(trigger!);
-}
-
 describe("<AnalyticsPage /> — состав экрана", () => {
   it("открывается на вкладке «Тесты» — едином входе в аналитику теста (Э3.0)", async () => {
     await renderLoaded();
@@ -270,33 +254,23 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     expect(called.some(url => url.includes("/api/analytics/summary"))).toBe(false);
   });
 
-  it("даёт четыре вкладки: тесты, реестр, срезы и дела, требующие внимания", async () => {
+  it("даёт три вкладки: тесты, реестр и дела, требующие внимания", async () => {
     await renderLoaded();
 
-    for (const name of ["Тесты", /Прохождения/, "Срезы", /Требует внимания/]) {
+    for (const name of ["Тесты", /Прохождения/, /Требует внимания/]) {
       expect(screen.getByRole("tab", { name })).toBeInTheDocument();
     }
   });
 
-  it("не считает срезы, пока тест не выбран, и говорит почему", async () => {
+  it("срезов на общем уровне нет — они живут в тесте; «Сохранить фильтр» остаётся (Э3.2)", async () => {
     await renderLoaded();
-    fireEvent.click(screen.getByRole("tab", { name: "Срезы" }));
+    await openAttemptsTab();
 
-    // FR-07e: рамка расчёта — один тест. Средние поверх нескольких тестов и есть то, что
-    // FR-12 убирает, поэтому «посчитаем по всем» здесь не предлагается вовсе.
-    expect(screen.getByText(/Срезы считаются внутри одного теста/)).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(call => String(call[0]).includes("/api/analytics/slices"))).toBe(false);
-  });
-
-  it("считает срезы внутри выбранного теста", async () => {
-    await renderLoaded();
-    await openSlicesForTest();
-
-    const sliced = fetchMock.mock.calls
-      .map(call => String(call[0]))
-      .find(url => url.includes("/api/analytics/slices"));
-    expect(sliced).toContain("testId=test1");
-    expect(screen.getByText("83 %")).toBeInTheDocument();
+    // Срез без теста существовать не может (решение владельца 2026-10-03), а здесь теста нет.
+    expect(screen.queryByRole("tab", { name: "Срезы" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Сравнить со срезом" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Сохранить как срез" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Сохранить фильтр" })).toBeInTheDocument();
   });
 
   it("на вкладке очереди — число дел, как в эскизе", async () => {
@@ -312,26 +286,6 @@ describe("<AnalyticsPage /> — состав экрана", () => {
 
     expect(await screen.findByText("Не сдали")).toBeInTheDocument();
     expect(screen.getByText(/Иван Петров/)).toBeInTheDocument();
-  });
-
-  it("«Сравнить со срезом» уносит в сравнение вариант и версию отбора", async () => {
-    window.history.replaceState(null, "", "/author/analytics?testId=test1&formId=form-b&snapshotId=snap-3&tab=attempts");
-    try {
-      await renderLoaded();
-      fireEvent.click(await screen.findByRole("button", { name: "Сравнить со срезом" }));
-
-      // Без варианта и версии отбор «Вариант Б» сравнивался бы как тест целиком.
-      await waitFor(() => {
-        const asked = fetchMock.mock.calls
-          .map(call => String(call[0]))
-          .find(url => url.includes("/api/analytics/slices") && url.includes("conditions="));
-        expect(asked).toBeTruthy();
-        const conditions = JSON.parse(new URL(asked!, "http://x").searchParams.get("conditions")!);
-        expect(conditions).toMatchObject({ formIds: ["form-b"], snapshotIds: ["snap-3"] });
-      });
-    } finally {
-      window.history.replaceState(null, "", "/");
-    }
   });
 
   it("при отборе ровно по одному тесту в шапке — «Аналитика теста», ведёт на его уровень (Э2)", async () => {
@@ -360,47 +314,6 @@ describe("<AnalyticsPage /> — состав экрана", () => {
   it("без отбора по одному тесту кнопки «Аналитика теста» в шапке нет (Э2)", async () => {
     await renderLoaded();
     expect(within(pageHeader()).queryByRole("button", { name: /Аналитика теста/ })).toBeNull();
-  });
-
-  it("«Сравнить со срезом» уносит в сравнение оргусловия отбора (FR-06b)", async () => {
-    window.history.replaceState(
-      null, "", `/author/analytics?testId=test1&unit=${encodeURIComponent("Отдел продаж")}&position=${encodeURIComponent("Кладовщик")}&tab=attempts`,
-    );
-    try {
-      await renderLoaded();
-      fireEvent.click(await screen.findByRole("button", { name: "Сравнить со срезом" }));
-
-      await waitFor(() => {
-        const asked = fetchMock.mock.calls
-          .map(call => String(call[0]))
-          .find(url => url.includes("/api/analytics/slices") && url.includes("conditions="));
-        expect(asked).toBeTruthy();
-        const conditions = JSON.parse(new URL(asked!, "http://x").searchParams.get("conditions")!);
-        expect(conditions).toMatchObject({ units: ["Отдел продаж"], positions: ["Кладовщик"] });
-      });
-    } finally {
-      window.history.replaceState(null, "", "/");
-    }
-  });
-
-  it("ведёт из строки среза в реестр с предзаполненными условиями", async () => {
-    await renderLoaded();
-    await openSlicesForTest();
-
-    fireEvent.click(screen.getByRole("button", { name: "Действия со срезом: Розница" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Открыть прохождения" }));
-
-    // FR-08: переход не просто открывает список, он показывает ТОТ ЖЕ состав — иначе строка
-    // среза и открытый по ней реестр отвечали бы на один вопрос разными числами (FR-25).
-    expect(screen.getByRole("tab", { name: /Прохождения/ })).toHaveAttribute("aria-selected", "true");
-    await waitFor(() => {
-      const asked = fetchMock.mock.calls
-        .map(call => String(call[0]))
-        .filter(url => url.includes("/api/analytics/registry"))
-        .at(-1);
-      expect(asked).toContain("groupId=g1");
-      expect(asked).toContain("testId=test1");
-    });
   });
 
   it("ведёт из очереди дел в разбор прохождения", async () => {

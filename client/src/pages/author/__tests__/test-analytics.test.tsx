@@ -227,7 +227,8 @@ describe("<TestAnalyticsPage />", () => {
   it("четыре плитки сводки — на «Обзоре», время медианой", async () => {
     await renderLoaded();
     for (const label of ["Прохождений", "Сдали", "Средний результат", "Время, медиана"]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+      // «Сдали» и «Средний результат» есть и в заголовках «Результатов по группам» (Э3.2).
+      expect(screen.getAllByText(label).filter(el => !el.closest("th"))).toHaveLength(1);
     }
     expect(screen.getByText("60 %")).toBeInTheDocument();
     expect(screen.getByText("73 %")).toBeInTheDocument();
@@ -519,11 +520,11 @@ describe("<TestAnalyticsPage />", () => {
   });
 
   /**
-   * Задачи 3.1 — 3.3 плана сверки, эскиз prd66-item-quality (состояние compare): вход в
-   * сравнение — кнопкой в строке фильтра, сам режим — одна карточка «Сравнение срезов», выход —
-   * переключателем «Одна выборка / Сравнение» в её шапке.
+   * Э3.2 (эскиз approved/e3-test-and-question.html): срезы живут на уровне теста. Срез создаётся
+   * из фильтра теста — «Сравнить со срезом» и «Сохранить как срез» стоят в его строке; сравнение
+   * одно, во вкладке «Срезы», а «Качество вопросов» — вторая метрика рядом с «Результатом и темами».
    */
-  describe("сравнение срезов на «Качестве вопросов» (PRD-66 FR-04b)", () => {
+  describe("срезы на уровне теста (Э3.2)", () => {
     const slice = (id: string, name: string, respondents: number, conditions: Record<string, unknown>) => ({
       id, name, conditions, alpha: 0.8, reliabilityGap: null, sem: 2, respondents,
       observations: respondents * 10, itemsCount: 3, suspiciousCount: 1, items: [],
@@ -547,31 +548,33 @@ describe("<TestAnalyticsPage />", () => {
       });
     });
 
-    it("кнопка «Сравнить срезы» стоит в строке фильтра только на «Качестве вопросов»", async () => {
+    it("в строке фильтра теста — «Сравнить со срезом» и «Сохранить как срез», выключенные без условий", async () => {
       await renderLoaded();
-      expect(screen.queryByRole("button", { name: /Сравнить срезы/ })).toBeNull();
 
+      const compare = screen.getByRole("button", { name: "Сравнить со срезом" });
+      const save = screen.getByRole("button", { name: "Сохранить как срез" });
+      expect(compare.closest(".ou-filterbar")).not.toBeNull();
+      expect(compare).toBeDisabled();
+      expect(save).toBeDisabled();
+      // Прежнего входа в сравнение на «Качестве вопросов» нет: сравнение одно, во «Срезах».
       fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
-      const button = await screen.findByRole("button", { name: /Сравнить срезы/ });
-      expect(button.closest(".ou-filterbar")).not.toBeNull();
+      expect(screen.queryByRole("button", { name: /Сравнить срезы/ })).toBeNull();
     });
 
-    it("режим — одна карточка со слотами PRD-56 и выходом переключателем", async () => {
+    it("вкладка «Срезы» стоит за «Качеством вопросов»; сравнение по качеству — вторая метрика", async () => {
       await renderLoaded();
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
-      fireEvent.click(await screen.findByRole("button", { name: /Сравнить срезы/ }));
+      const tabs = screen.getAllByRole("tab").map(tab => tab.textContent);
+      expect(tabs.indexOf("Срезы")).toBe(tabs.indexOf("Качество вопросов") + 1);
 
+      fireEvent.click(screen.getByRole("tab", { name: "Срезы" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Сравнение" }));
       expect(await screen.findByText("Сравнение срезов")).toBeInTheDocument();
-      // Внутри режима вход не нужен: выход — переключатель в шапке карточки.
-      expect(screen.queryByRole("button", { name: /Сравнить срезы/ })).toBeNull();
+      fireEvent.click(await screen.findByRole("button", { name: "Качество вопросов" }));
+
+      // Тот же механизм слотов PRD-56 и тот же расчёт PRD-66, что был на «Качестве вопросов».
       expect(await screen.findByText("486 прохождений")).toBeInTheDocument();
-      expect(screen.getByText("Условия отбора · 0")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "+ Добавить срез" })).toBeInTheDocument();
       expect(screen.getByText("до четырёх срезов")).toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole("button", { name: "Одна выборка" }));
-      await waitFor(() => expect(screen.queryByText("Сравнение срезов")).toBeNull());
-      expect(screen.getByRole("button", { name: /Сравнить срезы/ })).toBeInTheDocument();
     });
   });
 

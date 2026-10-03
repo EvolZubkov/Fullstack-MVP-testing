@@ -64,8 +64,8 @@ function menuItems(): string[] {
 }
 
 describe("SliceList", () => {
-  it("показывает объёмы и проценты среза", async () => {
-    render(<SliceList testId="test1" />);
+  it("показывает объёмы и проценты строки разбивки", async () => {
+    render(<SliceList testId="test1" axis="group" />);
 
     expect(await screen.findByText("Отдел продаж")).toBeTruthy();
     expect(screen.getByText("75 %")).toBeTruthy();
@@ -273,8 +273,19 @@ describe("SliceList — сортировка", () => {
     expect(order()).toEqual(["Бета", "Альфа", "Гамма", "Вега"]);
   });
 
-  it("шесть колонок сортируемы, «Слабейшая тема» — нет", async () => {
+  // Э3.2 (эскиз approved/e3-test-and-question.html): у сохранённых срезов теста «назначено» и
+  // «начато» не показываются — это величины разбивки по людям; под именем — условия среза.
+  it("сохранённые срезы: четыре сортируемые колонки, под именем — условия", async () => {
     render(<SliceList testId="test1" />);
+    await screen.findByText("Альфа");
+    const sortable = [...document.querySelectorAll(".ou-grid__th.is-sortable")].map(el => el.textContent);
+    expect(sortable).toEqual(["Срез", "Завершено", "Сдали", "Средний результат"]);
+    expect(screen.queryByText("Назначено")).toBeNull();
+    expect(screen.queryByText("Начато")).toBeNull();
+  });
+
+  it("шесть колонок разбивки сортируемы, «Слабейшая тема» — нет", async () => {
+    render(<SliceList testId="test1" axis="group" />);
     await screen.findByText("Альфа");
     const sortable = [...document.querySelectorAll(".ou-grid__th.is-sortable")].map(el => el.textContent);
     expect(sortable).toEqual(["Срез", "Назначено", "Начато", "Завершено", "Сдали", "Средний результат"]);
@@ -291,7 +302,7 @@ describe("SliceList — сортировка", () => {
   });
 
   it("«Срез» — по алфавиту, «Назначено» — прочерк последним", async () => {
-    render(<SliceList testId="test1" />);
+    render(<SliceList testId="test1" axis="group" />);
     await screen.findByText("Альфа");
 
     await clickHeader("Срез");

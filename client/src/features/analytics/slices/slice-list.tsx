@@ -21,6 +21,10 @@
  * Действия строки живут под троеточием «⋯» (эскиз, состояние `slice-gap`, дельта 6.3): два
  * перехода кнопками с именем среза в подписи вылезали за правый край таблицы, а действий у среза
  * больше двух. Порядок пунктов — как в эскизе: сначала куда перейти, потом что сделать со срезом.
+ *
+ * Э3.2 (эскиз approved/e3-test-and-question.html): один компонент — два вида. Без оси это
+ * «Сохранённые срезы» теста: под названием — условия среза, колонок «Назначено» и «Начато» нет.
+ * С осью — разбивка «Результаты по …» на «Обзоре» теста, в выборке с условиями уровня теста.
  */
 import { useEffect, useState } from "react";
 
@@ -44,7 +48,10 @@ import {
 import { percent } from "../format";
 import { ExportDialog } from "../registry/export-dialog";
 import { RegistryFilterDialog } from "../registry/filter-dialog";
-import { conditionsToFilter, EMPTY_FILTER, type RegistryFilter } from "../registry/filter-state";
+import {
+  conditionsToFilter, describeConditions, EMPTY_FILTER, type RegistryFilter,
+} from "../registry/filter-state";
+import { useRegistryDictionaries, useTestDictionary } from "../registry/use-dictionaries";
 
 /** Срез с посчитанными величинами — то, что отдаёт `GET /api/analytics/slices`. */
 export interface SliceRow {
@@ -80,6 +87,15 @@ export interface SliceListProps {
   to?: string;
   /** Ось разбиения. Без неё показываются сохранённые срезы. */
   axis?: string;
+  /**
+   * Э3.2: условия уровня теста — выборка, которую режет ось (разбивка на «Обзоре» подчиняется
+   * фильтру теста). Сохранённым срезам не передаются: у каждого свои условия.
+   */
+  conditions?: Record<string, unknown>;
+  /** Сколько строк пришло — для подзаголовка карточки, которую рисует вкладка. */
+  onLoaded?: (count: number) => void;
+  /** Заголовок первой колонки: у разбивки — имя оси («Группа»), у сохранённых — «Срез». */
+  nameHeader?: string;
   /** Перейти в реестр с условиями среза (FR-08). */
   onOpenRegistry?: (conditions: Record<string, unknown>) => void;
   /**
@@ -210,8 +226,14 @@ export interface SliceTopic {
 type TopicsState = Record<string, SliceTopic[] | null>;
 
 export function SliceList({
-  testId, from, to, axis, onOpenRegistry, onOpenTestAnalytics, onCompare,
+  testId, from, to, axis, conditions, onOpenRegistry, onOpenTestAnalytics, onCompare, onLoaded,
+  nameHeader = "Срез",
 }: SliceListProps) {
+  /** Ключ условий: новый объект с теми же условиями не должен пересчитывать список. */
+  const conditionsKey = axis && conditions && Object.keys(conditions).length > 0 ? JSON.stringify(conditions) : "";
+  /** Подписи условий сохранённого среза — по названиям, а не кодам (как в сравнении). */
+  const dictionaries = useRegistryDictionaries(!axis);
+  const testDictionary = useTestDictionary(axis ? null : testId, !axis);
   const [slices, setSlices] = useState<SliceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -243,6 +265,7 @@ export function SliceList({
     if (from) query.set("from", from);
     if (to) query.set("to", to);
     if (axis) query.set("axis", axis);
+    if (conditionsKey) query.set("conditions", conditionsKey);
 
     void (async () => {
       try {
@@ -252,7 +275,8 @@ export function SliceList({
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json() as { slices: SliceRow[] };
         if (!alive) return;
-        setSlices(data.slices);
+        setSlices(data.slices ?? []);
+        onLoaded?.((data.slices ?? []).length);
       } catch {
         // Пустой список на месте ошибки читается как «данных нет» — это разные вещи, и
         // молчать о второй нельзя: по «нет данных» принимают решение, по ошибке — обновляют.
@@ -265,7 +289,7 @@ export function SliceList({
     // Рамка сменилась — прежние темы к новой выборке отношения не имеют.
     setTopics({});
     return () => { alive = false; };
-  }, [testId, from, to, axis, reloads]);
+  }, [testId, from, to, axis, conditionsKey, reloads]);
 
   /**
    * Темы одного среза — по требованию, при развороте.
@@ -284,6 +308,7 @@ export function SliceList({
     if (axis) {
       query.set("axis", axis);
       query.set("key", row.id.slice(row.id.indexOf(":") + 1));
+      if (conditionsKey) query.set("conditions", conditionsKey);
     } else {
       query.set("sliceId", row.id);
     }
@@ -308,7 +333,9 @@ export function SliceList({
    * (FR-07e). Период — пересечение периода среза (у потока он свой) и периода рамки.
    */
   const exportFilterOf = (row: SliceRow): RegistryFilter => {
-    const own = conditionsToFilter(row.conditions);
+    // Э3.2: строка разбивки — часть выборки с условиями уровня теста; без них книга собрала бы
+    // группу по всему тесту, а строка показывает её внутри отбора.
+    const own = conditionsToFilter({ ...(axis ? conditions ?? {} : {}), ...row.conditions });
     const periodFrom = laterOf(own.from, from);
     const periodTo = earlierOf(own.to, to);
     return {
@@ -343,7 +370,9 @@ export function SliceList({
         body: JSON.stringify({
           name: saveName.trim(),
           kind: "slice",
-          conditions: { ...saving.conditions, testIds: [testId] },
+          // Э3.2: срез из строки разбивки несёт и условия уровня теста — иначе он считал бы
+          // группу по всему тесту, а не ту, что была в строке.
+          conditions: { ...(axis ? conditions ?? {} : {}), ...saving.conditions, testIds: [testId] },
         }),
       });
       if (!response.ok) {
@@ -400,12 +429,28 @@ export function SliceList({
   const columns = [
     {
       key: "name",
-      header: "Срез",
+      header: nameHeader,
       frozen: true,
       sortable: true,
-      render: (row: SliceRow) => <span className="ou-grid__cell-strong">{row.name}</span>,
+      render: (row: SliceRow) => (axis
+        ? <span className="ou-grid__cell-strong">{row.name}</span>
+        // Сохранённый срез: имя даёт автор, и оно может обещать не то, что срез считает, —
+        // поэтому под ним условия (как в шапке столбца сравнения, FR-07f).
+        : (
+          <Stack gap={1}>
+            <span className="ou-grid__cell-strong tb-cell-wrap">{row.name}</span>
+            <Text variant="body-xs" tone="muted">
+              {/* Тест в подписи не называется: он задан страницей, у всех срезов списка один. */}
+              {describeConditions({ ...conditionsToFilter(row.conditions), testIds: [] }, { ...dictionaries, ...testDictionary })
+                .map(condition => condition.label)
+                .join(" · ") || "без условий — тест целиком"}
+            </Text>
+          </Stack>
+        )),
     },
-    {
+    // Э3.2: у сохранённого среза «назначено» и «начато» — величины разбивки по людям; в списке
+    // срезов теста их нет (эскиз), там отвечают «как прошли».
+    ...(axis ? [{
       key: "assigned",
       header: "Назначено",
       align: "center" as const,
@@ -417,7 +462,7 @@ export function SliceList({
         ? "—"
         : row.assigned),
     },
-    { key: "started", header: "Начато", numeric: true, sortable: true, render: (row: SliceRow) => row.started },
+    { key: "started", header: "Начато", align: "center" as const, numeric: true, sortable: true, render: (row: SliceRow) => row.started }] : []),
     {
       key: "completed",
       header: "Завершено",
@@ -506,7 +551,12 @@ export function SliceList({
         sortDir={sortDir}
         onSort={(key, dir) => { setSortColumn(key as SliceSort); setSortDir(dir); }}
         rowKey={row => row.id}
-        emptyMessage={loading ? "Считаем срезы…" : "Срезов пока нет"}
+        emptyMessage={loading
+          ? "Считаем срезы…"
+          : axis
+            ? "Прохождений пока нет"
+            // Э3.2: пустой список сохранённых обязан сказать, где срезы берут.
+            : "Сохранённых срезов пока нет: отберите условия в фильтре теста и нажмите «Сохранить как срез»"}
         expandable
         // Разворачивать нечего там, где прохождений не было: раскрытие в пустоту читается как
         // поломка, а не как «данных нет».
