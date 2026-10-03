@@ -27,7 +27,6 @@ import {
   Select,
   Spinner,
   Stack,
-  Switch,
   Tag,
   Text,
   useToast,
@@ -71,8 +70,6 @@ interface Batch {
   rowsCreated: number;
   rowsUpdated: number;
   rowsLinked: number;
-  /** PRD-66 FR-12: учитывается ли загрузка в расчётах. Снятая остаётся в базе целиком. */
-  counted: boolean;
 }
 
 /**
@@ -160,9 +157,9 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
   const testId = inspect?.testId ?? null;
   const mismatch = !!fixedTestId && !!testId && fixedTestId !== testId;
   /**
-   * Чьи загрузки показывать. Тест, заданный страницей, известен ДО выбора файла: снять загрузку
-   * с учёта (PRD-66 FR-12) можно, ничего не загружая. Где тест определяется по файлу, до файла
-   * списка нет — показывать нечего.
+   * Чьи загрузки показывать. Тест, заданный страницей, известен ДО выбора файла: откатить
+   * загрузку можно, ничего не загружая. Где тест определяется по файлу, до файла списка нет —
+   * показывать нечего.
    */
   const batchesTestId = testId ?? fixedTestId ?? null;
 
@@ -233,28 +230,6 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
     },
     onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
   });
-  /**
-   * PRD-66 FR-12: снять загрузку с учёта или вернуть. Решение обратимое, поэтому без
-   * подтверждения — в отличие от отката рядом, который удаляет строки навсегда.
-   */
-  const countedMut = useMutation({
-    mutationFn: async ({ id, counted }: { id: string; counted: boolean }) => {
-      const res = await fetch(`/api/analytics/lms-import/batches/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ counted }),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Не удалось изменить учёт загрузки");
-    },
-    onSuccess: () => {
-      // Выборка изменилась: числа аналитики на странице-хозяине обязаны пересчитаться.
-      invalidateAnalytics(queryClient);
-      batches.refetch();
-    },
-    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
-  });
-
   function reset() {
     setOwnFile(null);
     setOwnInspect(null);
@@ -296,7 +271,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
 
   // ── Пусто: собственный загрузчик на месте строки файла ───────────────────
   // Остальная форма видна и до файла (эскиз, состояние «в окне»): человек сразу видит, что его
-  // ждёт, а на странице теста — ещё и загрузки, которые можно снять с учёта.
+  // ждёт, а на странице теста — ещё и загрузки, которые можно откатить.
   const uploader = (
     <FileUploader
       accept=".xlsx"
@@ -520,25 +495,15 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
       ) : (
         <Stack gap={1}>
           {(batches.data ?? []).map((b) => (
-            // Строка не переносится: в узком окне аналитики переключатель и откат иначе
-            // уезжали на отдельные строки и у соседних загрузок вставали по-разному. Переносится
-            // только текст — он и растягивается.
+            // Строка не переносится: в узком месте откат иначе уезжал на отдельную строку и у
+            // соседних загрузок вставал по-разному. Переносится только текст — он и растягивается.
             <Cluster key={b.id} gap={3} wrap={false}>
               <Stack gap={0} grow>
                 <Text variant="body-s" weight="medium">{b.fileName}</Text>
                 <Text variant="body-xs" tone="muted">
                   {new Date(b.importedAt).toLocaleString("ru-RU")} · добавлено {b.rowsCreated}, обновлено {b.rowsUpdated}
-                  {/* Выключенный переключатель в списке легко не заметить — говорим словами. */}
-                  {b.counted ? null : " · не учитывается в расчётах — данные сохранены"}
                 </Text>
               </Stack>
-              <Switch
-                size="s"
-                label="В расчётах"
-                checked={b.counted}
-                onChange={(e) => countedMut.mutate({ id: b.id, counted: e.target.checked })}
-                disabled={countedMut.isPending}
-              />
               <Button
                 variant="ghost"
                 size="s"

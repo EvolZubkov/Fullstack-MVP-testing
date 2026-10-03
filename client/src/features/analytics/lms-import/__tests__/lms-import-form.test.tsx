@@ -1,7 +1,6 @@
 /**
  * @module features/analytics/lms-import/__tests__/lms-import-form
- * @description Форма загрузки выгрузки LMS: список загрузок с учётом в расчётах (PRD-66 FR-12)
- * и подписи плана.
+ * @description Форма загрузки выгрузки LMS: список загрузок с откатом и подписи плана.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -16,8 +15,8 @@ const INSPECT: LmsInspectResult = {
 };
 
 const BATCHES = [
-  { id: "b1", fileName: "сентябрь.xlsx", importedAt: "2026-09-11T20:40:00Z", rowsCreated: 3, rowsUpdated: 0, rowsLinked: 0, counted: true },
-  { id: "b2", fileName: "август.xlsx", importedAt: "2026-08-14T07:12:00Z", rowsCreated: 18, rowsUpdated: 0, rowsLinked: 0, counted: false },
+  { id: "b1", fileName: "сентябрь.xlsx", importedAt: "2026-09-11T20:40:00Z", rowsCreated: 3, rowsUpdated: 0, rowsLinked: 0 },
+  { id: "b2", fileName: "август.xlsx", importedAt: "2026-08-14T07:12:00Z", rowsCreated: 18, rowsUpdated: 0, rowsLinked: 0 },
 ];
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -29,8 +28,8 @@ beforeEach(() => {
   fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
     const url = String(input);
     if (url === "/api/analytics/lms-import/batches/t1") return ok(BATCHES);
-    if (url.startsWith("/api/analytics/lms-import/batches/") && init?.method === "PATCH") {
-      return ok({ ok: true, counted: JSON.parse(String(init.body)).counted });
+    if (url.startsWith("/api/analytics/lms-import/batches/") && init?.method === "DELETE") {
+      return ok({ ok: true });
     }
     if (url.startsWith("/api/analytics/lms-import?dryRun=true")) {
       return ok({ testId: "t1", testTitle: "Тест", rowsTotal: 3, rowsCreated: 2, rowsUpdated: 1, rowsSkipped: 0, rowsLinked: 0, warnings: [] });
@@ -51,46 +50,25 @@ function renderForm() {
   );
 }
 
-describe("<LmsImportForm /> — учёт загрузки в расчётах (PRD-66 FR-12)", () => {
-  it("у каждой загрузки свой переключатель «В расчётах» с текущим состоянием", async () => {
+describe("<LmsImportForm /> — список загрузок", () => {
+  it("переключателя «В расчётах» нет: загрузку можно только откатить (FR-12 снят 2026-10-02)", async () => {
     renderForm();
 
-    const switches = await screen.findAllByRole("checkbox", { name: "В расчётах" });
-    expect(switches).toHaveLength(2);
-    expect((switches[0] as HTMLInputElement).checked).toBe(true);
-    expect((switches[1] as HTMLInputElement).checked).toBe(false);
+    await screen.findByText("сентябрь.xlsx");
+    expect(screen.queryByRole("checkbox", { name: "В расчётах" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Откатить" })).toHaveLength(2);
   });
 
-  it("снятая загрузка подписана: из чисел убрана, данные целы", async () => {
-    // Выключенный переключатель в списке легко не заметить — подпись говорит словами.
-    renderForm();
-
-    expect(await screen.findByText(/не учитывается в расчётах — данные сохранены/)).toBeInTheDocument();
-    expect(screen.getAllByText(/не учитывается в расчётах/)).toHaveLength(1);
-  });
-
-  it("переключение снимает загрузку с учёта сразу, без подтверждения", async () => {
-    renderForm();
-
-    const [first] = await screen.findAllByRole("checkbox", { name: "В расчётах" });
-    fireEvent.click(first);
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      "/api/analytics/lms-import/batches/b1",
-      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ counted: false }) }),
-    ));
-  });
-
-  it("после переключения числа аналитики на странице пересчитываются", async () => {
+  it("после отката числа аналитики на странице пересчитываются", async () => {
     // Ключи запросов аналитики — целые адреса («/api/analytics/psychometrics/t1»), и сброс по
-    // ключу ["/api/analytics"] их не задевал: страница показывала числа со снятой загрузкой.
+    // ключу ["/api/analytics"] их не задевал: страница показывала числа с откаченной загрузкой.
     queryClient.setQueryData(["/api/analytics/psychometrics/t1?source=import"], { items: [] });
     queryClient.setQueryData(["/api/analytics/tests/t1", "?groupId=g1"], { summary: {} });
     queryClient.setQueryData(["/api/tests"], []);
     renderForm();
 
-    const [first] = await screen.findAllByRole("checkbox", { name: "В расчётах" });
-    fireEvent.click(first);
+    await screen.findByText("сентябрь.xlsx");
+    fireEvent.click(screen.getAllByRole("button", { name: "Откатить" })[0]);
 
     await waitFor(() => expect(
       queryClient.getQueryState(["/api/analytics/psychometrics/t1?source=import"])?.isInvalidated,
@@ -122,10 +100,10 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
     expect(screen.getByRole("button", { name: "Импортировать" })).toBeDisabled();
   });
 
-  it("на странице теста загрузки видны сразу — переключить учёт можно, ничего не загружая", async () => {
+  it("на странице теста загрузки видны сразу — откатить можно, ничего не загружая", async () => {
     renderEmpty({ fixedTestId: "t1" });
 
-    expect(await screen.findAllByRole("checkbox", { name: "В расчётах" })).toHaveLength(2);
+    expect(await screen.findAllByRole("button", { name: "Откатить" })).toHaveLength(2);
     expect(screen.getByText("Загрузки этого теста")).toBeInTheDocument();
   });
 
@@ -146,7 +124,7 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
 
   it("встроенная форма ставит кнопки в тело, перед списком загрузок", async () => {
     renderEmpty({ fixedTestId: "t1" });
-    await screen.findAllByRole("checkbox", { name: "В расчётах" });
+    await screen.findByText("сентябрь.xlsx");
 
     const list = screen.getByText("Загрузки этого теста");
     const importButton = screen.getByRole("button", { name: "Импортировать" });
@@ -168,7 +146,7 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
         />
       </ToastProvider></QueryClientProvider>,
     );
-    await screen.findAllByRole("checkbox", { name: "В расчётах" });
+    await screen.findByText("сентябрь.xlsx");
 
     const body = screen.getByTestId("body");
     const actions = screen.getByTestId("actions");
