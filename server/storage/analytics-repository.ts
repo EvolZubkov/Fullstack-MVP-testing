@@ -15,7 +15,7 @@ import { unionAll } from "drizzle-orm/pg-core";
 
 import { db } from "../db";
 import {
-  attempts, groups, lmsImportBatches, scormAnswers, scormAttempts, scormPackages, tests, userGroups, users,
+  attempts, groups, scormAnswers, scormAttempts, scormPackages, tests, userGroups, users,
   type Attempt, type ScormAttempt,
 } from "@shared/schema";
 import { ORG_FIELDS, type OrgField } from "@shared/org-fields";
@@ -306,22 +306,7 @@ export class AnalyticsRepository {
      */
     const lmsTestId = sql`coalesce(${scormAttempts.testId}, ${scormPackages.testId})`;
 
-    /**
-     * PRD-66 FR-12: партия, снятая с учёта, из ВЫБОРКИ уходит — строки остаются в базе.
-     *
-     * Условие стоит здесь, в общем месте отбора строк из LMS, а не в психометрике: иначе
-     * снятая партия исчезла бы с одного экрана и осталась на другом, и два экрана одного
-     * трека стали бы показывать разные числа по одним и тем же данным.
-     *
-     * `coalesce(..., true)` — про живую телеметрию: партии у неё нет по построению, и без
-     * этого одно переключение выключило бы целый источник.
-     */
-    const lmsBatchCounted = sql`coalesce((
-      select b.counted from ${lmsImportBatches} as b where b.id = ${scormAttempts.batchId}
-    ), true)`;
-
     const lmsWhere = and(
-      lmsBatchCounted,
       ...orgConditions(lmsOrgValue),
       ...(testIds ? [inArray(lmsTestId, testIds)] : []),
       ...(query.from ? [gte(scormAttempts.startedAt, query.from)] : []),

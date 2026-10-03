@@ -589,15 +589,15 @@ async function seedMixedSourceTest(pool: pg.Pool): Promise<string> {
   await pool.query(
     `INSERT INTO lms_import_batches
        (id, test_id, file_name, file_hash, anonymized, source_anonymized, link_users, imported_by,
-        rows_total, rows_created, rows_unmatched, counted)
-     VALUES ($1, $2, $3, $4, true, false, false, $5, $6, $6, 2, true)`,
+        rows_total, rows_created, rows_unmatched)
+     VALUES ($1, $2, $3, $4, true, false, false, $5, $6, $6, 2)`,
     [rawBatchId, testId, `${MARK}.xlsx`, randomUUID(), people[0], anonymizedFrom],
   );
   await pool.query(
     `INSERT INTO lms_import_batches
        (id, test_id, file_name, file_hash, anonymized, source_anonymized, link_users, imported_by,
-        rows_total, rows_created, rows_unmatched, counted)
-     VALUES ($1, $2, $3, $4, true, true, false, $5, $6, $6, 0, true)`,
+        rows_total, rows_created, rows_unmatched)
+     VALUES ($1, $2, $3, $4, true, true, false, $5, $6, $6, 0)`,
     [anonymizedBatchId, testId, `${MARK} (обезличенная).xlsx`, randomUUID(), people[0], 6],
   );
 

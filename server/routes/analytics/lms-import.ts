@@ -18,7 +18,6 @@ import { canReadTestAnalytics } from "../../services/test-access";
 import { detectLmsExport, IMPORT_DENIED_ERROR } from "../workbook";
 import { resolveTestByQuestionIds } from "../../services/lms-test-resolver";
 import { runImport } from "../../services/lms-export-import";
-import { resetPsychometricsCache } from "./psychometrics";
 
 const router = Router();
 
@@ -120,41 +119,9 @@ router.get(
   },
 );
 
-// PATCH /api/analytics/lms-import/batches/:id — учитывать партию в расчётах или нет (PRD-66 FR-12)
-//
-// Снятие с учёта убирает партию из ВЫБОРКИ, не трогая строк: выгрузка, в которой засомневались,
-// перестаёт искажать числа, а данные остаются для разбора и возвращаются тем же переключателем.
-// Отдельная ручка, а не поле у отката: откат необратим, а это решение принимают и отменяют.
-router.patch(
-  "/lms-import/batches/:id",
-  requirePermission("analytics.import"),
-  async (req: Request, res: Response) => {
-    try {
-      const counted = req.body?.counted;
-      if (typeof counted !== "boolean") {
-        return res.status(400).json({ error: "Ожидается поле counted (true или false)" });
-      }
-      // Область берётся от ТЕСТА партии — как и у отката: в маршруте стоит партия, а не тест,
-      // и мидлварь области здесь не применима.
-      const batch = await storage.getLmsImportBatchById(req.params.id);
-      if (!batch) return res.status(404).json({ error: "Загрузка не найдена" });
-      const test = await storage.getTest(batch.testId);
-      if (!test) return res.status(404).json({ error: "Тест не найден" });
-      if (!(await canReadTestAnalytics(req.effectiveRoles!, req.currentUser!.id, test))) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-
-      await storage.setLmsImportBatchCounted(req.params.id, counted);
-      // PRD-66 FR-57: выборка изменилась СЕЙЧАС. Кэш психометрики живёт минуту, и без сброса
-      // экран эту минуту показывал бы прежние числа после переключения.
-      resetPsychometricsCache(batch.testId);
-      res.json({ ok: true, counted });
-    } catch (error) {
-      logger.error("LMS batch counted error: " + (error as Error).message, "analytics");
-      res.status(500).json({ error: "Не удалось изменить учёт загрузки" });
-    }
-  },
-);
+// Переключателя «В расчётах» (PRD-66 FR-12) больше нет — снят владельцем 2026-10-02 («повышаем
+// цену ошибки»): сомнительную выгрузку откатывают целиком и загружают заново, а не держат в базе
+// невидимой для расчётов.
 
 // DELETE /api/analytics/lms-import/batches/:id — откат партии целиком
 router.delete(

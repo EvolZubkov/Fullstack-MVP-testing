@@ -157,13 +157,11 @@ describe("GET /analytics/psychometrics/:testId", () => {
 
   describe("несопоставленные взаимодействия рядом с n (FR-11)", () => {
     const BATCHES = [
-      { id: "b1", testId: "test1", counted: true, groupId: "g1", rowsUnmatched: 7 },
-      { id: "b2", testId: "test1", counted: true, groupId: "g2", rowsUnmatched: 3 },
-      { id: "b3", testId: "test1", counted: false, groupId: "g1", rowsUnmatched: 50 },
+      { id: "b1", testId: "test1", groupId: "g1", rowsUnmatched: 7 },
+      { id: "b2", testId: "test1", groupId: "g2", rowsUnmatched: 3 },
     ];
 
-    it("складывает потери учтённых загрузок", async () => {
-      // Снятая с учёта загрузка в числах не участвует, и её потери выборку не уменьшают.
+    it("складывает потери всех загрузок", async () => {
       storageMock.getLmsImportBatches.mockResolvedValue(BATCHES);
       const res = await ask();
       expect(res.body.unmatched).toBe(10);
@@ -183,7 +181,7 @@ describe("GET /analytics/psychometrics/:testId", () => {
 
     it("загрузки без записанного числа дают ноль, а не ошибку", async () => {
       // Партии, загруженные до FR-11, числа не хранят.
-      storageMock.getLmsImportBatches.mockResolvedValue([{ id: "b1", testId: "test1", counted: true, groupId: null }]);
+      storageMock.getLmsImportBatches.mockResolvedValue([{ id: "b1", testId: "test1", groupId: null }]);
       const res = await ask();
       expect(res.body.unmatched).toBe(0);
     });
@@ -600,14 +598,14 @@ describe("GET /analytics/psychometrics/:testId", () => {
     });
   });
 
-  it("снятие партии с учёта пересчитывает, а не отдаёт прежние числа", async () => {
-    // Партия в ключе кэша именно поэтому: она меняет выборку, не трогая ни теста, ни его
-    // содержания, и без неё экран после переключения выглядел бы сломанным.
-    storageMock.getLmsImportBatches.mockResolvedValue([{ id: "b1", counted: true }]);
+  it("откат партии пересчитывает, а не отдаёт прежние числа", async () => {
+    // Состав партий в ключе кэша именно поэтому: загрузка и откат меняют выборку, не трогая ни
+    // теста, ни его содержания.
+    storageMock.getLmsImportBatches.mockResolvedValue([{ id: "b1" }, { id: "b2" }]);
     await ask();
     const callsAfterFirst = storageMock.selectObservations.mock.calls.length;
 
-    storageMock.getLmsImportBatches.mockResolvedValue([{ id: "b1", counted: false }]);
+    storageMock.getLmsImportBatches.mockResolvedValue([{ id: "b1" }]);
     await ask();
 
     expect(storageMock.selectObservations.mock.calls.length).toBeGreaterThan(callsAfterFirst);

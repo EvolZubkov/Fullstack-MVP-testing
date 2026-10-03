@@ -253,21 +253,20 @@ function mixesKeyAlgorithms(
 /**
  * Сколько взаимодействий импорта не нашли своего задания в тесте (PRD-66 FR-11).
  *
- * Число хранится на партии, поэтому отбор повторяет выборку там, где это возможно: только
- * учтённые партии (FR-12), только если импорт вообще входит в источники, только отобранные
- * группы. Период к партии не приложить — даты у прохождений свои, у партии лишь дата загрузки, —
- * поэтому по периоду число не режется: это верхняя граница потерь, а не точная доля.
+ * Число хранится на партии, поэтому отбор повторяет выборку там, где это возможно: только если
+ * импорт вообще входит в источники, только отобранные группы. Период к партии не приложить —
+ * даты у прохождений свои, у партии лишь дата загрузки, — поэтому по периоду число не режется:
+ * это верхняя граница потерь, а не точная доля.
  *
  * @param batches партии импорта теста
  * @param filter условия выборки
  */
 function unmatchedOf(
-  batches: ReadonlyArray<{ counted: boolean; groupId?: string | null; rowsUnmatched?: number | null }>,
+  batches: ReadonlyArray<{ groupId?: string | null; rowsUnmatched?: number | null }>,
   filter: ObservationFilter,
 ): number {
   if (filter.sources?.length && !filter.sources.includes("import")) return 0;
   return batches
-    .filter(batch => batch.counted)
     .filter(batch => !filter.groupIds?.length || (!!batch.groupId && filter.groupIds.includes(batch.groupId)))
     .reduce((sum, batch) => sum + (batch.rowsUnmatched ?? 0), 0);
 }
@@ -292,14 +291,14 @@ router.get(
 
       const { filter, onlyFirst } = readQuery(req, testId);
 
-      // Состав учитываемых партий — часть ключа: снятие партии с учёта меняет выборку, не
-      // трогая ни теста, ни его содержания.
+      // Состав партий — часть ключа: загрузка и откат меняют выборку, не трогая ни теста, ни его
+      // содержания.
       const batches = await storage.getLmsImportBatches(testId);
-      const countedBatches = batches.filter(b => b.counted).map(b => b.id).sort().join(",");
+      const batchIds = batches.map(b => b.id).sort().join(",");
       const key = JSON.stringify({
         testId,
         version: test.version ?? 1,
-        countedBatches,
+        batchIds,
         filter: { ...filter, from: filter.from?.toISOString(), to: filter.to?.toISOString() },
         onlyFirst,
       });

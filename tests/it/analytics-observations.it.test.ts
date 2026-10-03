@@ -308,9 +308,9 @@ describe("loadObservations", () => {
   });
 });
 
-describe("партия, снятая с учёта, из выборки уходит (PRD-66 FR-12)", () => {
-  /** Партия импорта; `counted` по умолчанию `true`, как и у всех уже загруженных. */
-  async function batch(counted: boolean) {
+describe("партия импорта учитывается всегда (переключатель PRD-66 FR-12 снят, 0046)", () => {
+  it("строки загруженной партии попадают в наблюдения", async () => {
+    // Снять партию с учёта больше нельзя: сомнительную выгрузку откатывают целиком.
     const id = randomUUID();
     await h.current!.db.insert(lmsImportBatches).values({
       id,
@@ -321,37 +321,11 @@ describe("партия, снятая с учёта, из выборки уход
       sourceAnonymized: false,
       linkUsers: false,
       importedBy: userId,
-      counted,
     } as never);
-    return id;
-  }
-
-  it("строки снятой партии не попадают в наблюдения, оставаясь в базе", async () => {
-    // Выгрузка, в которой засомневались, перестаёт искажать числа — но не удаляется: прежде у
-    // партии было два состояния, загружена и удалена, и любое сомнение решалось необратимо.
-    const off = await batch(false);
-    await lmsAttempt({ origin: "import", participantKey: "a".repeat(64), lmsUserName: null, batchId: off });
-
-    const page = await loadObservations({}, ALL_TESTS);
-
-    expect(page.total).toBe(0);
-    const stored = await h.current!.db.select().from(scormAttempts);
-    expect(stored).toHaveLength(1);
-  });
-
-  it("партия на учёте наблюдения даёт", async () => {
-    const on = await batch(true);
-    await lmsAttempt({ origin: "import", participantKey: "b".repeat(64), lmsUserName: null, batchId: on });
-
-    expect((await loadObservations({}, ALL_TESTS)).total).toBe(1);
-  });
-
-  it("прохождение живой телеметрии партии не имеет и учитывается всегда", async () => {
-    // `batch_id` у телеметрии пуст по построению: снятие партий её касаться не должно, иначе
-    // одно переключение выключило бы половину источников разом.
+    await lmsAttempt({ origin: "import", participantKey: "b".repeat(64), lmsUserName: null, batchId: id });
     await lmsAttempt();
 
-    expect((await loadObservations({}, ALL_TESTS)).total).toBe(1);
+    expect((await loadObservations({}, ALL_TESTS)).total).toBe(2);
   });
 });
 

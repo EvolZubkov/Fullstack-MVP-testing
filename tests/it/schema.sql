@@ -116,7 +116,6 @@ CREATE TABLE "lms_import_batches" (
 	"rows_skipped" integer DEFAULT 0 NOT NULL,
 	"rows_linked" integer DEFAULT 0 NOT NULL,
 	"rows_unmatched" integer DEFAULT 0 NOT NULL,
-	"counted" boolean DEFAULT true NOT NULL,
 	"warnings_json" jsonb
 );
 

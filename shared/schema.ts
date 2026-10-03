@@ -2209,17 +2209,11 @@ export const lmsImportBatches = pgTable("lms_import_batches", {
   /**
    * PRD-66 FR-11: how many interactions of the file were NOT matched to a question of
    * the test. A counter and not a warning line: the share of losses is what decides
-   * whether the batch may be counted at all, and a reader has to see it as a number
-   * beside the batch, not dig it out of the log.
+   * whether the batch is worth keeping, and a reader has to see it as a number beside
+   * the batch, not dig it out of the log. (The PRD-66 FR-12 «counted» switch is gone,
+   * migration 0046: a doubtful batch is rolled back, not hidden from the figures.)
    */
   rowsUnmatched: integer("rows_unmatched").notNull().default(0),
-  /**
-   * PRD-66 FR-12: whether the batch's passages take part in the statistics. Switching
-   * it off REMOVES the batch from the sample without deleting a row — a batch loaded
-   * from a damaged export stops distorting the figures, and the data stays in place
-   * for a second look. Default `true`: every batch already loaded keeps counting.
-   */
-  counted: boolean("counted").notNull().default(true),
   warningsJson: jsonb("warnings_json"),
 }, (table) => ({
   // Партии перечисляются по тесту, новые первыми.
