@@ -29,6 +29,11 @@
       .wf-sprite { display: none; }
       .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
       .wf-th-end { justify-content: flex-end; }
+      /* Правило владельца 2026-10-03: заголовок колонки и её значения выровнены одинаково.
+         Числа, теги и шкалы — по центру, текст — по левому краю. В коде — `align: "center"` у
+         колонки DataGrid; заголовок компонента обязан следовать `align` (сейчас не следует). */
+      .ou-grid__table th.wf-c .ou-grid__th, .ou-grid__table th.wf-c .ou-grid__th.wf-th-end { justify-content: center; text-align: center; }
+      .ou-grid__table tbody td.wf-c, .ou-grid__table tbody td.is-numeric.wf-c { text-align: center; }
       /* Меню строки — как в prd56-analytics-section.html. */
       .wf-rowmenu-cell { position: relative; text-align: right; }
       /* Открытое меню в эскизе не должно срезаться прокруткой таблицы. */
@@ -146,8 +151,8 @@
         <th><div class="ou-grid__th is-sortable">Участник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
         <th><div class="ou-grid__th is-sortable">Тест<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
         <th><div class="ou-grid__th is-sortable is-sorted">Дата<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-        <th><div class="ou-grid__th is-sortable wf-th-end">Результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-        <th><div class="ou-grid__th is-sortable">Исход<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+        <th class="wf-c"><div class="ou-grid__th is-sortable">Исход<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
         <th><div class="ou-grid__th is-sortable">Группа<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
         <th class="ou-grid__control-cell" aria-label="Аналитика теста"></th>
       </tr>
@@ -367,10 +372,10 @@
                       <tr>
                         <th><div class="ou-grid__th is-sortable">Участник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th is-sortable is-sorted">Дата<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Попытка<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable">Исход<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable">Источник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Попытка<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable">Исход<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable">Источник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th is-sortable">Группа<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                       </tr>
                     </thead>
@@ -378,28 +383,28 @@
                       <tr class="is-clickable">
                         <td><span class="ou-grid__cell-strong">Гаврилов Сергей</span></td>
                         <td>08.09.2026 13:31</td>
-                        <td class="is-numeric">3</td>
-                        <td class="is-numeric">58 %</td>
-                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
-                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td class="is-numeric wf-c">3</td>
+                        <td class="is-numeric wf-c">58 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
                         <td>Отдел продаж</td>
                       </tr>
                       <tr class="is-clickable">
                         <td><span class="ou-grid__cell-strong">Белкина Ольга</span></td>
                         <td>05.09.2026 09:48</td>
-                        <td class="is-numeric">1</td>
-                        <td class="is-numeric">61 %</td>
-                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
-                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td class="is-numeric wf-c">1</td>
+                        <td class="is-numeric wf-c">61 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
                         <td>Отдел продаж</td>
                       </tr>
                       <tr class="is-clickable">
                         <td><span class="ou-grid__cell-strong">Сафин Ильдар</span></td>
                         <td>03.09.2026 15:12</td>
-                        <td class="is-numeric">1</td>
-                        <td class="is-numeric">74 %</td>
-                        <td><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
-                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td class="is-numeric wf-c">1</td>
+                        <td class="is-numeric wf-c">74 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
                         <td>Розница</td>
                       </tr>
                     </tbody>
@@ -453,10 +458,10 @@
                       <tr>
                         <th><div class="ou-grid__th is-sortable">Участник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th is-sortable is-sorted">Дата<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Попытка<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable">Исход<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable">Источник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Попытка<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable">Исход<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable">Источник<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th is-sortable">Группа<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                       </tr>
                     </thead>
@@ -464,28 +469,28 @@
                       <tr class="is-clickable">
                         <td><span class="ou-grid__cell-strong">Гаврилов Сергей</span></td>
                         <td>08.09.2026 13:31</td>
-                        <td class="is-numeric">3</td>
-                        <td class="is-numeric">58 %</td>
-                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
-                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td class="is-numeric wf-c">3</td>
+                        <td class="is-numeric wf-c">58 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
                         <td>Отдел продаж</td>
                       </tr>
                       <tr class="is-clickable">
                         <td><span class="ou-grid__cell-strong">Белкина Ольга</span></td>
                         <td>05.09.2026 09:48</td>
-                        <td class="is-numeric">1</td>
-                        <td class="is-numeric">61 %</td>
-                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
-                        <td><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
+                        <td class="is-numeric wf-c">1</td>
+                        <td class="is-numeric wf-c">61 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--outline ou-tag--s">Веб</span></td>
                         <td>Отдел продаж</td>
                       </tr>
                       <tr class="is-clickable">
                         <td><span class="ou-grid__cell-strong">Сафин Ильдар</span></td>
                         <td>03.09.2026 15:12</td>
-                        <td class="is-numeric">1</td>
-                        <td class="is-numeric">74 %</td>
-                        <td><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
-                        <td><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
+                        <td class="is-numeric wf-c">1</td>
+                        <td class="is-numeric wf-c">74 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--outline ou-tag--s">LMS</span></td>
                         <td>Розница</td>
                       </tr>
                     </tbody>
@@ -567,9 +572,9 @@
                     <thead>
                       <tr>
                           <th><div class="ou-grid__th is-sortable">Срез<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Завершено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Завершено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th">Слабейшая тема</div></th>
                         <th class="ou-grid__control-cell" aria-label="Действия"></th>
                       </tr>
@@ -578,9 +583,9 @@
                       <!-- Строка среза ведёт во вкладку «Прохождения» этого теста с условиями среза. -->
                         <tr class="is-clickable" onclick="showState(null, 'test-passages')">
                           <td class="ou-grid__cell-strong">Розница, первый поток<span class="ou-grid__cell-sub">Группа: Розница · Период: 01.03 — 31.05.2026</span></td>
-                          <td class="is-numeric">163</td>
-                          <td class="is-numeric">85 %</td>
-                          <td class="is-numeric">81 %</td>
+                          <td class="is-numeric wf-c">163</td>
+                          <td class="is-numeric wf-c">85 %</td>
+                          <td class="is-numeric wf-c">81 %</td>
                           <td><span class="is-muted">Управление командой · 71 %</span></td>
                           <td class="wf-rowmenu-cell">
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="true"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
@@ -595,17 +600,17 @@
                         </tr>
                         <tr class="is-clickable" onclick="showState(null, 'test-passages')">
                           <td class="ou-grid__cell-strong">Отдел продаж, не сдали<span class="ou-grid__cell-sub">Группа: Отдел продаж · Исход: не сдал</span></td>
-                          <td class="is-numeric">21</td>
-                          <td class="is-numeric">0 %</td>
-                          <td class="is-numeric">52 %</td>
+                          <td class="is-numeric wf-c">21</td>
+                          <td class="is-numeric wf-c">0 %</td>
+                          <td class="is-numeric wf-c">52 %</td>
                           <td>Право и комплаенс · <span class="ou-tag ou-tag--error ou-tag--s">41 %</span></td>
                           <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
                         </tr>
                         <tr class="is-clickable" onclick="showState(null, 'test-passages')">
                           <td class="ou-grid__cell-strong">Внешние участники<span class="ou-grid__cell-sub">Внутренние и внешние: внешние</span></td>
-                          <td class="is-numeric">37</td>
-                          <td class="is-numeric">76 %</td>
-                          <td class="is-numeric">74 %</td>
+                          <td class="is-numeric wf-c">37</td>
+                          <td class="is-numeric wf-c">76 %</td>
+                          <td class="is-numeric wf-c">74 %</td>
                           <td>Право и комплаенс · <span class="ou-tag ou-tag--warning ou-tag--s">62 %</span></td>
                           <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия со срезом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
                         </tr>
@@ -658,15 +663,15 @@
                         <thead>
                           <tr>
                             <th><div class="ou-grid__th">Показатель</div></th>
-                            <th><div class="ou-grid__th wf-th-end">Розница, первый поток</div></th>
-                            <th><div class="ou-grid__th wf-th-end">Отдел продаж</div></th>
-                            <th><div class="ou-grid__th wf-th-end">Разница</div></th>
+                            <th class="wf-c"><div class="ou-grid__th wf-th-end">Розница, первый поток</div></th>
+                            <th class="wf-c"><div class="ou-grid__th wf-th-end">Отдел продаж</div></th>
+                            <th class="wf-c"><div class="ou-grid__th wf-th-end">Разница</div></th>
                           </tr>
                         </thead>
                         <tbody>
-                          <tr><td>Завершено</td><td class="is-numeric">163</td><td class="is-numeric">58</td><td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td></tr>
-                          <tr><td>Сдали</td><td class="is-numeric">85 %</td><td class="is-numeric">71 %</td><td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-error">−14 п.п.</span></td></tr>
-                          <tr><td>Средний результат</td><td class="is-numeric">81 %</td><td class="is-numeric">68 %</td><td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-error">−13 п.п.</span></td></tr>
+                          <tr><td>Завершено</td><td class="is-numeric wf-c">163</td><td class="is-numeric wf-c">58</td><td class="is-numeric wf-c"><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td></tr>
+                          <tr><td>Сдали</td><td class="is-numeric wf-c">85 %</td><td class="is-numeric wf-c">71 %</td><td class="is-numeric wf-c"><span class="ou-text ou-text--body-s ou-text--tone-error">−14 п.п.</span></td></tr>
+                          <tr><td>Средний результат</td><td class="is-numeric wf-c">81 %</td><td class="is-numeric wf-c">68 %</td><td class="is-numeric wf-c"><span class="ou-text ou-text--body-s ou-text--tone-error">−13 п.п.</span></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -717,15 +722,15 @@
                         <thead>
                           <tr>
                             <th><div class="ou-grid__th">Показатель</div></th>
-                            <th><div class="ou-grid__th wf-th-end">Розница, первый поток</div></th>
-                            <th><div class="ou-grid__th wf-th-end">Отдел продаж</div></th>
-                            <th><div class="ou-grid__th wf-th-end">Разница</div></th>
+                            <th class="wf-c"><div class="ou-grid__th wf-th-end">Розница, первый поток</div></th>
+                            <th class="wf-c"><div class="ou-grid__th wf-th-end">Отдел продаж</div></th>
+                            <th class="wf-c"><div class="ou-grid__th wf-th-end">Разница</div></th>
                           </tr>
                         </thead>
                         <tbody>
-                          <tr><td>Надёжность (альфа)</td><td class="is-numeric">0,81</td><td class="is-numeric">0,86</td><td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">+0,05</span></td></tr>
-                          <tr><td>Ошибка измерения</td><td class="is-numeric">4,8 п.п.</td><td class="is-numeric">3,9 п.п.</td><td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">−0,9 п.п.</span></td></tr>
-                          <tr><td>Вопросов под подозрением</td><td class="is-numeric">7</td><td class="is-numeric">3</td><td class="is-numeric"><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td></tr>
+                          <tr><td>Надёжность (альфа)</td><td class="is-numeric wf-c">0,81</td><td class="is-numeric wf-c">0,86</td><td class="is-numeric wf-c"><span class="ou-text ou-text--body-s ou-text--tone-muted">+0,05</span></td></tr>
+                          <tr><td>Ошибка измерения</td><td class="is-numeric wf-c">4,8 п.п.</td><td class="is-numeric wf-c">3,9 п.п.</td><td class="is-numeric wf-c"><span class="ou-text ou-text--body-s ou-text--tone-muted">−0,9 п.п.</span></td></tr>
+                          <tr><td>Вопросов под подозрением</td><td class="is-numeric wf-c">7</td><td class="is-numeric wf-c">3</td><td class="is-numeric wf-c"><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td></tr>
                         </tbody>
                       </table>
                     </div>
@@ -774,44 +779,44 @@
                     <thead>
                       <tr>
                         <th><div class="ou-grid__th is-sortable">Тест<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Прохождений<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Вопросов под подозрением<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Прохождений<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Вопросов под подозрением<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th is-sortable is-sorted">Последнее прохождение<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr class="is-clickable" onclick="showState(null, 'test-overview')">
                         <td><span class="ou-grid__cell-strong">Сертификация руководителей</span></td>
-                        <td class="is-numeric">486</td>
-                        <td class="is-numeric">61 %</td>
-                        <td class="is-numeric">68 %</td>
-                        <td class="is-numeric">7</td>
+                        <td class="is-numeric wf-c">486</td>
+                        <td class="is-numeric wf-c">61 %</td>
+                        <td class="is-numeric wf-c">68 %</td>
+                        <td class="is-numeric wf-c">7</td>
                         <td>08.09.2026</td>
                       </tr>
                       <tr class="is-clickable" onclick="showState(null, 'test-overview')">
                         <td><span class="ou-grid__cell-strong">Охрана труда</span></td>
-                        <td class="is-numeric">312</td>
-                        <td class="is-numeric">88 %</td>
-                        <td class="is-numeric">81 %</td>
-                        <td class="is-numeric">0</td>
+                        <td class="is-numeric wf-c">312</td>
+                        <td class="is-numeric wf-c">88 %</td>
+                        <td class="is-numeric wf-c">81 %</td>
+                        <td class="is-numeric wf-c">0</td>
                         <td>05.09.2026</td>
                       </tr>
                       <tr class="is-clickable" onclick="showState(null, 'test-overview')">
                         <td><span class="ou-grid__cell-strong">Опросник ЧИЛ</span></td>
-                        <td class="is-numeric">97</td>
-                        <td class="is-numeric">—</td>
-                        <td class="is-numeric">—</td>
-                        <td class="is-numeric">2</td>
+                        <td class="is-numeric wf-c">97</td>
+                        <td class="is-numeric wf-c">—</td>
+                        <td class="is-numeric wf-c">—</td>
+                        <td class="is-numeric wf-c">2</td>
                         <td>01.09.2026</td>
                       </tr>
                       <tr class="is-clickable" onclick="showState(null, 'test-overview')">
                         <td><span class="ou-grid__cell-strong">Вводный курс продаж</span></td>
-                        <td class="is-numeric">54</td>
-                        <td class="is-numeric">72 %</td>
-                        <td class="is-numeric">74 %</td>
-                        <td class="is-numeric">—</td>
+                        <td class="is-numeric wf-c">54</td>
+                        <td class="is-numeric wf-c">72 %</td>
+                        <td class="is-numeric wf-c">74 %</td>
+                        <td class="is-numeric wf-c">—</td>
                         <td>28.08.2026</td>
                       </tr>
                     </tbody>
@@ -862,8 +867,8 @@
                         <td><span class="ou-grid__cell-strong">Гаврилов Сергей</span></td>
                         <td>Сертификация руководителей</td>
                         <td>08.09.2026 13:31</td>
-                        <td class="is-numeric">58 %</td>
-                        <td><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
+                        <td class="is-numeric wf-c">58 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--error ou-tag--s">Не сдал</span></td>
                         <td>Отдел продаж</td>
                         <td class="ou-grid__control-cell" data-wf-test-link></td>
                       </tr>
@@ -871,8 +876,8 @@
                         <td><span class="ou-grid__cell-strong">Белкина Ольга</span></td>
                         <td>Охрана труда</td>
                         <td>05.09.2026 09:48</td>
-                        <td class="is-numeric">84 %</td>
-                        <td><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
+                        <td class="is-numeric wf-c">84 %</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">Сдал</span></td>
                         <td>Отдел продаж</td>
                         <td class="ou-grid__control-cell" data-wf-test-link></td>
                       </tr>
@@ -1025,40 +1030,40 @@
                     <thead class="wf-th-wrap">
                       <tr>
                         <th class="col-stick col-stick--shadow"><div class="ou-grid__th">Вариант</div></th>
-                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Выбрали&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля всех участников, выбравших этот вариант. Вариант, который почти никто не выбирает, не работает как дистрактор.</span></span></div></th>
-                        <th><div class="ou-grid__th"><span class="ou-tip" data-placement="bottom" tabindex="0">Слабые 27 %&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Нижние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. Дистрактор работает, когда здесь больше, чем у сильных.</span></span></div></th><th><div class="ou-grid__th"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Сильные 27 %&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Верхние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. У верного ответа здесь должно быть больше, чем у слабых.</span></span></div></th>
-                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Корреляция с остатком&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Корреляция выбора варианта с баллом за остальные вопросы. У верного ответа должна быть положительной, у дистрактора — отрицательной. Положительная у дистрактора значит, что его выбирают сильные: вариант частично верен либо ключ неверен.</span></span></div></th>
-                        <th><div class="ou-grid__th"><span class="ou-tip" data-placement="bottom" tabindex="0">Качество варианта&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Работает ли вариант: у верного ответа выбор должен расти с баллом, у дистрактора — падать. «Выбирают сильные» — дистрактор притягивает тех, кто знает материал.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Выбрали&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля всех участников, выбравших этот вариант. Вариант, который почти никто не выбирает, не работает как дистрактор.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th"><span class="ou-tip" data-placement="bottom" tabindex="0">Слабые 27 %&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Нижние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. Дистрактор работает, когда здесь больше, чем у сильных.</span></span></div></th><th class="wf-c"><div class="ou-grid__th"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Сильные 27 %&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Верхние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. У верного ответа здесь должно быть больше, чем у слабых.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Корреляция с остатком&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Корреляция выбора варианта с баллом за остальные вопросы. У верного ответа должна быть положительной, у дистрактора — отрицательной. Положительная у дистрактора значит, что его выбирают сильные: вариант частично верен либо ключ неверен.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Качество варианта&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Работает ли вариант: у верного ответа выбор должен расти с баллом, у дистрактора — падать. «Выбирают сильные» — дистрактор притягивает тех, кто знает материал.</span></span></div></th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
                         <td class="ou-grid__cell-strong col-stick col-stick--shadow">Проверка контрагента перед сделкой<span class="ou-grid__cell-sub">верный ответ</span></td>
-                        <td class="is-numeric">41 %</td>
-                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">19 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 19%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">68 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 68%"></span></span></span></td>
-                        <td class="is-numeric">+0,34</td>
-                        <td><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
+                        <td class="is-numeric wf-c">41 %</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">19 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 19%"></span></span></span></td><td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">68 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 68%"></span></span></span></td>
+                        <td class="is-numeric wf-c">+0,34</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong col-stick col-stick--shadow">Согласование подарка с руководителем</td>
-                        <td class="is-numeric">34 %</td>
-                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">46 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 46%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">21 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 21%"></span></span></span></td>
-                        <td class="is-numeric">−0,22</td>
-                        <td><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
+                        <td class="is-numeric wf-c">34 %</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">46 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 46%"></span></span></span></td><td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">21 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 21%"></span></span></span></td>
+                        <td class="is-numeric wf-c">−0,22</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong col-stick col-stick--shadow">Ежегодное обучение сотрудников</td>
-                        <td class="is-numeric">24 %</td>
-                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">33 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 33%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">11 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 11%"></span></span></span></td>
-                        <td class="is-numeric">−0,18</td>
-                        <td><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
+                        <td class="is-numeric wf-c">24 %</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">33 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 33%"></span></span></span></td><td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">11 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 11%"></span></span></span></td>
+                        <td class="is-numeric wf-c">−0,18</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong col-stick col-stick--shadow">Ведение бумажного журнала посещений</td>
-                        <td class="is-numeric">1 %</td>
-                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">2 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 2%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">0 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 0%"></span></span></span></td>
-                        <td class="is-numeric is-muted">—</td>
-                        <td><span class="ou-tag ou-tag--warning ou-tag--s">Мёртвый вариант</span></td>
+                        <td class="is-numeric wf-c">1 %</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">2 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 2%"></span></span></span></td><td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">0 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 0%"></span></span></span></td>
+                        <td class="is-numeric is-muted wf-c">—</td>
+                        <td class="wf-c"><span class="ou-tag ou-tag--warning ou-tag--s">Мёртвый вариант</span></td>
                       </tr>
                     </tbody>
                   </table>
@@ -1082,32 +1087,32 @@
                     <thead class="wf-th-wrap">
                       <tr>
                         <th class="col-stick col-stick--shadow"><div class="ou-grid__th"><span class="ou-tip" data-placement="bottom" tabindex="0">Редакция&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Версия текста вопроса. После правки формулировки наблюдения копятся заново: числа разных редакций описывают разные вопросы и не складываются.</span></span></div></th>
-                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">n&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Сколько участников видели вопрос в этой редакции. Коэффициенты считаются с 30 наблюдений, надёжными становятся со 100.</span></span></div></th>
-                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span></div></th>
-                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Дискриминативность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">n&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Сколько участников видели вопрос в этой редакции. Коэффициенты считаются с 30 наблюдений, надёжными становятся со 100.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Дискриминативность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span></div></th>
                         <th><div class="ou-grid__th"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Статистика карточки&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">По какой редакции посчитаны плитки и варианты ответа выше. По умолчанию — текущая; другую выбирают кнопкой «Показать».</span></span></div></th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
                         <td class="ou-grid__cell-strong col-stick col-stick--shadow">С 04.09.2026 — текущая<span class="ou-grid__cell-sub">переписан третий вариант ответа</span></td>
-                        <td class="is-numeric">268</td>
-                        <td class="is-numeric">0,41</td>
-                        <td class="is-numeric">0,34</td>
+                        <td class="is-numeric wf-c">268</td>
+                        <td class="is-numeric wf-c">0,41</td>
+                        <td class="is-numeric wf-c">0,34</td>
                         <td><span class="ou-tag ou-tag--info ou-tag--s">Выбрана</span></td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong col-stick col-stick--shadow">12.03.2026 — 03.09.2026<span class="ou-grid__cell-sub">предыдущая редакция</span></td>
-                        <td class="is-numeric">141</td>
-                        <td class="is-numeric">0,52</td>
-                        <td class="is-numeric">0,19</td>
+                        <td class="is-numeric wf-c">141</td>
+                        <td class="is-numeric wf-c">0,52</td>
+                        <td class="is-numeric wf-c">0,19</td>
                         <td><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Показать</span></button></td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow">Версия неизвестна<span class="ou-grid__cell-sub">импорт выгрузок и прохождения до 23.09.2026</span></td>
-                        <td class="is-numeric">96</td>
-                        <td class="is-numeric is-muted">0,47</td>
-                        <td class="is-numeric is-muted">—</td>
+                        <td class="is-numeric wf-c">96</td>
+                        <td class="is-numeric is-muted wf-c">0,47</td>
+                        <td class="is-numeric is-muted wf-c">—</td>
                         <td><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Показать</span></button></td>
                       </tr>
                     </tbody>
@@ -1132,22 +1137,22 @@
                     <thead>
                       <tr>
                         <th><div class="ou-grid__th">Тест</div></th>
-                        <th><div class="ou-grid__th wf-th-end">Наблюдений</div></th>
-                        <th><div class="ou-grid__th wf-th-end">Трудность</div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end">Наблюдений</div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end">Трудность</div></th>
                         <th class="ou-grid__control-cell" aria-label="Перейти"></th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr class="is-clickable">
                         <td class="ou-grid__cell-strong">Антикоррупционный минимум</td>
-                        <td class="is-numeric">412</td>
-                        <td class="is-numeric">0,58</td>
+                        <td class="is-numeric wf-c">412</td>
+                        <td class="is-numeric wf-c">0,58</td>
                         <td class="ou-grid__control-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вопрос в этом тесте" title="Вопрос в этом тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button></td>
                       </tr>
                       <tr class="is-clickable">
                         <td class="ou-grid__cell-strong">Вводный курс для новых сотрудников</td>
-                        <td class="is-numeric">96</td>
-                        <td class="is-numeric is-muted">мало данных</td>
+                        <td class="is-numeric wf-c">96</td>
+                        <td class="is-numeric is-muted wf-c">мало данных</td>
                         <td class="ou-grid__control-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вопрос в этом тесте" title="Вопрос в этом тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button></td>
                       </tr>
                     </tbody>
@@ -1274,61 +1279,61 @@
                     <thead>
                       <tr>
                         <th><div class="ou-grid__th is-sortable">Тема · подтема<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Прошли тему<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Доля верных ответов<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">Порог темы<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end">В выборке<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Прошли тему<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Доля верных ответов<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Порог темы<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">В выборке<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
                         <td class="ou-grid__cell-strong">Право и комплаенс</td>
-                        <td class="is-numeric">58 %</td>
-                        <td class="is-numeric">64 %</td>
-                        <td class="is-numeric">70 %</td>
-                        <td class="is-numeric">486</td>
+                        <td class="is-numeric wf-c">58 %</td>
+                        <td class="is-numeric wf-c">64 %</td>
+                        <td class="is-numeric wf-c">70 %</td>
+                        <td class="is-numeric wf-c">486</td>
                       </tr>
                       <tr>
                         <td class="is-muted"><span class="ou-box--pads-6">Антикоррупция</span></td>
-                        <td class="is-numeric is-muted">30 %</td>
-                        <td class="is-numeric is-muted">52 %</td>
-                        <td class="is-numeric is-muted">70 %</td>
-                        <td class="is-numeric is-muted">486</td>
+                        <td class="is-numeric is-muted wf-c">30 %</td>
+                        <td class="is-numeric is-muted wf-c">52 %</td>
+                        <td class="is-numeric is-muted wf-c">70 %</td>
+                        <td class="is-numeric is-muted wf-c">486</td>
                       </tr>
                       <tr>
                         <td class="is-muted"><span class="ou-box--pads-6">Персональные данные</span></td>
-                        <td class="is-numeric is-muted">56 %</td>
-                        <td class="is-numeric is-muted">68 %</td>
-                        <td class="is-numeric is-muted">70 %</td>
-                        <td class="is-numeric is-muted">486</td>
+                        <td class="is-numeric is-muted wf-c">56 %</td>
+                        <td class="is-numeric is-muted wf-c">68 %</td>
+                        <td class="is-numeric is-muted wf-c">70 %</td>
+                        <td class="is-numeric is-muted wf-c">486</td>
                       </tr>
                       <tr>
                         <td class="is-muted"><span class="ou-box--pads-6">Договорная работа</span></td>
-                        <td class="is-numeric is-muted">81 %</td>
-                        <td class="is-numeric is-muted">77 %</td>
-                        <td class="is-numeric is-muted">70 %</td>
-                        <td class="is-numeric is-muted">311</td>
+                        <td class="is-numeric is-muted wf-c">81 %</td>
+                        <td class="is-numeric is-muted wf-c">77 %</td>
+                        <td class="is-numeric is-muted wf-c">70 %</td>
+                        <td class="is-numeric is-muted wf-c">311</td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong">Управление командой</td>
-                        <td class="is-numeric">72 %</td>
-                        <td class="is-numeric">73 %</td>
-                        <td class="is-numeric">70 %</td>
-                        <td class="is-numeric">486</td>
+                        <td class="is-numeric wf-c">72 %</td>
+                        <td class="is-numeric wf-c">73 %</td>
+                        <td class="is-numeric wf-c">70 %</td>
+                        <td class="is-numeric wf-c">486</td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong">Охрана труда</td>
-                        <td class="is-numeric">88 %</td>
-                        <td class="is-numeric">81 %</td>
-                        <td class="is-numeric">70 %</td>
-                        <td class="is-numeric">486</td>
+                        <td class="is-numeric wf-c">88 %</td>
+                        <td class="is-numeric wf-c">81 %</td>
+                        <td class="is-numeric wf-c">70 %</td>
+                        <td class="is-numeric wf-c">486</td>
                       </tr>
                       <tr>
                         <td class="ou-grid__cell-strong is-muted">Информационная безопасность</td>
-                        <td class="is-muted">мало данных</td>
-                        <td class="is-muted">мало данных</td>
-                        <td class="is-numeric is-muted">70 %</td>
-                        <td class="is-numeric is-muted">6</td>
+                        <td class="is-muted wf-c">мало данных</td>
+                        <td class="is-muted wf-c">мало данных</td>
+                        <td class="is-numeric is-muted wf-c">70 %</td>
+                        <td class="is-numeric is-muted wf-c">6</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1452,11 +1457,11 @@
                         <tr>
                           <th class="ou-grid__control-cell"></th>
                           <th><div class="ou-grid__th is-sortable">Группа<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Назначено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Начато<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Завершено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                          <th><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Назначено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Начато<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Завершено<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                          <th class="wf-c"><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                           <th><div class="ou-grid__th">Слабейшая тема</div></th>
                           <th class="ou-grid__control-cell" aria-label="Действия"></th>
                         </tr>
@@ -1465,11 +1470,11 @@
                         <tr>
                           <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" ><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
                           <td class="ou-grid__cell-strong">Розница</td>
-                          <td class="is-numeric">168</td>
-                          <td class="is-numeric">166</td>
-                          <td class="is-numeric">163</td>
-                          <td class="is-numeric">85 %</td>
-                          <td class="is-numeric">81 %</td>
+                          <td class="is-numeric wf-c">168</td>
+                          <td class="is-numeric wf-c">166</td>
+                          <td class="is-numeric wf-c">163</td>
+                          <td class="is-numeric wf-c">85 %</td>
+                          <td class="is-numeric wf-c">81 %</td>
                           <td class="is-muted">Управление командой · 71 %</td>
                           <td class="wf-rowmenu-cell">
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с группой" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
@@ -1478,11 +1483,11 @@
                         <tr>
                           <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" ><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
                           <td class="ou-grid__cell-strong">Сервисные центры</td>
-                          <td class="is-numeric">216</td>
-                          <td class="is-numeric">210</td>
-                          <td class="is-numeric">206</td>
-                          <td class="is-numeric">80 %</td>
-                          <td class="is-numeric">77 %</td>
+                          <td class="is-numeric wf-c">216</td>
+                          <td class="is-numeric wf-c">210</td>
+                          <td class="is-numeric wf-c">206</td>
+                          <td class="is-numeric wf-c">80 %</td>
+                          <td class="is-numeric wf-c">77 %</td>
                           <td class="is-muted">Право и комплаенс · 69 %</td>
                           <td class="wf-rowmenu-cell">
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с группой" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
@@ -1491,11 +1496,11 @@
                         <tr>
                           <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" ><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
                           <td class="ou-grid__cell-strong">Логистика</td>
-                          <td class="is-numeric">46</td>
-                          <td class="is-numeric">44</td>
-                          <td class="is-numeric">41</td>
-                          <td class="is-numeric">74 %</td>
-                          <td class="is-numeric">70 %</td>
+                          <td class="is-numeric wf-c">46</td>
+                          <td class="is-numeric wf-c">44</td>
+                          <td class="is-numeric wf-c">41</td>
+                          <td class="is-numeric wf-c">74 %</td>
+                          <td class="is-numeric wf-c">70 %</td>
                           <td>Право и комплаенс · <span class="ou-tag ou-tag--warning ou-tag--s">61 %</span></td>
                           <td class="wf-rowmenu-cell">
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с группой" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
@@ -1504,11 +1509,11 @@
                         <tr>
                           <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" ><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
                           <td class="ou-grid__cell-strong">Отдел продаж</td>
-                          <td class="is-numeric">64</td>
-                          <td class="is-numeric">61</td>
-                          <td class="is-numeric">58</td>
-                          <td class="is-numeric">71 %</td>
-                          <td class="is-numeric">68 %</td>
+                          <td class="is-numeric wf-c">64</td>
+                          <td class="is-numeric wf-c">61</td>
+                          <td class="is-numeric wf-c">58</td>
+                          <td class="is-numeric wf-c">71 %</td>
+                          <td class="is-numeric wf-c">68 %</td>
                           <td>Право и комплаенс · <span class="ou-tag ou-tag--error ou-tag--s">54 %</span></td>
                           <td class="wf-rowmenu-cell">
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с группой" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
@@ -1517,11 +1522,11 @@
                         <tr>
                           <td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false" ><svg width="14" height="14"><use href="#i-chevron-right" /></svg></button></td>
                           <td class="ou-grid__cell-strong is-muted">Без группы</td>
-                          <td class="is-numeric is-muted">—</td>
-                          <td class="is-numeric">16</td>
-                          <td class="is-numeric">15</td>
-                          <td class="is-numeric">73 %</td>
-                          <td class="is-numeric">72 %</td>
+                          <td class="is-numeric is-muted wf-c">—</td>
+                          <td class="is-numeric wf-c">16</td>
+                          <td class="is-numeric wf-c">15</td>
+                          <td class="is-numeric wf-c">73 %</td>
+                          <td class="is-numeric wf-c">72 %</td>
                           <td class="is-muted">Управление командой · 66 %</td>
                           <td class="wf-rowmenu-cell">
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с группой" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
@@ -1530,11 +1535,11 @@
                         <tr>
                           <td class="ou-grid__control-cell"></td>
                           <td class="ou-grid__cell-strong">Новые сотрудники</td>
-                          <td class="is-numeric">5</td>
-                          <td class="is-numeric">4</td>
-                          <td class="is-numeric">3</td>
-                          <td class="is-muted">мало данных</td>
-                          <td class="is-muted">мало данных</td>
+                          <td class="is-numeric wf-c">5</td>
+                          <td class="is-numeric wf-c">4</td>
+                          <td class="is-numeric wf-c">3</td>
+                          <td class="is-muted wf-c">мало данных</td>
+                          <td class="is-muted wf-c">мало данных</td>
                           <td class="is-muted">—</td>
                           <td class="wf-rowmenu-cell">
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с группой" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button>
