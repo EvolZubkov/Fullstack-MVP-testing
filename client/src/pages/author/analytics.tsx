@@ -31,7 +31,6 @@ import { AttentionQueue, type AttentionData, type AttentionRow } from "@/feature
 import { DEFAULT_ATTENTION_PERIOD, type AttentionPeriod } from "@shared/analytics/attention-period";
 import { useQuery } from "@tanstack/react-query";
 import { LoadingState } from "@/components/loading-state";
-import { LmsImportDialog } from "@/features/analytics/lms-import/lms-import-dialog";
 import {
   Box,
   Button,
@@ -59,7 +58,6 @@ import {
   HelpCircle,
   Layers,
   RefreshCw,
-  Upload,
   FileDown,
 } from "lucide-react";
 import type { QuestionType } from "@shared/questions/question-type";
@@ -759,7 +757,6 @@ export default function AnalyticsPage() {
   const [selectedAttempt, setSelectedAttempt] = useState<CombinedAttempt | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   /** PRD-54: окно загрузки выгрузки отчёта LMS. */
-  const [lmsImportOpen, setLmsImportOpen] = useState(false);
   /**
    * Очередь «требует внимания» — страницей, а не только вкладкой: число дел стоит на самой
    * вкладке (эскиз prd56-analytics-section), и видно его должно быть до того, как её открыли.
@@ -930,22 +927,11 @@ export default function AnalyticsPage() {
         </Stack>
         {/* Кнопки одного ряда — родственные элементы, интервал 1x модульной сетки. */}
         <Cluster gap={1}>
-          {/* PRD-54: вторая точка входа. Теста в контексте нет — он берётся из самого файла. */}
-          <Button variant="secondary" size="s" leadingIcon={<Upload size={16} />} onClick={() => setLmsImportOpen(true)}>
-            Загрузить выгрузку LMS
-          </Button>
           <Button variant="secondary" size="s" leadingIcon={<RefreshCw size={16} />} onClick={() => window.location.reload()}>
             Обновить
           </Button>
         </Cluster>
       </Cluster>
-
-      <LmsImportDialog
-        open={lmsImportOpen}
-        onClose={() => setLmsImportOpen(false)}
-        description="Тест определяется по самому файлу"
-        onDone={() => window.location.reload()}
-      />
 
       {/* Табы */}
       <Tabs

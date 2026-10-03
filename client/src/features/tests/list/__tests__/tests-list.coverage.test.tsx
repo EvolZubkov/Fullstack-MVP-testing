@@ -302,6 +302,13 @@ describe("<TestsListPage /> — test more-menu actions", () => {
     fireEvent.click(screen.getByTestId("menu-export-excel-t-1"));
   });
 
+  it("«Загрузить выгрузку LMS» ведёт в «Импорт» с этим тестом (Э6)", async () => {
+    await openMenu();
+    const item = screen.getByTestId("menu-import-lms-t-1");
+    expect(item).toHaveTextContent("Загрузить выгрузку LMS");
+    expect(item.getAttribute("href")).toBe("/author/import?testId=t-1");
+  });
+
   it("«Опубликовать» fires a status PATCH", async () => {
     await openMenu();
     fireEvent.click(screen.getByTestId("menu-toggle-publish-t-1"));

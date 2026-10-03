@@ -13,7 +13,7 @@
  */
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
@@ -194,26 +194,9 @@ describe("<TestAnalyticsPage />", () => {
       .toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Прохождения теста/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Обновить" })).toBeInTheDocument();
-    // PRD-54: загрузка выгрузки стоит рядом с экспортом (эскиз prd54-lms-import).
-    expect(screen.getByRole("button", { name: /Загрузить выгрузку LMS/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Экспорт Excel/ })).toBeInTheDocument();
-  });
-
-  it("окно загрузки выгрузки LMS: кнопки в подвале окна, загрузки теста в теле", async () => {
-    await renderLoaded();
-    fireEvent.click(screen.getByRole("button", { name: /Загрузить выгрузку LMS/ }));
-
-    const dialog = await screen.findByRole("dialog");
-    const foot = dialog.querySelector("footer.ou-modal__foot") as HTMLElement;
-    expect(within(foot).getAllByRole("button").map((b) => b.textContent))
-      .toEqual(["Отмена", "Проверить", "Импортировать"]);
-    expect(within(foot).getByRole("button", { name: "Импортировать" })).toBeDisabled();
-    // Тест задан страницей — список загрузок виден до выбора файла, и он в теле окна.
-    const body = dialog.querySelector(".ou-modal__body") as HTMLElement;
-    expect(within(body).getByText("Загрузки этого теста")).toBeInTheDocument();
-
-    fireEvent.click(within(foot).getByRole("button", { name: "Отмена" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Э6: загрузка выгрузки LMS ушла в раздел «Импорт» — в шапке её нет.
+    expect(screen.queryByRole("button", { name: /Загрузить выгрузку LMS/ })).toBeNull();
   });
 
   it("четыре плитки сводки — на «Обзоре», время медианой", async () => {

@@ -61,7 +61,6 @@ import {
 import { LoadingState } from "@/components/loading-state";
 import { readQuestionAnalyticsLink } from "@/features/analytics/test/question-analytics-link";
 import { pluralize } from "@/lib/i18n";
-import { LmsImportDialog } from "@/features/analytics/lms-import/lms-import-dialog";
 import { RegistryFilterDialog } from "@/features/analytics/registry/filter-dialog";
 import {
     countConditions,
@@ -78,7 +77,6 @@ import {
     HelpCircle,
     Layers,
     FileSpreadsheet,
-    Upload,
     ChevronRight,
     RefreshCw,
 } from "lucide-react";
@@ -274,7 +272,6 @@ export default function TestAnalyticsPage() {
     );
     const [activeTab, setActiveTab] = useState<string>(deepLink.tab);
     /** PRD-54: окно загрузки выгрузки отчёта LMS. Тест здесь задан страницей. */
-    const [lmsImportOpen, setLmsImportOpen] = useState(false);
     /**
      * PRD-56 FR-20: тема профиля экспозиции. Держится в состоянии, а не выводится из данных:
      * профиль строится по банку ОДНОЙ темы, и выбирать её должен читатель.
@@ -802,16 +799,6 @@ export default function TestAnalyticsPage() {
                 </Stack>
                 {/* Кнопки одной группы — 4 px, как в эскизе (план сверки 6.2, 6.4). */}
                 <Cluster gap={1} justify="end" align="center">
-                    {/* PRD-54: третья точка входа. Тест здесь ЗАДАН страницей, поэтому файл
-                        чужого теста форма отвергнет — см. `fixedTestId`. */}
-                    <Button
-                        variant="secondary"
-                        size="s"
-                        leadingIcon={<Upload size={16} />}
-                        onClick={() => setLmsImportOpen(true)}
-                    >
-                        Загрузить выгрузку LMS
-                    </Button>
                     <Button onClick={handleExportExcel} variant="secondary" size="s" leadingIcon={<FileSpreadsheet size={16} />}>
                         Экспорт Excel
                     </Button>
@@ -838,14 +825,6 @@ export default function TestAnalyticsPage() {
                     />
                 </Cluster>
             </Cluster>
-
-            <LmsImportDialog
-                open={lmsImportOpen}
-                onClose={() => setLmsImportOpen(false)}
-                description={analytics.testTitle}
-                fixedTestId={testId}
-                onDone={() => invalidateAnalytics(queryClient)}
-            />
 
             <RegistryFilterDialog
                 open={filterOpen}

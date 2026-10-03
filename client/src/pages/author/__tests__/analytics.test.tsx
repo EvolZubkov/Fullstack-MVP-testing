@@ -493,18 +493,9 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     expect(screen.queryByRole("tab", { name: "Экспорт" })).toBeNull();
   });
 
-  it("окно загрузки выгрузки LMS: кнопки в подвале окна, «Отмена» закрывает", async () => {
+  it("загрузки выгрузки LMS в аналитике нет — она в разделе «Импорт» (Э6)", async () => {
     await renderLoaded();
-    fireEvent.click(screen.getByRole("button", { name: /Загрузить выгрузку LMS/ }));
-
-    const dialog = await screen.findByRole("dialog");
-    const foot = dialog.querySelector("footer.ou-modal__foot") as HTMLElement;
-    expect(within(foot).getAllByRole("button").map((b) => b.textContent))
-      .toEqual(["Отмена", "Проверить", "Импортировать"]);
-    expect(within(foot).getByRole("button", { name: "Проверить" })).toBeDisabled();
-
-    fireEvent.click(within(foot).getByRole("button", { name: "Отмена" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByRole("button", { name: /Загрузить выгрузку LMS/ })).toBeNull();
   });
 
 });

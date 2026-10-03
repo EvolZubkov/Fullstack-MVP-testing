@@ -2,19 +2,19 @@
  * @module features/analytics/lms-import/lms-import-form
  * @description Форма загрузки выгрузки отчёта LMS (PRD-54 раздел 11).
  *
- * ОДНА на три точки входа: экран «Импорт» встраивает её в страницу, обе страницы аналитики — в
- * `ModalDialog` через `LmsImportDialog`. В окне кнопки уходят в стандартный подвал окна (`frame`),
- * на встроенном экране стоят в теле формы. Копии разошлись бы поведением сухого прогона и предупреждений, а разойдясь,
- * начали бы обещать разное про один и тот же файл.
+ * Живёт только в разделе «Импорт» (Э6 UX-аудита, «единая точка импорта»): окно загрузки в
+ * аналитике снято, а меню теста ведёт сюда же с тестом в адресе.
  *
- * Хост может отдать уже разобранный файл (экран импорта опознаёт вид до ветвления) либо не отдать
- * ничего — тогда форма показывает собственный загрузчик и опознаёт файл сама.
+ * Хост может отдать уже разобранный файл (раздел опознаёт вид до ветвления) либо не отдать
+ * ничего — тогда форма показывает собственный загрузчик и опознаёт файл сама. Так она работает
+ * при входе из меню теста: загрузки теста видны сразу, до файла.
  *
- * Эскиз: `docs/wireframes/prd54-lms-import.html` (согласован 2026-09-12).
+ * Эскизы: `docs/wireframes/prd54-lms-import.html` (согласован 2026-09-12),
+ * `docs/wireframes/approved/e6-import-single-point.html` (согласован 2026-10-02).
  */
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Trash2, Upload, X } from "lucide-react";
 import {
   Banner,
   Button,
@@ -33,6 +33,20 @@ import {
 } from "@skillum/ui-kit";
 import { queryClient } from "@/lib/queryClient";
 import { invalidateAnalytics } from "../invalidate-analytics";
+
+/**
+ * Отказ по праву на вид файла (Э6) — тот же текст, что отдаёт разбор файла на сервере. Без
+ * пояснений и без перечня доступного: решение владельца 2026-10-02.
+ */
+export const IMPORT_DENIED_TEXT = "Недостаточно прав для выполнения операции";
+
+/** Разбор файла ответил 403: вид распознан, права на него нет. */
+class ImportDenied extends Error {
+  constructor() {
+    super("import denied");
+    this.name = "ImportDenied";
+  }
+}
 
 /** Сентинелы списка групп — по образцу `NEW_TEST = "__new__"` со страницы «Импорт». */
 const NO_GROUP = "__none__";
@@ -72,27 +86,19 @@ interface Batch {
   rowsLinked: number;
 }
 
-/**
- * Части формы, которые хост-окно раскладывает по своим местам: тело — в тело окна, кнопки — в
- * его подвал с разделителем.
- */
-export interface LmsImportFrameParts {
-  /** Содержимое формы без кнопок. */
-  body: ReactNode;
-  /** Кнопки текущего состояния формы («Отмена», «Проверить», «Импортировать» и т. п.). */
-  actions: ReactNode;
-}
-
 export interface LmsImportFormProps {
   /** Файл, уже выбранный хостом. Без него форма показывает свой загрузчик. */
   file?: File;
   /** Разбор, уже выполненный хостом. */
   inspect?: LmsInspectResult;
   /**
-   * Задан на странице аналитики КОНКРЕТНОГО теста. Файл чужого теста тогда отвергается — это
-   * единственная защита от загрузки посторонней выгрузки в открытую перед глазами аналитику.
+   * Тест, известный ДО файла, — вход из меню теста (Э6). Только начальный вид: загрузки этого
+   * теста видны сразу, без файла. Тест задаёт ФАЙЛ: выгрузка другого теста грузится в свой тест,
+   * без отказа (владелец 2026-10-02).
    */
-  fixedTestId?: string;
+  presetTestId?: string;
+  /** Сообщает хосту разбор файла, выбранного в собственном загрузчике формы. */
+  onInspect?: (inspect: LmsInspectResult) => void;
   /**
    * Зовётся после успешного импорта — ТОЛЬКО чтобы хост обновил свои данные.
    *
@@ -105,16 +111,6 @@ export interface LmsImportFormProps {
    * СВОЙ: форма чужое состояние не чистит, и без этого «Загрузить ещё» ничего бы не меняло.
    */
   onReset?: () => void;
-  /**
-   * Закрыть окно, в котором открыта форма. Задан — среди кнопок первой появляется «Отмена»
-   * (после успешной загрузки — «Закрыть»). Встроенная форма экрана «Импорт» его не передаёт.
-   */
-  onCancel?: () => void;
-  /**
-   * Раскладка по окну. Задана — форма отдаёт тело и кнопки порознь, и хост ставит кнопки в подвал
-   * окна (эскиз, состояние «в окне»). Не задана — кнопки стоят в теле формы, перед списком загрузок.
-   */
-  frame?: (parts: LmsImportFrameParts) => ReactNode;
 }
 
 /** Килобайты файла для подписи под именем. */
@@ -140,12 +136,14 @@ function plural(n: number, forms: [string, string, string]): string {
   return `${n} ${forms[2]}`;
 }
 
-export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestId, onDone, onReset, onCancel, frame }: LmsImportFormProps) {
+export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTestId, onInspect, onDone, onReset }: LmsImportFormProps) {
   const { push: toast } = useToast();
 
   const [ownFile, setOwnFile] = useState<File | null>(null);
   const [ownInspect, setOwnInspect] = useState<LmsInspectResult | null>(null);
   const [notRecognized, setNotRecognized] = useState(false);
+  /** Файл распознан, но права на его вид нет (Э6): отказ без пояснений. */
+  const [denied, setDenied] = useState(false);
   const [group, setGroup] = useState<string>(NO_GROUP);
   const [newGroupName, setNewGroupName] = useState("");
   const [linkUsers, setLinkUsers] = useState(false);
@@ -155,25 +153,24 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
   const file = hostFile ?? ownFile;
   const inspect = hostInspect ?? ownInspect;
   const testId = inspect?.testId ?? null;
-  const mismatch = !!fixedTestId && !!testId && fixedTestId !== testId;
   /**
-   * Чьи загрузки показывать. Тест, заданный страницей, известен ДО выбора файла: откатить
-   * загрузку можно, ничего не загружая. Где тест определяется по файлу, до файла списка нет —
-   * показывать нечего.
+   * Чьи загрузки показывать. Тест файла главнее заданного заранее: выгрузка другого теста
+   * грузится в свой тест, и список переключается на него. Тест, заданный входом из меню, известен
+   * ДО выбора файла: откатить загрузку можно, ничего не загружая. Где тест определяется по файлу,
+   * до файла списка нет — показывать нечего.
    */
-  const batchesTestId = testId ?? fixedTestId ?? null;
+  const batchesTestId = testId ?? presetTestId ?? null;
 
   const groups = useQuery<Array<{ id: string; name: string }>>({ queryKey: ["/api/groups"] });
   const batches = useQuery<Batch[]>({
     queryKey: [`/api/analytics/lms-import/batches/${batchesTestId}`],
-    enabled: !!batchesTestId && !mismatch,
+    enabled: !!batchesTestId,
   });
 
   /** Тело запроса: и сухой прогон, и импорт отправляют одно и то же. */
   function body(): FormData {
     const fd = new FormData();
     if (file) fd.append("file", file);
-    if (fixedTestId) fd.append("fixedTestId", fixedTestId);
     if (group !== NO_GROUP && group !== NEW_GROUP) fd.append("groupId", group);
     if (group === NEW_GROUP) fd.append("newGroupName", newGroupName);
     fd.append("linkUsers", String(linkUsers));
@@ -196,6 +193,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
       const fd = new FormData();
       fd.append("file", f);
       const res = await fetch("/api/workbook/inspect", { method: "POST", body: fd, credentials: "include" });
+      if (res.status === 403) throw new ImportDenied();
       if (!res.ok) throw new Error("read failed");
       return res.json();
     },
@@ -203,8 +201,9 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
       // Книга теста в эту форму не годится: она про содержание теста, а не про прохождения.
       if (data.kind !== "lmsExport") { setNotRecognized(true); return; }
       setOwnInspect(data);
+      onInspect?.(data);
     },
-    onError: () => setNotRecognized(true),
+    onError: (error) => (error instanceof ImportDenied ? setDenied(true) : setNotRecognized(true)),
   });
 
   const dryMut = useMutation({ mutationFn: () => send(true), onSuccess: setPlan });
@@ -234,6 +233,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
     setOwnFile(null);
     setOwnInspect(null);
     setNotRecognized(false);
+    setDenied(false);
     setPlan(null);
     setDone(null);
     // Файл мог прийти от хоста — своё состояние он чистит сам.
@@ -241,29 +241,17 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
   }
 
   /**
-   * Собрать состояние формы. В окне тело и кнопки уходят хосту порознь — кнопки встают в подвал;
-   * встроенная форма ставит их в конец тела, справа.
+   * Собрать состояние формы: тело, кнопки справа под ним и список загрузок ниже кнопок.
    *
    * @param body содержимое до кнопок
-   * @param buttons кнопки состояния, без «Отмены»: её добавляет сама раскладка
-   * @param options.closeLabel подпись закрывающей кнопки — после записи отменять уже нечего
-   * @param options.after содержимое под кнопками встроенной формы (список загрузок); в окне оно
-   *   остаётся в теле, а кнопки уходят в подвал
+   * @param buttons кнопки состояния
+   * @param after содержимое под кнопками (список загрузок теста)
    */
-  function compose(
-    body: ReactNode,
-    buttons: ReactNode,
-    { closeLabel = "Отмена", after = null }: { closeLabel?: string; after?: ReactNode } = {},
-  ) {
-    const cancel = onCancel ? (
-      <Button variant="ghost" onClick={onCancel} disabled={runMut.isPending}>{closeLabel}</Button>
-    ) : null;
-    const actions = <>{cancel}{buttons}</>;
-    if (frame) return <>{frame({ body: <Stack gap={3}>{body}{after}</Stack>, actions })}</>;
+  function compose(body: ReactNode, buttons: ReactNode, after: ReactNode = null) {
     return (
       <Stack gap={3}>
         {body}
-        <Cluster justify="end" gap={2}>{actions}</Cluster>
+        <Cluster justify="end" gap={2}>{buttons}</Cluster>
         {after}
       </Stack>
     );
@@ -284,9 +272,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
     >
       <span className="ou-uploader__icon" aria-hidden="true"><Upload size={24} /></span>
       <span className="ou-uploader__title">Перетащите файл .xlsx или выберите</span>
-      <span className="ou-uploader__sub">
-        {fixedTestId ? "Только выгрузка отчёта LMS этого теста" : "Выгрузка отчёта LMS — вид определяется автоматически"}
-      </span>
+      <span className="ou-uploader__sub">Выгрузка отчёта LMS — тест определится по файлу</span>
       <Button variant="secondary" size="s" type="button" tabIndex={-1}>Выбрать файл</Button>
     </FileUploader>
   );
@@ -302,14 +288,25 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
 
   // ── Идёт разбор ──────────────────────────────────────────────────────────
   if (inspectMut.isPending) {
-    // Встроенной форме без «Отмены» кнопок тут нет вовсе — пустую строку не рисуем.
-    const body = (
-      <>
+    // Кнопок тут нет вовсе — пустую строку под ними не рисуем.
+    return (
+      <Stack gap={3}>
         {fileRow}
         <Cluster gap={2}><Spinner size="s" /><Text variant="body-s" tone="muted">Читаем файл…</Text></Cluster>
-      </>
+      </Stack>
     );
-    return onCancel || frame ? compose(body, null) : <Stack gap={3}>{body}</Stack>;
+  }
+
+  // ── Нет права на вид файла ───────────────────────────────────────────────
+  // Отказ не объясняет и не перечисляет доступного (владелец 2026-10-02).
+  if (denied) {
+    return compose(
+      <>
+        {fileRow}
+        <Banner tone="error" variant="subtle" icon={<Ban size={16} />} title={IMPORT_DENIED_TEXT} />
+      </>,
+      <Button variant="secondary" onClick={reset}>Выбрать другой файл</Button>,
+    );
   }
 
   // ── Файл не распознан ────────────────────────────────────────────────────
@@ -342,20 +339,6 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
     );
   }
 
-  // ── Чужой тест ───────────────────────────────────────────────────────────
-  if (mismatch) {
-    return compose(
-      <>
-        {fileRow}
-        <Banner
-          tone="error"
-          title="Это выгрузка другого теста"
-          description={`В файле — «${inspect?.testTitle ?? testId}». Открыта аналитика другого теста, и записать эти строки сюда нельзя.`}
-        />
-      </>,
-      <Button variant="secondary" onClick={reset}>Выбрать другой файл</Button>,
-    );
-  }
 
   // ── Готово ───────────────────────────────────────────────────────────────
   if (done) {
@@ -366,15 +349,25 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
         description={`Добавлено ${done.rowsCreated}, обновлено ${done.rowsUpdated}, пропущено ${done.rowsSkipped}, связано с пользователями ${done.rowsLinked}.`}
       />,
       <Button variant="secondary" onClick={reset}>Загрузить ещё</Button>,
-      { closeLabel: "Закрыть" },
     );
   }
 
+  // Служебные пункты идут первыми и находятся поиском, как и группы: «Без группы» — по «без».
   const groupOptions = [
     { value: NO_GROUP, label: "Без группы" },
     { value: NEW_GROUP, label: "＋ Создать новую группу" },
     ...(groups.data ?? []).map((g) => ({ value: g.id, label: g.name })),
   ];
+  /** Числа файла для баннера; нулевые не называются — «0 показателей» ничего не говорит. */
+  const fileCounts = inspect
+    ? [
+        inspect.questionIds > 0 ? plural(inspect.questionIds, ["вопрос", "вопроса", "вопросов"]) : null,
+        inspect.scaleKeys.length > 0 ? plural(inspect.scaleKeys.length, ["шкала", "шкалы", "шкал"]) : null,
+        inspect.variableNames.length > 0
+          ? plural(inspect.variableNames.length, ["показатель", "показателя", "показателей"])
+          : null,
+      ].filter(Boolean).join(", ")
+    : "";
 
   /**
    * «Проверить» и «Импортировать». Без файла проверять нечего, поэтому обе заблокированы. В окне
@@ -410,23 +403,23 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
       {file ? fileRow : uploader}
 
       {inspect && (
+        // Баннер называет тест и числа файла — без технических пояснений (владелец 2026-10-02).
         <Banner
           tone="info"
+          variant="subtle"
           icon={<CheckCircle2 size={16} />}
           title={inspect.testTitle ?? "Тест определён"}
-          description={
-            `${plural(inspect.questionIds, ["вопрос", "вопроса", "вопросов"])}, ` +
-            `${plural(inspect.scaleKeys.length, ["шкала", "шкалы", "шкал"])}, ` +
-            `${plural(inspect.variableNames.length, ["показатель", "показателя", "показателей"])}. ` +
-            "Тест определён по файлу — выбирать не нужно."
-          }
+          description={fileCounts ? `${fileCounts}.` : undefined}
         />
       )}
 
+      {/* Одиночный выбор с поиском — Select searchable: групп бывают десятки (эскиз Э6). */}
       <Select
         label="Группа"
         hint="Разрез для аналитики. Метка ставится на прохождения этой загрузки."
         fullWidth
+        searchable
+        searchPlaceholder="Поиск по названию группы"
         value={group}
         onChange={setGroup}
         options={groupOptions}
@@ -520,5 +513,5 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, fixedTestI
     </Stack>
   );
 
-  return compose(form, buttons, { after: batchList });
+  return compose(form, buttons, batchList);
 }

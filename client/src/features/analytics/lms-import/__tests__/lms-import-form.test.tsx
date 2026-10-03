@@ -3,7 +3,7 @@
  * @description Форма загрузки выгрузки LMS: список загрузок с откатом и подписи плана.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn, queryClient } from "@/lib/queryClient";
 import { LmsImportForm, type LmsInspectResult } from "../lms-import-form";
@@ -79,8 +79,8 @@ describe("<LmsImportForm /> — список загрузок", () => {
   });
 });
 
-describe("<LmsImportForm /> — окно до выбора файла (эскиз prd54-lms-import, состояние «в окне»)", () => {
-  function renderEmpty(props: { fixedTestId?: string; onCancel?: () => void } = {}) {
+describe("<LmsImportForm /> — вход из меню теста: тест известен до файла (эскиз Э6)", () => {
+  function renderEmpty(props: { presetTestId?: string } = {}) {
     return render(
       <QueryClientProvider client={queryClient}><ToastProvider>
         <LmsImportForm {...props} />
@@ -89,19 +89,19 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
   }
 
   it("до файла видна вся форма: загрузчик, группа, связывание и кнопки", async () => {
-    renderEmpty({ fixedTestId: "t1", onCancel: () => {} });
+    renderEmpty({ presetTestId: "t1" });
 
     expect(screen.getByText("Перетащите файл .xlsx или выберите")).toBeInTheDocument();
+    expect(screen.getByText("Выгрузка отчёта LMS — тест определится по файлу")).toBeInTheDocument();
     expect(screen.getByText("Группа")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Связать с пользователями по ключу/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Отмена" })).toBeInTheDocument();
     // Проверять и импортировать нечего, пока файла нет.
     expect(screen.getByRole("button", { name: "Проверить" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Импортировать" })).toBeDisabled();
   });
 
-  it("на странице теста загрузки видны сразу — откатить можно, ничего не загружая", async () => {
-    renderEmpty({ fixedTestId: "t1" });
+  it("загрузки теста видны сразу — откатить можно, ничего не загружая", async () => {
+    renderEmpty({ presetTestId: "t1" });
 
     expect(await screen.findAllByRole("button", { name: "Откатить" })).toHaveLength(2);
     expect(screen.getByText("Загрузки этого теста")).toBeInTheDocument();
@@ -114,16 +114,8 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/lms-import/batches/"), expect.anything());
   });
 
-  it("«Отмена» закрывает окно у хоста", () => {
-    const onCancel = vi.fn();
-    renderEmpty({ fixedTestId: "t1", onCancel });
-
-    fireEvent.click(screen.getByRole("button", { name: "Отмена" }));
-    expect(onCancel).toHaveBeenCalled();
-  });
-
-  it("встроенная форма ставит кнопки в тело, перед списком загрузок", async () => {
-    renderEmpty({ fixedTestId: "t1" });
+  it("кнопки стоят в теле, перед списком загрузок", async () => {
+    renderEmpty({ presetTestId: "t1" });
     await screen.findByText("сентябрь.xlsx");
 
     const list = screen.getByText("Загрузки этого теста");
@@ -131,29 +123,41 @@ describe("<LmsImportForm /> — окно до выбора файла (эски�
     expect(importButton.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("с раскладкой по окну кнопки отдаются хосту отдельно от тела", async () => {
+  it("файл другого теста не отвергается: список переключается на его тест", async () => {
+    // Владелец 2026-10-02: тест задаёт ФАЙЛ, а тест из меню — только начальный вид.
     render(
       <QueryClientProvider client={queryClient}><ToastProvider>
-        <LmsImportForm
-          fixedTestId="t1"
-          onCancel={() => {}}
-          frame={({ body, actions }) => (
-            <>
-              <div data-testid="body">{body}</div>
-              <div data-testid="actions">{actions}</div>
-            </>
-          )}
-        />
+        <LmsImportForm presetTestId="t9" file={new File(["x"], "другой.xlsx")} inspect={INSPECT} />
       </ToastProvider></QueryClientProvider>,
     );
-    await screen.findByText("сентябрь.xlsx");
 
-    const body = screen.getByTestId("body");
-    const actions = screen.getByTestId("actions");
-    expect(within(body).getByText("Загрузки этого теста")).toBeInTheDocument();
-    expect(within(body).queryByRole("button", { name: "Импортировать" })).toBeNull();
-    expect(within(actions).getAllByRole("button").map((b) => b.textContent))
-      .toEqual(["Отмена", "Проверить", "Импортировать"]);
+    expect(await screen.findByText("сентябрь.xlsx")).toBeInTheDocument();
+    expect(screen.queryByText(/другого теста/)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith("/api/analytics/lms-import/batches/t1", expect.anything());
+  });
+
+  it("баннер называет тест и числа файла — без технического пояснения", () => {
+    renderForm();
+
+    expect(screen.getByText("Тест")).toBeInTheDocument();
+    expect(screen.getByText("2 вопроса.")).toBeInTheDocument();
+    expect(screen.queryByText(/выбирать не нужно/)).toBeNull();
+  });
+
+  it("нет права на вид файла — отказ без пояснений", async () => {
+    fetchMock.mockImplementation(async (input: string) => {
+      if (String(input) === "/api/workbook/inspect") {
+        return { ok: false, status: 403, json: async () => ({ kind: "workbook", error: "x" }) };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    });
+    const { container } = renderEmpty({ presetTestId: "t1" });
+
+    const input = container.querySelector("input[type=file]") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "книга.xlsx")] } });
+
+    expect(await screen.findByText("Недостаточно прав для выполнения операции")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Выбрать другой файл" })).toBeInTheDocument();
   });
 });
 

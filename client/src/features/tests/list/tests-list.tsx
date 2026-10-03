@@ -365,6 +365,8 @@ export function TestsListPage(): React.JSX.Element {
   // PRD-48: importing a `.tbtest` package creates or updates a test, so the right is the
   // same one «создать тест» needs.
   const canImportPackage = can("tests.create");
+  // Э6: пункт меню теста ведёт в «Импорт» на выгрузку LMS этого теста.
+  const canImportLms = can("analytics.import");
   const [transferOpen, setTransferOpen] = useState(false);
 
   // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
@@ -1068,6 +1070,20 @@ export function TestsListPage(): React.JSX.Element {
           <PackageOpen size={14} />
           Экспорт пакета (.tbtest)
         </a>
+        {/* Э6: своего окна у пункта нет — он ведёт в раздел «Импорт» с этим тестом в адресе,
+            и раздел сразу показывает загрузки теста. Тест задаёт файл, а не пункт. */}
+        {canImportLms && (
+          <Link
+            href={`/author/import?testId=${encodeURIComponent(test.id)}`}
+            className="dropdown-item"
+            role="menuitem"
+            onClick={() => setTestMenu(null)}
+            data-testid={`menu-import-lms-${test.id}`}
+          >
+            <Upload size={14} />
+            Загрузить выгрузку LMS
+          </Link>
+        )}
         <hr className="dropdown-sep" />
         <button
           type="button"

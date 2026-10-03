@@ -31,7 +31,6 @@ import {
   Cluster,
   Drawer,
   EmptyState,
-  Grid,
   IconButton,
   Input,
   Label,
@@ -57,6 +56,8 @@ import { ROLE_LABELS } from "@/lib/roles";
 import { ROLE_PRIORITY, type Role } from "@shared/access";
 import { foldOrgValues, orgValueKey, type OrgField, type OrgValueCount } from "@shared/org-fields";
 import { OrgFieldControl } from "@/features/users/org-field-control";
+import { importableCount, useUsersBulkImport } from "@/features/users/bulk-import/use-users-bulk-import";
+import { UsersBulkPreview, UsersBulkResult } from "@/features/users/bulk-import/users-bulk-preview";
 
 interface User {
   id: string;
@@ -193,28 +194,9 @@ export default function UsersPage() {
   });
   const [newPassword, setNewPassword] = useState("");
 
-  // Bulk import state
-  type PreviewRow = {
-    idx: number; email: string; name: string | null; role: string;
-    groupName: string | null; groupId: string | null; groupFound: boolean;
-    /**
-     * PRD-54: `keyUpdate` — существующий пользователь с непустым внешним ключом. Такая строка НЕ
-     * дубль: она не пропускается, а проставляет ключ, поэтому выбора «пропустить / обновить»
-     * у неё нет.
-     */
-    status: "new" | "duplicate" | "keyUpdate" | "error"; error?: string; existingId?: string;
-    duplicateAction?: "skip" | "update";
-    externalKey?: string | null;
-    lmsLearnerId?: string | null;
-    organization?: string | null;
-    unit?: string | null;
-    position?: string | null;
-  };
+  // Bulk import: the state is shared with the «Импорт» section (E6), the dialog only frames it.
+  const bulk = useUsersBulkImport();
   const [isBulkOpen, setIsBulkOpen] = useState(false);
-  const [bulkStep, setBulkStep] = useState<"upload" | "preview" | "done">("upload");
-  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
-  const [sendInvites, setSendInvites] = useState(true);
-  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; invitesSent: number; errors: string[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -298,47 +280,11 @@ export default function UsersPage() {
     },
   });
 
-  // Bulk preview mutation
-  const bulkPreviewMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/users/bulk-preview", { method: "POST", credentials: "include", body: fd });
-      if (!res.ok) throw new Error((await res.json()).error || "Parse error");
-      return res.json() as Promise<PreviewRow[]>;
-    },
-    onSuccess: (rows) => {
-      setPreviewRows(rows.map(r => ({ ...r, duplicateAction: "skip" })));
-      setBulkStep("preview");
-    },
-    onError: (e: Error) => toast({ tone: "error", title: "Ошибка", description: e.message }),
-  });
-
-  const bulkImportMutation = useMutation({
-    mutationFn: async ({ rows, sendInvites }: { rows: PreviewRow[]; sendInvites: boolean }) => {
-      const res = await fetch("/api/users/bulk-import", {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows, sendInvites }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "Import error");
-      return res.json();
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      setImportResult(result);
-      setBulkStep("done");
-    },
-    onError: (e: Error) => toast({ tone: "error", title: "Ошибка импорта", description: e.message }),
-  });
-
-  const handleBulkFile = (file: File) => bulkPreviewMutation.mutate(file);
+  const handleBulkFile = (file: File) => bulk.preview(file);
 
   const handleBulkClose = () => {
     setIsBulkOpen(false);
-    setBulkStep("upload");
-    setPreviewRows([]);
-    setImportResult(null);
+    bulk.reset();
   };
 
   // Update user mutation
@@ -773,7 +719,7 @@ export default function UsersPage() {
   }
 
   const bulkFooter =
-    bulkStep === "upload" ? (
+    bulk.step === "upload" ? (
       <Cluster justify="between" full>
         <a href="/api/users/bulk-template" download>
           <Cluster gap={1}>
@@ -783,15 +729,15 @@ export default function UsersPage() {
         </a>
         <Button variant="secondary" onClick={handleBulkClose}>Отмена</Button>
       </Cluster>
-    ) : bulkStep === "preview" ? (
+    ) : bulk.step === "preview" ? (
       <>
-        <Button variant="secondary" onClick={() => setBulkStep("upload")}>Назад</Button>
+        <Button variant="secondary" onClick={() => bulk.setStep("upload")}>Назад</Button>
         <Button
-          onClick={() => bulkImportMutation.mutate({ rows: previewRows, sendInvites })}
-          disabled={previewRows.filter((r) => r.status !== "error").length === 0}
-          loading={bulkImportMutation.isPending}
+          onClick={bulk.runImport}
+          disabled={importableCount(bulk.rows) === 0}
+          loading={bulk.importing}
         >
-          Импортировать ({previewRows.filter((r) => r.status !== "error").length} строк)
+          Импортировать ({importableCount(bulk.rows)} строк)
         </Button>
       </>
     ) : (
@@ -857,100 +803,6 @@ export default function UsersPage() {
       />
     </>
   );
-
-  // ── Bulk preview table columns ──
-  const previewColumns: TableColumn<PreviewRow>[] = [
-    { key: "email", header: "Email", render: (row) => <Text variant="mono-s">{row.email}</Text> },
-    { key: "name", header: "Имя", render: (row) => <Text variant="body-s" tone="muted">{row.name || "—"}</Text> },
-    { key: "role", header: "Роль", render: (row) => <Tag variant="outline" size="s">{row.role}</Tag> },
-    {
-      key: "group",
-      header: "Группа",
-      render: (row) =>
-        row.groupName ? (
-          <Tag
-            size="s"
-            tone={row.groupFound ? "success" : "error"}
-            title={row.groupFound ? undefined : "Группа не найдена — будет пропущена"}
-          >
-            {row.groupName}{!row.groupFound && " ⚠"}
-          </Tag>
-        ) : (
-          <Text variant="body-xs" tone="muted">—</Text>
-        ),
-    },
-    {
-      // Org-structure plan: one column in two lines — the unit, then position and
-      // organisation. Separate columns made ten, and «Статус» with «Действие»
-      // went past the edge of the dialog.
-      key: "org",
-      header: "Подразделение и должность",
-      render: (row) => {
-        const second = [row.position, row.organization].filter(Boolean).join(" · ");
-        if (!row.unit && !second) return <Text variant="body-xs" tone="muted">—</Text>;
-        return (
-          <Stack gap={1}>
-            <Text variant="body-s">{row.unit || "—"}</Text>
-            {second && <Text variant="body-xs" tone="muted">{second}</Text>}
-          </Stack>
-        );
-      },
-    },
-    {
-      // PRD-54: колонка нужна, чтобы до записи было видно, кому проставится ключ. Без неё
-      // состояние «Ключ будет обновлён» сообщало бы о факте, не показывая самого значения.
-      // Оба ключа связывания — в одной колонке, по строке на ключ.
-      key: "keys",
-      header: "Ключи связывания",
-      render: (row) =>
-        row.lmsLearnerId || row.externalKey ? (
-          <Stack gap={1}>
-            {row.lmsLearnerId && <Text variant="mono-s" className="tb-users-key">LMS: {row.lmsLearnerId}</Text>}
-            {row.externalKey && (
-              <Text variant="mono-s" tone="muted" className="tb-users-key">Ключ: {row.externalKey}</Text>
-            )}
-          </Stack>
-        ) : <Text variant="body-xs" tone="muted">—</Text>,
-    },
-    {
-      key: "status",
-      header: "Статус",
-      render: (row) => (
-        <>
-          {row.status === "new" && <Text variant="body-xs" weight="medium" tone="success">Новый</Text>}
-          {row.status === "duplicate" && <Text variant="body-xs" weight="medium" tone="warning">Дубль</Text>}
-          {row.status === "keyUpdate" && <Text variant="body-xs" weight="medium" tone="info">Ключ будет обновлён</Text>}
-          {row.status === "error" && <Text variant="body-xs" weight="medium" tone="error" title={row.error}>Ошибка</Text>}
-        </>
-      ),
-    },
-    {
-      key: "action",
-      header: "Действие",
-      width: "160px",
-      render: (row) => (
-        <>
-          {row.status === "duplicate" && (
-            <Select<NonNullable<PreviewRow["duplicateAction"]>>
-              size="s"
-              fullWidth
-              aria-label="Действие для дубля"
-              value={row.duplicateAction}
-              onChange={(value) => setPreviewRows(prev => prev.map(r =>
-                r.idx === row.idx ? { ...r, duplicateAction: value } : r
-              ))}
-              options={[
-                { value: "skip", label: "Пропустить" },
-                { value: "update", label: "Обновить" },
-              ]}
-            />
-          )}
-          {row.status === "new" && <Text variant="body-xs" tone="muted">Создать</Text>}
-          {row.status === "error" && <Text variant="body-xs" tone="muted">Пропустить</Text>}
-        </>
-      ),
-    },
-  ];
 
   return (
     <Stack gap={6}>
@@ -1378,19 +1230,19 @@ export default function UsersPage() {
         onClose={handleBulkClose}
         size="xl"
         title={
-          bulkStep === "upload" ? "Массовая загрузка пользователей"
-            : bulkStep === "preview" ? `Предпросмотр: ${previewRows.length} строк`
+          bulk.step === "upload" ? "Массовая загрузка пользователей"
+            : bulk.step === "preview" ? `Предпросмотр: ${bulk.rows.length} строк`
               : "Импорт завершён"
         }
         description={
-          bulkStep === "upload" ? "Загрузите файл CSV или Excel. Обязательная колонка: email. Необязательные: name, role (learner/author), group, external_key, organization, unit, position, lms_learner_id."
-            : bulkStep === "preview" ? "Проверьте данные перед импортом. Для дублей выберите действие."
+          bulk.step === "upload" ? "Загрузите файл CSV или Excel. Обязательная колонка: email. Необязательные: name, role (learner/author), group, external_key, organization, unit, position, lms_learner_id."
+            : bulk.step === "preview" ? "Проверьте данные перед импортом. Для дублей выберите действие."
               : undefined
         }
         footer={bulkFooter}
       >
         {/* Step: Upload */}
-        {bulkStep === "upload" && (
+        {bulk.step === "upload" && (
           <Box
             border
             radius="l"
@@ -1407,7 +1259,7 @@ export default function UsersPage() {
               if (file) handleBulkFile(file);
             }}
           >
-            {bulkPreviewMutation.isPending ? (
+            {bulk.previewing ? (
               <Stack align="center" gap={2}>
                 <Spinner size="l" />
                 <Text as="p" variant="body-s" tone="muted">Анализируем файл...</Text>
@@ -1416,13 +1268,13 @@ export default function UsersPage() {
               <Stack align="center" gap={2}>
                 <FileSpreadsheet size={40} color="var(--ou-fg-muted)" />
                 <Text as="p" weight="medium">Перетащите файл или нажмите для выбора</Text>
-                <Text as="p" variant="body-s" tone="muted">CSV, XLSX, XLS — до 500 строк</Text>
+                <Text as="p" variant="body-s" tone="muted">CSV, XLSX — до 500 строк</Text>
               </Stack>
             )}
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx"
               style={{ display: "none" }}
               aria-label="Файл для импорта пользователей"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBulkFile(f); }}
@@ -1430,79 +1282,8 @@ export default function UsersPage() {
           </Box>
         )}
 
-        {/* Step: Preview */}
-        {bulkStep === "preview" && (
-          <Stack gap={4}>
-            {/* Summary */}
-            <Cluster gap={3}>
-              <Cluster gap={1}>
-                <Tag tone="success" dot size="s">Новых: {previewRows.filter(r => r.status === "new").length}</Tag>
-              </Cluster>
-              <Cluster gap={1}>
-                <Tag tone="warning" dot size="s">Дублей: {previewRows.filter(r => r.status === "duplicate").length}</Tag>
-              </Cluster>
-              <Cluster gap={1}>
-                <Tag tone="error" dot size="s">Ошибок: {previewRows.filter(r => r.status === "error").length}</Tag>
-              </Cluster>
-            </Cluster>
-
-            {/* Preview table */}
-            <Box border radius="m">
-              <ScrollArea maxH="md">
-                <Table columns={previewColumns} rows={previewRows} rowKey={(row) => String(row.idx)} />
-              </ScrollArea>
-            </Box>
-
-            {/* Send invites toggle */}
-            <Checkbox
-              label="Отправить письма-приглашения с ссылкой для установки пароля"
-              checked={sendInvites}
-              onChange={(e) => setSendInvites(e.target.checked)}
-            />
-          </Stack>
-        )}
-
-        {/* Step: Done */}
-        {bulkStep === "done" && importResult && (
-          <Stack gap={4}>
-            <Grid cols={4} gap={3}>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="success">{importResult.created}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Создано</Text>
-                </Stack>
-              </Box>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="info">{importResult.updated}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Обновлено</Text>
-                </Stack>
-              </Box>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="muted">{importResult.skipped}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Пропущено</Text>
-                </Stack>
-              </Box>
-              <Box border radius="l" pad={4}>
-                <Stack gap={1} align="center">
-                  <Text variant="display-s" weight="bold" tone="accent">{importResult.invitesSent}</Text>
-                  <Text as="p" variant="body-s" tone="muted">Писем отправлено</Text>
-                </Stack>
-              </Box>
-            </Grid>
-            {importResult.errors.length > 0 && (
-              <Box border radius="m" pad={3}>
-                <Stack gap={1}>
-                  <Text as="p" variant="body-s" weight="medium" tone="error">Ошибки:</Text>
-                  {importResult.errors.map((e, i) => (
-                    <Text as="p" key={i} variant="body-xs" tone="muted">{e}</Text>
-                  ))}
-                </Stack>
-              </Box>
-            )}
-          </Stack>
-        )}
+        {bulk.step === "preview" && <UsersBulkPreview bulk={bulk} />}
+        {bulk.step === "done" && bulk.result && <UsersBulkResult result={bulk.result} />}
       </ModalDialog>
     </Stack>
   );
