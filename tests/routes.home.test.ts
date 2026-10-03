@@ -156,6 +156,14 @@ describe("GET /api/home", () => {
     expect(topicAccessMock.duplicateNameGroups).not.toHaveBeenCalled();
   });
 
+  it("gives a manager the «Импорт» quick action — the section opens with any import right (E6)", async () => {
+    rolesMock.getEffectiveRoles.mockResolvedValue(["manager"]);
+
+    const res = await get();
+
+    expect(res.body.quickActions.map((a: { id: string }) => a.id)).toContain("import");
+  });
+
   it("gives an administrator the materials section", async () => {
     rolesMock.getEffectiveRoles.mockResolvedValue(["administrator"]);
 

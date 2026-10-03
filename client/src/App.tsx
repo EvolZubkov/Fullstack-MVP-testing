@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadingState } from "@/components/loading-state";
 import { isScopeViolation, subscribeScopeViolation } from "@/lib/magic-scope";
-import type { Capability } from "@shared/access";
+import { IMPORT_CAPABILITIES, type Capability } from "@shared/access";
 import NotFound from "@/pages/not-found";
 import NoAccessPage from "@/pages/no-access";
 import LoginPage from "@/pages/login";
@@ -38,7 +38,11 @@ export function ProtectedRoute({
   requiredPermission,
 }: {
   children: React.ReactNode;
-  requiredPermission?: Capability;
+  /**
+   * The capability the route needs; a list means ANY of them — the «Импорт» section opens with
+   * any import right and then offers only the file kinds the user may load (stage E6).
+   */
+  requiredPermission?: Capability | readonly Capability[];
 }) {
   const { user, isLoading, can } = useAuth();
   const [location] = useLocation();
@@ -87,7 +91,10 @@ export function ProtectedRoute({
   // рисовать экран «нет доступа», иначе редирект зациклился бы. Теперь у любого
   // аутентифицированного пользователя есть куда приземлиться: главная сама
   // покажет «нет доступа», если ей нечего показать (FR-18).
-  if (requiredPermission && !can(requiredPermission)) {
+  const required: readonly Capability[] = requiredPermission === undefined
+    ? []
+    : typeof requiredPermission === "string" ? [requiredPermission] : requiredPermission;
+  if (required.length > 0 && !required.some((capability) => can(capability))) {
     return location === "/" ? <NoAccessPage /> : <Redirect to="/" />;
   }
 
@@ -185,7 +192,7 @@ function Router() {
       </Route>
 
       <Route path="/author/import">
-        <ProtectedRoute requiredPermission="questions.importExport">
+        <ProtectedRoute requiredPermission={IMPORT_CAPABILITIES}>
           <AuthorLayout>
             <ImportPage />
           </AuthorLayout>

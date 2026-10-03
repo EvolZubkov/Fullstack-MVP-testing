@@ -28,15 +28,15 @@ import {
 import { Cluster, Sidebar, Text } from "@skillum/ui-kit";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
-import type { Capability } from "@shared/access";
+import { IMPORT_CAPABILITIES, type Capability } from "@shared/access";
 
-/** Nav entry: route + icon + the capability that gates it (PRD-13). */
+/** Nav entry: route + icon + the capability that gates it (PRD-13); a list means ANY of them. */
 interface NavEntry {
   id: string;
   href: string;
   label: string;
   icon: LucideIcon;
-  perm: Capability;
+  perm: Capability | readonly Capability[];
 }
 
 const NAV: NavEntry[] = [
@@ -52,14 +52,18 @@ const NAV: NavEntry[] = [
   { id: "analytics", href: "/author/analytics", label: t.navigation.analytics, icon: BarChart3, perm: "analytics.read" },
   { id: "users", href: "/author/users", label: t.navigation.users, icon: Users, perm: "users.read" },
   { id: "groups", href: "/author/groups", label: t.navigation.groups, icon: UsersRound, perm: "groups.manage" },
-  { id: "import", href: "/author/import", label: t.navigation.import, icon: Import, perm: "questions.importExport" },
+  // Э6: единая точка импорта — раздел открыт любым правом на импорт (менеджеру — ради выгрузок
+  // LMS и списков пользователей), а виды файлов в нём — по правам.
+  { id: "import", href: "/author/import", label: t.navigation.import, icon: Import, perm: IMPORT_CAPABILITIES },
 ];
 
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const { can } = useAuth();
 
-  const allowed = NAV.filter((n) => can(n.perm));
+  const allowed = NAV.filter((n) =>
+    typeof n.perm === "string" ? can(n.perm) : n.perm.some((capability) => can(capability)),
+  );
   // PRD-25: «/» требует ТОЧНОГО совпадения — префиксная проверка совпала бы с
   // любым маршрутом и подсвечивала бы «Главную» повсюду.
   const activeId = allowed.find((n) =>
