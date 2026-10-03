@@ -24,6 +24,10 @@ import {
   type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
 import { testHref } from "@/features/analytics/levels/analytics-routes";
+import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
+
+/** Вкладки общего уровня. Первая — по умолчанию. */
+const GENERAL_ANALYTICS_TABS = ["attempts", "slices", "attention"] as const;
 import { percent } from "@/features/analytics/format";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import { SlicesTab } from "@/features/analytics/slices/slices-tab";
@@ -787,7 +791,8 @@ export default function AnalyticsPage() {
    * Открытая вкладка. Держится состоянием, а не умолчанием, ради FR-08: переход из строки
    * среза открывает реестр и должен ПЕРЕКЛЮЧИТЬ экран, а не только подставить условия.
    */
-  const [tab, setTab] = useState("attempts");
+  // Э2: вкладка — в адресе (`?tab=`): «Назад» возвращает на прежнюю, ссылка открывает ту же.
+  const [tab, setTab] = useAnalyticsTab(GENERAL_ANALYTICS_TABS, "attempts");
 
   // PRD-56 FR-12: combined-full и summary сняты вместе с «Обзором». Величины, которые они
   // считали — средний балл и pass rate ПО ВСЕМ тестам, тренды и проблемные темы вне контекста

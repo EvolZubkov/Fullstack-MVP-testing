@@ -65,7 +65,8 @@ import {
     Text,
 } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
-import { readQuestionAnalyticsLink } from "@/features/analytics/test/question-analytics-link";
+import { TEST_ANALYTICS_TABS } from "@/features/analytics/test/question-analytics-link";
+import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
 import { pluralize } from "@/lib/i18n";
 import { RegistryFilterDialog } from "@/features/analytics/registry/filter-dialog";
 import {
@@ -276,10 +277,8 @@ export default function TestAnalyticsPage() {
     const routeQuestionId = params.questionId ?? null;
     const [, navigate] = useLocation();
 
-    const [deepLink] = useState(() =>
-        readQuestionAnalyticsLink(typeof window === "undefined" ? "" : window.location.search),
-    );
-    const [tabState, setActiveTab] = useState<string>(deepLink.tab);
+    // Э2: вкладка — в адресе (`?tab=`): «Назад» возвращает на прежнюю, ссылка открывает ту же.
+    const [tabState, setActiveTab] = useAnalyticsTab(TEST_ANALYTICS_TABS, "overview");
     // Разбор вопроса живёт во вкладке «Качество вопросов»: адрес вопроса открывает её.
     const activeTab = routeQuestionId ? "quality" : tabState;
     /** PRD-54: окно загрузки выгрузки отчёта LMS. Тест здесь задан страницей. */
@@ -631,9 +630,9 @@ export default function TestAnalyticsPage() {
                 // число. Переход открывает КАРТОЧКУ на своей вкладке: возвращать автора к
                 // списку, из которого он только что пришёл, значит заставить искать строку
                 // второй раз.
+                // Э2: адрес вопроса сам открывает вкладку «Качество вопросов».
                 setBreakdownId(questionId);
                 setBreakdownVersion(undefined);
-                setActiveTab("quality");
             }}
         />
     );

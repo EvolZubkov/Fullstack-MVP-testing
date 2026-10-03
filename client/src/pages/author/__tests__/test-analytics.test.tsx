@@ -26,15 +26,11 @@ vi.mock("recharts", () => {
   };
 });
 
-// Э2: тест и вопрос — сегменты адреса уровня (`/author/analytics/tests/:testId[/questions/:qId]`).
-const route = vi.hoisted(() => ({ questionId: undefined as string | undefined, navigate: null as unknown }));
-
-vi.mock("wouter", () => ({
-  useParams: () => ({ testId: "t1", ...(route.questionId ? { questionId: route.questionId } : {}) }),
-  // Условия отбора экрана живут в адресе (FR-13, FR-24), поэтому странице нужен и `useLocation`.
-  useLocation: () => ["/author/analytics/tests/t1", route.navigate],
-  Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
-}));
+// Э2: тест и вопрос — сегменты адреса уровня, вкладка — `?tab=`. Страница рисуется в настоящем
+// маршрутизаторе с адресом в памяти: переходы по вкладкам и к разбору вопроса меняют этот адрес.
+import { Route, Router } from "wouter";
+import { memoryLocation } from "wouter/memory-location";
+import { ANALYTICS_QUESTION_ROUTE, ANALYTICS_TEST_ROUTE } from "@/features/analytics/levels/analytics-routes";
 
 import TestAnalyticsPage from "../test-analytics";
 import { ToastProvider } from "@skillum/ui-kit";
@@ -140,8 +136,6 @@ let state: State;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  route.questionId = undefined;
-  route.navigate = vi.fn();
   state = {
     mode: "standard", analyticsBody: standardAnalytics(), detailBody: standardDetail(),
     psychometricsBody: [],
@@ -160,14 +154,21 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-function renderPage() {
+/** Адрес в памяти последнего отрисованного экрана; `history` — все адреса, где он побывал. */
+let memory: ReturnType<typeof memoryLocation>;
+
+function renderPage(path = "/author/analytics/tests/t1") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, queryFn: getQueryFn({ on401: "throw" }) } },
   });
+  memory = memoryLocation({ path, record: true });
   return render(
-    <QueryClientProvider client={client}><ToastProvider>
-      <TestAnalyticsPage />
-    </ToastProvider></QueryClientProvider>,
+    <Router hook={memory.hook} searchHook={memory.searchHook}>
+      <QueryClientProvider client={client}><ToastProvider>
+        <Route path={ANALYTICS_QUESTION_ROUTE}><TestAnalyticsPage /></Route>
+        <Route path={ANALYTICS_TEST_ROUTE}><TestAnalyticsPage /></Route>
+      </ToastProvider></QueryClientProvider>
+    </Router>,
   );
 }
 
@@ -303,7 +304,13 @@ describe("<TestAnalyticsPage />", () => {
 
     // Э2: разбор вопроса — свой адрес уровня, а не состояние страницы.
     fireEvent.click(screen.getByRole("button", { name: /Разбор вопроса/ }));
-    expect(route.navigate).toHaveBeenCalledWith("/author/analytics/tests/t1/questions/q1", expect.anything());
+    expect(memory.history.at(-1)).toBe("/author/analytics/tests/t1/questions/q1");
+  });
+
+  it("вкладка — в адресе: переход по вкладке пишется в историю, адрес с вкладкой её открывает (Э2)", async () => {
+    await renderLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Вопросы" }));
+    expect(memory.history.at(-1)).toBe("/author/analytics/tests/t1?tab=questions");
   });
 
 
