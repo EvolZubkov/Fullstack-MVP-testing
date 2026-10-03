@@ -29,6 +29,22 @@
       .wf-sprite { display: none; }
       .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
       .wf-th-end { justify-content: flex-end; }
+      /* Разбор вопроса — как в prd66-item-quality.html: подсказки терминов, шкалы долей,
+         фиксированная раскладка таблиц. */
+      .wf-tip-wide { width: var(--wf-size-240); white-space: normal; }
+      .ou-tip { align-items: center; }
+      .wf-tip-ico { margin-left: var(--ou-space-1); color: var(--ou-fg-muted); flex-shrink: 0; }
+      .wf-scale { display: flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-scale__value { min-width: var(--wf-size-44); text-align: right; }
+      .wf-scale__track { flex: 1; height: var(--ou-space-2); background: var(--ou-bg-muted); border-radius: var(--ou-radius-pill); overflow: hidden; }
+      .wf-scale__fill { display: block; height: 100%; background: var(--ou-accent-default); border-radius: var(--ou-radius-pill); }
+      .wf-tip-end[data-placement="bottom"] .ou-tip__bubble { left: auto; right: 0; --ou-tip-tx: 0; }
+      .wf-th-wrap .ou-grid__th { white-space: normal; align-items: flex-start; }
+      .ou-grid__th .ou-tip { display: inline; }
+      .ou-grid__th .wf-tip-ico { vertical-align: -1px; }
+      .wf-grid-fixed { table-layout: fixed; width: 100%; }
+      .wf-grid-fixed td { overflow: hidden; }
+      .wf-grid-fixed .ou-grid__cell-strong, .wf-grid-fixed .ou-grid__cell-sub { text-overflow: ellipsis; }
       /* Слоты сравнения — как в prd56-analytics-section.html. */
       .wf-slot-add { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-1); background: transparent; cursor: pointer; color: var(--ou-accent-default); }
       .wf-slots { align-items: start; }
@@ -72,6 +88,7 @@
       <symbol id="i-users-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 21a8 8 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/></symbol>
       <symbol id="i-import" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
       <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
       <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
       <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></symbol>
       <symbol id="i-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></symbol>
@@ -753,13 +770,202 @@
             </div>
           </div>
 
+          <!-- Новое в Э3б: сам вопрос и его настройки в этом тесте — чтобы не идти за ними в ящик теста.
+               Значения — те же, что в «Оценке» теста; заданное в тесте помечено подписью. -->
+          <section class="ou-card ou-card--outlined">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Вопрос в этом тесте</h2>
+                <p class="ou-card__subtitle">Текущая редакция · изменена 04.09.2026</p>
+              </div>
+              <div class="ou-card__trail">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Открыть вопрос в теме</span></button>
+              </div>
+            </header>
+            <div class="ou-card__body ou-stack ou-stack--gap-4">
+              <p class="ou-text ou-text--body-m">Какая мера относится к антикоррупционным? Выберите один вариант: из перечисленных только одна мера прямо предусмотрена антикоррупционной политикой компании.</p>
+              <div class="ou-lgrid ou-lgrid--cols-3 ou-lgrid--gap-4">
+                <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Тема</span>
+                  <span class="ou-text ou-text--body-s">Право и комплаенс</span>
+                </div>
+                <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Подтемы</span>
+                  <span class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--wrap"><span class="ou-tag ou-tag--neutral ou-tag--s">Антикоррупция</span><span class="ou-tag ou-tag--neutral ou-tag--s">Контрагенты</span></span>
+                </div>
+                <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Выдача</span>
+                  <span class="ou-text ou-text--body-s">выдаётся</span>
+                </div>
+                <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Балл</span>
+                  <span class="ou-text ou-text--body-s">2</span><span class="ou-text ou-text--body-xs ou-text--tone-subtle">настроено в тесте</span>
+                </div>
+                <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Цена ответа</span>
+                  <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Точное</span>
+                </div>
+                <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сложность</span>
+                  <span class="ou-text ou-text--body-s">60</span><span class="ou-text ou-text--body-xs ou-text--tone-subtle">из вопроса</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
           <div class="ou-lgrid ou-lgrid--cols-3 ou-lgrid--gap-1">
-            <div class="ou-card ou-card--outlined"><div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center"><span class="ou-text ou-text--display-s ou-text--w-bold">0,41</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Трудность</span><span class="ou-text ou-text--body-xs ou-text--tone-subtle">приемлемо: 0,20 — 0,80</span></div></div>
-            <div class="ou-card ou-card--outlined"><div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center"><span class="ou-text ou-text--display-s ou-text--w-bold">0,34</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Дискриминативность (r)</span><span class="ou-text ou-text--body-xs ou-text--tone-subtle">корреляция вопрос-остаток · хорошо от 0,30</span></div></div>
-            <div class="ou-card ou-card--outlined"><div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center"><span class="ou-text ou-text--display-s ou-text--w-bold">0:48</span><span class="ou-text ou-text--body-s ou-text--tone-muted">Время, медиана</span><span class="ou-text ou-text--body-xs ou-text--tone-subtle">244 наблюдения</span></div></div>
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center">
+                <span class="ou-text ou-text--display-s ou-text--w-bold">0,41</span>
+                <span class="ou-text ou-text--body-s ou-text--tone-muted"><span class="ou-tip" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span></span>
+                <span class="ou-text ou-text--body-xs ou-text--tone-subtle">приемлемо: 0,20 — 0,80</span>
+              </div>
+            </div>
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center">
+                <span class="ou-text ou-text--display-s ou-text--w-bold">0,21</span>
+                <span class="ou-text ou-text--body-s ou-text--tone-muted"><span class="ou-tip" data-placement="bottom" tabindex="0">С поправкой на угадывание&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Трудность за вычетом случайных попаданий — для вопроса с одним верным ответом. Ноль и ниже: вопрос решают не лучше, чем наугад. Частичное знание модель не учитывает.</span></span></span>
+                <span class="ou-text ou-text--body-xs ou-text--tone-subtle">четыре варианта, ожидание 0,25</span>
+              </div>
+            </div>
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center">
+                <span class="ou-text ou-text--display-s ou-text--w-bold">0,34</span>
+                <span class="ou-text ou-text--body-s ou-text--tone-muted"><span class="ou-tip" data-placement="bottom" tabindex="0">Дискриминативность (r)&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span></span>
+                <span class="ou-text ou-text--body-xs ou-text--tone-subtle">корреляция вопрос-остаток · хорошо от 0,30</span>
+              </div>
+            </div>
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center">
+                <span class="ou-text ou-text--display-s ou-text--w-bold">0,38</span>
+                <span class="ou-text ou-text--body-s ou-text--tone-muted"><span class="ou-tip" data-placement="bottom" tabindex="0">Индекс дискриминации (D)&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Разница доли балла у сильных и слабых — верхних и нижних 27 % участников. От 0,30 — хорошо, ниже 0,20 — слабо, отрицательный — дефект.</span></span></span>
+                <span class="ou-text ou-text--body-xs ou-text--tone-subtle">крайние четверти, 27 % · хорошо 0,30 — 0,39</span>
+              </div>
+            </div>
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center">
+                <span class="ou-text ou-text--display-s ou-text--w-bold">60 → 59</span>
+                <span class="ou-text ou-text--body-s ou-text--tone-muted"><span class="ou-tip" data-placement="bottom" tabindex="0">Замысел и наблюдение&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Трудность, заявленная автором, рядом с наблюдаемой, в одной шкале 0 — 100. Расхождение больше 10 пунктов: вопрос оказался легче или труднее задуманного.</span></span></span>
+                <span class="ou-text ou-text--body-xs ou-text--tone-subtle">расхождения нет</span>
+              </div>
+            </div>
+            <div class="ou-card ou-card--outlined">
+              <div class="ou-card__body ou-stack ou-stack--gap-1 ou-stack--ai-center">
+                <span class="ou-text ou-text--display-s ou-text--w-bold">0:48</span>
+                <span class="ou-text ou-text--body-s ou-text--tone-muted"><span class="ou-tip" data-placement="bottom" tabindex="0">Время, медиана&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.</span></span></span>
+                <span class="ou-text ou-text--body-xs ou-text--tone-subtle">половина ответов 0:31 — 1:22 · 244 наблюдения</span>
+              </div>
+            </div>
           </div>
 
-          <!-- Новое в Э3б: где ещё этот вопрос. Варианты ответа и версии содержания — как сейчас. -->
+          <section class="ou-card ou-card--outlined">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Варианты ответа</h2>
+                <p class="ou-card__subtitle">Частота выбора и связь с остальным баллом · 268 наблюдений</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table wf-grid-fixed">
+                    <colgroup><col style="width: 30%" /><col style="width: 9%" /><col style="width: 19%" /><col style="width: 19%" /><col style="width: 10%" /><col style="width: 13%" /></colgroup>
+                    <thead class="wf-th-wrap">
+                      <tr>
+                        <th class="col-stick col-stick--shadow"><div class="ou-grid__th">Вариант</div></th>
+                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Выбрали&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля всех участников, выбравших этот вариант. Вариант, который почти никто не выбирает, не работает как дистрактор.</span></span></div></th>
+                        <th><div class="ou-grid__th"><span class="ou-tip" data-placement="bottom" tabindex="0">Слабые 27 %&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Нижние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. Дистрактор работает, когда здесь больше, чем у сильных.</span></span></div></th><th><div class="ou-grid__th"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Сильные 27 %&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Верхние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. У верного ответа здесь должно быть больше, чем у слабых.</span></span></div></th>
+                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Корреляция с остатком&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Корреляция выбора варианта с баллом за остальные вопросы. У верного ответа должна быть положительной, у дистрактора — отрицательной. Положительная у дистрактора значит, что его выбирают сильные: вариант частично верен либо ключ неверен.</span></span></div></th>
+                        <th><div class="ou-grid__th"><span class="ou-tip" data-placement="bottom" tabindex="0">Качество варианта&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Работает ли вариант: у верного ответа выбор должен расти с баллом, у дистрактора — падать. «Выбирают сильные» — дистрактор притягивает тех, кто знает материал.</span></span></div></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Проверка контрагента перед сделкой<span class="ou-grid__cell-sub">верный ответ</span></td>
+                        <td class="is-numeric">41 %</td>
+                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">19 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 19%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">68 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 68%"></span></span></span></td>
+                        <td class="is-numeric">+0,34</td>
+                        <td><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Согласование подарка с руководителем</td>
+                        <td class="is-numeric">34 %</td>
+                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">46 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 46%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">21 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 21%"></span></span></span></td>
+                        <td class="is-numeric">−0,22</td>
+                        <td><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Ежегодное обучение сотрудников</td>
+                        <td class="is-numeric">24 %</td>
+                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">33 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 33%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">11 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 11%"></span></span></span></td>
+                        <td class="is-numeric">−0,18</td>
+                        <td><span class="ou-tag ou-tag--success ou-tag--s">Работает</span></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Ведение бумажного журнала посещений</td>
+                        <td class="is-numeric">1 %</td>
+                        <td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">2 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 2%"></span></span></span></td><td><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">0 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 0%"></span></span></span></td>
+                        <td class="is-numeric is-muted">—</td>
+                        <td><span class="ou-tag ou-tag--warning ou-tag--s">Мёртвый вариант</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="ou-card ou-card--outlined">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Версии содержания</h2>
+                <p class="ou-card__subtitle">Наблюдения разных редакций не складываются</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table wf-grid-fixed">
+                    <colgroup><col style="width: 34%" /><col style="width: 10%" /><col style="width: 18%" /><col style="width: 22%" /><col style="width: 16%" /></colgroup>
+                    <thead class="wf-th-wrap">
+                      <tr>
+                        <th class="col-stick col-stick--shadow"><div class="ou-grid__th"><span class="ou-tip" data-placement="bottom" tabindex="0">Редакция&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Версия текста вопроса. После правки формулировки наблюдения копятся заново: числа разных редакций описывают разные вопросы и не складываются.</span></span></div></th>
+                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">n&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Сколько участников видели вопрос в этой редакции. Коэффициенты считаются с 30 наблюдений, надёжными становятся со 100.</span></span></div></th>
+                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Трудность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.</span></span></div></th>
+                        <th><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Дискриминативность&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.</span></span></div></th>
+                        <th><div class="ou-grid__th"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Статистика карточки&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">По какой редакции посчитаны плитки и варианты ответа выше. По умолчанию — текущая; другую выбирают кнопкой «Показать».</span></span></div></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">С 04.09.2026 — текущая<span class="ou-grid__cell-sub">переписан третий вариант ответа</span></td>
+                        <td class="is-numeric">268</td>
+                        <td class="is-numeric">0,41</td>
+                        <td class="is-numeric">0,34</td>
+                        <td><span class="ou-tag ou-tag--info ou-tag--s">Выбрана</span></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">12.03.2026 — 03.09.2026<span class="ou-grid__cell-sub">предыдущая редакция</span></td>
+                        <td class="is-numeric">141</td>
+                        <td class="is-numeric">0,52</td>
+                        <td class="is-numeric">0,19</td>
+                        <td><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Показать</span></button></td>
+                      </tr>
+                      <tr>
+                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow">Версия неизвестна<span class="ou-grid__cell-sub">импорт выгрузок и прохождения до 23.09.2026</span></td>
+                        <td class="is-numeric">96</td>
+                        <td class="is-numeric is-muted">0,47</td>
+                        <td class="is-numeric is-muted">—</td>
+                        <td><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Показать</span></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Новое в Э3б: где ещё этот вопрос. -->
           <section class="ou-card ou-card--outlined">
             <header class="ou-card__header">
               <div class="ou-card__heading">
@@ -940,6 +1146,8 @@
               <tr><td>Значок «Аналитика» в списке тестов</td><td>Ведёт на уровень теста: <code>/author/analytics/tests/:testId</code></td><td>Решение владельца 2026-10-03, отменяет решение Э2 (общий раздел с отбором). Отдельного состояния нет — внешний вид списка не меняется</td></tr>
               <tr><td>Вопрос: «Предыдущий / Следующий»</td><td>В порядке сортировки таблицы, из которой пришли; порядок — в состоянии перехода. Пришли по ссылке — порядок таблицы «Качества вопросов» по умолчанию</td><td>Э3б</td></tr>
               <tr><td>Вопрос: меню действий</td><td>Те же пункты, что в меню строки таблицы вопросов: «Открыть вопрос в теме», «Прохождения с ошибкой», «Исключить из выдачи…» / «Вернуть в выдачу»</td><td>Подписи — дословно из нынешнего меню строки</td></tr>
+              <tr><td>Страница вопроса: что переносится</td><td>Целиком нынешний разбор вопроса: шесть плиток (трудность, с поправкой на угадывание, дискриминативность r, индекс D, замысел и наблюдение, время), «Варианты ответа» с текстом вариантов и пометкой верного, «Версии содержания»</td><td>Разметка — дословно из prd66-item-quality.html. Ничего из нынешней страницы не убирается</td></tr>
+              <tr><td>Вопрос: «Вопрос в этом тесте»</td><td>Полный текст вопроса (и изображение, если есть), тема, подтемы, выдача («выдаётся» или «Исключён из выдачи»), балл, цена ответа и сложность — значения из «Оценки» теста; заданное в тесте подписано «настроено в тесте». У сопоставления и ранжирования здесь же пары и верный порядок: таблицы вариантов у них нет. «Открыть вопрос в теме» — переход к правке</td><td>Решение владельца 2026-10-03: подробности о вопросе — на его странице, без похода в ящик теста. Только чтение; правка — в теме и в «Оценке»</td></tr>
               <tr><td>Вопрос: «Этот вопрос в других тестах»</td><td>Тесты, где вопрос выдавался за окно экспозиции, с переходом на уровень вопроса в каждом</td><td>Нужен список тестов: сейчас сервер отдаёт только их число</td></tr>
               <tr><td>«Требует внимания» на «Обзоре» теста</td><td>Под подозрением, требуют ревизии, исключены из выдачи — счётчики; «Показать» ведёт в свой вид таблицы</td><td>Решение владельца 2026-10-03: точки внимания уровня теста — качество вопросов. Новых расчётов нет</td></tr>
               <tr><td>Корзина «Тесты с вопросами под подозрением»</td><td>В «Требует внимания» общего уровня: строка на тест, «Открыть» — уровень теста</td><td>Системная очередь показывает, где на уровне теста есть дела, но не разбирает их сама. Стоимость сводки по всем тестам — проверить при реализации</td></tr>
