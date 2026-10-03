@@ -10,6 +10,8 @@
  * фильтр их не читает, поэтому ссылка не меняет выборку, по которой считается разбор.
  */
 
+import { questionHref } from "../levels/analytics-routes";
+
 /** Вкладки страницы аналитики теста, на которые можно сослаться. */
 const TABS = ["overview", "questions", "quality", "delivery", "scales"] as const;
 
@@ -24,15 +26,14 @@ export type QuestionAnalyticsLink = {
 };
 
 /**
- * Адрес разбора вопроса во вкладке «Качество вопросов».
+ * Адрес разбора вопроса — уровень вопроса в тесте (Э2): `/author/analytics/tests/:testId/questions/:qId`.
  *
  * @param testId тест
  * @param questionId вопрос
- * @returns относительный адрес страницы аналитики теста
+ * @returns относительный адрес уровня вопроса
  */
 export function questionAnalyticsHref(testId: string, questionId: string): string {
-  const params = new URLSearchParams({ tab: "quality", questionId });
-  return `/author/tests/${encodeURIComponent(testId)}/analytics?${params.toString().replace(/\+/g, "%20")}`;
+  return questionHref(testId, questionId);
 }
 
 /**

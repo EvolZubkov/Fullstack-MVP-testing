@@ -32,6 +32,13 @@ import ResultPage from "@/pages/learner/result";
 import HistoryPage from "@/pages/learner/history";
 import { LearnerLayout } from "@/pages/learner/layout";
 import LogsPage from "@/pages/author/logs";
+import {
+  ANALYTICS_QUESTION_ROUTE,
+  ANALYTICS_ROUTE,
+  ANALYTICS_TEST_ROUTE,
+  LEGACY_TEST_ANALYTICS_ROUTE,
+} from "@/features/analytics/levels/analytics-routes";
+import { LegacyTestAnalyticsRedirect } from "@/features/analytics/levels/legacy-test-analytics-redirect";
 
 export function ProtectedRoute({
   children,
@@ -143,7 +150,25 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/author/analytics">
+      {/* Э2: три уровня аналитики — общая, тест, вопрос в тесте. Вопрос — та же страница теста:
+          разбор вопроса пока живёт в ней (отдельную страницу уровня делает Э3). */}
+      <Route path={ANALYTICS_QUESTION_ROUTE}>
+        <ProtectedRoute requiredPermission="analytics.read">
+          <AuthorLayout>
+            <TestAnalyticsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path={ANALYTICS_TEST_ROUTE}>
+        <ProtectedRoute requiredPermission="analytics.read">
+          <AuthorLayout>
+            <TestAnalyticsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path={ANALYTICS_ROUTE}>
         <ProtectedRoute requiredPermission="analytics.read">
           <AuthorLayout>
             <AnalyticsPage />
@@ -151,11 +176,9 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/author/tests/:testId/analytics">
+      <Route path={LEGACY_TEST_ANALYTICS_ROUTE}>
         <ProtectedRoute requiredPermission="analytics.read">
-          <AuthorLayout>
-            <TestAnalyticsPage />
-          </AuthorLayout>
+          <LegacyTestAnalyticsRedirect />
         </ProtectedRoute>
       </Route>
 

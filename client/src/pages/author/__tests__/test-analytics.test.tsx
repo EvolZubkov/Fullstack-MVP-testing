@@ -26,10 +26,13 @@ vi.mock("recharts", () => {
   };
 });
 
+// Э2: тест и вопрос — сегменты адреса уровня (`/author/analytics/tests/:testId[/questions/:qId]`).
+const route = vi.hoisted(() => ({ questionId: undefined as string | undefined, navigate: null as unknown }));
+
 vi.mock("wouter", () => ({
-  useRoute: () => [true, { testId: "t1" }],
+  useParams: () => ({ testId: "t1", ...(route.questionId ? { questionId: route.questionId } : {}) }),
   // Условия отбора экрана живут в адресе (FR-13, FR-24), поэтому странице нужен и `useLocation`.
-  useLocation: () => ["/author/tests/t1/analytics", vi.fn()],
+  useLocation: () => ["/author/analytics/tests/t1", route.navigate],
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
@@ -137,6 +140,8 @@ let state: State;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  route.questionId = undefined;
+  route.navigate = vi.fn();
   state = {
     mode: "standard", analyticsBody: standardAnalytics(), detailBody: standardDetail(),
     psychometricsBody: [],
@@ -295,6 +300,10 @@ describe("<TestAnalyticsPage />", () => {
 
     await waitFor(() => expect(screen.getByText("0,62")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: /Разбор вопроса/ })).toBeInTheDocument();
+
+    // Э2: разбор вопроса — свой адрес уровня, а не состояние страницы.
+    fireEvent.click(screen.getByRole("button", { name: /Разбор вопроса/ }));
+    expect(route.navigate).toHaveBeenCalledWith("/author/analytics/tests/t1/questions/q1", expect.anything());
   });
 
 
@@ -302,7 +311,7 @@ describe("<TestAnalyticsPage />", () => {
   describe("фильтр экрана доходит до психометрики (PRD-66 FR-04a, FR-54b)", () => {
     beforeEach(() => {
       // Условия экрана живут в адресе: с них и начинается страница.
-      window.history.replaceState(null, "", "/author/tests/t1/analytics?groupId=g1&source=import");
+      window.history.replaceState(null, "", "/author/analytics/tests/t1?groupId=g1&source=import");
       state.psychometricsBody = {
         items: [{
           questionId: "q1", observations: 40, difficulty: 0.62, correctedDifficulty: null,

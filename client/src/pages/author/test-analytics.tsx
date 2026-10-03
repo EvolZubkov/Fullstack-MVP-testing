@@ -41,7 +41,13 @@ import {
 import { PsychometricsComparePanel } from "@/features/analytics/test/psychometrics-compare-panel";
 import { invalidateAnalytics } from "@/features/analytics/invalidate-analytics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRoute, Link } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
+import {
+    filterOutOfTest,
+    generalHref,
+    questionHref,
+    testHref,
+} from "@/features/analytics/levels/analytics-routes";
 import {
     Box,
     Button,
@@ -262,15 +268,20 @@ function formatDuration(seconds: number | null): string {
 /** Строка «подпись — значение» под текстом вопроса (Ответ / Эталон / Вклад). */
 
 export default function TestAnalyticsPage() {
-    const [, params] = useRoute("/author/tests/:testId/analytics");
-    const testId = params?.testId;
+    // Э2: страница отвечает двум уровням — тесту и вопросу в тесте. Вопрос — сегмент адреса
+    // (`/author/analytics/tests/:testId/questions/:questionId`), а не состояние страницы: на разбор
+    // вопроса ведёт ссылка, «Назад» возвращает к таблице.
+    const params = useParams<{ testId: string; questionId?: string }>();
+    const testId = params.testId;
+    const routeQuestionId = params.questionId ?? null;
+    const [, navigate] = useLocation();
 
-    // Ссылка «Открыть в аналитике» из редактора теста приходит с `?tab=quality&questionId=…`:
-    // вкладка и раскрытый разбор берутся из адреса один раз, при открытии страницы.
     const [deepLink] = useState(() =>
         readQuestionAnalyticsLink(typeof window === "undefined" ? "" : window.location.search),
     );
-    const [activeTab, setActiveTab] = useState<string>(deepLink.tab);
+    const [tabState, setActiveTab] = useState<string>(deepLink.tab);
+    // Разбор вопроса живёт во вкладке «Качество вопросов»: адрес вопроса открывает её.
+    const activeTab = routeQuestionId ? "quality" : tabState;
     /** PRD-54: окно загрузки выгрузки отчёта LMS. Тест здесь задан страницей. */
     /**
      * PRD-56 FR-20: тема профиля экспозиции. Держится в состоянии, а не выводится из данных:
@@ -412,7 +423,14 @@ export default function TestAnalyticsPage() {
      * Дистракторный разбор требует ответов КАЖДОГО участника по этому заданию, и считать его
      * для всех строк таблицы заранее значило бы платить за сорок разборов ради одного.
      */
-    const [breakdownId, setBreakdownId] = useState<string | null>(deepLink.questionId);
+    const breakdownId = routeQuestionId;
+    /** Открыть разбор вопроса — перейти на его адрес; `null` — вернуться к таблице вопросов. */
+    const setBreakdownId = (questionId: string | null) => {
+        if (!testId) return;
+        navigate(questionId ? questionHref(testId, questionId, filter) : testHref(testId, filter, "quality"), {
+            state: typeof window === "undefined" ? null : window.history.state,
+        });
+    };
     /**
      * Выбранная редакция вопроса: `undefined` — автор ещё не выбирал, и сервер считает карточку по
      * текущей редакции (FR-49a); `null` — «версия неизвестна».
@@ -601,11 +619,11 @@ export default function TestAnalyticsPage() {
                 // отбора живут в адресе реестра (FR-03), поэтому это обычная ссылка. Фильтр
                 // страницы едет с ней: иначе реестр показал бы ошибки за всё время по всем
                 // группам, а таблица вопросов — по отобранным.
-                window.location.href = `/author/analytics${filterToSearch({
+                navigate(generalHref({
                     ...filter,
                     testIds: testId ? [testId] : [],
                     wrongQuestionIds: [questionId],
-                })}`;
+                }));
             }}
             psychometrics={questionPsychometrics}
             onOpenQuality={questionId => {
@@ -807,7 +825,7 @@ export default function TestAnalyticsPage() {
                       прохождений, где умеет фильтровать, догружать порциями и вести в разбор.
                       Два списка на продукт означали бы два ответа на вопрос «кто проходил».
                     */}
-                    <Link href={`/author/analytics?testId=${testId}`}>
+                    <Link href={generalHref(filterOutOfTest(filter, testId))}>
                         <Button variant="secondary" size="s" trailingIcon={<ChevronRight size={16} />}>
                             Прохождения теста
                         </Button>

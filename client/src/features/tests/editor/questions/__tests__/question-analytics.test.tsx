@@ -193,7 +193,7 @@ describe("<TestQuestionsSection /> with analytics", () => {
     renderSection();
     fireEvent.click(screen.getByTestId("test-questions-analytics-q1"));
     expect(open).toHaveBeenCalledWith(
-      "/author/tests/test-1/analytics?tab=quality&questionId=q1",
+      "/author/analytics/tests/test-1/questions/q1",
       "_blank",
       "noopener",
     );

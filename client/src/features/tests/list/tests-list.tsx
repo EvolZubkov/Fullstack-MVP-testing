@@ -26,6 +26,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { generalHref } from "@/features/analytics/levels/analytics-routes";
 import {
   AlertCircle,
   Archive,
@@ -1553,8 +1554,9 @@ function TestRow(props: {
             <Users width={14} height={14} />
           </button>
         )}
+        {/* Э2, решение владельца 2026-10-03: в общий раздел «Аналитика», отобранный по этому тесту. */}
         {canAnalytics && (
-          <Link href={`/author/tests/${e.id}/analytics`} onClick={(ev) => ev.stopPropagation()}>
+          <Link href={generalHref({ testIds: [e.id] })} onClick={(ev) => ev.stopPropagation()}>
             <button
               type="button"
               className="action-btn"

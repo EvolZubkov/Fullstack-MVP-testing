@@ -20,10 +20,10 @@ import { useLocation } from "wouter";
 import {
   conditionsToFilter,
   countConditions,
-  filterToSearch,
   EMPTY_FILTER,
   type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
+import { testHref } from "@/features/analytics/levels/analytics-routes";
 import { percent } from "@/features/analytics/format";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import { SlicesTab } from "@/features/analytics/slices/slices-tab";
@@ -1010,12 +1010,7 @@ export default function AnalyticsPage() {
                 // где их читает тот же разбор, что у реестра. Тест в условия не входит — он
                 // задан адресом страницы.
                 onOpenTestAnalytics={(openTestId, conditions) => {
-                  const search = filterToSearch({
-                    ...EMPTY_FILTER,
-                    ...conditionsToFilter(conditions),
-                    testIds: [],
-                  });
-                  setLocation(`/author/tests/${openTestId}/analytics${search}`);
+                  setLocation(testHref(openTestId, { ...EMPTY_FILTER, ...conditionsToFilter(conditions) }));
                 }}
               />
             ),
