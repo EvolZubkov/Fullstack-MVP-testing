@@ -105,6 +105,22 @@ describe("GET /api/analytics/tests/:testId — оргусловия (FR-06b)", (
   });
 });
 
+describe("GET /api/analytics/tests/:testId — «Прохождения с ошибкой» (Э3.1)", () => {
+  it("считает «Обзор» по прохождениям с ошибкой на вопросе, а не по всему тесту", async () => {
+    const res = await request(makeApp())
+      .get("/api/analytics/tests/test1?wrongQuestionId=q1")
+      .set("x-test-user", "a1");
+
+    expect(res.status).toBe(200);
+    // Ответов с ошибкой в двойнике нет: отбор поимённый и пустой — ни одного прохождения.
+    const narrowed = storageMock.selectObservations.mock.calls
+      .map(call => call[0])
+      .find(query => query.attemptIds !== undefined);
+    expect(narrowed?.attemptIds).toEqual([]);
+    expect(res.body.summary.completedAttempts).toBe(0);
+  });
+});
+
 describe("GET /api/analytics/tests/:testId — блоки экрана", () => {
   it("строит распределение результатов по всем источникам", async () => {
     const res = await request(makeApp()).get("/api/analytics/tests/test1").set("x-test-user", "a1");

@@ -54,6 +54,9 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
     const filter = {
       ...(listOf(req.query.source).length ? { sources: listOf(req.query.source) as never } : {}),
       ...(listOf(req.query.groupId).length ? { groupIds: listOf(req.query.groupId) } : {}),
+      // Э3.1: «Прохождения с ошибкой» ставят условие на уровне теста — «Обзор» и шапка обязаны
+      // считать по тому же отбору, что показывает чип, иначе условие висит, а числа его не знают.
+      ...(listOf(req.query.wrongQuestionId).length ? { wrongQuestionIds: listOf(req.query.wrongQuestionId) } : {}),
       ...(repeated(req.query.organization).length ? { organizations: repeated(req.query.organization) } : {}),
       ...(repeated(req.query.unit).length ? { units: repeated(req.query.unit) } : {}),
       ...(repeated(req.query.position).length ? { positions: repeated(req.query.position) } : {}),

@@ -9,7 +9,7 @@
  * потеря данных.
  */
 import { describe, it, expect } from "vitest";
-import { formatUserAnswer, formatCorrectAnswer } from "../analytics";
+import { formatUserAnswer, formatCorrectAnswer } from "@/features/analytics/attempt/attempt-details-dialog";
 
 const answer = (over: Record<string, unknown>) => ({ questionType: "short", ...over }) as never;
 

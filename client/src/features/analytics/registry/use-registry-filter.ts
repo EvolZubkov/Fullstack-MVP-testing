@@ -14,7 +14,7 @@
  * заново и молча сбрасывала вкладку.
  */
 import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 import { filterToSearch, parseFilter, type RegistryFilter } from "./filter-state";
 
@@ -41,6 +41,9 @@ export function mergeFilterIntoSearch(current: string, filter: RegistryFilter): 
 /** Условия отбора и способ их изменить. */
 export function useRegistryFilter(): [RegistryFilter, (next: RegistryFilter) => void] {
   const [location] = useLocation();
+  // Э3.1: переход внутри той же страницы меняет только строку запроса («Прохождения с ошибкой» —
+  // путь теста тот же, добавляются условие и вкладка). Без неё условия оставались прежними.
+  const search = useSearch();
   const [filter, setFilter] = useState<RegistryFilter>(
     () => parseFilter(typeof window === "undefined" ? "" : window.location.search),
   );
@@ -49,7 +52,7 @@ export function useRegistryFilter(): [RegistryFilter, (next: RegistryFilter) => 
   useEffect(() => {
     if (typeof window === "undefined") return;
     setFilter(parseFilter(window.location.search));
-  }, [location]);
+  }, [location, search]);
 
   const change = useCallback((next: RegistryFilter) => {
     setFilter(next);

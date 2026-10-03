@@ -146,6 +146,19 @@ beforeEach(() => {
     if (u === "/api/analytics/tests/t1") return ok(state.analyticsBody);
     if (u === "/api/analytics/psychometrics/t1") return ok(state.psychometricsBody);
     if (u.startsWith("/api/analytics/attempts/")) return ok(state.detailBody);
+    // Э3.1: реестр прохождений внутри теста.
+    if (u.startsWith("/api/analytics/registry")) {
+      return ok({
+        rows: [{
+          id: "a1", participant: "Иван Петров", participantKey: null, userId: "u1",
+          testId: "t1", testTitle: "Тест по финансам", attemptNumber: 1,
+          startedAt: "2026-06-01T10:00:00Z", finishedAt: "2026-06-01T10:15:00Z",
+          durationMs: 900_000, percent: 85, passed: true, outcome: "passed",
+          source: "web", groupId: null, groups: [],
+        }],
+        total: 1, limit: 25, offset: 0,
+      });
+    }
     return ok([]);
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -193,7 +206,7 @@ describe("<TestAnalyticsPage />", () => {
   });
 
   // План сверки, 5.1: каркас по эскизам prd56-test-analytics и prd66-item-quality.
-  it("шапка по эскизу Э2: крошки «Аналитика › тест», название, объём и источники, реестр и «Обновить»", async () => {
+  it("шапка по эскизу Э2: крошки «Аналитика › тест», название, объём и источники, «Обновить»", async () => {
     await renderLoaded();
     // Крошки вместо «Все тесты»: «Аналитика» ведёт на общий уровень, отобранный по этому тесту.
     const crumbs = screen.getByRole("navigation", { name: "Хлебные крошки" });
@@ -203,7 +216,8 @@ describe("<TestAnalyticsPage />", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Тест по финансам" })).toBeInTheDocument();
     expect(screen.getByText("8 завершённых прохождений · веб, телеметрия LMS и импортированные выгрузки"))
       .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Прохождения теста/ })).toBeInTheDocument();
+    // Э3.1: прохождения — вкладка, а не переход из шапки в общий реестр.
+    expect(screen.queryByRole("button", { name: /Прохождения теста/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Обновить" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Экспорт Excel/ })).toBeInTheDocument();
     // Э6: загрузка выгрузки LMS ушла в раздел «Импорт» — в шапке её нет.
@@ -260,20 +274,43 @@ describe("<TestAnalyticsPage />", () => {
 
 
 
-  it("не показывает списка попыток: он живёт в реестре прохождений", async () => {
+  it("прохождения теста — вкладка сразу за «Обзором», тот же реестр (Э3.1)", async () => {
     await renderLoaded();
 
-    // FR-23: один список на продукт, а не два. Вместо вкладки — переход в реестр, где тот же
-    // список умеет фильтровать, догружать и вести в разбор.
-    expect(screen.queryByRole("tab", { name: "Попытки" })).toBeNull();
-    expect(screen.getByRole("link", { name: /Прохождения теста/ })).toBeInTheDocument();
+    // FR-23: один список на продукт. Э3.1: он открывается внутри теста, а не в общем разделе.
+    const tabs = screen.getAllByRole("tab").map(tab => tab.textContent);
+    expect(tabs.slice(0, 2)).toEqual(["Обзор", "Прохождения"]);
+    expect(screen.queryByRole("link", { name: /Прохождения теста/ })).toBeNull();
   });
 
-  it("ведёт в реестр с фильтром по этому тесту", async () => {
+  it("реестр внутри теста: запрос по этому тесту, без колонки «Тест», строка открывает разбор (Э3.1)", async () => {
     await renderLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Прохождения" }));
 
-    const link = screen.getByRole("link", { name: /Прохождения теста/ });
-    expect(link.getAttribute("href")).toContain("/author/analytics?testId=t1");
+    await waitFor(() => expect(screen.getByText("Иван Петров")).toBeInTheDocument());
+    const asked = fetchMock.mock.calls.map(call => String(call[0])).find(url => url.startsWith("/api/analytics/registry"));
+    expect(asked).toContain("testId=t1");
+    expect(screen.getByText("Прохождения теста")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /^Тест/ })).toBeNull();
+    // Фильтр — один на уровень теста: второй панели внутри карточки нет, экспорт — в общей.
+    expect(screen.getAllByRole("button", { name: /^Фильтр/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Экспорт" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Иван Петров"));
+    await waitFor(() => expect(fetchMock.mock.calls.some(call => String(call[0]).startsWith("/api/analytics/attempts/a1"))).toBe(true));
+  });
+
+  it("«Прохождения с ошибкой» ведут во вкладку «Прохождения» этого теста с условием по вопросу (Э3.1)", async () => {
+    await renderLoaded();
+    fireEvent.click(screen.getByRole("tab", { name: "Вопросы" }));
+    await waitFor(() => expect(screen.getByText("Что такое бюджет?")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Действия с вопросом: Что такое бюджет?" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Прохождения с ошибкой: Что такое бюджет?" }));
+
+    // Один переход: условие и вкладка вместе, тест — в адресе, а не в условиях.
+    await waitFor(() => expect(memory.history?.at(-1)).toBe("/author/analytics/tests/t1?wrongQuestionId=q1&tab=passages"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: "Прохождения" })).toHaveAttribute("aria-selected", "true"));
   });
 
   it("renders the questions tab with per-question stats", async () => {

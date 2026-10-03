@@ -8,6 +8,10 @@
  *
  * Условия отбора компонент не хранит: они приходят сверху и уходят наверх изменёнными, потому
  * что живут в адресе страницы (FR-03) — ссылку на выборку пересылают коллеге.
+ *
+ * Э3.1: тот же реестр работает внутри теста (`testId`). Тест задан страницей — колонки «Тест» и
+ * значка перехода нет, а панель фильтра у уровня теста своя, общая для его вкладок, поэтому
+ * компонент рисует только карточку со списком.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3 } from "lucide-react";
@@ -87,6 +91,11 @@ export interface PassageRegistryProps {
   onOpenTestAnalytics?: (testId: string) => void;
   /** Что показать справа в первой строке панели фильтра (например, кнопку экспорта). */
   actions?: React.ReactNode;
+  /**
+   * Э3.1: реестр внутри теста. Тест добавляется к условиям запроса; колонки «Тест», значка
+   * перехода, панели фильтра и окон сохранения нет — фильтр принадлежит уровню теста.
+   */
+  testId?: string;
 }
 
 /** Сколько строк просим за раз. Совпадает с умолчанием ручки. */
@@ -133,8 +142,10 @@ function outcomeTone(outcome: RegistryOutcome): "success" | "error" | "neutral" 
 }
 
 export function PassageRegistry({
-  filter, onFilterChange, onOpenPassage, onOpenTestAnalytics, actions,
+  filter, onFilterChange, onOpenPassage, onOpenTestAnalytics, actions, testId,
 }: PassageRegistryProps) {
+  /** Условия запроса: внутри теста к ним добавляется сам тест (Э3.1). */
+  const scoped = useMemo(() => (testId ? { ...filter, testIds: [testId] } : filter), [filter, testId]);
   const [filterOpen, setFilterOpen] = useState(false);
   /** Что именно сохраняем: `null` — окно закрыто (решение владельца 2026-09-25). */
   const [saveOpen, setSaveOpen] = useState<"slice" | "filter" | null>(null);
@@ -147,14 +158,15 @@ export function PassageRegistry({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const search = filterToSearch(filter);
+  const search = filterToSearch(scoped);
   /** Названия тестов и групп — чтобы условие в чипе читалось, а не значилось кодом (FR-02). */
   const dictionaries = useRegistryDictionaries();
   // Вариант и версия называются по справочнику ТОГО теста, что стоит в условиях: у разных
   // тестов они свои, и общего перечня для них не существует.
   const testDictionary = useTestDictionary(
-    filter.testIds.length === 1 ? filter.testIds[0] : null,
-    true,
+    scoped.testIds.length === 1 ? scoped.testIds[0] : null,
+    // Внутри теста чипы рисует панель уровня теста со своим справочником.
+    !testId,
     filter.wrongQuestionIds,
   );
 
@@ -242,13 +254,14 @@ export function PassageRegistry({
       sortable: true,
       render: (row: RegistryRow) => <span className="ou-grid__cell-strong">{row.participant}</span>,
     },
-    {
+    // Э3.1: внутри теста колонка «Тест» повторяла бы шапку страницы в каждой строке.
+    ...(testId ? [] : [{
       key: "test",
       header: "Тест",
       sortable: true,
       // Э3.5: длинное название переносится, а не выталкивает таблицу в горизонтальную прокрутку.
       render: (row: RegistryRow) => <span className="tb-cell-wrap">{row.testTitle}</span>,
-    },
+    }]),
     { key: "date", header: "Дата", sortable: true, render: (row: RegistryRow) => formatMoment(row.startedAt) },
     {
       key: "attempt",
@@ -312,7 +325,7 @@ export function PassageRegistry({
     },
     // Э2: переход на уровень теста строки — значком, как в строке списка тестов (текстовой
     // ссылки в DS нет). Сама строка по-прежнему открывает прохождение, поэтому клик не всплывает.
-    ...(onOpenTestAnalytics ? [{
+    ...(onOpenTestAnalytics && !testId ? [{
       key: "testAnalytics",
       header: "",
       render: (row: RegistryRow) => (row.testId ? (
@@ -332,7 +345,8 @@ export function PassageRegistry({
   ];
 
   const hasMore = rows.length < total;
-  const conditionCount = countConditions(filter);
+  // Внутри теста сам тест условием отбора не считается: он задан страницей.
+  const conditionCount = countConditions(testId ? { ...filter, testIds: [] } : filter);
 
   /**
    * Сохранить текущий отбор — фильтром или срезом (FR-07c и решение владельца 2026-09-25).
@@ -383,7 +397,7 @@ export function PassageRegistry({
   return (
     <Card>
       <CardHeader
-        title="Реестр прохождений"
+        title={testId ? "Прохождения теста" : "Реестр прохождений"}
         subtitle={subtitleOf(total, conditionCount)}
       />
       <CardBody>
@@ -391,6 +405,7 @@ export function PassageRegistry({
             отбора и таблица слипались вплотную. Между РАЗНЫМИ блоками модульная сетка требует
             16px, и расставляет их примитив, а не поля у соседей. */}
         <Stack gap={4}>
+          {!testId && (<>
           <FilterBar
             count={conditionCount}
             applied={applied}
@@ -530,6 +545,7 @@ export function PassageRegistry({
           onApply={onFilterChange}
           onClose={() => setFilterOpen(false)}
         />
+          </>)}
 
         {failed ? (
           <Text tone="error">Не удалось загрузить прохождения. Обновите страницу.</Text>
@@ -552,7 +568,7 @@ export function PassageRegistry({
             emptyMessage={
               loading
                 ? "Загружаем прохождения…"
-                : countConditions(filter) > 0
+                : conditionCount > 0
                   ? "Под эти условия не подошло ни одного прохождения. Снимите условие или расширьте период."
                   : "Прохождений пока нет"
             }

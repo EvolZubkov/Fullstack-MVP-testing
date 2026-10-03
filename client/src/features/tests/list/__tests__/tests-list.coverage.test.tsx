@@ -302,10 +302,10 @@ describe("<TestsListPage /> — test more-menu actions", () => {
     fireEvent.click(screen.getByTestId("menu-export-excel-t-1"));
   });
 
-  it("значок «Аналитика» ведёт в общий раздел, отобранный по тесту (Э2)", async () => {
+  it("значок «Аналитика» ведёт на уровень теста — туда же, куда строка вкладки «Тесты» (Э3.1)", async () => {
     await openMenu();
     const link = screen.getByTestId("test-analytics-t-1").closest("a");
-    expect(link?.getAttribute("href")).toBe("/author/analytics?testId=t-1");
+    expect(link?.getAttribute("href")).toBe("/author/analytics/tests/t-1");
   });
 
   it("«Загрузить выгрузку LMS» ведёт в «Импорт» с этим тестом (Э6)", async () => {

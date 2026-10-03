@@ -78,8 +78,17 @@ import {
     describeConditions,
     filterToSearch,
     EMPTY_FILTER,
+    ORG_CONDITIONS,
     type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
+import { PassageRegistry, type RegistryRow } from "@/features/analytics/registry/passage-registry";
+import { ExportDialog } from "@/features/analytics/registry/export-dialog";
+import {
+    AttemptDetailsDialog,
+    attemptOfRegistryRow,
+    exportAttemptWorkbook,
+    type CombinedAttempt,
+} from "@/features/analytics/attempt/attempt-details-dialog";
 import { percent } from "@/features/analytics/format";
 import { useRegistryDictionaries, useTestDictionary } from "@/features/analytics/registry/use-dictionaries";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
@@ -301,10 +310,14 @@ export default function TestAnalyticsPage() {
      */
     const [filter, setFilter] = useRegistryFilter();
     const [filterOpen, setFilterOpen] = useState(false);
+    /** Э3.1: окно «Детали попытки» — то же, что на общем уровне. */
+    const [openedAttempt, setOpenedAttempt] = useState<CombinedAttempt | null>(null);
+    /** Э3.1: выгрузка прохождений теста — по условиям фильтра уровня теста. */
+    const [exportOpen, setExportOpen] = useState(false);
     const dictionaries = useRegistryDictionaries();
     // Вариант и версия — условия внутри теста, а он здесь задан страницей: справочник для
     // чипов и для окна отбора читается по нему.
-    const testDictionary = useTestDictionary(testId ?? null);
+    const testDictionary = useTestDictionary(testId ?? null, true, filter.wrongQuestionIds);
     const queryClient = useQueryClient();
 
     const filterSearch = filterToSearch({ ...filter, testIds: [] });
@@ -622,12 +635,12 @@ export default function TestAnalyticsPage() {
                 // отбора живут в адресе реестра (FR-03), поэтому это обычная ссылка. Фильтр
                 // страницы едет с ней: иначе реестр показал бы ошибки за всё время по всем
                 // группам, а таблица вопросов — по отобранным.
-                // Э3.0: вкладка общего уровня по умолчанию — «Тесты»; реестр называется явно.
-                navigate(generalHref({
-                    ...filter,
-                    testIds: testId ? [testId] : [],
-                    wrongQuestionIds: [questionId],
-                }, "attempts"));
+                // Э3.1: во вкладку «Прохождения» ЭТОГО теста, а не в общий реестр. Условие и
+                // вкладка уходят одним переходом: два шага по адресу перетёрли бы друг друга.
+                // Состояние истории сохраняется — крошка «Аналитика» помнит, откуда пришли.
+                navigate(testHref(testId!, { ...filter, wrongQuestionIds: [questionId] }, "passages"), {
+                    state: typeof window === "undefined" ? undefined : window.history.state,
+                });
             }}
             psychometrics={questionPsychometrics}
             onOpenQuality={questionId => {
@@ -755,6 +768,11 @@ export default function TestAnalyticsPage() {
                 >
                     Сравнить срезы
                 </Button>
+            ) : activeTab === "passages" ? (
+                // Э3.1: выгрузка списка прохождений — там же, где список, по тем же условиям.
+                <Button variant="secondary" size="s" onClick={() => setExportOpen(true)}>
+                    Экспорт
+                </Button>
             ) : undefined}
             onOpenFilter={() => setFilterOpen(true)}
             onRemove={(id: string) => {
@@ -771,6 +789,12 @@ export default function TestAnalyticsPage() {
                     setFilter({ ...filter, formIds: filter.formIds.filter(x => x !== value) });
                 } else if (kind === "snapshot") {
                     setFilter({ ...filter, snapshotIds: filter.snapshotIds.filter(x => x !== value) });
+                } else if (kind === "wrongQuestion") {
+                    // Э3.1: условие «Прохождения с ошибкой» теперь живёт и на уровне теста.
+                    setFilter({ ...filter, wrongQuestionIds: (filter.wrongQuestionIds ?? []).filter(x => x !== value) });
+                } else if (ORG_CONDITIONS.some(condition => condition.param === kind)) {
+                    const { key } = ORG_CONDITIONS.find(condition => condition.param === kind)!;
+                    setFilter({ ...filter, [key]: filter[key].filter(x => x !== value) });
                 } else if (id === "period") {
                     setFilter({ ...filter, from: undefined, to: undefined });
                 }
@@ -845,8 +869,8 @@ export default function TestAnalyticsPage() {
     return (
         <Stack gap={6}>
             {/* Шапка уровня теста (Э2, эскиз e2-analytics-levels): крошки «Аналитика › тест» вместо
-                «Все тесты», под названием — объём и источники. Справа — экспорт, переход в реестр
-                и «Обновить». */}
+                «Все тесты», под названием — объём и источники. Справа — экспорт и «Обновить»;
+                прохождения теста — вкладка (Э3.1), а не переход в общий реестр. */}
             <AnalyticsHeader
                 crumbs={[generalCrumb, { label: analytics.testTitle }]}
                 title={analytics.testTitle}
@@ -856,16 +880,6 @@ export default function TestAnalyticsPage() {
                         <Button onClick={handleExportExcel} variant="secondary" size="s" leadingIcon={<FileSpreadsheet size={16} />}>
                             Экспорт Excel
                         </Button>
-                        {/*
-                          PRD-56 FR-23: список попыток со страницы снят — он есть в реестре
-                          прохождений, где умеет фильтровать, догружать порциями и вести в разбор.
-                          Два списка на продукт означали бы два ответа на вопрос «кто проходил».
-                        */}
-                        <Link href={generalHref(filterOutOfTest(filter, testId!), "attempts")}>
-                            <Button variant="secondary" size="s" trailingIcon={<ChevronRight size={16} />}>
-                                Прохождения теста
-                            </Button>
-                        </Link>
                         {/* Значком, а не текстом (решение владельца 2026-09-26, план 6.4): четыре текстовые
                             кнопки не помещались в строку, и «Обновить» уходило вторым рядом. Имя для
                             экранного диктора и подсказка при наведении — те же слова. */}
@@ -896,6 +910,20 @@ export default function TestAnalyticsPage() {
                 onChange={setActiveTab}
                 items={[
                     { id: "overview", label: "Обзор", content: underFilter(overviewPanel) },
+                    {
+                        // Э3.1, PRD-56 FR-23: прохождения теста — тот же реестр, что на общем уровне
+                        // (один список на продукт), только тест задан страницей.
+                        id: "passages",
+                        label: "Прохождения",
+                        content: underFilter(
+                            <PassageRegistry
+                                testId={testId!}
+                                filter={filter}
+                                onFilterChange={setFilter}
+                                onOpenPassage={(row: RegistryRow) => setOpenedAttempt(attemptOfRegistryRow(row))}
+                            />,
+                        ),
+                    },
                     { id: "questions", label: "Вопросы", content: underFilter(questionsPanel) },
                     // PRD-66: пригодность задания как инструмента — отдельный вопрос от того,
                     // что с ним происходит, и потому отдельная вкладка.
@@ -963,6 +991,17 @@ export default function TestAnalyticsPage() {
                 ]}
             />
 
+            <ExportDialog
+                open={exportOpen}
+                onClose={() => setExportOpen(false)}
+                filter={{ ...filter, testIds: [testId!] }}
+            />
+            <AttemptDetailsDialog
+                attempt={openedAttempt}
+                open={openedAttempt !== null}
+                onClose={() => setOpenedAttempt(null)}
+                onExport={exportAttemptWorkbook}
+            />
         </Stack>
     );
 }
