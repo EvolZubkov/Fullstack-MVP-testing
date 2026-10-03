@@ -10,6 +10,9 @@
  *
  * Уцелевшая сводка считается по общему слою наблюдений, как и страница теста: расхождение чисел
  * между экранами — дефект, а не особенность (FR-25).
+ *
+ * `GET /tests` (Э3.0) — сводка ПО КАЖДОМУ тесту: строка вкладки «Тесты» общего уровня, вход в
+ * аналитику теста. Это не сумма по тестам: каждая строка — своя выборка со своим порогом.
  */
 import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
@@ -17,6 +20,7 @@ import { requirePermission } from "../../middleware/auth";
 import { loadObservations } from "../../services/analytics/observations";
 import { summariseObservations } from "../../services/analytics/test-summary";
 import { analyticsScope } from "./helpers";
+import { storage } from "../../storage";
 
 const router = Router();
 
@@ -66,6 +70,66 @@ router.get("/summary", requirePermission("analytics.read"), async (req: Request,
   } catch (error) {
     logger.error("Summary analytics error: " + (error as Error).message, "analytics");
     res.status(500).json({ error: "Failed to get summary" });
+  }
+});
+
+/** Строка вкладки «Тесты» общего уровня (Э3.0). */
+export interface TestSummaryRow {
+  testId: string;
+  title: string;
+  /** Завершённые прохождения — брошенные в сводку не входят, как и в `/summary`. */
+  completedAttempts: number;
+  /** Доля сдавших; `null`, когда вердикт не выносился (измерительный тест). */
+  passRate: number | null;
+  /** Средний результат; `null`, когда оценивать было нечего. */
+  avgPercent: number | null;
+  /** Последнее завершённое прохождение — по дате окончания, без неё — начала. */
+  lastAttemptAt: string | null;
+}
+
+// GET /api/analytics/tests - Э3.0: тесты с прохождениями и их сводка — единая точка входа в
+// аналитику теста. Считается по тому же слою наблюдений, что страница теста (FR-25): число
+// в строке и плитка на уровне теста обязаны совпадать.
+router.get("/tests", requirePermission("analytics.read"), async (req: Request, res: Response) => {
+  try {
+    const scope = await analyticsScope(req);
+    const { rows } = await loadObservations({}, scope);
+
+    const byTest = new Map<string, typeof rows>();
+    for (const row of rows) {
+      if (!row.testId || row.outcome === "incomplete") continue;
+      const list = byTest.get(row.testId) ?? [];
+      list.push(row);
+      byTest.set(row.testId, list);
+    }
+
+    const ids = [...byTest.keys()];
+    const tests = await Promise.all(ids.map(id => storage.getTest(id)));
+    const titles = new Map(ids.map((id, i) => [id, tests[i]?.title ?? "Удалённый тест"]));
+
+    const result: TestSummaryRow[] = ids.map(testId => {
+      const list = byTest.get(testId)!;
+      const stats = summariseObservations(list);
+      const last = list.reduce<Date | null>((latest, o) => {
+        const at = o.finishedAt ?? o.startedAt;
+        return latest === null || at > latest ? at : latest;
+      }, null);
+      return {
+        testId,
+        title: titles.get(testId)!,
+        completedAttempts: stats.completedAttempts,
+        passRate: stats.passRate,
+        avgPercent: stats.avgPercent,
+        lastAttemptAt: last ? last.toISOString() : null,
+      };
+    });
+    // Свежие — сверху: вкладка отвечает «где сейчас идёт работа».
+    result.sort((a, b) => (b.lastAttemptAt ?? "").localeCompare(a.lastAttemptAt ?? ""));
+
+    res.json({ tests: result });
+  } catch (error) {
+    logger.error("Tests summary error: " + (error as Error).message, "analytics");
+    res.status(500).json({ error: "Failed to get tests summary" });
   }
 });
 

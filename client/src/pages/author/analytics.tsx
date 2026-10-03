@@ -23,11 +23,13 @@ import {
   type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
 import { useOpenTestLevel } from "@/features/analytics/levels/use-open-test-level";
+import { TestsTab } from "@/features/analytics/tests/tests-tab";
 import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
 import { AnalyticsHeader } from "@/features/analytics/levels/analytics-header";
 
 /** Вкладки общего уровня. Первая — по умолчанию. */
-const GENERAL_ANALYTICS_TABS = ["attempts", "slices", "attention"] as const;
+// Э3.0: «Тесты» — первая вкладка и вкладка по умолчанию: единая точка входа в аналитику теста.
+const GENERAL_ANALYTICS_TABS = ["tests", "attempts", "slices", "attention"] as const;
 import { percent } from "@/features/analytics/format";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import { SlicesTab } from "@/features/analytics/slices/slices-tab";
@@ -791,7 +793,7 @@ export default function AnalyticsPage() {
    * среза открывает реестр и должен ПЕРЕКЛЮЧИТЬ экран, а не только подставить условия.
    */
   // Э2: вкладка — в адресе (`?tab=`): «Назад» возвращает на прежнюю, ссылка открывает ту же.
-  const [tab, setTab] = useAnalyticsTab(GENERAL_ANALYTICS_TABS, "attempts");
+  const [tab, setTab] = useAnalyticsTab(GENERAL_ANALYTICS_TABS, "tests");
   // Э2: переход на уровень теста несёт условия и адрес возврата для крошки «Аналитика».
   const openTestLevel = useOpenTestLevel();
   const queryClient = useQueryClient();
@@ -936,7 +938,7 @@ export default function AnalyticsPage() {
       {/* Шапка уровня (Э2): общий уровень — корень, крошек нет. */}
       <AnalyticsHeader
         title="Аналитика"
-        subtitle="Прохождения, срезы и дела, по которым нужно действие"
+        subtitle="Тесты, прохождения и дела, по которым нужно действие"
         actions={(
           <>
             {/* Э2: отбор ровно по одному тесту (так приводит значок списка тестов) — переход на
@@ -966,6 +968,13 @@ export default function AnalyticsPage() {
         value={tab}
         onChange={setTab}
         items={[
+          {
+            // Э3.0: строка — тест с ключевыми числами; клик открывает уровень теста. Условия
+            // реестра в переход не едут: вкладка их не показывает и не применяет.
+            id: "tests",
+            label: "Тесты",
+            content: <TestsTab onOpenTest={(id) => openTestLevel(id, EMPTY_FILTER)} />,
+          },
           {
             id: "attempts",
             label: "Прохождения",

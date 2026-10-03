@@ -3254,6 +3254,10 @@
   overflow-wrap: anywhere;
 }
 
+/* Э3.0: поиск вкладки «Тесты» — размером с поиск панели фильтра (`.ou-filterbar__search`):
+   вкладка фильтра не имеет, а поле должно стоять так же, как на соседней вкладке. */
+.tb-tests-search { flex: 1 1 280px; min-width: 0; max-width: 420px; }
+
 .tb-psy-prompt {
   display: block;
   max-width: 46ch;

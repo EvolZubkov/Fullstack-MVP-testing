@@ -29,6 +29,9 @@ const { storageMock } = vi.hoisted(() => ({
     getTest: vi.fn(),
     getTestSections: vi.fn(),
     getTestQuestionScoring: vi.fn(),
+    // Э3.0: область видимости читателя без роли администратора.
+    getTestIdsByOwner: vi.fn(),
+    getUserTestGrants: vi.fn(),
   },
 }));
 
@@ -218,5 +221,71 @@ describe("GET /analytics/summary", () => {
     const res = await asAuthor(request(makeApp()).get("/api/analytics/summary"));
     expect(res.body.adaptiveAttempts).toBe(1);
     expect(res.body.adaptivePassed).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Э3.0: вкладка «Тесты» общего уровня — сводка по каждому тесту, вход в аналитику теста.
+describe("GET /analytics/tests", () => {
+  const later = new Date(now.getTime() + 3600000);
+
+  beforeEach(() => {
+    storageMock.getTest.mockImplementation((id: string) =>
+      Promise.resolve(id === "test1" ? dbTest : id === "test2" ? { id: "test2", title: "Охрана труда" } : undefined));
+  });
+
+  it("returns 401 when not authenticated", async () => {
+    const res = await request(makeApp()).get("/api/analytics/tests");
+    expect(res.status).toBe(401);
+  });
+
+  it("groups finished passages by test, both sources, abandoned ones left out", async () => {
+    storageMock.getAllAttempts.mockResolvedValue([webAttemptPassed, webAttemptFailed, webAttemptUnfinished]);
+    storageMock.getAllScormAttempts.mockResolvedValue([lmsAttemptPassed, lmsAttemptUnfinished]);
+
+    const res = await asAuthor(request(makeApp()).get("/api/analytics/tests"));
+    expect(res.status).toBe(200);
+    expect(res.body.tests).toHaveLength(1);
+    const [row] = res.body.tests;
+    expect(row).toMatchObject({ testId: "test1", title: "JS Basics", completedAttempts: 3 });
+    // 2 of 3 passed; mean of 80, 40 and 90.
+    expect(row.passRate).toBeCloseTo(66.67, 1);
+    expect(row.avgPercent).toBeCloseTo(70, 1);
+    expect(row.lastAttemptAt).toBe(now.toISOString());
+  });
+
+  it("puts the test with the freshest passage first and names a deleted test", async () => {
+    const other = { ...webAttemptPassed, id: "wa-t2", testId: "test2", finishedAt: later };
+    const orphan = { ...webAttemptFailed, id: "wa-gone", testId: "gone", finishedAt: yesterday, startedAt: yesterday };
+    storageMock.getAllAttempts.mockResolvedValue([webAttemptPassed, other, orphan]);
+    storageMock.getAllScormAttempts.mockResolvedValue([]);
+
+    const res = await asAuthor(request(makeApp()).get("/api/analytics/tests"));
+    expect(res.body.tests.map((t: { testId: string }) => t.testId)).toEqual(["test2", "test1", "gone"]);
+    expect(res.body.tests[2].title).toBe("Удалённый тест");
+  });
+
+  it("leaves pass rate and average empty for a test with no verdict and nothing graded", async () => {
+    const survey = {
+      ...webAttemptPassed, id: "wa-survey",
+      resultJson: { mode: "standard", overallPassed: null, overallPercent: null, totalEarnedPoints: null, totalPossiblePoints: null },
+    };
+    storageMock.getAllAttempts.mockResolvedValue([survey]);
+    storageMock.getAllScormAttempts.mockResolvedValue([]);
+
+    const res = await asAuthor(request(makeApp()).get("/api/analytics/tests"));
+    expect(res.body.tests[0]).toMatchObject({ completedAttempts: 1, passRate: null, avgPercent: null });
+  });
+
+  it("shows nothing outside the reader's scope", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTestIdsByOwner.mockResolvedValue(["test2"]);
+    storageMock.getUserTestGrants.mockResolvedValue([]);
+    storageMock.getAllAttempts.mockResolvedValue([webAttemptPassed]);
+    storageMock.getAllScormAttempts.mockResolvedValue([]);
+
+    const res = await asAuthor(request(makeApp()).get("/api/analytics/tests"));
+    expect(res.status).toBe(200);
+    expect(res.body.tests).toEqual([]);
   });
 });

@@ -622,11 +622,12 @@ export default function TestAnalyticsPage() {
                 // отбора живут в адресе реестра (FR-03), поэтому это обычная ссылка. Фильтр
                 // страницы едет с ней: иначе реестр показал бы ошибки за всё время по всем
                 // группам, а таблица вопросов — по отобранным.
+                // Э3.0: вкладка общего уровня по умолчанию — «Тесты»; реестр называется явно.
                 navigate(generalHref({
                     ...filter,
                     testIds: testId ? [testId] : [],
                     wrongQuestionIds: [questionId],
-                }));
+                }, "attempts"));
             }}
             psychometrics={questionPsychometrics}
             onOpenQuality={questionId => {
@@ -795,7 +796,7 @@ export default function TestAnalyticsPage() {
     const generalCrumb = {
         label: "Аналитика",
         href: returnHrefOf(typeof window === "undefined" ? null : window.history.state)
-            ?? generalHref(filterOutOfTest(filter, testId!)),
+            ?? generalHref(filterOutOfTest(filter, testId!), "attempts"),
     };
     const subtitle = (
         <>
@@ -860,7 +861,7 @@ export default function TestAnalyticsPage() {
                           прохождений, где умеет фильтровать, догружать порциями и вести в разбор.
                           Два списка на продукт означали бы два ответа на вопрос «кто проходил».
                         */}
-                        <Link href={generalHref(filterOutOfTest(filter, testId!))}>
+                        <Link href={generalHref(filterOutOfTest(filter, testId!), "attempts")}>
                             <Button variant="secondary" size="s" trailingIcon={<ChevronRight size={16} />}>
                                 Прохождения теста
                             </Button>
