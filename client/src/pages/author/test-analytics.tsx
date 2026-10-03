@@ -62,6 +62,9 @@ import {
     FilterBar,
     Grid,
     IconButton,
+    Menu,
+    MenuItem,
+    MenuTrigger,
     Stack,
     Tabs,
     Tag,
@@ -83,6 +86,13 @@ import {
 } from "@/features/analytics/registry/filter-state";
 import { PassageRegistry, type RegistryRow } from "@/features/analytics/registry/passage-registry";
 import { TestSlicesTab } from "@/features/analytics/slices/test-slices-tab";
+import {
+    OtherTestsCard,
+    QuestionInTestCard,
+    type QuestionCardView,
+} from "@/features/analytics/test/question-card";
+import { DeliveryExclusionDialog, type ExclusionTarget } from "@/features/analytics/test/delivery-exclusion-dialog";
+import { questionInTopicHref } from "@/features/content/question-link";
 import { ResultsByAxis } from "@/features/analytics/slices/results-by-axis";
 import { SaveSliceDialog } from "@/features/analytics/slices/save-slice-dialog";
 import { ExportDialog } from "@/features/analytics/registry/export-dialog";
@@ -97,6 +107,9 @@ import { useRegistryDictionaries, useTestDictionary } from "@/features/analytics
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import {
     ArrowLeft,
+    ChevronLeft,
+    ChevronRight,
+    MoreHorizontal,
     HelpCircle,
     Layers,
     FileSpreadsheet,
@@ -459,13 +472,33 @@ export default function TestAnalyticsPage() {
      * для всех строк таблицы заранее значило бы платить за сорок разборов ради одного.
      */
     const breakdownId = routeQuestionId;
-    /** Открыть разбор вопроса — перейти на его адрес; `null` — вернуться к таблице вопросов. */
-    const setBreakdownId = (questionId: string | null) => {
+    /**
+     * Открыть разбор вопроса — перейти на его адрес; `null` — вернуться к таблице вопросов.
+     *
+     * Э3.3: в состояние перехода уходят порядок таблицы, из которой пришли (по нему ходят
+     * «Предыдущий / Следующий»), и её вкладка (туда возвращает крошка теста). Адрес возврата
+     * крошки «Аналитика» в том же состоянии сохраняется.
+     */
+    const setBreakdownId = (questionId: string | null, order?: string[]) => {
         if (!testId) return;
+        const current = (typeof window === "undefined" ? null : window.history.state) as Record<string, unknown> | null;
         navigate(questionId ? questionHref(testId, questionId, filter) : testHref(testId, filter, "quality"), {
-            state: typeof window === "undefined" ? null : window.history.state,
+            state: questionId
+                ? { ...(current ?? {}), ...(order ? { questionOrder: order, questionFrom: activeTab } : {}) }
+                : current,
         });
     };
+    /** Э3.3: состояние перехода на уровень вопроса — порядок таблицы и вкладка, откуда пришли. */
+    const questionState = (typeof window === "undefined" ? null : window.history.state) as
+        { questionOrder?: string[]; questionFrom?: string } | null;
+    /** Э3.3: окно «Исключить из выдачи» на уровне вопроса. */
+    const [excludeTarget, setExcludeTarget] = useState<ExclusionTarget | null>(null);
+    const cardKey = `/api/analytics/tests/${testId}/questions/${routeQuestionId}/card`;
+    /** Э3.3: «Вопрос в этом тесте» и «Этот вопрос в других тестах». */
+    const { data: questionCard } = useQuery<QuestionCardView>({
+        queryKey: [cardKey],
+        enabled: !!testId && !!routeQuestionId,
+    });
     /**
      * Выбранная редакция вопроса: `undefined` — автор ещё не выбирал, и сервер считает карточку по
      * текущей редакции (FR-49a); `null` — «версия неизвестна».
@@ -679,13 +712,14 @@ export default function TestAnalyticsPage() {
                 });
             }}
             psychometrics={questionPsychometrics}
-            onOpenQuality={questionId => {
+            onOpenQuality={(questionId, order) => {
                 // PRD-66 FR-03: дискриминативность — вход в разбор задания, а не просто
                 // число. Переход открывает КАРТОЧКУ на своей вкладке: возвращать автора к
                 // списку, из которого он только что пришёл, значит заставить искать строку
                 // второй раз.
                 // Э2: адрес вопроса сам открывает вкладку «Качество вопросов».
-                setBreakdownId(questionId);
+                // Э3.3: порядок этой таблицы — для «Предыдущий / Следующий».
+                setBreakdownId(questionId, order);
                 setBreakdownVersion(undefined);
             }}
         />
@@ -890,6 +924,17 @@ export default function TestAnalyticsPage() {
 
     // ── Уровень вопроса (Э2): своя шапка с крошками, разбор без вкладок теста ──────────────
     if (routeQuestionId) {
+        // Порядок «Предыдущий / Следующий» — таблицы, из которой пришли; пришли по ссылке —
+        // порядок таблицы «Качества вопросов» по умолчанию (эскиз).
+        const order = questionState?.questionOrder ?? (itemQuality?.items ?? []).map(item => item.questionId);
+        const at = order.indexOf(routeQuestionId);
+        const previous = at > 0 ? order[at - 1] : null;
+        const next = at >= 0 && at < order.length - 1 ? order[at + 1] : null;
+        const goTo = (questionId: string) => navigate(questionHref(testId!, questionId, filter), {
+            state: typeof window === "undefined" ? undefined : window.history.state,
+        });
+        const sourceTab = questionState?.questionFrom === "questions" ? "questions" : "quality";
+        const currentSince = breakdown?.versions?.find(row => row.psychoHash === breakdown.currentVersion)?.firstAt ?? null;
         return (
             <Stack gap={6}>
                 <AnalyticsHeader
@@ -897,15 +942,82 @@ export default function TestAnalyticsPage() {
                         generalCrumb,
                         {
                             label: analytics.testTitle,
-                            href: testHref(testId!, filter, "quality"),
+                            // Э3.3: крошка теста возвращает на вкладку, с которой пришли.
+                            href: testHref(testId!, filter, sourceTab),
                             state: typeof window === "undefined" ? undefined : window.history.state,
                         },
-                        { label: breakdown?.prompt ?? "Вопрос" },
+                        { label: breakdown?.prompt ?? questionCard?.prompt ?? "Вопрос" },
                     ]}
-                    title={breakdown ? <BreakdownTitle view={breakdown} /> : "Вопрос"}
-                    subtitle={breakdown ? breakdownSubtitle(breakdown) : undefined}
+                    title={breakdown?.item ? <BreakdownTitle view={breakdown} /> : (questionCard?.prompt ?? "Вопрос")}
+                    subtitle={breakdown?.item ? breakdownSubtitle(breakdown) : undefined}
+                    actions={(
+                        <>
+                            <Button
+                                variant="secondary"
+                                size="s"
+                                leadingIcon={<ChevronLeft size={14} />}
+                                disabled={!previous}
+                                onClick={() => previous && goTo(previous)}
+                            >
+                                Предыдущий
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                size="s"
+                                trailingIcon={<ChevronRight size={14} />}
+                                disabled={!next}
+                                onClick={() => next && goTo(next)}
+                            >
+                                Следующий
+                            </Button>
+                            {/* Те же пункты, что в меню строки таблицы вопросов (эскиз). */}
+                            <MenuTrigger
+                                placement="bottom-end"
+                                trigger={(
+                                    <IconButton
+                                        variant="ghost"
+                                        size="s"
+                                        aria-label="Действия с вопросом"
+                                        icon={<MoreHorizontal size={16} />}
+                                    />
+                                )}
+                            >
+                                <Menu size="sm">
+                                    <MenuItem onClick={() => navigate(questionInTopicHref(routeQuestionId))}>
+                                        Открыть вопрос в теме
+                                    </MenuItem>
+                                    <MenuItem onClick={() => openPassages({ ...filterConditions, wrongQuestionIds: [routeQuestionId] })}>
+                                        Прохождения с ошибкой
+                                    </MenuItem>
+                                    {questionCard?.excluded ? (
+                                        <MenuItem onClick={() => void changeDelivery(routeQuestionId, false)
+                                            .then(() => queryClient.invalidateQueries({ queryKey: [cardKey] }))}
+                                        >
+                                            Вернуть в выдачу
+                                        </MenuItem>
+                                    ) : (
+                                        <MenuItem onClick={() => setExcludeTarget({
+                                            questionId: routeQuestionId,
+                                            prompt: questionCard?.prompt ?? breakdown?.prompt ?? "",
+                                            caption: questionCard?.topicName ?? "",
+                                        })}
+                                        >
+                                            Исключить из выдачи…
+                                        </MenuItem>
+                                    )}
+                                </Menu>
+                            </MenuTrigger>
+                        </>
+                    )}
                 />
-                {breakdown
+                {questionCard?.questionId ? (
+                    <QuestionInTestCard
+                        card={questionCard}
+                        currentSince={currentSince}
+                        onOpenInTopic={() => navigate(questionInTopicHref(routeQuestionId))}
+                    />
+                ) : null}
+                {breakdown?.item
                     ? (
                         <ItemBreakdownPanel
                             view={breakdown}
@@ -914,6 +1026,23 @@ export default function TestAnalyticsPage() {
                         />
                     )
                     : <LoadingState message="Считаем психометрику..." />}
+                {questionCard?.questionId ? (
+                    <OtherTestsCard
+                        rows={questionCard.otherTests ?? []}
+                        windowMonths={questionCard.windowMonths}
+                        onOpen={otherTestId => navigate(questionHref(otherTestId, routeQuestionId, {}))}
+                    />
+                ) : null}
+                <DeliveryExclusionDialog
+                    target={excludeTarget}
+                    testId={testId ?? undefined}
+                    onClose={() => setExcludeTarget(null)}
+                    onConfirm={questionId => {
+                        setExcludeTarget(null);
+                        void changeDelivery(questionId, true)
+                            .then(() => queryClient.invalidateQueries({ queryKey: [cardKey] }));
+                    }}
+                />
             </Stack>
         );
     }

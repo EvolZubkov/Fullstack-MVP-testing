@@ -931,7 +931,8 @@ describe("ItemQualityPanel — меню строки", () => {
     await openMenu();
     await userEvent.click(screen.getByRole("menuitem", { name: "Разбор вопроса: Вопрос про ключ" }));
 
-    expect(onOpenItem).toHaveBeenCalledWith("q1");
+    // Э3.3: вместе с вопросом уходит порядок таблицы — для «Предыдущий / Следующий».
+    expect(onOpenItem).toHaveBeenCalledWith("q1", ["q1"]);
   });
 
   it("«Открыть вопрос в теме» ведёт в раздел «Темы и вопросы» на этот вопрос", async () => {

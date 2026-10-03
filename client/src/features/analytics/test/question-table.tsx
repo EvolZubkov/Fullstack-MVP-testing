@@ -131,8 +131,11 @@ export interface QuestionTableProps {
    * записи — «ещё не посчитано», и это прочерк, а не ноль.
    */
   psychometrics?: Record<string, QuestionPsychometrics>;
-  /** Открыть разбор задания на вкладке «Качество вопросов» (FR-03). */
-  onOpenQuality?: (questionId: string) => void;
+  /**
+   * Открыть разбор задания — уровень вопроса (FR-03, Э3.3). `order` — вопросы в порядке таблицы,
+   * как она отсортирована сейчас: по нему ходят «Предыдущий / Следующий».
+   */
+  onOpenQuality?: (questionId: string, order: string[]) => void;
 }
 
 /** Психометрика одного задания — ровно то, что нужно строке таблицы. */
@@ -522,7 +525,7 @@ export function QuestionTable({
               variant="ghost"
               size="s"
               aria-label={`Разбор вопроса: ${row.questionPrompt}`}
-              onClick={() => onOpenQuality(row.questionId)}
+              onClick={() => onOpenQuality(row.questionId, rows.map(item => item.questionId))}
             >
               {num(psycho.itemRest)}
             </Button>
@@ -612,7 +615,7 @@ export function QuestionTable({
       render: (row: QuestionRow) => (
         <QuestionRowMenu
           prompt={row.questionPrompt}
-          onOpenQuality={onOpenQuality ? () => onOpenQuality(row.questionId) : undefined}
+          onOpenQuality={onOpenQuality ? () => onOpenQuality(row.questionId, rows.map(item => item.questionId)) : undefined}
           onOpenInTopic={() => navigate(questionInTopicHref(row.questionId))}
           onOpenRegistry={onOpenRegistry && row.correctPercent !== null
             ? () => onOpenRegistry(row.questionId)
@@ -681,6 +684,8 @@ export function QuestionTable({
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={(key, dir) => { setSortKey(key); setSortDir(dir); }}
+          // Э3.3: строка открывает вопрос — прежде клик по ней не делал ничего.
+          onRowClick={onOpenQuality ? row => onOpenQuality(row.questionId, rows.map(item => item.questionId)) : undefined}
           emptyMessage={view === "review"
             ? "Признаки проблем не сошлись ни у одного вопроса: чинить нечего"
             : view === "excluded"

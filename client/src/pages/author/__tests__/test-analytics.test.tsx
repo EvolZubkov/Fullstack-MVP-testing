@@ -377,7 +377,16 @@ describe("<TestAnalyticsPage />", () => {
       const u = String(input);
       const body = u === "/api/analytics/tests/t1" ? state.analyticsBody
         : u.startsWith("/api/analytics/psychometrics/t1/items/q1") ? breakdown
-        : u.startsWith("/api/analytics/psychometrics/t1") ? state.psychometricsBody : [];
+        : u.startsWith("/api/analytics/psychometrics/t1") ? state.psychometricsBody
+        // Э3.3: «Вопрос в этом тесте» и «Этот вопрос в других тестах».
+        : u === "/api/analytics/tests/t1/questions/q1/card" ? {
+          questionId: "q1", prompt: "Какая мера относится к антикоррупционным?", questionType: "single",
+          topicName: "Право и комплаенс", tags: ["Антикоррупция"], media: null, excluded: false,
+          points: 2, pointsInTest: true, scoringKind: "exact", scoringInTest: false,
+          difficulty: 60, difficultyInTest: false, correctAnswer: null, windowMonths: 12,
+          otherTests: [{ testId: "t2", title: "Антикоррупционный минимум", delivered: 412, observations: 412, difficulty: 0.58 }],
+        }
+        : [];
       return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
     });
     renderPage("/author/analytics/tests/t1/questions/q1");
@@ -390,6 +399,39 @@ describe("<TestAnalyticsPage />", () => {
       .toHaveAttribute("href", "/author/analytics/tests/t1?tab=quality");
     expect(screen.queryByRole("tab", { name: "Обзор" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ко всем вопросам" })).toBeNull();
+
+    // Э3.3: сам вопрос и его настройки в тесте, другие тесты, переходы и действия.
+    expect(await screen.findByText("Вопрос в этом тесте")).toBeInTheDocument();
+    expect(screen.getByText("настроено в тесте")).toBeInTheDocument();
+    expect(screen.getByText("выдаётся")).toBeInTheDocument();
+    expect(screen.getByText("Этот вопрос в других тестах")).toBeInTheDocument();
+    expect(screen.getByText("Антикоррупционный минимум")).toBeInTheDocument();
+    // Пришли по ссылке, порядка таблицы нет — а таблица «Качества» пуста: соседей нет.
+    expect(screen.getByRole("button", { name: /Предыдущий/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Следующий/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Действия с вопросом" }));
+    expect((await screen.findAllByRole("menuitem")).map(item => item.textContent))
+      .toEqual(["Открыть вопрос в теме", "Прохождения с ошибкой", "Исключить из выдачи…"]);
+
+    // Строка другого теста ведёт на уровень этого же вопроса в том тесте.
+    fireEvent.click(screen.getByText("Антикоррупционный минимум"));
+    await waitFor(() => expect(memory.history?.at(-1)).toBe("/author/analytics/tests/t2/questions/q1"));
+  });
+
+  it("«Предыдущий / Следующий» идут по порядку таблицы, из которой пришли; крошка — на её вкладку (Э3.3)", async () => {
+    window.history.replaceState({ questionOrder: ["q0", "q1", "q2"], questionFrom: "questions" }, "", "/");
+    fetchMock.mockImplementation(async (input: string) => {
+      const body = String(input) === "/api/analytics/tests/t1" ? state.analyticsBody : [];
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    });
+    renderPage("/author/analytics/tests/t1/questions/q1");
+
+    const crumbs = await screen.findByRole("navigation", { name: "Хлебные крошки" });
+    expect(within(crumbs).getByRole("link", { name: "Тест по финансам" }))
+      .toHaveAttribute("href", "/author/analytics/tests/t1?tab=questions");
+    fireEvent.click(screen.getByRole("button", { name: /Следующий/ }));
+    await waitFor(() => expect(memory.history?.at(-1)).toBe("/author/analytics/tests/t1/questions/q2"));
+    window.history.replaceState(null, "", "/");
   });
 
   it("вкладка — в адресе: переход по вкладке пишется в историю, адрес с вкладкой её открывает (Э2)", async () => {

@@ -355,6 +355,8 @@ export interface IStorage {
   getDeliveryCountsForTest(questionIds: string[], testId: string, since: Date): Promise<Map<string, number>>;
   /** PRD-55 (FR-32): в скольких ДРУГИХ тестах задание выдавалось за окно. */
   getOtherTestsCount(questionIds: string[], testId: string, since: Date): Promise<Map<string, number>>;
+  /** Э3.3: другие тесты, где задание выдавалось за окно, — поимённо, с числом выдач. */
+  getOtherTests(questionId: string, testId: string, since: Date): Promise<Array<{ testId: string; delivered: number }>>;
   /** PRD-55 (FR-31a): медиана времени на задание и СВОЙ объём выборки (веб времени не даёт). */
   getLatencyStats(questionIds: string[], testId: string, since: Date): Promise<Map<string, { medianMs: number; sampleSize: number }>>;
   /** PRD-56 FR-33: страница прохождений веба, телеметрии и импорта одной выборкой. */
@@ -1219,6 +1221,10 @@ export class DatabaseStorage implements IStorage {
 
   getOtherTestsCount(questionIds: string[], testId: string, since: Date): Promise<Map<string, number>> {
     return this.exposureRepo.getOtherTestsCount(questionIds, testId, since);
+  }
+
+  getOtherTests(questionId: string, testId: string, since: Date): Promise<Array<{ testId: string; delivered: number }>> {
+    return this.exposureRepo.getOtherTests(questionId, testId, since);
   }
 
   selectObservations(query: ObservationQuery): Promise<ObservationRows> {

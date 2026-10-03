@@ -4,6 +4,7 @@ import attemptsRouter from "./attempts";
 import scormRouter from "./scorm";
 import summaryRouter from "./summary";
 import questionDeliveryRouter from "./question-delivery";
+import questionCardRouter from "./question-card";
 import questionAnswersRouter from "./question-answers";
 import deliveryRouter from "./delivery";
 import scalesRouter from "./scales";
@@ -38,6 +39,9 @@ router.use("/", summaryRouter);
 
 // PRD-56 FR-17a: исключение задания из выдачи теста и возврат в неё
 router.use("/", questionDeliveryRouter);
+
+// Э3.3: вопрос в тесте — его настройки и другие тесты, где он выдавался
+router.use("/", questionCardRouter);
 
 // PRD-57 FR-32: ответы одного задания списком и выгрузкой
 router.use("/", questionAnswersRouter);

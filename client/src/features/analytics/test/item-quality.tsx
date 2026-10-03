@@ -163,8 +163,12 @@ export interface ItemQualityPanelProps {
   /** Ссылки выгрузок: отчёт и матрица. Без них кнопки не рисуются. */
   exportHref?: string;
   matrixHref?: string;
-  /** Открыть разбор вопроса — пункт «Разбор вопроса» меню строки. Без обработчика его нет. */
-  onOpenItem?: (questionId: string) => void;
+  /**
+   * Открыть разбор вопроса — пункт «Разбор вопроса» меню строки (строка здесь не кликабельна,
+   * PRD-66). `order` — вопросы в порядке таблицы: по нему ходят «Предыдущий / Следующий» (Э3.3).
+   * Без обработчика пункта нет.
+   */
+  onOpenItem?: (questionId: string, order: string[]) => void;
   /**
    * PRD-56 FR-17a: исключить вопрос из выдачи или вернуть его — тем же путём, что на вкладке
    * «Вопросы». Без обработчика пунктов выдачи в меню нет.
@@ -756,7 +760,7 @@ export function ItemQualityPanel({
           <QuestionRowMenu
             prompt={prompt}
             // Невыданный вопрос разбирать не по чему: пункта «Разбор вопроса» у него нет.
-            onOpenQuality={onOpenItem && !row.neverDelivered ? () => onOpenItem(row.questionId) : undefined}
+            onOpenQuality={onOpenItem && !row.neverDelivered ? () => onOpenItem(row.questionId, rows.map(item => item.questionId)) : undefined}
             onOpenInTopic={() => navigate(questionInTopicHref(row.questionId))}
             excluded={!!excluded[row.questionId]}
             onExclude={onDeliveryChange

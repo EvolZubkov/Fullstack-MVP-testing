@@ -227,7 +227,21 @@ describe("QuestionTable — психометрика в строке (PRD-66)", 
     // FR-03: без перехода новая вкладка осталась бы складом, куда никто не заходит.
     await userEvent.click(screen.getByRole("button", { name: /Разбор вопроса: Какая мера/ }));
 
-    expect(onOpenQuality).toHaveBeenCalledWith("q1");
+    // Э3.3: вместе с вопросом уходит порядок таблицы — для «Предыдущий / Следующий».
+    expect(onOpenQuality).toHaveBeenCalledWith("q1", expect.arrayContaining(["q1"]));
+  });
+
+  it("щелчок по строке открывает вопрос — с порядком таблицы, как она отсортирована (Э3.3)", async () => {
+    const onOpenQuality = vi.fn();
+    render(<QuestionTable questions={QUESTIONS} psychometrics={PSYCHO} onOpenQuality={onOpenQuality} />);
+
+    const shown = [...document.querySelectorAll("tbody tr")];
+    await userEvent.click(within(shown[0] as HTMLElement).getAllByRole("cell")[0]);
+
+    expect(onOpenQuality).toHaveBeenCalledTimes(1);
+    const [, order] = onOpenQuality.mock.calls[0];
+    expect(order).toHaveLength(QUESTIONS.length);
+    expect(order[0]).toBe(onOpenQuality.mock.calls[0][0]);
   });
 
   it("ниже порога коэффициента дискриминативности нет, а трудность есть", () => {
@@ -632,7 +646,8 @@ describe("QuestionTable — меню строки", () => {
     await openRowMenu(/Действия с вопросом: Какая мера/);
     await userEvent.click(screen.getByRole("menuitem", { name: /Разбор вопроса: Какая мера/ }));
 
-    expect(onOpenQuality).toHaveBeenCalledWith("q1");
+    // Э3.3: вместе с вопросом уходит порядок таблицы — для «Предыдущий / Следующий».
+    expect(onOpenQuality).toHaveBeenCalledWith("q1", expect.arrayContaining(["q1"]));
   });
 
   it("без входа в разбор пункта нет", async () => {

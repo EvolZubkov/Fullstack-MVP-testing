@@ -182,6 +182,34 @@ export class ExposureRepository {
   }
 
   /**
+   * Э3.3: ДРУГИЕ тесты, где задание выдавалось за окно, и сколько раз — поимённо.
+   *
+   * `getOtherTestsCount` отвечает «в скольких», а страница вопроса — «в каких»: из списка
+   * переходят на уровень вопроса в каждом тесте. Сначала — где выдавалось чаще.
+   */
+  async getOtherTests(
+    questionId: string,
+    testId: string,
+    since: Date,
+  ): Promise<Array<{ testId: string; delivered: number }>> {
+    const rows = await db
+      .select({
+        testId: questionExposure.testId,
+        delivered: sql<number>`sum(${questionExposure.deliveredCount})::int`,
+      })
+      .from(questionExposure)
+      .where(and(
+        eq(questionExposure.questionId, questionId),
+        ne(questionExposure.testId, testId),
+        gte(questionExposure.bucketMonth, bucketOf(since)),
+      ))
+      .groupBy(questionExposure.testId);
+    return rows
+      .map(r => ({ testId: r.testId, delivered: Number(r.delivered) }))
+      .sort((a, b) => b.delivered - a.delivered);
+  }
+
+  /**
    * Медиана времени на задание и объём выборки (PRD-55 FR-31a).
    *
    * МЕДИАНА, а не среднее: распределение тяжелохвостое — участник, открывший вопрос и ушедший,
