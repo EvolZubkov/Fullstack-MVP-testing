@@ -15,7 +15,6 @@
 import { useState } from "react";
 import { ExportDialog } from "@/features/analytics/registry/export-dialog";
 import { PassageRegistry, type RegistryRow } from "@/features/analytics/registry/passage-registry";
-import { useLocation } from "wouter";
 
 import {
   conditionsToFilter,
@@ -23,7 +22,7 @@ import {
   EMPTY_FILTER,
   type RegistryFilter,
 } from "@/features/analytics/registry/filter-state";
-import { testHref } from "@/features/analytics/levels/analytics-routes";
+import { useOpenTestLevel } from "@/features/analytics/levels/use-open-test-level";
 import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
 import { AnalyticsHeader } from "@/features/analytics/levels/analytics-header";
 
@@ -779,8 +778,6 @@ export default function AnalyticsPage() {
   const [registryFilter, setRegistryFilter] = useRegistryFilter();
   /** PRD-56 FR-04: окно выгрузки отфильтрованного — открывается из панели фильтра реестра. */
   const [exportOpen, setExportOpen] = useState(false);
-  /** FR-24: переход «группа → тест» уводит со страницы, поэтому нужен переход маршрутизатора. */
-  const [, setLocation] = useLocation();
   /**
    * Отбор, отправленный из реестра в сравнение (FR-07b).
    *
@@ -794,6 +791,8 @@ export default function AnalyticsPage() {
    */
   // Э2: вкладка — в адресе (`?tab=`): «Назад» возвращает на прежнюю, ссылка открывает ту же.
   const [tab, setTab] = useAnalyticsTab(GENERAL_ANALYTICS_TABS, "attempts");
+  // Э2: переход на уровень теста несёт условия и адрес возврата для крошки «Аналитика».
+  const openTestLevel = useOpenTestLevel();
 
   // PRD-56 FR-12: combined-full и summary сняты вместе с «Обзором». Величины, которые они
   // считали — средний балл и pass rate ПО ВСЕМ тестам, тренды и проблемные темы вне контекста
@@ -1013,7 +1012,8 @@ export default function AnalyticsPage() {
                 // где их читает тот же разбор, что у реестра. Тест в условия не входит — он
                 // задан адресом страницы.
                 onOpenTestAnalytics={(openTestId, conditions) => {
-                  setLocation(testHref(openTestId, { ...EMPTY_FILTER, ...conditionsToFilter(conditions) }));
+                  // Условия среза относятся к этому тесту: варианты и версии в них — его.
+                  openTestLevel(openTestId, { ...EMPTY_FILTER, ...conditionsToFilter(conditions), testIds: [openTestId] });
                 }}
               />
             ),

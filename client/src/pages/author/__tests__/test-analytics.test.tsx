@@ -312,6 +312,18 @@ describe("<TestAnalyticsPage />", () => {
     expect(memory.history.at(-1)).toBe("/author/analytics/tests/t1/questions/q1");
   });
 
+  it("крошка «Аналитика» возвращает на общий уровень с тем фильтром, с которым с него ушли (Э2)", async () => {
+    window.history.replaceState({ analyticsReturn: "/author/analytics?testId=t1&testId=t2&tab=attention" }, "", "/");
+    try {
+      await renderLoaded();
+      const crumbs = screen.getByRole("navigation", { name: "Хлебные крошки" });
+      expect(within(crumbs).getByRole("link", { name: "Аналитика" }))
+        .toHaveAttribute("href", "/author/analytics?testId=t1&testId=t2&tab=attention");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
   it("уровень вопроса (Э2): три крошки, заголовок — вопрос, вкладок теста нет", async () => {
     const breakdown = {
       questionId: "q1", prompt: "Какая мера относится к антикоррупционным?", questionType: "single",
