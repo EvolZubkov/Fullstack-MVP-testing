@@ -72,6 +72,7 @@
       <symbol id="i-users-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 21a8 8 0 0 0-12 0"/><circle cx="12" cy="11" r="4"/></symbol>
       <symbol id="i-import" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
       <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
       <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></symbol>
       <symbol id="i-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
@@ -148,7 +149,8 @@
       <button type="button" onclick="showState(this, 'test-compare-quality')">сравнение: качество</button>
       <span class="wf-nav-sep"></span>
       <span class="wf-nav-title">Общая (Э3а):</span>
-      <button type="button" onclick="showState(this, 'general')">без «Срезов»</button>
+      <button type="button" onclick="showState(this, 'general-tests')">тесты</button>
+      <button type="button" onclick="showState(this, 'general')">прохождения</button>
       <span class="wf-nav-sep"></span>
       <span class="wf-nav-title">Э3б:</span>
       <button type="button" onclick="showState(this, 'question')">вопрос</button>
@@ -194,9 +196,11 @@
       </div>
     </template>
 
-    <!-- Вкладки общего уровня после Э3: «Срезы» ушли в тест. -->
+    <!-- Вкладки общего уровня после Э3: «Тесты» — первая, единая точка входа в аналитику теста;
+         «Срезы» ушли в тест. -->
     <template id="wf-general-tabs-e3-tpl">
       <div class="ou-tabs__list" role="tablist">
+        <button type="button" class="ou-tabs__tab" role="tab" data-tab="tests" onclick="showState(null, 'general-tests')"><span class="ou-tabs__label">Тесты</span></button>
         <button type="button" class="ou-tabs__tab" role="tab" data-tab="reg" onclick="showState(null, 'general')"><span class="ou-tabs__label">Прохождения</span></button>
         <button type="button" class="ou-tabs__tab" role="tab" data-tab="attention" onclick="showState(null, 'attention')"><span class="ou-tabs__label">Требует внимания</span><span class="ou-tabs__badge">33</span></button>
       </div>
@@ -206,7 +210,7 @@
     <template id="wf-general-head-tpl">
       <div class="ou-stack ou-stack--gap-1">
         <h1 class="ou-text ou-text--heading-l">Аналитика</h1>
-        <p class="ou-text ou-text--body-m ou-text--tone-muted">Прохождения, срезы и дела, по которым нужно действие</p>
+        <p class="ou-text ou-text--body-m ou-text--tone-muted">Тесты, прохождения и дела, по которым нужно действие</p>
       </div>
       <div class="ou-stack ou-stack--row ou-stack--gap-1">
         <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-refresh" /></svg></span><span>Обновить</span></button>
@@ -565,6 +569,92 @@
       </div>
     </div>
 
+    <!-- ════════════════ Общая: вкладка «Тесты» — единая точка входа в аналитику теста ════════════════ -->
+    <div id="wf-general-tests" class="wf-state" data-tab="tests">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-general-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-general-tabs-e3></div>
+
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              <div class="ou-filterbar__search">
+                <div class="ou-field ou-field--s ou-field--full ou-searchfield">
+                  <div class="ou-field__box">
+                    <span class="ou-field__ico"><svg width="16" height="16"><use href="#i-search" /></svg></span>
+                    <input class="ou-field__input" type="search" placeholder="Название теста" aria-label="Поиск по названию теста" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Тесты с прохождениями</h2>
+                <p class="ou-card__subtitle">12 тестов · завершённые прохождения: веб, телеметрия LMS и импортированные выгрузки</p>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-grid">
+                <div class="ou-grid__scroll">
+                  <table class="ou-grid__table">
+                    <thead>
+                      <tr>
+                        <th><div class="ou-grid__th is-sortable">Тест<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end">Прохождений<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end">Сдали<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end">Средний результат<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end">Вопросов под подозрением<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable is-sorted">Последнее прохождение<svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="is-clickable" onclick="showState(null, 'test-overview')">
+                        <td><span class="ou-grid__cell-strong">Сертификация руководителей</span></td>
+                        <td class="is-numeric">486</td>
+                        <td class="is-numeric">61 %</td>
+                        <td class="is-numeric">68 %</td>
+                        <td class="is-numeric">7</td>
+                        <td>08.09.2026</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="showState(null, 'test-overview')">
+                        <td><span class="ou-grid__cell-strong">Охрана труда</span></td>
+                        <td class="is-numeric">312</td>
+                        <td class="is-numeric">88 %</td>
+                        <td class="is-numeric">81 %</td>
+                        <td class="is-numeric">0</td>
+                        <td>05.09.2026</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="showState(null, 'test-overview')">
+                        <td><span class="ou-grid__cell-strong">Опросник ЧИЛ</span></td>
+                        <td class="is-numeric">97</td>
+                        <td class="is-numeric">—</td>
+                        <td class="is-numeric">—</td>
+                        <td class="is-numeric">2</td>
+                        <td>01.09.2026</td>
+                      </tr>
+                      <tr class="is-clickable" onclick="showState(null, 'test-overview')">
+                        <td><span class="ou-grid__cell-strong">Вводный курс продаж</span></td>
+                        <td class="is-numeric">54</td>
+                        <td class="is-numeric">72 %</td>
+                        <td class="is-numeric">74 %</td>
+                        <td class="is-numeric">—</td>
+                        <td>28.08.2026</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
     <!-- ════════════════ Общая: без «Срезов» и без «Сохранить как срез» ════════════════ -->
     <div id="wf-general" class="wf-state" data-tab="reg">
       <div class="ou-shell">
@@ -845,7 +935,8 @@
               <tr><td>Вкладка «Прохождения» теста</td><td>Реестр прохождений внутри теста: тест задан страницей — ни чипа «Тест», ни колонки «Тест». Строка открывает «Детали попытки» — то же окно, что на общем уровне</td><td>Кнопка «Прохождения теста ›» в шапке теста уходит — стала вкладкой. «Прохождения с ошибкой» ведут сюда с условием по вопросу (Э0.1)</td></tr>
               <tr><td>Вкладка «Срезы» теста</td><td>Список по оси и сравнение. Рамка — только период: тест задан страницей. Строка среза ведёт во вкладку «Прохождения» с условиями среза</td><td>Решение владельца 2026-10-03: срез без теста существовать не может. Сохранённые срезы в списках — только срезы этого теста</td></tr>
               <tr><td>Сравнение срезов</td><td>Переключатель «Результат и темы / Качество вопросов» под слотами; за ним два существующих расчёта (PRD-56 и PRD-66)</td><td>«Сравнить срезы» внутри «Качества вопросов» уходит — сравнение одно, во вкладке «Срезы»</td></tr>
-              <tr><td>Общий уровень</td><td>Вкладки «Прохождения» и «Требует внимания». Из реестра ушли «Сравнить со срезом» и «Сохранить как срез» с окном выбора теста; «Сохранить фильтр» остаётся</td><td>Э3а</td></tr>
+              <tr><td>Вкладка «Тесты» общего уровня</td><td>Первая вкладка «Аналитики»: тесты с прохождениями, поиск по названию. Строка открывает уровень теста; туда же ведут значок «Аналитика» в списке тестов и значок в строке реестра. Колонки: прохождений, сдали, средний результат, вопросов под подозрением, последнее прохождение</td><td>Решение владельца 2026-10-03: точка входа в аналитику единая. «—» в «Сдали» и «Средний результат» — у измерительного теста нет вердикта; «—» в «Под подозрением» — прохождений мало для расчёта. Э3а; колонка «Вопросов под подозрением» — в Э3б вместе с корзиной внимания</td></tr>
+              <tr><td>Общий уровень</td><td>Вкладки «Тесты», «Прохождения» и «Требует внимания». Из реестра ушли «Сравнить со срезом» и «Сохранить как срез» с окном выбора теста; «Сохранить фильтр» остаётся</td><td>Э3а</td></tr>
               <tr><td>Значок «Аналитика» в списке тестов</td><td>Ведёт на уровень теста: <code>/author/analytics/tests/:testId</code></td><td>Решение владельца 2026-10-03, отменяет решение Э2 (общий раздел с отбором). Отдельного состояния нет — внешний вид списка не меняется</td></tr>
               <tr><td>Вопрос: «Предыдущий / Следующий»</td><td>В порядке сортировки таблицы, из которой пришли; порядок — в состоянии перехода. Пришли по ссылке — порядок таблицы «Качества вопросов» по умолчанию</td><td>Э3б</td></tr>
               <tr><td>Вопрос: меню действий</td><td>Те же пункты, что в меню строки таблицы вопросов: «Открыть вопрос в теме», «Прохождения с ошибкой», «Исключить из выдачи…» / «Вернуть в выдачу»</td><td>Подписи — дословно из нынешнего меню строки</td></tr>
