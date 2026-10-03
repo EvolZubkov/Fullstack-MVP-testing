@@ -2741,6 +2741,9 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-grid__th svg { width: 12px; height: 12px; opacity: 0.6; }
 .ou-grid__th.is-sorted svg { opacity: 1; }
 .ou-grid__th .ou-grid__th-filter svg { opacity: 1; }
+/* Заголовок следует выравниванию столбца: ячейка заголовка — гибкий ряд, text-align её не двигает. */
+.ou-grid__th--center { justify-content: center; text-align: center; }
+.ou-grid__th--right { justify-content: flex-end; text-align: right; }
 .ou-grid__th-filter {
   width: 18px; height: 18px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -2778,6 +2781,10 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 .ou-grid__table tbody tr:last-child td { border-bottom: 0; }
 .ou-grid__table tbody td.is-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+/* Явное выравнивание столбца важнее правого у is-numeric. */
+.ou-grid__table tbody td.is-align-left { text-align: left; }
+.ou-grid__table tbody td.is-align-center { text-align: center; }
+.ou-grid__table tbody td.is-align-right { text-align: right; }
 .ou-grid__table tbody td.is-muted { color: var(--ou-fg-muted); }
 
 .ou-grid__cell-strong { font: var(--ou-text-body-m); font-weight: 500; color: var(--ou-fg-default); }
@@ -7004,6 +7011,10 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-tbl th, .ou-tbl td { text-align: left; border-bottom: 1px solid var(--ou-border-soft); vertical-align: middle; }
 /* Mirrors DataGrid: a numeric column reads right-aligned with lining figures. */
 .ou-tbl tbody td.is-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+/* Заголовок и значения столбца выровнены одинаково; явное выравнивание важнее is-numeric. */
+.ou-tbl th.is-align-center, .ou-tbl tbody td.is-align-center { text-align: center; }
+.ou-tbl th.is-align-right, .ou-tbl tbody td.is-align-right { text-align: right; }
+.ou-tbl tbody td.is-align-left { text-align: left; }
 .ou-tbl thead th {
   font: var(--ou-text-body-s); font-weight: 600;
   color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px;

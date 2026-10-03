@@ -319,19 +319,21 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
     {
       key: "share",
       width: "9%",
-      header: <TermHint term="Выбрали" hint={HINT.share} align="end" />,
-      align: "right" as const,
+      header: <TermHint term="Выбрали" hint={HINT.share} />,
+      align: "center" as const,
       numeric: true,
       render: (row: OptionRow) => <Text variant="body-s">{percent(row.share)}</Text>,
     },
     {
       key: "bottom",
+      align: "center" as const,
       width: "17%",
       header: <TermHint term={`Слабые ${groupPercent}`} hint={HINT.bottom} />,
       render: (row: OptionRow) => <ShareScale value={row.bottomShare} />,
     },
     {
       key: "top",
+      align: "center" as const,
       width: "17%",
       header: <TermHint term={`Сильные ${groupPercent}`} hint={HINT.top} />,
       render: (row: OptionRow) => <ShareScale value={row.topShare} />,
@@ -341,13 +343,14 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
       width: "12%",
       // Неразрывный пробел держит предлог при слове: в колонке 10 % заголовок иначе ломался в три
       // строки с одиноким «с» посередине, а так — не больше двух.
-      header: <TermHint term={"Корреляция с остатком"} hint={HINT.optionRest} align="end" />,
-      align: "right" as const,
+      header: <TermHint term={"Корреляция с остатком"} hint={HINT.optionRest} />,
+      align: "center" as const,
       numeric: true,
       render: (row: OptionRow) => <Text variant="body-s">{num(row.restCorrelation)}</Text>,
     },
     {
       key: "flag",
+      align: "center" as const,
       width: "17%",
       header: <TermHint term="Качество варианта" hint={HINT.optionQuality} />,
       render: (row: OptionRow) => {
@@ -518,16 +521,16 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 {
                   key: "observations",
                   width: "10%",
-                  header: <TermHint term="n" hint={HINT.versionN} align="end" />,
-                  align: "right" as const,
+                  header: <TermHint term="n" hint={HINT.versionN} />,
+                  align: "center" as const,
                   numeric: true,
                   render: (row: VersionRow) => <Text variant="body-s">{row.observations}</Text>,
                 },
                 {
                   key: "difficulty",
                   width: "16%",
-                  header: <TermHint term="Трудность" hint={HINT.difficulty} align="end" />,
-                  align: "right" as const,
+                  header: <TermHint term="Трудность" hint={HINT.difficulty} />,
+                  align: "center" as const,
                   numeric: true,
                   render: (row: VersionRow) => (
                     <Text variant="body-s" tone={row.psychoHash === null ? "muted" : undefined}>{num(row.difficulty)}</Text>
@@ -536,8 +539,8 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 {
                   key: "itemRest",
                   width: "22%",
-                  header: <TermHint term="Дискриминативность" hint={HINT.itemRest} align="end" />,
-                  align: "right" as const,
+                  header: <TermHint term="Дискриминативность" hint={HINT.itemRest} />,
+                  align: "center" as const,
                   numeric: true,
                   render: (row: VersionRow) => (
                     <Text variant="body-s" tone={row.psychoHash === null || row.itemRest == null ? "muted" : undefined}>
@@ -547,6 +550,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 },
                 {
                   key: "action",
+                  align: "center" as const,
                   width: "22%",
                   header: <TermHint term="Статистика карточки" hint={HINT.cardStats} />,
                   render: (row: VersionRow) => {

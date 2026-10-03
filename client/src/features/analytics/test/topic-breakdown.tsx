@@ -81,24 +81,28 @@ export function TopicBreakdown({ topics }: TopicBreakdownProps) {
     {
       key: "passed",
       header: "Прошли тему, % прохождений",
+      align: "center" as const,
       numeric: true,
       render: (row: Row) => percent(row.passedShare),
     },
     {
       key: "correct",
       header: "Доля верных, % ответов",
+      align: "center" as const,
       numeric: true,
       render: (row: Row) => percent(row.correctShare),
     },
     {
       key: "threshold",
       header: "Порог темы",
+      align: "center" as const,
       numeric: true,
       render: (row: Row) => percent(row.thresholdPercent),
     },
     {
       key: "sample",
       header: "В выборке, прохождений",
+      align: "center" as const,
       numeric: true,
       render: (row: Row) => row.inSample,
     },

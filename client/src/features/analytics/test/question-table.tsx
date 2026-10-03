@@ -482,6 +482,7 @@ export function QuestionTable({
     ...(measurement ? [{
       key: "answers",
       header: "Ответов",
+      align: "center" as const,
       numeric: true,
       sortable: true,
       render: (row: QuestionRow) => row.totalAnswers,
@@ -492,9 +493,9 @@ export function QuestionTable({
       {
         key: "difficulty",
         ...share("10%"),
-        header: <TermHint term="Трудность" hint={DIFFICULTY_HINT} align="end" />,
+        header: <TermHint term="Трудность" hint={DIFFICULTY_HINT} />,
         numeric: true,
-        align: "right" as const,
+        align: "center" as const,
         sortable: true,
         render: (row: QuestionRow) => num(psychometrics?.[row.questionId]?.difficulty ?? null),
       },
@@ -503,9 +504,9 @@ export function QuestionTable({
       {
         key: "itemRest",
         ...share("15%"),
-        header: <TermHint term="Дискриминативность" hint={ITEM_REST_HINT} align="end" />,
+        header: <TermHint term="Дискриминативность" hint={ITEM_REST_HINT} />,
         numeric: true,
-        align: "right" as const,
+        align: "center" as const,
         sortable: true,
         render: (row: QuestionRow) => {
           const psycho = psychometrics?.[row.questionId];
@@ -532,9 +533,9 @@ export function QuestionTable({
     {
       key: "skip",
       ...share("9%"),
-      header: <TermHint term="Пропуски" hint={HINTS.skip} align="end" />,
+      header: <TermHint term="Пропуски" hint={HINTS.skip} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       sortable: true,
       render: (row: QuestionRow) => percent(row.skipShare),
     },
@@ -546,9 +547,9 @@ export function QuestionTable({
       ...share("10%"),
       // «Экспозиция» — как в эскизе и в пояснении под таблицей: то же слово, что у профиля
       // банка на вкладке «Выдача» (PRD-55).
-      header: <TermHint term="Экспозиция" hint={HINTS.exposure} align="end" />,
+      header: <TermHint term="Экспозиция" hint={HINTS.exposure} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       sortable: true,
       render: (row: QuestionRow) => percent(row.exposurePercent),
     }, {
@@ -557,18 +558,18 @@ export function QuestionTable({
       // видели, и для износа задания оно не в счёт (PRD-55 FR-32).
       key: "otherTests",
       ...share("7%"),
-      header: <TermHint term="Другие тесты" hint={HINTS.otherTests} align="end" />,
+      header: <TermHint term="Другие тесты" hint={HINTS.otherTests} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       sortable: true,
       render: (row: QuestionRow) => row.otherTestsCount ?? "—",
     }]),
     {
       key: "latency",
       ...share("10%"),
-      header: <TermHint term="Время, медиана" hint={HINTS.latency} align="end" />,
+      header: <TermHint term="Время, медиана" hint={HINTS.latency} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       sortable: true,
       render: (row: QuestionRow) => duration(row.latencyMedianMs),
     },
@@ -581,9 +582,9 @@ export function QuestionTable({
     ...(measurement ? [] : [{
       key: "declared",
       ...share("8%"),
-      header: <TermHint term="Замысел" hint={HINTS.declared} align="end" />,
+      header: <TermHint term="Замысел" hint={HINTS.declared} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       sortable: true,
       render: (row: QuestionRow) => row.difficulty,
     }, {
@@ -591,9 +592,9 @@ export function QuestionTable({
       // называла бы одну цену, а результат участника считался бы по другой.
       key: "points",
       ...share("7%"),
-      header: <TermHint term="Цена" hint={HINTS.points} align="end" />,
+      header: <TermHint term="Цена" hint={HINTS.points} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       sortable: true,
       render: (row: QuestionRow) => (row.points === null || row.points === undefined
         ? "—"

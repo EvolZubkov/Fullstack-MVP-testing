@@ -84,6 +84,7 @@ export function ExposureProfile({ profile, topics, onTopicChange }: ExposureProf
     },
     {
       key: "bar",
+      align: "center" as const,
       header: "Доля прохождений с этим вопросом",
       render: (row: ExposureRowView) => (
         <ProgressBar value={row.sharePercent ?? 0} size="s" hideHeader />
@@ -92,6 +93,7 @@ export function ExposureProfile({ profile, topics, onTopicChange }: ExposureProf
     {
       key: "share",
       header: "Доля",
+      align: "center" as const,
       numeric: true,
       // Прохождений за окно не было — доли нет, а не ноль.
       render: (row: ExposureRowView) => (row.sharePercent === null
@@ -101,6 +103,7 @@ export function ExposureProfile({ profile, topics, onTopicChange }: ExposureProf
     {
       key: "count",
       header: "Выдан раз",
+      align: "center" as const,
       numeric: true,
       render: (row: ExposureRowView) => row.deliveredCount,
     },

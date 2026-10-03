@@ -289,8 +289,8 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
     {
       key: "items",
       width: "10%",
-      header: <TermHint term="Пунктов" hint={HINT.items} align="end" />,
-      align: "right" as const,
+      header: <TermHint term="Пунктов" hint={HINT.items} />,
+      align: "center" as const,
       numeric: true,
       render: (row: ScaleQualityRow) => (
         <Text variant="body-s">
@@ -301,8 +301,8 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
     {
       key: "alpha",
       width: "10%",
-      header: <TermHint term="Альфа Кронбаха" hint={HINT.alpha} align="end" />,
-      align: "right" as const,
+      header: <TermHint term="Альфа Кронбаха" hint={HINT.alpha} />,
+      align: "center" as const,
       numeric: true,
       render: (row: ScaleQualityRow) => (
         <Text variant="body-s">
@@ -313,8 +313,8 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
     {
       key: "respondents",
       width: "8%",
-      header: <TermHint term="n" hint={HINT.respondents} align="end" />,
-      align: "right" as const,
+      header: <TermHint term="n" hint={HINT.respondents} />,
+      align: "center" as const,
       numeric: true,
       render: (row: ScaleQualityRow) => (
         <Text variant="body-s">
@@ -376,8 +376,8 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
           {
             key: "contribution",
             width: "8%",
-            header: <TermHint term="Вклад" hint={HINT.contribution} align="end" />,
-            align: "right" as const,
+            header: <TermHint term="Вклад" hint={HINT.contribution} />,
+            align: "center" as const,
             numeric: true,
             render: (row: ScaleItemRow) => {
               const contribution = row.contribution ?? null;
@@ -409,13 +409,14 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
             // Перенос после первого слова (решение владельца 2026-09-26): «Корреляция» /
             // «с остатком шкалы», а не как придётся по ширине колонки. Пробел перед <br /> держит
             // термин одним текстом для поиска и экранного диктора.
-            header: <TermHint term={<>Корреляция <br />с остатком шкалы</>} hint={HINT.itemRest} align="end" />,
-            align: "right" as const,
+            header: <TermHint term={<>Корреляция <br />с остатком шкалы</>} hint={HINT.itemRest} />,
+            align: "center" as const,
             numeric: true,
             render: (row: ScaleItemRow) => <Text variant="body-s">{num(row.itemRest)}</Text>,
           },
           {
             key: "distribution",
+            align: "center" as const,
             width: "34%",
             header: <TermHint term="Распределение ответов" hint={HINT.distribution} />,
             render: (row: ScaleItemRow) => (
@@ -424,6 +425,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
           },
           {
             key: "flag",
+            align: "center" as const,
             width: "20%",
             header: <TermHint term="Качество пункта" hint={HINT.quality} />,
             render: (row: ScaleItemRow) => {

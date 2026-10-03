@@ -151,6 +151,7 @@ export function PsychometricsCompare({ slices }: PsychometricsCompareProps) {
     ...slices.map(slice => ({
       key: `slice-${slice.id}`,
       header: <SliceHead slice={slice} />,
+      align: "center" as const,
       numeric: true,
       render: (row: SummaryRow) => (
         <Text variant="body-s">{row.format(row.valueOf(slice), slice)}</Text>
@@ -160,6 +161,7 @@ export function PsychometricsCompare({ slices }: PsychometricsCompareProps) {
       ? [{
         key: "delta",
         header: "Разница",
+        align: "center" as const,
         numeric: true,
         render: (row: SummaryRow) => {
           // У счётной строки — прочерк даже при двух срезах.
@@ -196,6 +198,7 @@ export function PsychometricsCompare({ slices }: PsychometricsCompareProps) {
     ...slices.map(slice => ({
       key: `slice-${slice.id}`,
       header: <SliceHead slice={slice} />,
+      align: "center" as const,
       numeric: true,
       render: (row: { questionId: string }) => (
         <Text variant="body-s">{num(difficultyOf(slice, row.questionId))}</Text>
@@ -205,6 +208,7 @@ export function PsychometricsCompare({ slices }: PsychometricsCompareProps) {
       ? [{
         key: "delta",
         header: "Разница",
+        align: "center" as const,
         numeric: true,
         render: (row: { questionId: string }) => {
           const first = difficultyOf(slices[0], row.questionId);

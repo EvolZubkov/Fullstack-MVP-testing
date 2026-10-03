@@ -408,6 +408,7 @@ export function SliceList({
     {
       key: "assigned",
       header: "Назначено",
+      align: "center" as const,
       numeric: true,
       sortable: true,
       // Прочерк здесь значит «величина к этому срезу неприменима», а не «ноль назначений»:
@@ -420,6 +421,7 @@ export function SliceList({
     {
       key: "completed",
       header: "Завершено",
+      align: "center" as const,
       numeric: true,
       sortable: true,
       render: (row: SliceRow) => row.completed,
@@ -427,6 +429,7 @@ export function SliceList({
     {
       key: "passRate",
       header: "Сдали",
+      align: "center" as const,
       numeric: true,
       sortable: true,
       // «Мало данных» вместо процента — и это не то же самое, что прочерк: прочерк говорит
@@ -438,6 +441,7 @@ export function SliceList({
     {
       key: "avgPercent",
       header: "Средний результат",
+      align: "center" as const,
       numeric: true,
       sortable: true,
       render: (row: SliceRow) => (row.enoughData
@@ -527,6 +531,7 @@ export function SliceList({
                 {
                   key: "correct",
                   header: "Доля верных, % ответов",
+                  align: "center" as const,
                   numeric: true,
                   render: (topic: SliceTopic) => (topic.correctShare === null
                     ? "—"
@@ -535,6 +540,7 @@ export function SliceList({
                 {
                   key: "sample",
                   header: "В выборке, прохождений",
+                  align: "center" as const,
                   numeric: true,
                   render: (topic: SliceTopic) => topic.inSample,
                 },

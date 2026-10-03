@@ -62,23 +62,27 @@ function columnsOf() {
     {
       key: "attempts",
       header: "Прохождений",
+      align: "center" as const,
       numeric: true,
       render: (row: VariantRowView) => row.attempts,
     },
     {
       key: "passRate",
       header: "Сдали",
+      align: "center" as const,
       numeric: true,
       render: (row: VariantRowView) => share(row.passRate, row.lowSample),
     },
     {
       key: "avgPercent",
       header: "Средний результат",
+      align: "center" as const,
       numeric: true,
       render: (row: VariantRowView) => share(row.avgPercent, row.lowSample),
     },
     {
       key: "delta",
+      align: "center" as const,
       header: "Расхождение",
       render: (row: VariantRowView) => (row.deviates
         ? <Tag tone="error" size="s">{deltaText(row)}</Tag>

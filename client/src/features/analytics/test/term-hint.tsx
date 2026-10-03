@@ -13,9 +13,8 @@
  * (`.tb-term-hint__tail`): перенос возможен только перед ним. Термин при этом остаётся одним
  * текстом — так его читает экранный диктор и находит поиск по странице.
  *
- * У числовой колонки заголовок стоит справа, над числами (`align="end"`): ячейка заголовка
- * DataGrid — гибкий ряд, поэтому обёртка растягивается на всю ширину (`ou-grow`) и
- * выравнивает текст по правому краю (`ou-text--end`).
+ * Где стоит термин в заголовке колонки, решает сама колонка (`align` у DataGrid): заголовок и
+ * значения выровнены одинаково (правило владельца 2026-10-03). Своего выравнивания у термина нет.
  *
  * Пузырь выводится поверх страницы (`FloatingHint`): внутри таблицы его обрезала рамка, а у
  * последних колонок скрытый пузырь включал горизонтальную прокрутку.
@@ -56,22 +55,19 @@ export interface TermHintProps {
   term: ReactNode;
   /** Текст подсказки — дословно из эскиза. */
   hint: string;
-  /** `end` — заголовок числовой колонки: стоит справа, над числами. */
-  align?: "start" | "end";
 }
 
 /**
  * Термин с подсказкой (FR-14b).
  *
- * @param props - термин, текст подсказки и выравнивание
+ * @param props - термин и текст подсказки
  * @returns триггер подсказки; значок рисует стиль термина и держится при последнем слове
  */
-export function TermHint({ term, hint, align = "start" }: TermHintProps) {
-  const tip = (
+export function TermHint({ term, hint }: TermHintProps) {
+  return (
     // `tb-term-hint` — метка для раскладки заголовка в `tb-components.css`.
     <FloatingHint content={hint} className="tb-term-hint">
       <span className="tb-term-hint__term">{withIcon(term)}</span>
     </FloatingHint>
   );
-  return align === "end" ? <span className="ou-grow ou-text--end">{tip}</span> : tip;
 }

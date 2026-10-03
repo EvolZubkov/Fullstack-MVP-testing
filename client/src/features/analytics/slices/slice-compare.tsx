@@ -226,12 +226,13 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
         <th><div className="ou-grid__th">{first}</div></th>
         {selected.map(slice => (
           <th key={slice.id}>
-            <div className="ou-grid__th">
+            {/* Заголовок числового столбца — по центру, как и его значения (правило 2026-10-03). */}
+            <div className="ou-grid__th ou-grid__th--center">
               <ColumnHead name={slice.name} conditions={conditionsOf.get(slice.id) ?? []} />
             </div>
           </th>
         ))}
-        {showDifference && <th><div className="ou-grid__th">Разница</div></th>}
+        {showDifference && <th><div className="ou-grid__th ou-grid__th--center">Разница</div></th>}
       </tr>
     </thead>
   );
@@ -279,12 +280,12 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
                         <tr key={String(row.key)}>
                           <td className="ou-grid__cell-strong">{row.label}</td>
                           {selected.map(slice => (
-                            <td key={slice.id} className="is-numeric">
+                            <td key={slice.id} className="is-numeric is-align-center">
                               {cell(slice, row.key, row.share)}
                             </td>
                           ))}
                           {showDifference && (
-                            <td className="is-numeric">
+                            <td className="is-numeric is-align-center">
                               {/* Разница только у долей: вычитать объёмы — значит называть
                                   разницу в составе штата результатом обучения. */}
                               {delta === null
@@ -334,7 +335,7 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
                           <tr key={topic.id}>
                             <td className="ou-grid__cell-strong">{topic.name}</td>
                             {shares.map((share, index) => (
-                              <td key={selected[index].id} className="is-numeric">
+                              <td key={selected[index].id} className="is-numeric is-align-center">
                                 {!selected[index].enoughData
                                   ? <Text variant="body-s" tone="muted">мало данных</Text>
                                   : share === undefined || share.correctShare === null
@@ -343,7 +344,7 @@ export function SliceCompare({ testId, from, to, adhoc, adhocName }: SliceCompar
                               </td>
                             ))}
                             {showDifference && (
-                              <td className="is-numeric">
+                              <td className="is-numeric is-align-center">
                                 {delta === null
                                   ? <Text variant="body-s" tone="muted">—</Text>
                                   : <Text variant="body-s" tone={deltaTone(delta)}>{deltaLabel(delta)}</Text>}

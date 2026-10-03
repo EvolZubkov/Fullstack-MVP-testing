@@ -603,8 +603,8 @@ describe("QuestionTable — подсказки терминов (FR-14b)", () =>
     // Значок — lucide `Info` в одном неразрывном блоке с последним словом (см. term-hint.tsx).
     expect(trigger.querySelector(".tb-term-hint__term")).toBeTruthy();
     expect(trigger.getAttribute("tabindex")).toBe("0");
-    // Числовая колонка: заголовок справа, над числами.
-    expect(trigger.closest(".ou-text--end")).toBeTruthy();
+    // Числовая колонка: заголовок по центру, как и её значения (правило 2026-10-03).
+    expect(trigger.closest(".ou-grid__th--center")).toBeTruthy();
   });
 });
 

@@ -643,6 +643,7 @@ export function ItemQualityPanel({
     },
     {
       key: "flag",
+      align: "center" as const,
       sortable: true,
       width: thin ? "27%" : "26%",
       // FR-46: пока данных мало, колонка говорит не о симптоме, а о том, сколько добрать.
@@ -696,9 +697,9 @@ export function ItemQualityPanel({
       key: "difficulty",
       sortable: true,
       width: thin ? "15%" : "13%",
-      header: <TermHint term="Трудность" hint={DIFFICULTY_HINT} align="end" />,
+      header: <TermHint term="Трудность" hint={DIFFICULTY_HINT} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       // Трудность живёт при пороге наблюдений инстанса, а коэффициенты — при 30 и 100
       // (FR-38a). Поэтому у задания с дюжиной наблюдений она есть, а дискриминативности нет.
       render: (row: ItemQualityRow) => (row.neverDelivered ? <NoObservations /> : (
@@ -721,9 +722,9 @@ export function ItemQualityPanel({
       key: "itemRest",
       sortable: true,
       width: thin ? "18%" : "17%",
-      header: <TermHint term="Дискриминативность" hint={ITEM_REST_HINT} align="end" />,
+      header: <TermHint term="Дискриминативность" hint={ITEM_REST_HINT} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       render: (row: ItemQualityRow) => (row.neverDelivered ? <NoObservations /> : (
         <Text variant="body-s" tone={row.coefficientConfidence === "insufficient" ? "muted" : undefined}>
           {row.coefficientConfidence === "insufficient" ? "мало данных" : num(row.itemRest)}
@@ -737,9 +738,9 @@ export function ItemQualityPanel({
       // меню нет — 34 / 27 / 15 / 18 / 6 %. При фиксированной раскладке (`tb-psy-grid`) они и
       // есть ширины: «n» больше не уезжает за горизонтальную прокрутку.
       width: thin ? "6%" : "8%",
-      header: <TermHint term="n" hint={HINTS.observations} align="end" />,
+      header: <TermHint term="n" hint={HINTS.observations} />,
       numeric: true,
-      align: "right" as const,
+      align: "center" as const,
       render: (row: ItemQualityRow) => <Text variant="body-s">{row.observations}</Text>,
     },
     // Действия строки — меню «⋯», а не щелчок по строке (эскиз, состояние wf-quality): у вопроса

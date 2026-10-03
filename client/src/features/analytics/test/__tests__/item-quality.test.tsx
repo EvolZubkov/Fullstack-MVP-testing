@@ -849,15 +849,18 @@ describe("ItemQualityPanel — подсказки терминов (FR-14b)", ()
     expectHint("Состояние", "Сколько наблюдений собрано и сколько ещё нужно: коэффициенты вопроса считаются с 30 наблюдений. До порога признака у вопроса нет — не потому, что он здоров.");
   });
 
-  it("заголовки числовых колонок стоят справа, над числами", () => {
+  it("заголовки числовых колонок стоят по центру — как и их значения (правило 2026-10-03)", () => {
     render(<ItemQualityPanel view={view()} />);
 
     for (const term of ["Трудность", "Дискриминативность", "n"]) {
       const header = screen.getAllByText(termOrText(term)).find(el => el.closest(".ou-grid__th"))!;
-      expect(header.closest(".ou-text--end"), term).toBeTruthy();
+      expect(header.closest(".ou-grid__th--center"), term).toBeTruthy();
     }
+    // Колонка тегов — тоже по центру; текстовая колонка вопроса — по левому краю.
     const flagHeader = screen.getAllByText(termOrText("Что не так")).find(el => el.closest(".ou-grid__th"))!;
-    expect(flagHeader.closest(".ou-text--end")).toBeNull();
+    expect(flagHeader.closest(".ou-grid__th--center")).toBeTruthy();
+    const questionHeader = screen.getAllByText("Вопрос").find(el => el.closest(".ou-grid__th"))!;
+    expect(questionHeader.closest(".ou-grid__th--center")).toBeNull();
   });
 });
 

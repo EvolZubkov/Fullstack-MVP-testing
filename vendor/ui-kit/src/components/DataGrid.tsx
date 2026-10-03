@@ -9,12 +9,24 @@ export interface DataGridColumn<T> {
   width?: string | number;
   align?: TableAlign;
   sortable?: boolean;
-  /** Сделать столбец числовым (правое выравнивание, моно-цифры). */
+  /**
+   * Сделать столбец числовым (моно-цифры; без `align` — правое выравнивание).
+   * Явный `align` важнее: числовой столбец по центру — `numeric` + `align: 'center'`.
+   */
   numeric?: boolean;
   /** Зафиксировать столбец слева (sticky). */
   frozen?: boolean;
   /** Кастомный экстрактор значения для сортировки/поиска. */
   accessor?: (row: T) => string | number | undefined;
+}
+
+/**
+ * Выравнивание столбца: явное `align`, иначе числа — вправо, остальное — влево.
+ * Заголовок и значения столбца выравниваются ОДИНАКОВО: заголовок, оторванный от своих чисел
+ * на ширину колонки, читается как подпись соседнего столбца.
+ */
+function columnAlign<T>(c: DataGridColumn<T>): TableAlign {
+  return c.align ?? (c.numeric ? 'right' : 'left');
 }
 
 export interface DataGridProps<T> extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onSelect' | 'title'> {
@@ -326,11 +338,18 @@ export function DataGrid<T>({
                   className={cn(
                     c.frozen && 'col-stick',
                     i === lastFrozen && 'col-stick--shadow',
-                    cssStyleClass({ width: c.width, textAlign: c.align ?? 'left' }, 'ou-grid-cell'),
+                    cssStyleClass({ width: c.width, textAlign: columnAlign(c) }, 'ou-grid-cell'),
                   )}
                 >
+                  {/* Ячейка заголовка — гибкий ряд: `text-align` её не двигает, поэтому
+                      выравнивание передаётся модификатором. */}
                   <div
-                    className={cn('ou-grid__th', sortKey === c.key && 'is-sorted', c.sortable && 'is-sortable')}
+                    className={cn(
+                      'ou-grid__th',
+                      columnAlign(c) !== 'left' && `ou-grid__th--${columnAlign(c)}`,
+                      sortKey === c.key && 'is-sorted',
+                      c.sortable && 'is-sortable',
+                    )}
                     onClick={() => onClickHeader(c)}
                   >
                     {c.header}
@@ -392,9 +411,11 @@ export function DataGrid<T>({
                         key={c.key}
                         className={cn(
                           c.numeric && 'is-numeric',
+                          // Явное выравнивание перебивает правое у `is-numeric`.
+                          c.align && `is-align-${c.align}`,
                           c.frozen && 'col-stick',
                           i === lastFrozen && 'col-stick--shadow',
-                          cssStyleClass({ textAlign: c.align ?? 'left' }, 'ou-grid-cell'),
+                          cssStyleClass({ textAlign: columnAlign(c) }, 'ou-grid-cell'),
                         )}
                       >
                         {c.render

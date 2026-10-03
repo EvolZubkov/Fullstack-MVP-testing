@@ -242,11 +242,18 @@ export function PassageRegistry({
       sortable: true,
       render: (row: RegistryRow) => <span className="ou-grid__cell-strong">{row.participant}</span>,
     },
-    { key: "test", header: "Тест", sortable: true, render: (row: RegistryRow) => row.testTitle },
+    {
+      key: "test",
+      header: "Тест",
+      sortable: true,
+      // Э3.5: длинное название переносится, а не выталкивает таблицу в горизонтальную прокрутку.
+      render: (row: RegistryRow) => <span className="tb-cell-wrap">{row.testTitle}</span>,
+    },
     { key: "date", header: "Дата", sortable: true, render: (row: RegistryRow) => formatMoment(row.startedAt) },
     {
       key: "attempt",
       header: "Попытка",
+      align: "center" as const,
       numeric: true,
       // Сортируется сервером: номер считается по всем попыткам человека, а на странице видны
       // не все, — отсортировать по нему пришедшую порцию значило бы соврать.
@@ -268,12 +275,14 @@ export function PassageRegistry({
       key: "result",
       sortable: true,
       header: "Результат",
+      align: "center" as const,
       numeric: true,
       // Прочерк, а не ноль: у прохождения без оценивания результата нет (PRD-29 §6.7).
       render: (row: RegistryRow) => (row.percent === null ? "—" : `${percent(row.percent)}`),
     },
     {
       key: "outcome",
+      align: "center" as const,
       sortable: true,
       header: "Исход",
       render: (row: RegistryRow) => (
@@ -282,6 +291,7 @@ export function PassageRegistry({
     },
     {
       key: "source",
+      align: "center" as const,
       sortable: true,
       header: "Источник",
       render: (row: RegistryRow) => <Tag>{SOURCE_LABEL[row.source]}</Tag>,
@@ -297,7 +307,7 @@ export function PassageRegistry({
       // Поле читается мягко: строка приходит из сети, и отсутствие списка (ответ ручки прежнего
       // выпуска) должно давать «без группы», а не ронять таблицу целиком.
       render: (row: RegistryRow) => ((row.groups ?? []).length > 0
-        ? row.groups.join(", ")
+        ? <span className="tb-cell-wrap">{row.groups.join(", ")}</span>
         : <Text variant="body-s" tone="muted">без группы</Text>),
     },
     // Э2: переход на уровень теста строки — значком, как в строке списка тестов (текстовой

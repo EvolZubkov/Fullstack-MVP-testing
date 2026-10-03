@@ -76,18 +76,21 @@ export function VersionTable({ versions }: VersionTableProps) {
     {
       key: "attempts",
       header: "Прохождений",
+      align: "center" as const,
       numeric: true,
       render: (row: VersionRowView) => row.attempts,
     },
     {
       key: "passRate",
       header: "Сдали",
+      align: "center" as const,
       numeric: true,
       render: (row: VersionRowView) => share(row.passRate, row.lowSample),
     },
     {
       key: "avgPercent",
       header: "Средний результат",
+      align: "center" as const,
       numeric: true,
       render: (row: VersionRowView) => share(row.avgPercent, row.lowSample),
     },
