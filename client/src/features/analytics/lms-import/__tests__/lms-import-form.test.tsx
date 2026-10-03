@@ -88,16 +88,14 @@ describe("<LmsImportForm /> — вход из меню теста: тест из
     );
   }
 
-  it("до файла видна вся форма: загрузчик, группа, связывание и кнопки", async () => {
+  it("до файла — только загрузчик и загрузки теста, без группы и кнопок (эскиз Э6)", async () => {
     renderEmpty({ presetTestId: "t1" });
 
     expect(screen.getByText("Перетащите файл .xlsx или выберите")).toBeInTheDocument();
     expect(screen.getByText("Выгрузка отчёта LMS — тест определится по файлу")).toBeInTheDocument();
-    expect(screen.getByText("Группа")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: /Связать с пользователями по ключу/ })).toBeInTheDocument();
-    // Проверять и импортировать нечего, пока файла нет.
-    expect(screen.getByRole("button", { name: "Проверить" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Импортировать" })).toBeDisabled();
+    expect(await screen.findByText("Загрузки этого теста")).toBeInTheDocument();
+    expect(screen.queryByText("Группа")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Проверить" })).toBeNull();
   });
 
   it("загрузки теста видны сразу — откатить можно, ничего не загружая", async () => {
@@ -114,8 +112,8 @@ describe("<LmsImportForm /> — вход из меню теста: тест из
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/lms-import/batches/"), expect.anything());
   });
 
-  it("кнопки стоят в теле, перед списком загрузок", async () => {
-    renderEmpty({ presetTestId: "t1" });
+  it("с файлом кнопки стоят перед списком загрузок", async () => {
+    renderForm();
     await screen.findByText("сентябрь.xlsx");
 
     const list = screen.getByText("Загрузки этого теста");

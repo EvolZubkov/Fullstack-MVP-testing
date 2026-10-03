@@ -58,6 +58,7 @@ import { foldOrgValues, orgValueKey, type OrgField, type OrgValueCount } from "@
 import { OrgFieldControl } from "@/features/users/org-field-control";
 import { importableCount, useUsersBulkImport } from "@/features/users/bulk-import/use-users-bulk-import";
 import { UsersBulkPreview, UsersBulkResult } from "@/features/users/bulk-import/users-bulk-preview";
+import { plural } from "@/features/import/file-meta";
 
 interface User {
   id: string;
@@ -737,7 +738,7 @@ export default function UsersPage() {
           disabled={importableCount(bulk.rows) === 0}
           loading={bulk.importing}
         >
-          Импортировать ({importableCount(bulk.rows)} строк)
+          Импортировать ({plural(importableCount(bulk.rows), ["строка", "строки", "строк"])})
         </Button>
       </>
     ) : (
@@ -1231,7 +1232,7 @@ export default function UsersPage() {
         size="xl"
         title={
           bulk.step === "upload" ? "Массовая загрузка пользователей"
-            : bulk.step === "preview" ? `Предпросмотр: ${bulk.rows.length} строк`
+            : bulk.step === "preview" ? `Предпросмотр: ${plural(bulk.rows.length, ["строка", "строки", "строк"])}`
               : "Импорт завершён"
         }
         description={

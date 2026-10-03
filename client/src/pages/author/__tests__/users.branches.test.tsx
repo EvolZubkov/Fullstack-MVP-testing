@@ -434,10 +434,10 @@ describe("<UsersPage /> — bulk import wizard", () => {
     expect(screen.getByText("Создать")).toBeInTheDocument();
 
     // Dialog title reflects the preview row count.
-    expect(screen.getByRole("heading", { name: "Предпросмотр: 3 строк" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Предпросмотр: 3 строки" })).toBeInTheDocument();
 
     // Confirm import (2 non-error rows) -> done step.
-    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строк)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строки)" }));
     await screen.findByRole("heading", { name: "Импорт завершён" });
     expect(screen.getByText("Создано")).toBeInTheDocument();
     expect(screen.getByText("Писем отправлено")).toBeInTheDocument();
@@ -463,7 +463,7 @@ describe("<UsersPage /> — bulk import wizard", () => {
     bulkImportResult = { created: 0, updated: 0, skipped: 1, invitesSent: 0, errors: ["Строка 2: дубль"] };
     renderPage();
     await openBulkPreview();
-    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строк)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строки)" }));
     await screen.findByRole("heading", { name: "Импорт завершён" });
     expect(screen.getByText("Ошибки:")).toBeInTheDocument();
     expect(screen.getByText("Строка 2: дубль")).toBeInTheDocument();
@@ -503,7 +503,7 @@ describe("<UsersPage /> — bulk import wizard", () => {
     );
     renderPage();
     await openBulkPreview();
-    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строк)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Импортировать (2 строки)" }));
     await waitFor(() =>
       expect(toastSpy).toHaveBeenCalledWith(
         expect.objectContaining({ tone: "error", title: "Ошибка импорта", description: "БД недоступна" }),

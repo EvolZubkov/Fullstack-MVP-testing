@@ -44,6 +44,7 @@ import { IMPORT_KIND_CAPABILITY, IMPORT_KINDS, canAssignRole, type ImportKind } 
 import { PageHeader } from "@/components/page-header";
 import { LmsImportForm, type LmsInspectResult } from "@/features/analytics/lms-import/lms-import-form";
 import { ImportKindsTable, KIND_EXTENSIONS } from "@/features/import/import-kinds-table";
+import { fileMeta, formatSize } from "@/features/import/file-meta";
 import { WorkbookImportForm, type WorkbookInspectResult } from "@/features/import/workbook-import-form";
 import { UsersImportForm } from "@/features/import/users-import-form";
 import { PackageImportForm } from "@/features/import/package-import-form";
@@ -62,8 +63,8 @@ type InspectResult =
 /** Где сейчас раздел после выбора файла. */
 type Step =
   | { kind: "inspecting" }
-  /** Вид распознан, права на него нет. */
-  | { kind: "denied" }
+  /** Вид распознан, права на него нет; `fileKind` — какой вид назвал разбор. */
+  | { kind: "denied"; fileKind: string | null }
   | { kind: "workbook"; inspect: WorkbookInspectResult }
   | { kind: "lmsExport"; inspect: LmsInspectResult }
   | { kind: "users"; rows: number }
@@ -84,11 +85,21 @@ class WorkbookReadFailure extends Error {
 
 /** Разбор ответил 403: вид распознан, права на него нет. */
 class ImportDenied extends Error {
-  constructor() {
+  constructor(readonly kind: string | null) {
     super("import denied");
     this.name = "ImportDenied";
   }
 }
+
+/** Вид файла в подписи строки файла — как в формах видов. */
+const KIND_META: Record<string, string> = {
+  workbook: "книга с вопросами",
+  lmsExport: "выгрузка отчёта LMS",
+  users: "список пользователей",
+};
+
+/** Все форматы раздела в порядке показа. */
+const FORMAT_ORDER = [".xlsx", ".csv", ".tbtest", ".zip"];
 
 /** Расширение файла в нижнем регистре, с точкой; пустая строка — расширения нет. */
 function extensionOf(name: string): string {
@@ -107,7 +118,10 @@ async function inspectFile(file: File): Promise<InspectResult> {
   const fd = new FormData();
   fd.append("file", file);
   const res = await fetch("/api/workbook/inspect", { method: "POST", body: fd, credentials: "include" });
-  if (res.status === 403) throw new ImportDenied();
+  if (res.status === 403) {
+    const kind = await res.json().then((b) => (typeof b?.kind === "string" ? b.kind : null)).catch(() => null);
+    throw new ImportDenied(kind);
+  }
   if (!res.ok) {
     // The server tells WHY the read failed; carry the code so the toast can
     // say what to do about it instead of «проверьте формат».
@@ -129,10 +143,11 @@ export default function ImportPage() {
     () => IMPORT_KINDS.filter((kind) => can(IMPORT_KIND_CAPABILITY[kind])),
     [can],
   );
-  const extensions = useMemo(
-    () => Array.from(new Set(kinds.flatMap((kind) => KIND_EXTENSIONS[kind]))),
-    [kinds],
-  );
+  // Порядок форматов — как в эскизе: таблицы (.xlsx, .csv), затем архивы (.tbtest, .zip).
+  const extensions = useMemo(() => {
+    const allowed = new Set(kinds.flatMap((kind) => KIND_EXTENSIONS[kind]));
+    return FORMAT_ORDER.filter((ext) => allowed.has(ext));
+  }, [kinds]);
   const usersBeyondLearners = canAssignRole(user?.roles ?? [], "author", { atCreation: true });
 
   const [file, setFile] = useState<File | null>(null);
@@ -172,7 +187,7 @@ export default function ImportPage() {
       else setStep({ kind: "workbook", inspect });
     } catch (error) {
       if (error instanceof ImportDenied) {
-        setStep({ kind: "denied" });
+        setStep({ kind: "denied", fileKind: error.kind });
         return;
       }
       const code = error instanceof WorkbookReadFailure ? error.code : null;
@@ -192,7 +207,7 @@ export default function ImportPage() {
     return (
       <div>
         <PageHeader title={tr.title} description={tr.description} />
-        <Box maxW="3xl">
+        <Box maxW="5xl">
           <Card variant="outlined">
             <CardHeader title={tr.cardTitleLms} subtitle={fileTestTitle ?? presetTitle ?? undefined} />
             <CardBody>
@@ -214,7 +229,7 @@ export default function ImportPage() {
     <div>
       <PageHeader title={tr.title} description={tr.description} />
 
-      <Box maxW="3xl">
+      <Box maxW="5xl">
         <Card variant="outlined">
           <CardHeader title={tr.cardTitle} />
           <CardBody>
@@ -244,7 +259,12 @@ export default function ImportPage() {
             ) : step.kind === "denied" ? (
               /* Отказ не объясняет и не перечисляет доступного (владелец 2026-10-02). */
               <Stack gap={3}>
-                <FileItem name={file.name} kind={fileKindOf(extensionOf(file.name))} actions={removeAction} />
+                <FileItem
+                  name={file.name}
+                  meta={fileMeta(step.fileKind ? KIND_META[step.fileKind] : null, formatSize(file.size))}
+                  kind={fileKindOf(extensionOf(file.name))}
+                  actions={removeAction}
+                />
                 <Banner tone="error" variant="subtle" icon={<Ban size={16} />} title={tr.importDenied} />
                 <Cluster justify="end" gap={2}>
                   <Button variant="secondary" onClick={resetAll}>{tr.chooseOtherFile}</Button>

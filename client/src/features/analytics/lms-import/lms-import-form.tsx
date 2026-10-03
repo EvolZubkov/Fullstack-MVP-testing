@@ -17,6 +17,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Ban, CheckCircle2, Trash2, Upload, X } from "lucide-react";
 import {
   Banner,
+  Box,
   Button,
   Checkbox,
   Cluster,
@@ -258,8 +259,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
   }
 
   // ── Пусто: собственный загрузчик на месте строки файла ───────────────────
-  // Остальная форма видна и до файла (эскиз, состояние «в окне»): человек сразу видит, что его
-  // ждёт, а на странице теста — ещё и загрузки, которые можно откатить.
+  // До файла рядом с ним — только загрузки теста, которые можно откатить (эскиз Э6).
   const uploader = (
     <FileUploader
       accept=".xlsx"
@@ -413,18 +413,21 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
         />
       )}
 
-      {/* Одиночный выбор с поиском — Select searchable: групп бывают десятки (эскиз Э6). */}
-      <Select
-        label="Группа"
-        hint="Разрез для аналитики. Метка ставится на прохождения этой загрузки."
-        fullWidth
-        searchable
-        searchPlaceholder="Поиск по названию группы"
-        value={group}
-        onChange={setGroup}
-        options={groupOptions}
-        disabled={runMut.isPending}
-      />
+      {/* Одиночный выбор с поиском — Select searchable: групп бывают десятки (эскиз Э6).
+          Поле узкое, как в эскизе: название группы короче ширины карточки. */}
+      <Box maxW="lg" style={{ marginInline: 0 }}>
+        <Select
+          label="Группа"
+          hint="Разрез для аналитики. Метка ставится на прохождения этой загрузки."
+          fullWidth
+          searchable
+          searchPlaceholder="Поиск по названию группы"
+          value={group}
+          onChange={setGroup}
+          options={groupOptions}
+          disabled={runMut.isPending}
+        />
+      </Box>
       {group === NEW_GROUP && (
         <Input
           label="Название новой группы"
@@ -512,6 +515,17 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
       )}
     </Stack>
   );
+
+  // До файла — только загрузчик и загрузки теста (эскиз Э6, «из меню теста»): группе, связыванию
+  // и кнопкам нечего делать, пока нет файла.
+  if (!file) {
+    return (
+      <Stack gap={4}>
+        {uploader}
+        {batchList}
+      </Stack>
+    );
+  }
 
   return compose(form, buttons, batchList);
 }

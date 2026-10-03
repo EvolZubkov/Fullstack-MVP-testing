@@ -372,37 +372,40 @@ export function WorkbookImportForm({ file, inspect, onReset }: WorkbookImportFor
             description={requiresTest ? tr.detectedWorkbook : tr.detectedQuestionsOnly}
           />
 
+          {/* Поле узкое, как в эскизе: название теста короче ширины карточки. */}
           {requiresTest && (
-            <Stack gap={3}>
-              <Select
-                // Select has no `required`: the mark goes into the label, as elsewhere in the app.
-                label={<>{tr.targetTest} <span className="ou-formfield__lbl-req" aria-hidden="true">*</span></>}
-                placeholder={tr.targetTestPlaceholder}
-                searchable
-                searchPlaceholder="Поиск по названию теста"
-                options={testOptions}
-                value={targetTestId ?? undefined}
-                onChange={(v) => {
-                  setTargetTestId(v);
-                  setPreview(null);
-                }}
-                fullWidth
-              />
-              {isNew && (
-                <Input
-                  id="new-test-name"
-                  label={tr.newTestName}
-                  required
-                  value={newTestTitle}
-                  placeholder={tr.newTestNamePlaceholder}
-                  fullWidth
-                  onChange={(e) => {
-                    setNewTestTitle(e.target.value);
+            <Box maxW="lg" style={{ marginInline: 0 }}>
+              <Stack gap={3}>
+                <Select
+                  // Select has no `required`: the mark goes into the label, as elsewhere in the app.
+                  label={<>{tr.targetTest} <span className="ou-formfield__lbl-req" aria-hidden="true">*</span></>}
+                  placeholder={tr.targetTestPlaceholder}
+                  searchable
+                  searchPlaceholder="Поиск по названию теста"
+                  options={testOptions}
+                  value={targetTestId ?? undefined}
+                  onChange={(v) => {
+                    setTargetTestId(v);
                     setPreview(null);
                   }}
+                  fullWidth
                 />
-              )}
-            </Stack>
+                {isNew && (
+                  <Input
+                    id="new-test-name"
+                    label={tr.newTestName}
+                    required
+                    value={newTestTitle}
+                    placeholder={tr.newTestNamePlaceholder}
+                    fullWidth
+                    onChange={(e) => {
+                      setNewTestTitle(e.target.value);
+                      setPreview(null);
+                    }}
+                  />
+                )}
+              </Stack>
+            </Box>
           )}
 
           <Cluster justify="end" gap={2} wrap={false}>

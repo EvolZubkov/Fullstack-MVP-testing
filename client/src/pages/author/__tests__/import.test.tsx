@@ -142,7 +142,7 @@ describe("<ImportPage /> — пусто: загрузчик и перечень 
   it("администратор видит все пять видов и все форматы", async () => {
     renderPage();
     expect(await screen.findByText("Перетащите файл или выберите")).toBeInTheDocument();
-    expect(screen.getByText(".xlsx, .tbtest, .csv, .zip")).toBeInTheDocument();
+    expect(screen.getByText(".xlsx, .csv, .tbtest, .zip")).toBeInTheDocument();
     for (const kind of ["Книга с вопросами", "Выгрузка отчёта LMS", "Пакет теста", "Список пользователей", "Шаблон оформления"]) {
       expect(screen.getByText(kind)).toBeInTheDocument();
     }
