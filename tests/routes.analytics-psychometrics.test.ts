@@ -542,6 +542,13 @@ describe("GET /analytics/psychometrics/:testId", () => {
     expect(res.body.slices[0].suspiciousCount).toBe(1);
   });
 
+  it("сравнение берёт только срезы этого теста (Э3)", async () => {
+    await request(makeApp())
+      .get("/api/analytics/psychometrics/test1/slices?withWhole=1")
+      .set("x-test-user", "a1");
+    expect(storageMock.getSlices).toHaveBeenCalledWith("a1", "slice", "test1");
+  });
+
   it("срез отдаёт трудность ПО ЗАДАНИЯМ — иначе сравнивать нечего", async () => {
     storageMock.getSlices.mockResolvedValue([
       { id: "s1", name: "Розница", conditionsJson: { groupIds: ["g1"] } },

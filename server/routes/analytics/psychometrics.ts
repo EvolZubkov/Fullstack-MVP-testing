@@ -406,8 +406,9 @@ router.get(
       if (!test) return res.status(404).json({ error: "Тест не найден" });
 
       const requested = listOf(req.query.sliceId);
-      // Срезы принадлежат читателю: их видит тот, кто сохранил (PRD-56 FR-07b).
-      const saved = await storage.getSlices(req.currentUser?.id ?? "");
+      // Срезы принадлежат читателю: их видит тот, кто сохранил (PRD-56 FR-07b). Э3: и только
+      // срезы этого теста — чужой срез сравнивался бы не в своей рамке.
+      const saved = await storage.getSlices(req.currentUser?.id ?? "", "slice", testId);
       const sources = [
         // «Тест целиком» — законный участник сравнения: без него срез не с чем сопоставить,
         // кроме другого среза, а вопрос «а как у всех?» возникает первым.

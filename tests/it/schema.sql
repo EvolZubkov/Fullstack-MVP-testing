@@ -34,7 +34,8 @@ CREATE TABLE "analytics_slices" (
 	"conditions_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_by" varchar(36) NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "analytics_slices_slice_has_test" CHECK ("analytics_slices"."kind" <> 'slice' OR "analytics_slices"."test_id" IS NOT NULL)
 );
 
 CREATE TABLE "assignment_access_tokens" (
@@ -555,7 +556,8 @@ ALTER TABLE "test_question_scoring" ADD CONSTRAINT "test_question_scoring_test_i
 ALTER TABLE "test_question_scoring" ADD CONSTRAINT "test_question_scoring_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_review_comments" ADD CONSTRAINT "test_review_comments_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 CREATE INDEX "analytics_slices_owner_idx" ON "analytics_slices" USING btree ("created_by");
-CREATE UNIQUE INDEX "analytics_slices_owner_name_uq" ON "analytics_slices" USING btree ("created_by","name");
+CREATE UNIQUE INDEX "analytics_slices_owner_test_name_uq" ON "analytics_slices" USING btree ("created_by","test_id","name") WHERE "analytics_slices"."kind" = 'slice';
+CREATE UNIQUE INDEX "analytics_slices_owner_filter_name_uq" ON "analytics_slices" USING btree ("created_by","name") WHERE "analytics_slices"."kind" = 'filter';
 CREATE INDEX "attempts_user_test_idx" ON "attempts" USING btree ("user_id","test_id");
 CREATE INDEX "attempts_test_id_idx" ON "attempts" USING btree ("test_id");
 CREATE INDEX "attempts_snapshot_id_idx" ON "attempts" USING btree ("snapshot_id");

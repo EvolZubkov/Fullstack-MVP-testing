@@ -370,7 +370,8 @@ export interface IStorage {
   /** PRD-56 FR-21: значения шкал прохождений теста — оба источника одной выборкой. */
   selectScaleValuesForTest(testId: string): Promise<ScaleValuesRow[]>;
   /** PRD-56 FR-07b: срезы — сохранённые наборы условий отбора. */
-  getSlices(ownerId: string, kind?: "slice" | "filter"): Promise<AnalyticsSlice[]>;
+  /** Записи владельца одной роли; `testId` — только срезы этого теста (Э3). */
+  getSlices(ownerId: string, kind?: "slice" | "filter", testId?: string): Promise<AnalyticsSlice[]>;
   getSlice(id: string, ownerId: string): Promise<AnalyticsSlice | undefined>;
   createSlice(input: InsertAnalyticsSlice): Promise<AnalyticsSlice>;
   updateSlice(
@@ -1248,8 +1249,8 @@ export class DatabaseStorage implements IStorage {
     return this.analyticsRepo.selectGroupsOfUsers(userIds);
   }
 
-  getSlices(ownerId: string, kind?: "slice" | "filter"): Promise<AnalyticsSlice[]> {
-    return this.slicesRepo.getSlices(ownerId, kind);
+  getSlices(ownerId: string, kind?: "slice" | "filter", testId?: string): Promise<AnalyticsSlice[]> {
+    return this.slicesRepo.getSlices(ownerId, kind, testId);
   }
 
   getSlice(id: string, ownerId: string): Promise<AnalyticsSlice | undefined> {

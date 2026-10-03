@@ -6,9 +6,12 @@
  * словарь условий уезжает в `jsonb` и обязан вернуться без потерь, иначе сохранённый срез
  * назавтра отберёт не то.
  *
- * Второе, что можно проверить только на базе: уникальность имени у одного владельца. Она
- * держится индексом, а не кодом, и её нарушение проявится не ошибкой, а двумя одинаковыми
- * строками в списке срезов.
+ * Второе, что можно проверить только на базе: уникальность имени. Она держится индексом, а не
+ * кодом, и её нарушение проявится не ошибкой, а двумя одинаковыми строками в списке срезов.
+ *
+ * Э3 (решение владельца 2026-10-03, миграция 0047): срез без теста существовать не может — это
+ * держит ограничение базы; имя среза уникально у владельца В ПРЕДЕЛАХ ТЕСТА, имя фильтра — у
+ * владельца вообще.
  */
 import { randomUUID } from "node:crypto";
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
@@ -71,20 +74,56 @@ describe("SlicesRepository", () => {
     expect(loaded.conditionsJson).toEqual(conditions);
   });
 
-  it("допускает срез без теста: отбор по всем доступным", async () => {
-    const created = await repo.createSlice({
+  it("не допускает срез без теста — его нельзя ни посчитать, ни открыть (Э3)", async () => {
+    await expect(repo.createSlice({
       name: "Все не сдавшие",
       testId: null,
       conditionsJson: { outcomes: ["failed"] },
       createdBy: ownerId,
-    });
+    })).rejects.toThrow();
+  });
 
+  it("сохранённый фильтр без теста допустим: тесты у него в условиях", async () => {
+    const created = await repo.createSlice({
+      name: "Все не сдавшие", kind: "filter", testId: null,
+      conditionsJson: { outcomes: ["failed"] }, createdBy: ownerId,
+    });
     expect(created.testId).toBeNull();
   });
 
+  it("отбирает срезы по тесту (Э3)", async () => {
+    await repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: ownerId });
+    await repo.createSlice({ name: "Логистика", testId: "t2", conditionsJson: {}, createdBy: ownerId });
+
+    expect((await repo.getSlices(ownerId, "slice", "t1")).map(s => s.name)).toEqual(["Розница"]);
+    expect(await repo.getSlices(ownerId, "slice")).toHaveLength(2);
+  });
+
+  it("одно имя среза в разных тестах допустимо, в одном тесте — нет (Э3)", async () => {
+    await repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: ownerId });
+
+    await expect(
+      repo.createSlice({ name: "Розница", testId: "t2", conditionsJson: {}, createdBy: ownerId }),
+    ).resolves.toBeTruthy();
+    await expect(
+      repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: ownerId }),
+    ).rejects.toThrow();
+  });
+
+  it("имя фильтра уникально у владельца, а со срезом не спорит (Э3)", async () => {
+    await repo.createSlice({ name: "Розница", kind: "filter", testId: null, conditionsJson: {}, createdBy: ownerId });
+
+    await expect(
+      repo.createSlice({ name: "Розница", kind: "filter", testId: null, conditionsJson: {}, createdBy: ownerId }),
+    ).rejects.toThrow();
+    await expect(
+      repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: ownerId }),
+    ).resolves.toBeTruthy();
+  });
+
   it("показывает владельцу только его срезы", async () => {
-    await repo.createSlice({ name: "Мой", testId: null, conditionsJson: {}, createdBy: ownerId });
-    await repo.createSlice({ name: "Чужой", testId: null, conditionsJson: {}, createdBy: otherId });
+    await repo.createSlice({ name: "Мой", testId: "t1", conditionsJson: {}, createdBy: ownerId });
+    await repo.createSlice({ name: "Чужой", testId: "t1", conditionsJson: {}, createdBy: otherId });
 
     const mine = await repo.getSlices(ownerId);
 
@@ -92,28 +131,28 @@ describe("SlicesRepository", () => {
     expect(mine[0].name).toBe("Мой");
   });
 
-  it("не даёт одному владельцу два среза с одним именем", async () => {
-    await repo.createSlice({ name: "Розница", testId: null, conditionsJson: {}, createdBy: ownerId });
+  it("не даёт одному владельцу два среза с одним именем в одном тесте", async () => {
+    await repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: ownerId });
 
     await expect(
-      repo.createSlice({ name: "Розница", testId: null, conditionsJson: {}, createdBy: ownerId }),
+      repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: ownerId }),
     ).rejects.toThrow();
   });
 
   it("разрешает одинаковые имена разным владельцам", async () => {
-    await repo.createSlice({ name: "Розница", testId: null, conditionsJson: {}, createdBy: ownerId });
+    await repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: ownerId });
 
     await expect(
-      repo.createSlice({ name: "Розница", testId: null, conditionsJson: {}, createdBy: otherId }),
+      repo.createSlice({ name: "Розница", testId: "t1", conditionsJson: {}, createdBy: otherId }),
     ).resolves.toBeTruthy();
   });
 
   it("удаляет срез своего владельца и не трогает чужой", async () => {
     const mine = await repo.createSlice({
-      name: "Мой", testId: null, conditionsJson: {}, createdBy: ownerId,
+      name: "Мой", testId: "t1", conditionsJson: {}, createdBy: ownerId,
     });
     const alien = await repo.createSlice({
-      name: "Чужой", testId: null, conditionsJson: {}, createdBy: otherId,
+      name: "Чужой", testId: "t1", conditionsJson: {}, createdBy: otherId,
     });
 
     expect(await repo.deleteSlice(mine.id, ownerId)).toBe(true);
@@ -122,9 +161,9 @@ describe("SlicesRepository", () => {
   });
 
   it("перечисляет срезы новыми первыми", async () => {
-    await repo.createSlice({ name: "Первый", testId: null, conditionsJson: {}, createdBy: ownerId });
+    await repo.createSlice({ name: "Первый", testId: "t1", conditionsJson: {}, createdBy: ownerId });
     await new Promise(resolve => setTimeout(resolve, 5));
-    await repo.createSlice({ name: "Второй", testId: null, conditionsJson: {}, createdBy: ownerId });
+    await repo.createSlice({ name: "Второй", testId: "t1", conditionsJson: {}, createdBy: ownerId });
 
     expect((await repo.getSlices(ownerId)).map(s => s.name)).toEqual(["Второй", "Первый"]);
   });

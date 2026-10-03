@@ -2245,8 +2245,9 @@ export const analyticsSlices = pgTable("analytics_slices", {
    */
   kind: text("kind").notNull().default("slice"),
   /**
-   * Тест. У среза заполнен ВСЕГДА и ровно один — это его определение. У сохранённого
-   * фильтра NULL: тесты (сколько угодно) живут в условиях отбора.
+   * Тест. У среза заполнен ВСЕГДА и ровно один — это его определение (ограничение
+   * `analytics_slices_slice_has_test`). У сохранённого фильтра NULL: тесты (сколько угодно)
+   * живут в условиях отбора.
    */
   testId: varchar("test_id", { length: 36 }),
   /**
@@ -2262,8 +2263,18 @@ export const analyticsSlices = pgTable("analytics_slices", {
 }, (table) => ({
   // Срезы перечисляются своим владельцем, новые первыми.
   ownerIdx: index("analytics_slices_owner_idx").on(table.createdBy),
-  // Имя уникально у одного владельца: два «Отдела продаж» в списке неразличимы.
-  ownerNameUq: uniqueIndex("analytics_slices_owner_name_uq").on(table.createdBy, table.name),
+  // Э3 (решение владельца 2026-10-03): срез без теста существовать не может — его нельзя ни
+  // посчитать, ни открыть. Правило держит сама база, а не только ручка сохранения.
+  sliceHasTest: check("analytics_slices_slice_has_test", sql`${table.kind} <> 'slice' OR ${table.testId} IS NOT NULL`),
+  // Имя среза уникально у владельца В ПРЕДЕЛАХ ТЕСТА: срезы живут на уровне теста, и «Отдел
+  // продаж» в двух тестах — два разных среза, в списке каждого теста он один.
+  sliceNameUq: uniqueIndex("analytics_slices_owner_test_name_uq")
+    .on(table.createdBy, table.testId, table.name)
+    .where(sql`${table.kind} = 'slice'`),
+  // Имя фильтра — у владельца вообще: фильтр общего уровня, и два одноимённых неразличимы.
+  filterNameUq: uniqueIndex("analytics_slices_owner_filter_name_uq")
+    .on(table.createdBy, table.name)
+    .where(sql`${table.kind} = 'filter'`),
 }));
 
 export type AnalyticsSlice = typeof analyticsSlices.$inferSelect;

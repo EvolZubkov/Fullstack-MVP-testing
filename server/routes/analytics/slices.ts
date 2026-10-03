@@ -8,6 +8,10 @@
  * Над срезами стоит рамка расчёта — тест и период (FR-07i). Тест обязателен: средние законны
  * только внутри одного теста, у разных тестов разные пороги и шкалы (решение 2 спеки). Период
  * необязателен — пустой означает «за всё время» (FR-07j).
+ *
+ * Э3 (решение владельца 2026-10-03): срезы живут на уровне теста. Списки и сравнение берут
+ * только срезы ЭТОГО теста, и каждая ручка среза проверяет область теста — как
+ * `requireTestScope`, только тест приходит из запроса или из самого среза, а не из пути.
  */
 import { Router, type Request, type Response } from "express";
 
@@ -32,6 +36,24 @@ import { readAssigned } from "../../services/analytics/assigned-count";
 import { summariseSlice } from "../../services/analytics/slice-stats";
 import { readSliceTopics, weakestTopic } from "../../services/analytics/slice-topics";
 import { analyticsScope } from "./helpers";
+import { canReadTestAnalytics } from "../../services/test-access";
+
+/**
+ * Область теста для ручек срезов (Э3): тот же ответ, что у `requireTestScope("analytics")`.
+ *
+ * @returns `null`, если читать аналитику теста можно; иначе — код и тело отказа
+ */
+async function denyOutsideTest(
+  req: Request,
+  testId: string,
+): Promise<{ status: number; error: string } | null> {
+  const roles = req.effectiveRoles;
+  const user = req.currentUser;
+  if (!roles || !user) return { status: 401, error: "Unauthorized" };
+  const test = await storage.getTest(testId);
+  if (!test) return { status: 404, error: "Test not found" };
+  return (await canReadTestAnalytics(roles, user.id, test)) ? null : { status: 403, error: "Forbidden" };
+}
 
 const router = Router();
 
@@ -204,6 +226,8 @@ router.get("/slices", requirePermission("analytics.read"), async (req: Request, 
       // неинтерпретируемое число, ради снятия которого затеян PRD-56.
       return res.status(400).json({ error: "Нужен тест: средние считаются внутри одного теста" });
     }
+    const denied = await denyOutsideTest(req, testId);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
 
     const scope = await analyticsScope(req);
     const ownerId = req.currentUser?.id ?? "";
@@ -267,7 +291,8 @@ router.get("/slices", requirePermission("analytics.read"), async (req: Request, 
       });
     }
 
-    const saved = await storage.getSlices(ownerId);
+    // Э3: только срезы этого теста — чужие в сравнении теста считались бы не по своей рамке.
+    const saved = await storage.getSlices(ownerId, "slice", testId);
 
     /**
      * Срез «тест целиком» — обычный срез БЕЗ условий (FR-07a).
@@ -388,6 +413,8 @@ router.get("/slices/topics", requirePermission("analytics.read"), async (req: Re
     if (axis && !AXES.includes(axis as SliceAxis)) {
       return res.status(400).json({ error: `Неизвестная ось разбиения: ${axis}` });
     }
+    const denied = await denyOutsideTest(req, testId);
+    if (denied) return res.status(denied.status).json({ error: denied.error });
 
     const scope = await analyticsScope(req);
     const from = dateOf(req.query.from, "start");
@@ -408,7 +435,7 @@ router.get("/slices/topics", requirePermission("analytics.read"), async (req: Re
       // «Тест целиком» — срез без условий (FR-07a), отдельной сущности для него не заводится.
       const saved = sliceId === "whole"
         ? { conditionsJson: {} as Record<string, unknown> }
-        : (await storage.getSlices(req.currentUser?.id ?? "")).find(s => s.id === sliceId);
+        : (await storage.getSlices(req.currentUser?.id ?? "", "slice", testId)).find(s => s.id === sliceId);
       if (!saved) return res.status(404).json({ error: "Срез не найден" });
       const { rows } = await loadObservations(
         withinFrame(conditionsOf(saved.conditionsJson), testId, from, to),
@@ -464,6 +491,11 @@ router.post("/slices", requirePermission("analytics.read"), async (req: Request,
       });
     }
     const testId = kind === "slice" ? testIds[0] : null;
+    if (testId) {
+      // Э3: сохранить срез теста может тот, кому видна аналитика этого теста.
+      const denied = await denyOutsideTest(req, testId);
+      if (denied) return res.status(denied.status).json({ error: denied.error });
+    }
 
     const hasConditions = Object.values(conditions).some(value =>
       Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== "");
@@ -527,6 +559,14 @@ router.put("/slices/:id", requirePermission("analytics.read"), async (req: Reque
 
     if (Object.keys(patch).length === 0) {
       return res.status(400).json({ error: "Нечего менять" });
+    }
+
+    // Э3: срез теста правит тот, кому видна аналитика теста. Чужой и несуществующий отвечают
+    // одинаково — ниже, запросом с владельцем.
+    const existing = await storage.getSlice(req.params.id, req.currentUser?.id ?? "");
+    if (existing?.testId) {
+      const denied = await denyOutsideTest(req, existing.testId);
+      if (denied) return res.status(denied.status).json({ error: denied.error });
     }
 
     // Владелец проверяется запросом: чужой срез не найдётся, и это тот же ответ, что у

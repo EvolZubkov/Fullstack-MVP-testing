@@ -330,6 +330,13 @@
       "when": 1790979197617,
       "tag": "0046_drop_lms_batch_counted",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791050784892,
+      "tag": "0047_analytics_slices_per_test",
+      "breakpoints": true
     }
   ]
 }

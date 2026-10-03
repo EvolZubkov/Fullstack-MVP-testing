@@ -20,6 +20,8 @@ const { storageMock } = vi.hoisted(() => ({
     getAllAttempts: vi.fn(), getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
+    // Э3: область теста у ручек срезов — тот же расчёт, что у requireTestScope.
+    getTestGrantForUser: vi.fn().mockResolvedValue(undefined),
     selectObservations: vi.fn(),
     getSlices: vi.fn(), getSlice: vi.fn(), createSlice: vi.fn(),
     updateSlice: vi.fn(), deleteSlice: vi.fn(),
@@ -481,5 +483,50 @@ describe("GET /api/analytics/slices/topics — разворот строки (FR
 
   it("срез, которого нет, отвечает 404", async () => {
     expect((await askTopics("testId=test1&sliceId=нет-такого")).status).toBe(404);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Э3 (решение владельца 2026-10-03): срезы живут на уровне теста.
+describe("срезы на уровне теста (Э3)", () => {
+  it("список и сравнение берут только срезы этого теста", async () => {
+    await ask("?testId=test1");
+    expect(storageMock.getSlices).toHaveBeenCalledWith("u-owner", "slice", "test1");
+  });
+
+  it("разворот сохранённого среза ищет его среди срезов этого теста", async () => {
+    await request(makeApp())
+      .get("/api/analytics/slices/topics?testId=test1&sliceId=s1")
+      .set("x-test-user", "u-owner");
+    expect(storageMock.getSlices).toHaveBeenCalledWith("u-owner", "slice", "test1");
+  });
+
+  it("вне области теста — отказ, как у requireTestScope, и срезы не читаются", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTest.mockResolvedValue({ ...TEST, ownerId: "someone-else" });
+
+    const listed = await ask("?testId=test1");
+    expect(listed.status).toBe(403);
+    expect(storageMock.getSlices).not.toHaveBeenCalled();
+
+    const saved = await save({ name: "Чужой", kind: "slice", conditions: { testIds: ["test1"], groupIds: ["g1"] } });
+    expect(saved.status).toBe(403);
+    expect(storageMock.createSlice).not.toHaveBeenCalled();
+  });
+
+  it("правка среза чужого теста — отказ, срез не меняется", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTest.mockResolvedValue({ ...TEST, ownerId: "someone-else" });
+    storageMock.getSlice.mockResolvedValue({ id: "s1", kind: "slice", testId: "test1", createdBy: "u-owner" });
+
+    const res = await request(makeApp()).put("/api/analytics/slices/s1").set("x-test-user", "u-owner").send({ name: "Новое" });
+    expect(res.status).toBe(403);
+    expect(storageMock.updateSlice).not.toHaveBeenCalled();
+  });
+
+  it("несуществующий тест — 404", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await ask("?testId=nope");
+    expect(res.status).toBe(404);
   });
 });

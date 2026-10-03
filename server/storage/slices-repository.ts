@@ -19,18 +19,26 @@ import {
 } from "@shared/schema";
 
 export class SlicesRepository {
-  /** Срезы владельца, новые первыми. */
   /**
    * Записи владельца одной роли (решение владельца 2026-09-25).
    *
    * По умолчанию — СРЕЗЫ: их спрашивает аналитика и сравнение, и сохранённый фильтр реестра,
    * попавший в этот список, предлагал бы сравнивать выборки разных тестов.
    */
-  async getSlices(ownerId: string, kind: "slice" | "filter" = "slice"): Promise<AnalyticsSlice[]> {
+  async getSlices(
+    ownerId: string,
+    kind: "slice" | "filter" = "slice",
+    testId?: string,
+  ): Promise<AnalyticsSlice[]> {
     return db
       .select()
       .from(analyticsSlices)
-      .where(and(eq(analyticsSlices.createdBy, ownerId), eq(analyticsSlices.kind, kind)))
+      .where(and(
+        eq(analyticsSlices.createdBy, ownerId),
+        eq(analyticsSlices.kind, kind),
+        // Э3: срезы живут на уровне теста — в списке и сравнении теста только его срезы.
+        ...(testId ? [eq(analyticsSlices.testId, testId)] : []),
+      ))
       .orderBy(desc(analyticsSlices.createdAt));
   }
 
