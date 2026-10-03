@@ -60,6 +60,31 @@ describe("PassageRegistry", () => {
     expect(screen.getByText("Сертификация руководителей")).toBeTruthy();
   });
 
+  it("значок «Аналитика теста» ведёт на уровень теста строки, не открывая прохождение (Э2)", async () => {
+    const onOpenPassage = vi.fn();
+    const onOpenTestAnalytics = vi.fn();
+    render(
+      <PassageRegistry
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
+        onFilterChange={() => {}}
+        onOpenPassage={onOpenPassage}
+        onOpenTestAnalytics={onOpenTestAnalytics}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "Аналитика теста" }));
+
+    expect(onOpenTestAnalytics).toHaveBeenCalledWith("t1");
+    expect(onOpenPassage).not.toHaveBeenCalled();
+  });
+
+  it("без перехода на уровень теста колонки со значком нет", async () => {
+    render(<PassageRegistry filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }} onFilterChange={() => {}} />);
+
+    await screen.findByText("Морозова Анна");
+    expect(screen.queryByRole("button", { name: "Аналитика теста" })).toBeNull();
+  });
+
   // FR-01: группа названа прямо в перечне колонок реестра, а FR-09 говорит, что прохождение
   // вне групп не исчезает. Обе половины проверяются здесь, потому что одна без другой
   // оставляет колонку, которая молчит ровно там, где от неё ждут ответа.

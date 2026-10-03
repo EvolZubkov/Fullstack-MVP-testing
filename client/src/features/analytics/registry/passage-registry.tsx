@@ -10,9 +10,10 @@
  * что живут в адресе страницы (FR-03) — ссылку на выборку пересылают коллеге.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BarChart3 } from "lucide-react";
 
 import {
-  Button, Card, CardBody, CardHeader, DataGrid, FilterBar, Input, Menu, MenuItem, MenuTrigger,
+  Button, Card, CardBody, CardHeader, DataGrid, FilterBar, IconButton, Input, Menu, MenuItem, MenuTrigger,
   ModalDialog, Select, Stack, Tag, Text,
   type SortDir,
 } from "@skillum/ui-kit";
@@ -82,6 +83,8 @@ export interface PassageRegistryProps {
   onFilterChange: (filter: RegistryFilter) => void;
   /** Открыть разбор прохождения. Без него строка не кликается. */
   onOpenPassage?: (row: RegistryRow) => void;
+  /** Э2: перейти на уровень теста строки. Без него колонки со значком нет. */
+  onOpenTestAnalytics?: (testId: string) => void;
   /** Что показать справа в первой строке панели фильтра (например, кнопку экспорта). */
   actions?: React.ReactNode;
 }
@@ -130,7 +133,7 @@ function outcomeTone(outcome: RegistryOutcome): "success" | "error" | "neutral" 
 }
 
 export function PassageRegistry({
-  filter, onFilterChange, onOpenPassage, actions,
+  filter, onFilterChange, onOpenPassage, onOpenTestAnalytics, actions,
 }: PassageRegistryProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   /** Что именно сохраняем: `null` — окно закрыто (решение владельца 2026-09-25). */
@@ -297,6 +300,25 @@ export function PassageRegistry({
         ? row.groups.join(", ")
         : <Text variant="body-s" tone="muted">без группы</Text>),
     },
+    // Э2: переход на уровень теста строки — значком, как в строке списка тестов (текстовой
+    // ссылки в DS нет). Сама строка по-прежнему открывает прохождение, поэтому клик не всплывает.
+    ...(onOpenTestAnalytics ? [{
+      key: "testAnalytics",
+      header: "",
+      render: (row: RegistryRow) => (row.testId ? (
+        <IconButton
+          variant="ghost"
+          size="s"
+          aria-label="Аналитика теста"
+          title="Аналитика теста"
+          icon={<BarChart3 size={14} />}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenTestAnalytics(row.testId!);
+          }}
+        />
+      ) : null),
+    }] : []),
   ];
 
   const hasMore = rows.length < total;

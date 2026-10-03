@@ -12,8 +12,9 @@
  */
 import { useEffect, useState } from "react";
 
+import { BarChart3 } from "lucide-react";
 import {
-  Box, Button, Card, CardBody, CardHeader, SegmentedControl, Separator, Stack, Tag, Text,
+  Box, Button, Card, CardBody, CardHeader, IconButton, SegmentedControl, Separator, Stack, Tag, Text,
 } from "@skillum/ui-kit";
 
 import { pluralize } from "@/lib/i18n";
@@ -52,6 +53,8 @@ export interface AttentionQueueProps {
   onOpenPassage?: (row: AttentionRow) => void;
   /** Уйти в реестр за остальными делами корзины (FR-08). */
   onOpenRegistry?: (conditions: Record<string, unknown>) => void;
+  /** Э2: перейти на уровень теста позиции. Без него значка нет. */
+  onOpenTestAnalytics?: (testId: string) => void;
   /**
    * Очередь, уже загруженная страницей (ради счётчика на вкладке). Передана — компонент её не
    * запрашивает: второй запрос за теми же данными был бы лишним.
@@ -176,7 +179,7 @@ function details(row: AttentionRow): string {
   return parts.join(" · ");
 }
 
-export function AttentionQueue({ onOpenPassage, onOpenRegistry, data, period, onPeriodChange }: AttentionQueueProps) {
+export function AttentionQueue({ onOpenPassage, onOpenRegistry, onOpenTestAnalytics, data, period, onPeriodChange }: AttentionQueueProps) {
   const [rows, setRows] = useState<AttentionRow[]>(data?.items ?? []);
   const [counts, setCounts] = useState<Record<AttentionKind, number> | null>(data?.counts ?? null);
   const [loading, setLoading] = useState(!data);
@@ -286,6 +289,17 @@ export function AttentionQueue({ onOpenPassage, onOpenRegistry, data, period, on
                           <Button variant="ghost" size="s" onClick={() => onOpenPassage(row)}>
                             Разбор прохождения
                           </Button>
+                        )}
+                        {/* Э2: на уровень теста строки — значком, как в строке списка тестов. */}
+                        {row.testId && onOpenTestAnalytics && (
+                          <IconButton
+                            variant="ghost"
+                            size="s"
+                            aria-label="Аналитика теста"
+                            title="Аналитика теста"
+                            icon={<BarChart3 size={14} />}
+                            onClick={() => onOpenTestAnalytics(row.testId!)}
+                          />
                         )}
                       </Stack>
                     </Box>

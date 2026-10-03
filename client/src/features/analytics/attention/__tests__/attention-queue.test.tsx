@@ -124,6 +124,16 @@ describe("AttentionQueue", () => {
     );
   });
 
+  it("значок «Аналитика теста» ведёт на уровень теста позиции (Э2)", async () => {
+    const onOpenTestAnalytics = vi.fn();
+    render(<AttentionQueue onOpenTestAnalytics={onOpenTestAnalytics} />);
+    await screen.findByText("Не сдали");
+
+    await userEvent.click(within(bucket("Не сдали")).getAllByRole("button", { name: "Аналитика теста" })[0]);
+
+    expect(onOpenTestAnalytics).toHaveBeenCalledWith("test1");
+  });
+
   it("не предлагает открыть прохождение там, где его нет", async () => {
     // У просроченного назначения прохождения не существует: к тесту не приступали.
     render(<AttentionQueue onOpenPassage={() => {}} />);

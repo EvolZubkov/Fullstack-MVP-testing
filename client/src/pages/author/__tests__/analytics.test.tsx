@@ -202,6 +202,14 @@ async function renderLoaded() {
   await waitFor(() => expect(screen.getByText("Аналитика")).toBeInTheDocument());
 }
 
+/**
+ * Шапка уровня: ряд с заголовком и действиями. Значки строк реестра называются так же, как кнопка
+ * шапки («Аналитика теста»), поэтому кнопку ищут внутри шапки.
+ */
+function pageHeader(): HTMLElement {
+  return screen.getByRole("heading", { level: 1, name: "Аналитика" }).parentElement!.parentElement!;
+}
+
 async function openAttemptsTab() {
   fireEvent.click(screen.getByRole("tab", { name: /Прохождения/ }));
   await waitFor(() => expect(screen.getByText("Иван Петров")).toBeInTheDocument());
@@ -317,6 +325,22 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     } finally {
       window.history.replaceState(null, "", "/");
     }
+  });
+
+  it("при отборе ровно по одному тесту в шапке — «Аналитика теста», ведёт на его уровень (Э2)", async () => {
+    window.history.replaceState(null, "", "/author/analytics?testId=test1&groupId=g1");
+    try {
+      await renderLoaded();
+      fireEvent.click(within(pageHeader()).getByRole("button", { name: /Аналитика теста/ }));
+      expect(`${window.location.pathname}${window.location.search}`).toBe("/author/analytics/tests/test1?groupId=g1");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("без отбора по одному тесту кнопки «Аналитика теста» в шапке нет (Э2)", async () => {
+    await renderLoaded();
+    expect(within(pageHeader()).queryByRole("button", { name: /Аналитика теста/ })).toBeNull();
   });
 
   it("«Сравнить со срезом» уносит в сравнение оргусловия отбора (FR-06b)", async () => {

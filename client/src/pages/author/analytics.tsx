@@ -929,9 +929,23 @@ export default function AnalyticsPage() {
         title="Аналитика"
         subtitle="Прохождения, срезы и дела, по которым нужно действие"
         actions={(
-          <Button variant="secondary" size="s" leadingIcon={<RefreshCw size={16} />} onClick={() => window.location.reload()}>
-            Обновить
-          </Button>
+          <>
+            {/* Э2: отбор ровно по одному тесту (так приводит значок списка тестов) — переход на
+                уровень этого теста, пара к «Прохождения теста» на уровне теста. */}
+            {registryFilter.testIds.length === 1 && (
+              <Button
+                variant="secondary"
+                size="s"
+                trailingIcon={<ChevronRight size={16} />}
+                onClick={() => openTestLevel(registryFilter.testIds[0], registryFilter)}
+              >
+                Аналитика теста
+              </Button>
+            )}
+            <Button variant="secondary" size="s" leadingIcon={<RefreshCw size={16} />} onClick={() => window.location.reload()}>
+              Обновить
+            </Button>
+          </>
         )}
       />
 
@@ -954,6 +968,7 @@ export default function AnalyticsPage() {
                 filter={registryFilter}
                 onFilterChange={setRegistryFilter}
                 onOpenPassage={handleOpenPassage}
+                onOpenTestAnalytics={(id) => openTestLevel(id, registryFilter)}
                 // FR-04: выгрузка живёт там же, где фильтр, и берёт его условия. Отдельного
                 // набора галочек для состава строк книги в продукте быть не должно — два
                 // описания одной выборки однажды разойдутся, и книга перестанет отвечать
@@ -1029,6 +1044,8 @@ export default function AnalyticsPage() {
                 onPeriodChange={setAttentionPeriod}
                 onOpenPassage={handleOpenAttentionPassage}
                 onOpenRegistry={handleOpenSliceInRegistry}
+                // Очередь условий реестра не читает — и в тест уходит без них.
+                onOpenTestAnalytics={(id) => openTestLevel(id, EMPTY_FILTER)}
               />
             ),
           },
