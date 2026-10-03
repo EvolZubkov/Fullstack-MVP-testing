@@ -31,9 +31,12 @@ import {
     type ItemQualityView,
 } from "@/features/analytics/test/item-quality";
 import {
+    BreakdownTitle,
+    breakdownSubtitle,
     ItemBreakdownPanel,
     type ItemBreakdownView,
 } from "@/features/analytics/test/item-breakdown";
+import { AnalyticsHeader } from "@/features/analytics/levels/analytics-header";
 import {
     ScaleQualityPanel,
     type ScaleQualityRow,
@@ -46,6 +49,7 @@ import {
     filterOutOfTest,
     generalHref,
     questionHref,
+    returnHrefOf,
     testHref,
 } from "@/features/analytics/levels/analytics-routes";
 import {
@@ -746,7 +750,7 @@ export default function TestAnalyticsPage() {
                     variant="ghost"
                     size="s"
                     trailingIcon={<ChevronRight size={14} />}
-                    onClick={() => { setBreakdownId(null); setQualityMode("compare"); }}
+                    onClick={() => setQualityMode("compare")}
                 >
                     Сравнить срезы
                 </Button>
@@ -784,64 +788,97 @@ export default function TestAnalyticsPage() {
         </Stack>
     );
 
+    /**
+     * Крошка «Аналитика» (Э2): на общий уровень с тем фильтром, с которым с него ушли (адрес
+     * возврата в состоянии истории), а пришли не с общего — с условиями этого уровня по тесту.
+     */
+    const generalCrumb = {
+        label: "Аналитика",
+        href: returnHrefOf(typeof window === "undefined" ? null : window.history.state)
+            ?? generalHref(filterOutOfTest(filter, testId!)),
+    };
+    const subtitle = (
+        <>
+            {`${summary.completedAttempts} ${pluralize(summary.completedAttempts, "завершённое прохождение", "завершённых прохождения", "завершённых прохождений")} · ${sourcesLabel(filter.sources)}`}
+            {/* FR-52, эскиз wf-scales: почему у вкладки качества нет плиток и таблицы
+                вопросов, говорит подзаголовок, а не отдельная карточка. Признак — тот же,
+                что у таблицы вопросов (прохождения есть, оценённых нет), а не ответ
+                вкладки качества: тот грузится только на ней, и шапка менялась бы при
+                переключении вкладок. */}
+            {summary.completedAttempts > 0 && summary.gradedAttempts === 0
+                ? " · измерительный тест, эталона у вопросов нет"
+                : ""}
+        </>
+    );
+
+    // ── Уровень вопроса (Э2): своя шапка с крошками, разбор без вкладок теста ──────────────
+    if (routeQuestionId) {
+        return (
+            <Stack gap={6}>
+                <AnalyticsHeader
+                    crumbs={[
+                        generalCrumb,
+                        {
+                            label: analytics.testTitle,
+                            href: testHref(testId!, filter, "quality"),
+                            state: typeof window === "undefined" ? undefined : window.history.state,
+                        },
+                        { label: breakdown?.prompt ?? "Вопрос" },
+                    ]}
+                    title={breakdown ? <BreakdownTitle view={breakdown} /> : "Вопрос"}
+                    subtitle={breakdown ? breakdownSubtitle(breakdown) : undefined}
+                />
+                {breakdown
+                    ? (
+                        <ItemBreakdownPanel
+                            view={breakdown}
+                            version={breakdownVersion}
+                            onSelectVersion={setBreakdownVersion}
+                        />
+                    )
+                    : <LoadingState message="Считаем психометрику..." />}
+            </Stack>
+        );
+    }
+
     return (
         <Stack gap={6}>
-            {/*
-              Шапка по эскизу (prd56-test-analytics, шаблон wf-head-tpl): возврат к тестам над
-              названием, под ним — объём и источники, по которым посчитана страница. Справа
-              кнопки PRD-54 (эскиз prd54-lms-import ставит загрузку рядом с экспортом), затем
-              переход в реестр и «Обновить».
-            */}
-            {/* Кнопки держатся справа, как в эскизе: при нехватке места переносится подзаголовок и
-                сами кнопки — вторым рядом справа, а не под название. */}
-            <Cluster justify="between" align="start" wrap={false}>
-                <Stack gap={1} align="start">
-                    <Link href="/author/tests">
-                        <Button variant="ghost" size="s" leadingIcon={<ArrowLeft size={16} />}>
-                            Все тесты
+            {/* Шапка уровня теста (Э2, эскиз e2-analytics-levels): крошки «Аналитика › тест» вместо
+                «Все тесты», под названием — объём и источники. Справа — экспорт, переход в реестр
+                и «Обновить». */}
+            <AnalyticsHeader
+                crumbs={[generalCrumb, { label: analytics.testTitle }]}
+                title={analytics.testTitle}
+                subtitle={subtitle}
+                actions={(
+                    <>
+                        <Button onClick={handleExportExcel} variant="secondary" size="s" leadingIcon={<FileSpreadsheet size={16} />}>
+                            Экспорт Excel
                         </Button>
-                    </Link>
-                    <Text as="h1" variant="heading-l">{analytics.testTitle}</Text>
-                    <Text tone="muted">
-                        {`${summary.completedAttempts} ${pluralize(summary.completedAttempts, "завершённое прохождение", "завершённых прохождения", "завершённых прохождений")} · ${sourcesLabel(filter.sources)}`}
-                        {/* FR-52, эскиз wf-scales: почему у вкладки качества нет плиток и таблицы
-                            вопросов, говорит подзаголовок, а не отдельная карточка. Признак — тот же,
-                            что у таблицы вопросов (прохождения есть, оценённых нет), а не ответ
-                            вкладки качества: тот грузится только на ней, и шапка менялась бы при
-                            переключении вкладок. */}
-                        {summary.completedAttempts > 0 && summary.gradedAttempts === 0
-                            ? " · измерительный тест, эталона у вопросов нет"
-                            : ""}
-                    </Text>
-                </Stack>
-                {/* Кнопки одной группы — 4 px, как в эскизе (план сверки 6.2, 6.4). */}
-                <Cluster gap={1} justify="end" align="center">
-                    <Button onClick={handleExportExcel} variant="secondary" size="s" leadingIcon={<FileSpreadsheet size={16} />}>
-                        Экспорт Excel
-                    </Button>
-                    {/*
-                      PRD-56 FR-23: список попыток со страницы снят — он есть в реестре
-                      прохождений, где умеет фильтровать, догружать порциями и вести в разбор.
-                      Два списка на продукт означали бы два ответа на вопрос «кто проходил».
-                    */}
-                    <Link href={generalHref(filterOutOfTest(filter, testId))}>
-                        <Button variant="secondary" size="s" trailingIcon={<ChevronRight size={16} />}>
-                            Прохождения теста
-                        </Button>
-                    </Link>
-                    {/* Значком, а не текстом (решение владельца 2026-09-26, план 6.4): четыре текстовые
-                        кнопки не помещались в строку, и «Обновить» уходило вторым рядом. Имя для
-                        экранного диктора и подсказка при наведении — те же слова. */}
-                    <IconButton
-                        variant="ghost"
-                        size="s"
-                        aria-label="Обновить"
-                        title="Обновить"
-                        icon={<RefreshCw size={16} />}
-                        onClick={() => invalidateAnalytics(queryClient)}
-                    />
-                </Cluster>
-            </Cluster>
+                        {/*
+                          PRD-56 FR-23: список попыток со страницы снят — он есть в реестре
+                          прохождений, где умеет фильтровать, догружать порциями и вести в разбор.
+                          Два списка на продукт означали бы два ответа на вопрос «кто проходил».
+                        */}
+                        <Link href={generalHref(filterOutOfTest(filter, testId!))}>
+                            <Button variant="secondary" size="s" trailingIcon={<ChevronRight size={16} />}>
+                                Прохождения теста
+                            </Button>
+                        </Link>
+                        {/* Значком, а не текстом (решение владельца 2026-09-26, план 6.4): четыре текстовые
+                            кнопки не помещались в строку, и «Обновить» уходило вторым рядом. Имя для
+                            экранного диктора и подсказка при наведении — те же слова. */}
+                        <IconButton
+                            variant="ghost"
+                            size="s"
+                            aria-label="Обновить"
+                            title="Обновить"
+                            icon={<RefreshCw size={16} />}
+                            onClick={() => invalidateAnalytics(queryClient)}
+                        />
+                    </>
+                )}
+            />
 
             <RegistryFilterDialog
                 open={filterOpen}
@@ -876,16 +913,8 @@ export default function TestAnalyticsPage() {
                                     onExit={() => setQualityMode("sample")}
                                 />
                             )
-                            : breakdownId && breakdown
-                                ? (
-                                    <ItemBreakdownPanel
-                                        view={breakdown}
-                                        version={breakdownVersion}
-                                        onSelectVersion={setBreakdownVersion}
-                                        onBack={() => { setBreakdownId(null); setBreakdownVersion(undefined); }}
-                                    />
-                                )
-                                : itemQuality?.measurementOnly
+                            // Э2: разбор вопроса — свой уровень (ранний возврат выше), здесь — таблица.
+                            : itemQuality?.measurementOnly
                                     // FR-52, эскиз wf-scales: у измерительного теста вкладка —
                                     // только раздел шкал, без плиток и таблицы вопросов.
                                     ? (scaleQuality

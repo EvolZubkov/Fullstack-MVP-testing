@@ -87,7 +87,11 @@ export interface VersionRow {
 
 export interface ItemBreakdownPanelProps {
   view: ItemBreakdownView;
-  onBack: () => void;
+  /**
+   * Вернуться к таблице вопросов. Не задан — у панели нет своей шапки: на уровне вопроса (Э2)
+   * заголовок и путь назад даёт шапка уровня с крошками.
+   */
+  onBack?: () => void;
   /**
    * Какую редакцию выбрал автор: строка-отпечаток, `null` — «версия неизвестна»; `undefined` —
    * ещё не выбирал, и отмечена та, по которой сервер посчитал карточку (`view.selectedVersion`).
@@ -250,6 +254,30 @@ const HINT = {
 } as const;
 
 /** Карточка разбора задания. */
+/**
+ * Подзаголовок разбора — «Тема · подтема · N наблюдений» (эскиз); пустые части не печатаются.
+ * Общий у панели и шапки уровня вопроса.
+ */
+export function breakdownSubtitle(view: ItemBreakdownView): string {
+  return [
+    view.topicName,
+    view.tags?.length ? view.tags.join(", ") : "",
+    `${view.item.observations} ${pluralize(view.item.observations, "наблюдение", "наблюдения", "наблюдений")}`,
+  ].filter(Boolean).join(" · ");
+}
+
+/** Заголовок разбора: пиктограмма типа вопроса и его текст. */
+export function BreakdownTitle({ view }: { view: ItemBreakdownView }) {
+  return (
+    <>
+      {view.questionType
+        ? <QuestionTypeIcon type={view.questionType as QuestionType} size={20} />
+        : null}
+      {" "}{view.prompt}
+    </>
+  );
+}
+
 export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: ItemBreakdownPanelProps) {
   const { item, groups, options } = view;
   // FR-18a: наблюдение — в шкале автора (0 — легко, 100 — сложно). Трудность p растёт в
@@ -269,12 +297,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
     .filter(row => row.psychoHash !== null)
     .map(row => row.firstAt)
     .sort()[0] ?? null;
-  // Подзаголовок — «Тема · подтема · N наблюдений» (эскиз); пустые части не печатаются.
-  const subtitle = [
-    view.topicName,
-    view.tags?.length ? view.tags.join(", ") : "",
-    `${item.observations} ${pluralize(item.observations, "наблюдение", "наблюдения", "наблюдений")}`,
-  ].filter(Boolean).join(" · ");
+  const subtitle = breakdownSubtitle(view);
   // Размер крайних групп — в заголовке колонки: 27 % не четверть, и число не подменяется словом.
   const groupPercent = percentOfShare(groups?.share ?? 0.27);
 
@@ -336,18 +359,15 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
 
   return (
     <Stack gap={4}>
-      <Stack gap={1} align="start">
-        <Button variant="ghost" size="s" onClick={onBack} leadingIcon={<ArrowLeft size={14} />}>
-          Ко всем вопросам
-        </Button>
-        <Text variant="heading-l">
-          {view.questionType
-            ? <QuestionTypeIcon type={view.questionType as QuestionType} size={20} />
-            : null}
-          {" "}{view.prompt}
-        </Text>
-        <Text variant="body-m" tone="muted">{subtitle}</Text>
-      </Stack>
+      {onBack && (
+        <Stack gap={1} align="start">
+          <Button variant="ghost" size="s" onClick={onBack} leadingIcon={<ArrowLeft size={14} />}>
+            Ко всем вопросам
+          </Button>
+          <Text variant="heading-l"><BreakdownTitle view={view} /></Text>
+          <Text variant="body-m" tone="muted">{subtitle}</Text>
+        </Stack>
+      )}
 
       {/* FR-48b: СТРОГО три в ряд. Автоподбор давал на широком мониторе пять плиток и одну
           на второй строке, а пары величин разъезжались по разным строкам. */}

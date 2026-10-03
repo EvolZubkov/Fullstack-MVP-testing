@@ -13,7 +13,7 @@
  */
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
@@ -174,7 +174,8 @@ function renderPage(path = "/author/analytics/tests/t1") {
 
 async function renderLoaded() {
   renderPage();
-  await waitFor(() => expect(screen.getByText("Тест по финансам")).toBeInTheDocument());
+  // Название теста — и в крошке, и в заголовке (Э2): ждём заголовок.
+  await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Тест по финансам" })).toBeInTheDocument());
 }
 
 describe("<TestAnalyticsPage />", () => {
@@ -192,9 +193,13 @@ describe("<TestAnalyticsPage />", () => {
   });
 
   // План сверки, 5.1: каркас по эскизам prd56-test-analytics и prd66-item-quality.
-  it("шапка по эскизу: «Все тесты», название, объём и источники, реестр и «Обновить»", async () => {
+  it("шапка по эскизу Э2: крошки «Аналитика › тест», название, объём и источники, реестр и «Обновить»", async () => {
     await renderLoaded();
-    expect(screen.getByRole("button", { name: "Все тесты" })).toBeInTheDocument();
+    // Крошки вместо «Все тесты»: «Аналитика» ведёт на общий уровень, отобранный по этому тесту.
+    const crumbs = screen.getByRole("navigation", { name: "Хлебные крошки" });
+    expect(within(crumbs).getByRole("link", { name: "Аналитика" })).toHaveAttribute("href", "/author/analytics?testId=t1");
+    expect(within(crumbs).getByText("Тест по финансам")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Все тесты" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "Тест по финансам" })).toBeInTheDocument();
     expect(screen.getByText("8 завершённых прохождений · веб, телеметрия LMS и импортированные выгрузки"))
       .toBeInTheDocument();
@@ -305,6 +310,36 @@ describe("<TestAnalyticsPage />", () => {
     // Э2: разбор вопроса — свой адрес уровня, а не состояние страницы.
     fireEvent.click(screen.getByRole("button", { name: /Разбор вопроса/ }));
     expect(memory.history.at(-1)).toBe("/author/analytics/tests/t1/questions/q1");
+  });
+
+  it("уровень вопроса (Э2): три крошки, заголовок — вопрос, вкладок теста нет", async () => {
+    const breakdown = {
+      questionId: "q1", prompt: "Какая мера относится к антикоррупционным?", questionType: "single",
+      topicName: "Право и комплаенс",
+      item: {
+        observations: 268, difficulty: 0.41, correctedDifficulty: 0.21, itemRest: 0.34, discrimination: 0.38,
+        declaredDifficulty: 60, timing: { medianMs: 48_000, q1Ms: 31_000, q3Ms: 82_000, measured: 244 },
+      },
+      groups: { size: 72, share: 0.27, topDifficulty: 0.68, bottomDifficulty: 0.19 },
+      options: [],
+    };
+    fetchMock.mockImplementation(async (input: string) => {
+      const u = String(input);
+      const body = u === "/api/analytics/tests/t1" ? state.analyticsBody
+        : u.startsWith("/api/analytics/psychometrics/t1/items/q1") ? breakdown
+        : u.startsWith("/api/analytics/psychometrics/t1") ? state.psychometricsBody : [];
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    });
+    renderPage("/author/analytics/tests/t1/questions/q1");
+
+    const crumbs = await screen.findByRole("navigation", { name: "Хлебные крошки" });
+    await waitFor(() => expect(within(crumbs).getByText("Какая мера относится к антикоррупционным?")).toBeInTheDocument());
+    expect(within(crumbs).getByRole("link", { name: "Аналитика" })).toHaveAttribute("href", "/author/analytics?testId=t1");
+    // Крошка теста возвращает на вкладку, где живёт таблица вопросов.
+    expect(within(crumbs).getByRole("link", { name: "Тест по финансам" }))
+      .toHaveAttribute("href", "/author/analytics/tests/t1?tab=quality");
+    expect(screen.queryByRole("tab", { name: "Обзор" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ко всем вопросам" })).toBeNull();
   });
 
   it("вкладка — в адресе: переход по вкладке пишется в историю, адрес с вкладкой её открывает (Э2)", async () => {

@@ -25,6 +25,7 @@ import {
 } from "@/features/analytics/registry/filter-state";
 import { testHref } from "@/features/analytics/levels/analytics-routes";
 import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
+import { AnalyticsHeader } from "@/features/analytics/levels/analytics-header";
 
 /** Вкладки общего уровня. Первая — по умолчанию. */
 const GENERAL_ANALYTICS_TABS = ["attempts", "slices", "attention"] as const;
@@ -924,19 +925,16 @@ export default function AnalyticsPage() {
     // Модульная сетка 4 px (эскиз prd56-analytics-section, дельта 6.2): шапка и вкладки —
     // разные блоки страницы, 4x; тот же шаг держит `ou-shell__main` эскиза.
     <Stack gap={4}>
-      {/* Заголовок */}
-      <Cluster justify="between" gap={4}>
-        <Stack gap={1}>
-          <Text as="h1" variant="display-s" weight="semibold">Аналитика</Text>
-          <Text tone="muted">Прохождения, срезы и дела, по которым нужно действие</Text>
-        </Stack>
-        {/* Кнопки одного ряда — родственные элементы, интервал 1x модульной сетки. */}
-        <Cluster gap={1}>
+      {/* Шапка уровня (Э2): общий уровень — корень, крошек нет. */}
+      <AnalyticsHeader
+        title="Аналитика"
+        subtitle="Прохождения, срезы и дела, по которым нужно действие"
+        actions={(
           <Button variant="secondary" size="s" leadingIcon={<RefreshCw size={16} />} onClick={() => window.location.reload()}>
             Обновить
           </Button>
-        </Cluster>
-      </Cluster>
+        )}
+      />
 
       {/* Табы */}
       <Tabs

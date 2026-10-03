@@ -1162,6 +1162,9 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
   transition: color var(--ou-motion-fast), background var(--ou-motion-fast);
 }
+/* The crumb is inline-flex, and a flex container ignores text-overflow: a long crumb was cut
+   mid-word. The label is its own box, so the ellipsis applies to it. */
+.ou-crumbs__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-hover); }
 .ou-crumbs__item.is-current .ou-crumbs__crumb { color: var(--ou-fg-default); font-weight: 600; }
 .ou-crumbs__ico { display: inline-flex; color: var(--ou-fg-muted); }
