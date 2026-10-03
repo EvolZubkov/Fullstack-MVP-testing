@@ -338,6 +338,17 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     }
   });
 
+  it("«Обновить» перезапрашивает данные вкладки без перезагрузки страницы (Э2)", async () => {
+    await renderLoaded();
+    const registryCalls = () => fetchMock.mock.calls.filter(call => String(call[0]).startsWith("/api/analytics/registry")).length;
+    await waitFor(() => expect(registryCalls()).toBeGreaterThan(0));
+    const before = registryCalls();
+
+    fireEvent.click(within(pageHeader()).getByRole("button", { name: "Обновить" }));
+
+    await waitFor(() => expect(registryCalls()).toBeGreaterThan(before));
+  });
+
   it("без отбора по одному тесту кнопки «Аналитика теста» в шапке нет (Э2)", async () => {
     await renderLoaded();
     expect(within(pageHeader()).queryByRole("button", { name: /Аналитика теста/ })).toBeNull();

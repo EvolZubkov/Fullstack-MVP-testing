@@ -33,7 +33,8 @@ import { useRegistryFilter } from "@/features/analytics/registry/use-registry-fi
 import { SlicesTab } from "@/features/analytics/slices/slices-tab";
 import { AttentionQueue, type AttentionData, type AttentionRow } from "@/features/analytics/attention/attention-queue";
 import { DEFAULT_ATTENTION_PERIOD, type AttentionPeriod } from "@shared/analytics/attention-period";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateAnalytics } from "@/features/analytics/invalidate-analytics";
 import { LoadingState } from "@/components/loading-state";
 import {
   Box,
@@ -793,6 +794,14 @@ export default function AnalyticsPage() {
   const [tab, setTab] = useAnalyticsTab(GENERAL_ANALYTICS_TABS, "attempts");
   // Э2: переход на уровень теста несёт условия и адрес возврата для крошки «Аналитика».
   const openTestLevel = useOpenTestLevel();
+  const queryClient = useQueryClient();
+  /** Счётчик пересоздания вкладок для «Обновить». */
+  const [refreshKey, setRefreshKey] = useState(0);
+  /** «Обновить» (Э2): сброс запросов аналитики и перезапрос данных вкладок — без перезагрузки. */
+  const refresh = () => {
+    void invalidateAnalytics(queryClient);
+    setRefreshKey((key) => key + 1);
+  };
 
   // PRD-56 FR-12: combined-full и summary сняты вместе с «Обзором». Величины, которые они
   // считали — средний балл и pass rate ПО ВСЕМ тестам, тренды и проблемные темы вне контекста
@@ -942,15 +951,18 @@ export default function AnalyticsPage() {
                 Аналитика теста
               </Button>
             )}
-            <Button variant="secondary" size="s" leadingIcon={<RefreshCw size={16} />} onClick={() => window.location.reload()}>
+            {/* Э2: без перезагрузки страницы — она теряла бы состояние истории (адреса возврата). */}
+            <Button variant="secondary" size="s" leadingIcon={<RefreshCw size={16} />} onClick={refresh}>
               Обновить
             </Button>
           </>
         )}
       />
 
-      {/* Табы */}
+      {/* Табы. `key` — для «Обновить»: вкладки грузят данные сами, при монтировании, и пересоздание
+          их перезапрашивает; вкладка живёт в адресе и не сбрасывается. */}
       <Tabs
+        key={refreshKey}
         value={tab}
         onChange={setTab}
         items={[
