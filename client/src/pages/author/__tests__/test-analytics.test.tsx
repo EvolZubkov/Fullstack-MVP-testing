@@ -197,7 +197,7 @@ describe("<TestAnalyticsPage />", () => {
     await renderLoaded();
     // Крошки вместо «Все тесты»: «Аналитика» ведёт на общий уровень, отобранный по этому тесту.
     const crumbs = screen.getByRole("navigation", { name: "Хлебные крошки" });
-    expect(within(crumbs).getByRole("link", { name: "Аналитика" })).toHaveAttribute("href", "/author/analytics?testId=t1");
+    expect(within(crumbs).getByRole("link", { name: "Аналитика" })).toHaveAttribute("href", "/author/analytics?testId=t1&tab=attempts");
     expect(within(crumbs).getByText("Тест по финансам")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Все тесты" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1, name: "Тест по финансам" })).toBeInTheDocument();
@@ -346,7 +346,7 @@ describe("<TestAnalyticsPage />", () => {
 
     const crumbs = await screen.findByRole("navigation", { name: "Хлебные крошки" });
     await waitFor(() => expect(within(crumbs).getByText("Какая мера относится к антикоррупционным?")).toBeInTheDocument());
-    expect(within(crumbs).getByRole("link", { name: "Аналитика" })).toHaveAttribute("href", "/author/analytics?testId=t1");
+    expect(within(crumbs).getByRole("link", { name: "Аналитика" })).toHaveAttribute("href", "/author/analytics?testId=t1&tab=attempts");
     // Крошка теста возвращает на вкладку, где живёт таблица вопросов.
     expect(within(crumbs).getByRole("link", { name: "Тест по финансам" }))
       .toHaveAttribute("href", "/author/analytics/tests/t1?tab=quality");

@@ -8,7 +8,8 @@
  * ни в запросах: уцелевший запрос к снятой ручке — это та же нагрузка и то же обещание вернуть
  * «общее среднее», просто невидимое.
  *
- * Остальное — договор экрана: реестр открывается первым, срезы считаются только внутри выбранного
+ * Остальное — договор экрана: первой открывается вкладка «Тесты» — вход в аналитику теста (Э3.0),
+ * реестр — на соседней вкладке, срезы считаются только внутри выбранного
  * теста, очередь дел на своей вкладке, а окно разбора прохождения (все четыре типа ответов, веб и
  * адаптивный из LMS) и экспорт работают как прежде.
  */
@@ -166,6 +167,10 @@ beforeEach(() => {
   fetchMock = vi.fn(async (input: string) => {
     const u = String(input);
     if (u.startsWith("/api/analytics/registry")) return ok(state.registry);
+    // Э3.0: вкладка «Тесты» — сводка по каждому тесту.
+    if (u === "/api/analytics/tests") {
+      return ok({ tests: [{ testId: "test1", title: "Тест по финансам", completedAttempts: 2, passRate: 100, avgPercent: 85, lastAttemptAt: "2026-06-02T09:20:00Z" }] });
+    }
     if (u.startsWith("/api/analytics/slices")) return ok(state.slices);
     if (u.startsWith("/api/analytics/attention")) return ok(state.attention);
     if (u === "/api/tests") return ok(state.tests);
@@ -232,12 +237,14 @@ function openSelectByLabel(labelText: string) {
 }
 
 describe("<AnalyticsPage /> — состав экрана", () => {
-  it("открывается на реестре прохождений", async () => {
+  it("открывается на вкладке «Тесты» — едином входе в аналитику теста (Э3.0)", async () => {
     await renderLoaded();
 
-    // Первое, что видит пришедший на экран, — прохождения, а не сводка по всему продукту.
-    expect(screen.getByRole("tab", { name: /Прохождения/ })).toHaveAttribute("aria-selected", "true");
-    expect(await screen.findByText("Иван Петров")).toBeInTheDocument();
+    // Первое, что видит пришедший на экран, — тесты с их числами, а не сводка по всему продукту:
+    // каждая строка — своя выборка, итоговой строки нет.
+    expect(screen.getByRole("tab", { name: "Тесты" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Тест по финансам")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Прохождения/ })).toHaveAttribute("aria-selected", "false");
   });
 
   it("не показывает величин, посчитанных по всем тестам сразу", async () => {
@@ -254,7 +261,7 @@ describe("<AnalyticsPage /> — состав экрана", () => {
 
   it("не зовёт снятые ручки общей сводки", async () => {
     await renderLoaded();
-    await screen.findByText("Иван Петров");
+    await openAttemptsTab();
 
     // Уцелевший запрос к снятой ручке — это та же нагрузка и то же обещание «общего среднего»,
     // просто невидимое: экран считался бы очищенным, оставаясь на прежнем источнике.
@@ -263,10 +270,10 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     expect(called.some(url => url.includes("/api/analytics/summary"))).toBe(false);
   });
 
-  it("даёт три вкладки: реестр, срезы и дела, требующие внимания", async () => {
+  it("даёт четыре вкладки: тесты, реестр, срезы и дела, требующие внимания", async () => {
     await renderLoaded();
 
-    for (const name of [/Прохождения/, "Срезы", /Требует внимания/]) {
+    for (const name of ["Тесты", /Прохождения/, "Срезы", /Требует внимания/]) {
       expect(screen.getByRole("tab", { name })).toBeInTheDocument();
     }
   });
@@ -308,7 +315,7 @@ describe("<AnalyticsPage /> — состав экрана", () => {
   });
 
   it("«Сравнить со срезом» уносит в сравнение вариант и версию отбора", async () => {
-    window.history.replaceState(null, "", "/author/analytics?testId=test1&formId=form-b&snapshotId=snap-3");
+    window.history.replaceState(null, "", "/author/analytics?testId=test1&formId=form-b&snapshotId=snap-3&tab=attempts");
     try {
       await renderLoaded();
       fireEvent.click(await screen.findByRole("button", { name: "Сравнить со срезом" }));
@@ -340,6 +347,7 @@ describe("<AnalyticsPage /> — состав экрана", () => {
 
   it("«Обновить» перезапрашивает данные вкладки без перезагрузки страницы (Э2)", async () => {
     await renderLoaded();
+    await openAttemptsTab();
     const registryCalls = () => fetchMock.mock.calls.filter(call => String(call[0]).startsWith("/api/analytics/registry")).length;
     await waitFor(() => expect(registryCalls()).toBeGreaterThan(0));
     const before = registryCalls();
@@ -356,7 +364,7 @@ describe("<AnalyticsPage /> — состав экрана", () => {
 
   it("«Сравнить со срезом» уносит в сравнение оргусловия отбора (FR-06b)", async () => {
     window.history.replaceState(
-      null, "", `/author/analytics?testId=test1&unit=${encodeURIComponent("Отдел продаж")}&position=${encodeURIComponent("Кладовщик")}`,
+      null, "", `/author/analytics?testId=test1&unit=${encodeURIComponent("Отдел продаж")}&position=${encodeURIComponent("Кладовщик")}&tab=attempts`,
     );
     try {
       await renderLoaded();
