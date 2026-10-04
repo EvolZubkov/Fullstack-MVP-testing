@@ -47,6 +47,7 @@ import { hasOwnExternalIdFormat } from "../../utils/crypto";
 import type { ObservationFilter, ObservationSource } from "../../services/analytics/observations";
 import { analyticsScope } from "./helpers";
 import { isSuspicious, type FlagSource } from "@shared/psychometrics/question-flag";
+import { NO_GROUP_ID } from "@shared/analytics/no-group";
 
 const router = Router();
 
@@ -269,7 +270,9 @@ function unmatchedOf(
 ): number {
   if (filter.sources?.length && !filter.sources.includes("import")) return 0;
   return batches
-    .filter(batch => !filter.groupIds?.length || (!!batch.groupId && filter.groupIds.includes(batch.groupId)))
+    // «Без группы» — партии, загруженные без группы.
+    .filter(batch => !filter.groupIds?.length
+      || (batch.groupId ? filter.groupIds.includes(batch.groupId) : filter.groupIds.includes(NO_GROUP_ID)))
     .reduce((sum, batch) => sum + (batch.rowsUnmatched ?? 0), 0);
 }
 

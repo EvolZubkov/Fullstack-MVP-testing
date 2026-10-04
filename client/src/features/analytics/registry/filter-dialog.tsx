@@ -21,6 +21,7 @@ import {
   type RegistryOutcome,
   type RegistrySource,
 } from "./filter-state";
+import { NO_GROUP_ID, NO_GROUP_LABEL } from "@shared/analytics/no-group";
 import { useRegistryDictionaries, useTestDictionary } from "./use-dictionaries";
 import type { OrgField, OrgValueCount } from "@shared/org-fields";
 
@@ -172,7 +173,12 @@ export function RegistryFilterDialog({
           label="Группа"
           multiple
           placeholder="Все группы"
-          options={groups.map(group => ({ value: group.id, label: group.name }))}
+          // «Без группы» — первым: прохождения людей вне групп иначе не отобрать (замечание
+          // владельца 2026-10-04). Выбирается вместе с группами, условия — через «или».
+          options={[
+            { value: NO_GROUP_ID, label: NO_GROUP_LABEL },
+            ...groups.map(group => ({ value: group.id, label: group.name })),
+          ]}
           values={draft.groupIds}
           onValuesChange={values => setDraft(d => ({ ...d, groupIds: values }))}
           fullWidth

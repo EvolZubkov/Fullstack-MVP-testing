@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { splitGroupFilter } from "@shared/analytics/no-group";
 import { logger } from "../../logger";
 import ExcelJS from "exceljs";
 import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
@@ -521,9 +522,18 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
 
     if (groupIds.length > 0) {
       const groupUserIds = new Set<string>();
-      for (const groupId of groupIds) {
+      const { groups: realGroupIds, none: withoutGroup } = splitGroupFilter(groupIds);
+      for (const groupId of realGroupIds) {
         const groupUsers = await storage.getGroupUsers(groupId);
         groupUsers.forEach(u => groupUserIds.add(u.id));
+      }
+      // «Без группы» — участники, не состоящие ни в одной группе.
+      if (withoutGroup) {
+        const grouped = new Set<string>();
+        for (const group of await storage.getGroups()) {
+          (await storage.getGroupUsers(group.id)).forEach(u => grouped.add(u.id));
+        }
+        (await storage.getUsers()).filter(u => !grouped.has(u.id)).forEach(u => groupUserIds.add(u.id));
       }
 
       if (userIds.length > 0) {

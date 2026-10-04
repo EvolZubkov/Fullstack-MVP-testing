@@ -11,6 +11,7 @@
  * Модуль чистый — ни React, ни истории браузера: так его можно проверить без DOM, а страница
  * решает сама, когда писать адрес.
  */
+import { NO_GROUP_ID, NO_GROUP_LABEL } from "@shared/analytics/no-group";
 
 /** Источник прохождения. Совпадает с `ObservationSource` сервера. */
 export type RegistrySource = "web" | "telemetry" | "import";
@@ -223,7 +224,9 @@ export function describeConditions(
 
   const items: Array<{ id: string; label: string }> = [];
   for (const id of filter.testIds) items.push({ id: `test:${id}`, label: `Тест: ${testTitle(id)}` });
-  for (const id of filter.groupIds) items.push({ id: `group:${id}`, label: `Группа: ${groupName(id)}` });
+  for (const id of filter.groupIds) {
+    items.push({ id: `group:${id}`, label: id === NO_GROUP_ID ? NO_GROUP_LABEL : `Группа: ${groupName(id)}` });
+  }
   // Вариант и версия называются так же, как в срезах по этим осям: одно и то же условие не
   // должно на двух экранах читаться по-разному.
   for (const id of filter.formIds) {

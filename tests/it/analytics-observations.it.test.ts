@@ -306,6 +306,28 @@ describe("loadObservations", () => {
     expect(page.total).toBe(1);
     expect(page.rows[0].source).toBe("import");
   });
+
+  it("«Без группы» — участники вне групп и строки LMS без группы загрузки (замечание владельца 2026-10-04)", async () => {
+    const groupId = randomUUID();
+    await h.current!.db.insert(groups).values({ id: groupId, name: "Отдел продаж" } as never);
+    await h.current!.db.insert(userGroups).values({ id: randomUUID(), userId, groupId } as never);
+    const outsiderId = randomUUID();
+    await h.current!.db.insert(users).values({
+      id: outsiderId, email: "out@b.c", passwordHash: "x", name: "Вне групп",
+    } as never);
+    await webAttempt();                                  // в группе — не подходит
+    await webAttempt({ userId: outsiderId });            // вне групп — подходит
+    await lmsAttempt();                                  // телеметрия без группы — подходит
+    await lmsAttempt({ origin: "import", participantKey: "b".repeat(64), groupId, lmsUserName: null }); // метка группы — нет
+
+    const none = await loadObservations({ groupIds: ["none"] }, ALL_TESTS);
+    expect(none.total).toBe(2);
+    expect(none.rows.map(row => row.source).sort()).toEqual(["telemetry", "web"]);
+
+    // Вместе с группой — «или»: всё, кроме… ничего не теряется.
+    const both = await loadObservations({ groupIds: ["none", groupId] }, ALL_TESTS);
+    expect(both.total).toBe(4);
+  });
 });
 
 describe("партия импорта учитывается всегда (переключатель PRD-66 FR-12 снят, 0046)", () => {

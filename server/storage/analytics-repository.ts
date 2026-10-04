@@ -10,7 +10,7 @@
  * Репозиторий отдаёт сырые строки — приведение к наблюдению живёт в сервисе, потому что зависит
  * от правил оценивания, а не от хранения.
  */
-import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 
 import { db } from "../db";
@@ -19,6 +19,7 @@ import {
   type Attempt, type ScormAttempt,
 } from "@shared/schema";
 import { ORG_FIELDS, type OrgField } from "@shared/org-fields";
+import { splitGroupFilter } from "@shared/analytics/no-group";
 
 /** Колонка профиля и колонка прохождения для каждого оргполя. */
 const ORG_COLUMNS = {
@@ -219,6 +220,14 @@ export class AnalyticsRepository {
         and ${userGroups.groupId} in ${ids}
     )`;
     const { testIds, groupIds, sources, outcomes, formIds, snapshotIds, attemptIds } = query;
+    /**
+     * «Без группы» (`NO_GROUP_ID`) — участник не состоит ни в одной группе. Выбирается вместе с
+     * обычными группами, условия соединяются через «или».
+     */
+    const groupFilter = splitGroupFilter(groupIds);
+    const inNoGroup = (userIdColumn: unknown) => sql`not exists (
+      select 1 from ${userGroups} where ${userGroups.userId} = ${userIdColumn}
+    )`;
 
     /** Поимённый отбор: пустой список — ни одной строки, а не снятое условие. */
     const inAttemptIds = (column: typeof attempts.id | typeof scormAttempts.id) =>
@@ -288,7 +297,12 @@ export class AnalyticsRepository {
       ...(query.from ? [gte(attempts.startedAt, query.from)] : []),
       ...(query.to ? [lte(attempts.startedAt, query.to)] : []),
       ...(outcomes?.length ? [inArray(webOutcome, outcomes)] : []),
-      ...(groupIds?.length ? [inGroups(attempts.userId, groupIds)] : []),
+      ...(groupIds?.length
+        ? [or(
+            ...(groupFilter.groups.length ? [inGroups(attempts.userId, groupFilter.groups)] : []),
+            ...(groupFilter.none ? [inNoGroup(attempts.userId)] : []),
+          )!]
+        : []),
       ...(formIds?.length ? [webInForms(formIds)] : []),
       ...(snapshotIds?.length ? [inArray(attempts.snapshotId, snapshotIds)] : []),
       ...(attemptIds ? [inAttemptIds(attempts.id)] : []),
@@ -313,8 +327,11 @@ export class AnalyticsRepository {
       ...(query.to ? [lte(scormAttempts.startedAt, query.to)] : []),
       ...(groupIds?.length
         ? [or(
-            inArray(scormAttempts.groupId, groupIds),
-            inGroups(scormAttempts.userId, groupIds),
+            ...(groupFilter.groups.length
+              ? [inArray(scormAttempts.groupId, groupFilter.groups), inGroups(scormAttempts.userId, groupFilter.groups)]
+              : []),
+            // У прохождения из LMS «без группы» — нет и группы загрузки.
+            ...(groupFilter.none ? [and(isNull(scormAttempts.groupId), inNoGroup(scormAttempts.userId))!] : []),
           )!]
         : []),
       ...(outcomes?.length ? [inArray(lmsOutcome, outcomes)] : []),

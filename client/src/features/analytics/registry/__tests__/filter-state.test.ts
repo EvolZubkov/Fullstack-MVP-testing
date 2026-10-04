@@ -168,3 +168,14 @@ describe("filter-state", () => {
     });
   });
 });
+
+describe("«Без группы» (замечание владельца 2026-10-04)", () => {
+  it("чип называет значение словами, а не идентификатором", () => {
+    const items = describeConditions({ ...EMPTY_FILTER, groupIds: ["none"] }, { tests: [], groups: [] } as never);
+    expect(items.map(item => item.label)).toContain("Без группы");
+  });
+
+  it("живёт в адресе как groupId=none", () => {
+    expect(filterToSearch({ ...EMPTY_FILTER, groupIds: ["none"] })).toContain("groupId=none");
+  });
+});
