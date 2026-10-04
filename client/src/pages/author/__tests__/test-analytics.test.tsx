@@ -383,7 +383,8 @@ describe("<TestAnalyticsPage />", () => {
     };
     fetchMock.mockImplementation(async (input: string) => {
       const u = String(input);
-      const body = u === "/api/analytics/tests/t1" ? state.analyticsBody
+      // Переход «в другой тест» (t2) открывает его уровень вопроса — аналитика теста нужна и ему.
+      const body = u === "/api/analytics/tests/t1" || u === "/api/analytics/tests/t2" ? state.analyticsBody
         : u.startsWith("/api/analytics/psychometrics/t1/items/q1") ? breakdown
         : u.startsWith("/api/analytics/psychometrics/t1") ? state.psychometricsBody
         // Э3.3: «Вопрос в этом тесте» и «Этот вопрос в других тестах».
