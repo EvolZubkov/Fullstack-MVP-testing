@@ -11,7 +11,7 @@ import { TermHint } from "../term-hint";
 
 describe("TermHint", () => {
   it("glues the lucide Info icon to the last word", () => {
-    const { container } = render(<TermHint term="Время, медиана" hint="Подсказка" />);
+    const { container } = render(<TermHint entry="latency" />);
     const term = container.querySelector(".tb-term-hint__term")!;
     const tail = term.querySelector(".tb-term-hint__tail")!;
 
@@ -21,16 +21,23 @@ describe("TermHint", () => {
   });
 
   it("keeps a one-word term whole, with the icon", () => {
-    const { container } = render(<TermHint term="Вклад" hint="Подсказка" />);
+    const { container } = render(<TermHint entry="scaleContribution" />);
     const tail = container.querySelector(".tb-term-hint__tail")!;
     expect(tail.textContent).toBe("Вклад");
     expect(tail.querySelector("svg.lucide-info")).not.toBeNull();
   });
 
   it("wraps a non-text term together with the icon", () => {
-    const { container } = render(<TermHint term={<b>n</b>} hint="Подсказка" />);
+    const { container } = render(<TermHint entry="observations" term={<b>n</b>} />);
     const tail = container.querySelector(".tb-term-hint__tail")!;
     expect(tail.querySelector("b")?.textContent).toBe("n");
     expect(tail.querySelector("svg.lucide-info")).not.toBeNull();
+  });
+
+  it("takes the hint from the analytics glossary (Э4а)", async () => {
+    const { GLOSSARY } = await import("../../glossary");
+    const { container } = render(<TermHint entry="difficulty" />);
+    expect(container.querySelector(".tb-term-hint__term")?.textContent).toBe(GLOSSARY.difficulty.term);
+    expect(container.textContent).toContain(GLOSSARY.difficulty.hint);
   });
 });

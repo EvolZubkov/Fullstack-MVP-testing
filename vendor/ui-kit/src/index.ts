@@ -4,7 +4,7 @@ import {
 } from './components/AppShell';
 import { Avatar } from './components/Avatar';
 import { Banner } from './components/Banner';
-import { BarChart, Chart, LineChart, ProgressRing, DonutChart } from './components/Charts';
+import { BarChart, Chart, ChartLegendList, LineChart, ProgressRing, DonutChart } from './components/Charts';
 import { Box, Cluster, Grid, Stack } from './components/Layout';
 import { Breadcrumbs } from './components/Breadcrumbs';
 import { BudgetAllocation } from './components/BudgetAllocation';
@@ -87,7 +87,7 @@ export {
   AppShellSearch, AppShellUser, Avatar, Banner, Breadcrumbs, Button, Calendar, Center,
   IconBadge, Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia, BarChart,
   Chart, LineChart, ProgressRing, Checkbox, ChoiceCard, ChoiceCardGroup, ChoiceCardInset, Chip,
-  Collapsible, CollapsibleContent, CollapsibleTrigger, Label, DonutChart, ColorPicker,
+  Collapsible, CollapsibleContent, CollapsibleTrigger, Label, DonutChart, ChartLegendList, ColorPicker,
   Combobox, CommandPalette, DataGrid, DataGridProgress, DatePicker, Drawer, EmptyState, Fab,
   FabGroup, FabMenu, Matching, QuizMap, QuizSummary, Ranking, FileItem, FileTile, FileUploader,
   FilterBar, FormActions, FormCard, FormField, FormGroup, FormSection, GradientPicker,
@@ -128,6 +128,7 @@ export type {
   LineChartProps, LineSeries,
   BarChartProps, BarSeries,
   DonutChartProps, DonutSegment,
+  ChartLegendListProps, ChartLegendListItem,
   ProgressRingProps,
 } from './components/Charts';
 export type { CheckboxProps } from './components/Checkbox';

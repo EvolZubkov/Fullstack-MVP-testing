@@ -236,23 +236,6 @@ function versionLabel(
  * Трудность и дискриминативность повторяются в плитках и в таблице версий: текст у них один,
  * иначе один и тот же термин объяснялся бы по-разному.
  */
-const HINT = {
-  difficulty: "Средняя доля набранного балла: 0 — не решил никто, 1 — решили все. Приемлемо 0,20 — 0,80; выше 0,90 вопрос ничего не отсеивает.",
-  corrected: "Трудность за вычетом случайных попаданий — для вопроса с одним верным ответом. Ноль и ниже: вопрос решают не лучше, чем наугад. Частичное знание модель не учитывает.",
-  itemRest: "Отделяет ли вопрос сильных от слабых: корреляция балла за него с баллом за остальные вопросы формы. Хорошо от 0,30, отрицательная — почти всегда ошибка в ключе.",
-  discrimination: "Разница доли балла у сильных и слабых — верхних и нижних 27 % участников. От 0,30 — хорошо, ниже 0,20 — слабо, отрицательный — дефект.",
-  intent: "Трудность, заявленная автором, рядом с наблюдаемой, в одной шкале 0 — 100. Расхождение больше 10 пунктов: вопрос оказался легче или труднее задуманного.",
-  time: "Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.",
-  share: "Доля всех участников, выбравших этот вариант. Вариант, который почти никто не выбирает, не работает как дистрактор.",
-  bottom: "Нижние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. Дистрактор работает, когда здесь больше, чем у сильных.",
-  top: "Верхние 27 % участников по баллу за весь тест. Число — доля ИЗ ЭТОЙ ГРУППЫ, выбравшая вариант; колонка целиком даёт 100 %. У верного ответа здесь должно быть больше, чем у слабых.",
-  optionRest: "Корреляция выбора варианта с баллом за остальные вопросы. У верного ответа должна быть положительной, у дистрактора — отрицательной. Положительная у дистрактора значит, что его выбирают сильные: вариант частично верен либо ключ неверен.",
-  optionQuality: "Работает ли вариант: у верного ответа выбор должен расти с баллом, у дистрактора — падать. «Выбирают сильные» — дистрактор притягивает тех, кто знает материал.",
-  version: "Версия текста вопроса. После правки формулировки наблюдения копятся заново: числа разных редакций описывают разные вопросы и не складываются.",
-  versionN: "Сколько участников видели вопрос в этой редакции. Коэффициенты считаются с 30 наблюдений, надёжными становятся со 100.",
-  cardStats: "По какой редакции посчитаны плитки и варианты ответа выше. По умолчанию — текущая; другую выбирают кнопкой «Показать».",
-} as const;
-
 /** Карточка разбора задания. */
 /**
  * Подзаголовок разбора — «Тема · подтема · N наблюдений» (эскиз); пустые части не печатаются.
@@ -319,7 +302,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
     {
       key: "share",
       width: "9%",
-      header: <TermHint term="Выбрали" hint={HINT.share} />,
+      header: <TermHint entry="optionShare" />,
       align: "center" as const,
       numeric: true,
       render: (row: OptionRow) => <Text variant="body-s">{percent(row.share)}</Text>,
@@ -328,14 +311,14 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
       key: "bottom",
       align: "center" as const,
       width: "17%",
-      header: <TermHint term={`Слабые ${groupPercent}`} hint={HINT.bottom} />,
+      header: <TermHint entry="optionBottom" term={`Слабые ${groupPercent}`} />,
       render: (row: OptionRow) => <ShareScale value={row.bottomShare} />,
     },
     {
       key: "top",
       align: "center" as const,
       width: "17%",
-      header: <TermHint term={`Сильные ${groupPercent}`} hint={HINT.top} />,
+      header: <TermHint entry="optionTop" term={`Сильные ${groupPercent}`} />,
       render: (row: OptionRow) => <ShareScale value={row.topShare} />,
     },
     {
@@ -343,7 +326,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
       width: "12%",
       // Неразрывный пробел держит предлог при слове: в колонке 10 % заголовок иначе ломался в три
       // строки с одиноким «с» посередине, а так — не больше двух.
-      header: <TermHint term={"Корреляция с остатком"} hint={HINT.optionRest} />,
+      header: <TermHint entry="optionRest" term="Корреляция с остатком" />,
       align: "center" as const,
       numeric: true,
       render: (row: OptionRow) => <Text variant="body-s">{num(row.restCorrelation)}</Text>,
@@ -352,7 +335,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
       key: "flag",
       align: "center" as const,
       width: "17%",
-      header: <TermHint term="Качество варианта" hint={HINT.optionQuality} />,
+      header: <TermHint entry="optionQuality" />,
       render: (row: OptionRow) => {
         const flag = optionFlag(row);
         return <Tag tone={flag.tone} size="s">{flag.label}</Tag>;
@@ -379,7 +362,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
           <CardBody>
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{num(item.difficulty)}</Text>
-              <Text variant="body-s" tone="muted"><TermHint term="Трудность" hint={HINT.difficulty} /></Text>
+              <Text variant="body-s" tone="muted"><TermHint entry="difficulty" /></Text>
               <Text variant="body-xs" tone="subtle">{difficultyCaption(item.difficulty)}</Text>
             </Stack>
           </CardBody>
@@ -389,7 +372,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
             <CardBody>
               <Stack gap={1} align="center">
                 <Text variant="display-s" weight="bold">{num(item.correctedDifficulty)}</Text>
-                <Text variant="body-s" tone="muted"><TermHint term="С поправкой на угадывание" hint={HINT.corrected} /></Text>
+                <Text variant="body-s" tone="muted"><TermHint entry="corrected" /></Text>
                 {/* Сколько вариантов и какой доли ждать от случайного выбора — как в эскизе.
                     FR-17b (частичное знание модель не учитывает) эскиз перенёс в подсказку
                     термина: под числом у каждой плитки одна строка. */}
@@ -406,7 +389,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
           <CardBody>
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{num(item.itemRest)}</Text>
-              <Text variant="body-s" tone="muted"><TermHint term="Дискриминативность (r)" hint={HINT.itemRest} /></Text>
+              <Text variant="body-s" tone="muted"><TermHint entry="itemRest" term="Дискриминативность (r)" /></Text>
               <Text variant="body-xs" tone="subtle">корреляция вопрос-остаток · хорошо от 0,30</Text>
             </Stack>
           </CardBody>
@@ -415,7 +398,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
           <CardBody>
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{num(item.discrimination)}</Text>
-              <Text variant="body-s" tone="muted"><TermHint term="Индекс дискриминации (D)" hint={HINT.discrimination} /></Text>
+              <Text variant="body-s" tone="muted"><TermHint entry="discrimination" /></Text>
               <Text variant="body-xs" tone="subtle">
                 {/* Эскиз: «крайние четверти, 27 % · хорошо 0,30 — 0,39» — расшифровка из FR-14a
                     и полоса FR-14, в которую попало число. */}
@@ -433,7 +416,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 <Text variant="display-s" weight="bold">
                   {item.declaredDifficulty} → {observedHardness === null ? "—" : observedHardness}
                 </Text>
-                <Text variant="body-s" tone="muted"><TermHint term="Замысел и наблюдение" hint={HINT.intent} /></Text>
+                <Text variant="body-s" tone="muted"><TermHint entry="intent" /></Text>
                 {/* FR-18a: два числа и вывод о расхождении — без вывода плитка ничего не утверждает. */}
                 <Text variant="body-xs" tone="subtle">{intentVerdict(item.declaredDifficulty, observedHardness)}</Text>
               </Stack>
@@ -445,7 +428,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
             <CardBody>
               <Stack gap={1} align="center">
                 <Text variant="display-s" weight="bold">{duration(item.timing.medianMs)}</Text>
-                <Text variant="body-s" tone="muted"><TermHint term="Время, медиана" hint={HINT.time} /></Text>
+                <Text variant="body-s" tone="muted"><TermHint entry="latency" /></Text>
                 <Text variant="body-xs" tone="subtle">
                   половина ответов {duration(item.timing.q1Ms)} — {duration(item.timing.q3Ms)} · {item.timing.measured} {pluralize(item.timing.measured, "наблюдение", "наблюдения", "наблюдений")}
                 </Text>
@@ -501,7 +484,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 {
                   key: "version",
                   width: "30%",
-                  header: <TermHint term="Редакция" hint={HINT.version} />,
+                  header: <TermHint entry="version" />,
                   frozen: true,
                   render: (row: VersionRow) => {
                     // FR-49b: серия, собранная до появления штампа, выбирается так же, как
@@ -521,7 +504,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 {
                   key: "observations",
                   width: "10%",
-                  header: <TermHint term="n" hint={HINT.versionN} />,
+                  header: <TermHint entry="versionN" />,
                   align: "center" as const,
                   numeric: true,
                   render: (row: VersionRow) => <Text variant="body-s">{row.observations}</Text>,
@@ -529,7 +512,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 {
                   key: "difficulty",
                   width: "16%",
-                  header: <TermHint term="Трудность" hint={HINT.difficulty} />,
+                  header: <TermHint entry="difficulty" />,
                   align: "center" as const,
                   numeric: true,
                   render: (row: VersionRow) => (
@@ -539,7 +522,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                 {
                   key: "itemRest",
                   width: "22%",
-                  header: <TermHint term="Дискриминативность" hint={HINT.itemRest} />,
+                  header: <TermHint entry="itemRest" />,
                   align: "center" as const,
                   numeric: true,
                   render: (row: VersionRow) => (
@@ -552,7 +535,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
                   key: "action",
                   align: "center" as const,
                   width: "22%",
-                  header: <TermHint term="Статистика карточки" hint={HINT.cardStats} />,
+                  header: <TermHint entry="cardStats" />,
                   render: (row: VersionRow) => {
                     // FR-49a: отметка выбранной редакции переезжает в нажатую строку. «Показать
                     // все вместе» нет: наблюдения разных редакций не складываются.

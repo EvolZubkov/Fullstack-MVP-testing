@@ -29,7 +29,7 @@ import { pluralize } from "@/lib/i18n";
 
 import { percent } from "../format";
 import { DeliveryExclusionDialog, type ExclusionTarget } from "./delivery-exclusion-dialog";
-import { COEFFICIENT_MIN, DIFFICULTY_HINT, ITEM_REST_HINT, num } from "./psychometrics-format";
+import { COEFFICIENT_MIN, num } from "./psychometrics-format";
 import { QuestionRowMenu } from "./question-row-menu";
 import { TermHint } from "./term-hint";
 
@@ -39,15 +39,6 @@ import { TermHint } from "./term-hint";
  * «Качество вопросов» (`psychometrics-format`): одна величина на двух экранах не объясняется
  * двумя способами.
  */
-const HINTS = {
-  skip: "Доля показов, в которых на вопрос не ответили. Считается по веб-прохождениям: состав выданной формы пакет SCORM не сообщает.",
-  exposure: "Доля прохождений, в которые попал вопрос. Высокая экспозиция при малом банке — ответ быстро становится известен.",
-  latency: "Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.",
-  declared: "Трудность, которую автор заявил при создании вопроса: 0 — легко, 100 — сложно. Сравнивается с наблюдаемой в разборе вопроса.",
-  points: "Сколько баллов вопрос приносит в этом тесте: цена, заданная вопросу в тесте, иначе цена раздела, иначе цена теста.",
-  otherTests: "В скольких других тестах вопрос выдавался за окно наблюдения экспозиции (по умолчанию 12 месяцев). Вопрос, который показывают в нескольких тестах, быстрее становится известен.",
-} as const;
-
 /** Признак ревизии — то, что отдаёт `GET /api/analytics/tests/:testId`. */
 export interface ReviewFlagView {
   kind: string;
@@ -501,7 +492,7 @@ export function QuestionTable({
       {
         key: "difficulty",
         ...share("10%"),
-        header: <TermHint term="Трудность" hint={DIFFICULTY_HINT} />,
+        header: <TermHint entry="difficulty" />,
         numeric: true,
         align: "center" as const,
         sortable: true,
@@ -512,7 +503,7 @@ export function QuestionTable({
       {
         key: "itemRest",
         ...share("15%"),
-        header: <TermHint term="Дискриминативность" hint={ITEM_REST_HINT} />,
+        header: <TermHint entry="itemRest" />,
         numeric: true,
         align: "center" as const,
         sortable: true,
@@ -541,7 +532,7 @@ export function QuestionTable({
     {
       key: "skip",
       ...share("9%"),
-      header: <TermHint term="Пропуски" hint={HINTS.skip} />,
+      header: <TermHint entry="skip" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
@@ -555,7 +546,7 @@ export function QuestionTable({
       ...share("10%"),
       // «Экспозиция» — как в эскизе и в пояснении под таблицей: то же слово, что у профиля
       // банка на вкладке «Выдача» (PRD-55).
-      header: <TermHint term="Экспозиция" hint={HINTS.exposure} />,
+      header: <TermHint entry="exposure" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
@@ -566,7 +557,7 @@ export function QuestionTable({
       // видели, и для износа задания оно не в счёт (PRD-55 FR-32).
       key: "otherTests",
       ...share("7%"),
-      header: <TermHint term="Другие тесты" hint={HINTS.otherTests} />,
+      header: <TermHint entry="otherTests" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
@@ -575,7 +566,7 @@ export function QuestionTable({
     {
       key: "latency",
       ...share("10%"),
-      header: <TermHint term="Время, медиана" hint={HINTS.latency} />,
+      header: <TermHint entry="latency" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
@@ -590,7 +581,7 @@ export function QuestionTable({
     ...(measurement ? [] : [{
       key: "declared",
       ...share("8%"),
-      header: <TermHint term="Замысел" hint={HINTS.declared} />,
+      header: <TermHint entry="intent" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
@@ -600,7 +591,7 @@ export function QuestionTable({
       // называла бы одну цену, а результат участника считался бы по другой.
       key: "points",
       ...share("7%"),
-      header: <TermHint term="Цена" hint={HINTS.points} />,
+      header: <TermHint entry="points" />,
       numeric: true,
       align: "center" as const,
       sortable: true,

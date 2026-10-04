@@ -18,11 +18,15 @@
  *
  * Пузырь выводится поверх страницы (`FloatingHint`): внутри таблицы его обрезала рамка, а у
  * последних колонок скрытый пузырь включал горизонтальную прокрутку.
+ *
+ * Э4а: текст подсказки берётся из словаря аналитики (`glossary.ts`) по ключу `entry`; подпись
+ * можно заменить (`term`), пояснение — нет: одно слово объясняется везде одинаково.
  */
 import type { ReactNode } from "react";
 import { Info } from "lucide-react";
 
 import { FloatingHint } from "./floating-hint";
+import { GLOSSARY, type GlossaryKey } from "../glossary";
 
 /** Значок подсказки: lucide `Info` в 14 px — в 12 px его черта и точка не читаются. */
 const HINT_ICON = <Info size={14} aria-hidden="true" className="tb-term-hint__icon" />;
@@ -51,23 +55,24 @@ function withIcon(term: ReactNode): ReactNode {
 
 /** Свойства термина с подсказкой. */
 export interface TermHintProps {
-  /** Сам термин — то, что читается в заголовке или под числом плитки. */
-  term: ReactNode;
-  /** Текст подсказки — дословно из эскиза. */
-  hint: string;
+  /** Запись словаря аналитики: из неё берутся пояснение и, если `term` не задан, подпись. */
+  entry: GlossaryKey;
+  /** Подпись вместо словарной — «Дискриминативность (r)» у плитки, «Слабые 27 %» у колонки. */
+  term?: ReactNode;
 }
 
 /**
  * Термин с подсказкой (FR-14b).
  *
- * @param props - термин и текст подсказки
+ * @param props - запись словаря и, при необходимости, своя подпись
  * @returns триггер подсказки; значок рисует стиль термина и держится при последнем слове
  */
-export function TermHint({ term, hint }: TermHintProps) {
+export function TermHint({ entry, term }: TermHintProps) {
+  const record = GLOSSARY[entry];
   return (
     // `tb-term-hint` — метка для раскладки заголовка в `tb-components.css`.
-    <FloatingHint content={hint} className="tb-term-hint">
-      <span className="tb-term-hint__term">{withIcon(term)}</span>
+    <FloatingHint content={record.hint} className="tb-term-hint">
+      <span className="tb-term-hint__term">{withIcon(term ?? record.term)}</span>
     </FloatingHint>
   );
 }

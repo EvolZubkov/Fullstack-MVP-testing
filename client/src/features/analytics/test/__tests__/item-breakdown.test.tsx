@@ -61,7 +61,7 @@ describe("ItemBreakdownPanel", () => {
 
     for (const term of [
       "Трудность", "С поправкой на угадывание", "Дискриминативность (r)", "Индекс дискриминации (D)",
-      "Замысел и наблюдение", "Время, медиана",
+      "Сложность: задана → по ответам", "Время, медиана",
       "Выбрали", "Слабые 27 %", "Сильные 27 %", "Корреляция с остатком", "Качество варианта",
     ]) {
       const label = screen.getByText(termOrText(term));
@@ -201,7 +201,7 @@ describe("ItemBreakdownPanel", () => {
       item: { ...view().item, declaredDifficulty: null },
     })} onBack={() => {}} />);
 
-    expect(screen.queryByText(termOrText("Замысел и наблюдение"))).toBeNull();
+    expect(screen.queryByText(termOrText("Сложность: задана → по ответам"))).toBeNull();
   });
 
   it("работающие верный ответ и дистрактор — «Работает», мёртвый — «Мёртвый вариант» (эскиз)", () => {

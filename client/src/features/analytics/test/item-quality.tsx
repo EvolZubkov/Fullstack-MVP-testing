@@ -31,7 +31,7 @@ import type { QuestionType } from "@shared/questions/question-type";
 import { pluralize } from "@/lib/i18n";
 
 import { DeliveryExclusionDialog, type ExclusionTarget } from "./delivery-exclusion-dialog";
-import { COEFFICIENT_MIN, DIFFICULTY_HINT, ITEM_REST_HINT, num } from "./psychometrics-format";
+import { COEFFICIENT_MIN, num } from "./psychometrics-format";
 import { QuestionRowMenu } from "./question-row-menu";
 import { TermHint } from "./term-hint";
 import { percent, percentNumber, percentOfShare } from "../format";
@@ -489,16 +489,6 @@ function withinRank(row: ItemQualityRow, heuristic?: ReviewHeuristic): number {
  * Толкования терминов вкладки (FR-14b) — дословно из эскиза prd66-item-quality, состояния
  * wf-quality и wf-quality-thin. Трудность и дискриминативность — общие с вкладкой «Вопросы».
  */
-const HINTS = {
-  flag: "Что не так с вопросом — по числам этой же строки; пусто, если по ним всё в порядке. Сортировка — по силе подозрения, от прямых дефектов к спокойным вопросам.",
-  state: "Сколько наблюдений собрано и сколько ещё нужно: коэффициенты вопроса считаются с 30 наблюдений. До порога признака у вопроса нет — не потому, что он здоров.",
-  observations: "Сколько участников выборки видели этот вопрос. Коэффициенты считаются с 30 наблюдений, надёжными становятся со 100.",
-  alpha: "Насколько согласованно вопросы теста меряют одно и то же. От 0,70 — приемлемо, от 0,80 — хорошо; ниже итоговый балл заметно зависит от случая.",
-  sem: "На сколько процентных пунктов балл участника может отклониться от его истинного уровня. Интервал вокруг балла — ±1,96 ошибки: в нём с вероятностью 95 % лежит истинный уровень.",
-  suspicious: "Сколько вопросов получили отметку в колонке «Что не так». Их стоит проверить первыми.",
-  reliable: "Сколько вопросов набрали 100 наблюдений и больше: их коэффициенты устойчивы. У остальных числа ориентировочные или ещё не считаются.",
-} as const;
-
 /** Вид таблицы «Качества вопросов». */
 export type QualityView = "all" | "suspicious" | "thin";
 type View = QualityView;
@@ -669,8 +659,8 @@ export function ItemQualityPanel({
       width: thin ? "27%" : "26%",
       // FR-46: пока данных мало, колонка говорит не о симптоме, а о том, сколько добрать.
       header: thin
-        ? <TermHint term="Состояние" hint={HINTS.state} />
-        : <TermHint term="Что не так" hint={HINTS.flag} />,
+        ? <TermHint entry="state" />
+        : <TermHint entry="flag" />,
       render: (row: ItemQualityRow) => {
         // Эскиз prd66-item-quality, состояние quality-thin: вопрос пула без наблюдений.
         if (row.neverDelivered) {
@@ -718,7 +708,7 @@ export function ItemQualityPanel({
       key: "difficulty",
       sortable: true,
       width: thin ? "15%" : "13%",
-      header: <TermHint term="Трудность" hint={DIFFICULTY_HINT} />,
+      header: <TermHint entry="difficulty" />,
       numeric: true,
       align: "center" as const,
       // Трудность живёт при пороге наблюдений инстанса, а коэффициенты — при 30 и 100
@@ -743,7 +733,7 @@ export function ItemQualityPanel({
       key: "itemRest",
       sortable: true,
       width: thin ? "18%" : "17%",
-      header: <TermHint term="Дискриминативность" hint={ITEM_REST_HINT} />,
+      header: <TermHint entry="itemRest" />,
       numeric: true,
       align: "center" as const,
       render: (row: ItemQualityRow) => (row.neverDelivered ? <NoObservations /> : (
@@ -759,7 +749,7 @@ export function ItemQualityPanel({
       // меню нет — 34 / 27 / 15 / 18 / 6 %. При фиксированной раскладке (`tb-psy-grid`) они и
       // есть ширины: «n» больше не уезжает за горизонтальную прокрутку.
       width: thin ? "6%" : "8%",
-      header: <TermHint term="n" hint={HINTS.observations} />,
+      header: <TermHint entry="observations" />,
       numeric: true,
       align: "center" as const,
       render: (row: ItemQualityRow) => <Text variant="body-s">{row.observations}</Text>,
@@ -833,8 +823,8 @@ export function ItemQualityPanel({
               {/* FR-20: оценка по связям заданий — не альфа полного набора, и заголовок это говорит. */}
               <Text variant="body-s" tone="muted">
                 <TermHint
+                  entry="testAlpha"
                   term={reliability?.method === "pairwise" ? "Надёжность (оценка)" : "Надёжность (альфа)"}
-                  hint={HINTS.alpha}
                 />
               </Text>
               <Text variant="body-xs" tone="subtle">
@@ -870,7 +860,7 @@ export function ItemQualityPanel({
               <Text variant="display-s" weight="bold">
                 {view.semPercent === null || view.semPercent === undefined ? "—" : `${num(view.semPercent, 1)} п.п.`}
               </Text>
-              <Text variant="body-s" tone="muted"><TermHint term="Ошибка измерения" hint={HINTS.sem} /></Text>
+              <Text variant="body-s" tone="muted"><TermHint entry="sem" /></Text>
               <Text variant="body-xs" tone="subtle">интервал вокруг балла</Text>
             </Stack>
           </CardBody>
@@ -879,7 +869,7 @@ export function ItemQualityPanel({
           <CardBody>
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{suspiciousCount}</Text>
-              <Text variant="body-s" tone="muted"><TermHint term="Под подозрением" hint={HINTS.suspicious} /></Text>
+              <Text variant="body-s" tone="muted"><TermHint entry="suspicious" /></Text>
               <Text variant="body-xs" tone="subtle">из {view.items.length} {pluralize(view.items.length, "вопроса", "вопросов", "вопросов")}</Text>
             </Stack>
           </CardBody>
@@ -888,7 +878,7 @@ export function ItemQualityPanel({
           <CardBody>
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{reliableCount}</Text>
-              <Text variant="body-s" tone="muted"><TermHint term="Вопросов с надёжной оценкой" hint={HINTS.reliable} /></Text>
+              <Text variant="body-s" tone="muted"><TermHint entry="reliable" /></Text>
               <Text variant="body-xs" tone="subtle">n не меньше 100</Text>
             </Stack>
           </CardBody>

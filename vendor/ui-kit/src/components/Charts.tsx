@@ -765,6 +765,42 @@ const RAMP = [
   'var(--ou-ramp-7)',
 ];
 
+/** Строка легенды: цвет, подпись и значение справа. */
+export interface ChartLegendListItem {
+  /** Ключ строки. По умолчанию — индекс. */
+  id?: string;
+  /** Произвольный CSS-цвет метки (или CSS-переменная). */
+  color: string;
+  label: React.ReactNode;
+  /** Текст справа — обычно доля в процентах. */
+  value?: React.ReactNode;
+}
+
+export interface ChartLegendListProps extends React.HTMLAttributes<HTMLUListElement> {
+  items: ChartLegendListItem[];
+}
+
+/**
+ * Легенда списком: цветная метка, подпись, значение справа.
+ *
+ * Та же разметка, что у легенды `DonutChart` (`ou-donut__legend`), вынесенная отдельно:
+ * легенду без кольца рисуют и рядом с полосой долей, и во всплывающей подсказке.
+ */
+export const ChartLegendList = forwardRef<HTMLUListElement, ChartLegendListProps>(
+  ({ items, className, ...rest }, ref) => (
+    <ul ref={ref} className={cn('ou-donut__legend', className)} {...rest}>
+      {items.map((item, index) => (
+        <li className="ou-donut__legend-item" key={item.id ?? index}>
+          <span className={cn('ou-donut__dot', cssStyleClass({ background: item.color }, 'ou-donut-dot'))} />
+          <span className="ou-donut__legend-name">{item.label}</span>
+          {item.value !== undefined && <span className="ou-donut__legend-value">{item.value}</span>}
+        </li>
+      ))}
+    </ul>
+  ),
+);
+ChartLegendList.displayName = 'ChartLegendList';
+
 export interface DonutSegment {
   /** Ключ строки. По умолчанию — индекс. */
   id?: string;
@@ -853,19 +889,14 @@ export const DonutChart = forwardRef<HTMLDivElement, DonutChartProps>(
         </div>
 
         {showLegend && (
-          <ul className="ou-donut__legend">
-            {segments.map((segment, index) => (
-              <li className="ou-donut__legend-item" key={segment.id ?? index}>
-                <span
-                  className={cn('ou-donut__dot', cssStyleClass({ background: colorOf(index) }, 'ou-donut-dot'))}
-                />
-                <span className="ou-donut__legend-name">{segment.label}</span>
-                <span className="ou-donut__legend-value">
-                  {segment.valueLabel ?? `${Math.round(shareOf(index) * 100)}%`}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ChartLegendList
+            items={segments.map((segment, index) => ({
+              id: segment.id,
+              color: colorOf(index),
+              label: segment.label,
+              value: segment.valueLabel ?? `${Math.round(shareOf(index) * 100)}%`,
+            }))}
+          />
         )}
       </div>
     );

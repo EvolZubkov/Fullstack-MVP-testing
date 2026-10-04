@@ -99,19 +99,6 @@ const RELIABILITY_GAP: Record<string, string> = {
  *
  * Внутри шкалы опросника единица — «пункт», а не «вопрос».
  */
-const HINT = {
-  items: "Сколько пунктов опросника вносят вклад в шкалу. Альфа по двум-трём пунктам ненадёжна сама по себе.",
-  alpha: "Насколько согласованно пункты шкалы меряют одно и то же. Приемлемо от 0,70, хорошо от 0,80. У ипсативной методики занижена по построению и дефектом не считается.",
-  respondents: "Сколько участников ответили на все пункты шкалы: по ним считается альфа.",
-  verdict: "Годится ли шкала: альфа от 0,70 — приемлемо, от 0,80 — хорошо. Ниже — пункты шкалы меряют разное.",
-  contribution: "С каким знаком ответ на пункт входит в шкалу. У обратного пункта вклад должен быть отрицательным — иначе он портит согласованность шкалы.",
-  itemRest: "Связь ответа на этот пункт с суммой по ОСТАЛЬНЫМ пунктам той же шкалы. Показывает, тянет ли пункт в ту же сторону, что шкала целиком. Отрицательная — пункт работает против своей шкалы: чаще всего у обратного пункта забыли поставить отрицательный вклад.",
-  quality: "Что не так с пунктом: «Работает против шкалы» — ответы идут противоположно остальным пунктам; «мёртвый» — почти все выбирают одну градацию.",
-  // Одна форма гистограммы на все случаи (решение владельца 2026-09-26, FR-30): номера под
-  // столбиками, словами — только края, расшифровка номеров — в подсказке ячейки.
-  distribution: "Доли участников по градациям ответа. Под столбиками — номера градаций, словами подписаны крайние; расшифровка номеров — в подсказке ячейки.",
-} as const;
-
 /**
  * Число градаций словом, с прописной — оно открывает подзаголовок карточки («Пять градаций
  * ответа»). Больше десяти — цифрами: словом такое число читается хуже, чем числом.
@@ -289,7 +276,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
     {
       key: "items",
       width: "10%",
-      header: <TermHint term="Пунктов" hint={HINT.items} />,
+      header: <TermHint entry="scaleItems" />,
       align: "center" as const,
       numeric: true,
       render: (row: ScaleQualityRow) => (
@@ -301,7 +288,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
     {
       key: "alpha",
       width: "10%",
-      header: <TermHint term="Альфа Кронбаха" hint={HINT.alpha} />,
+      header: <TermHint entry="scaleAlpha" />,
       align: "center" as const,
       numeric: true,
       render: (row: ScaleQualityRow) => (
@@ -313,7 +300,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
     {
       key: "respondents",
       width: "8%",
-      header: <TermHint term="n" hint={HINT.respondents} />,
+      header: <TermHint entry="scaleRespondents" />,
       align: "center" as const,
       numeric: true,
       render: (row: ScaleQualityRow) => (
@@ -325,7 +312,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
     {
       key: "verdict",
       width: "46%",
-      header: <TermHint term="Вывод по шкале" hint={HINT.verdict} />,
+      header: <TermHint entry="scaleVerdict" />,
       render: (row: ScaleQualityRow) => <ScaleVerdict scale={row} />,
     },
   ];
@@ -376,7 +363,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
           {
             key: "contribution",
             width: "8%",
-            header: <TermHint term="Вклад" hint={HINT.contribution} />,
+            header: <TermHint entry="scaleContribution" />,
             align: "center" as const,
             numeric: true,
             render: (row: ScaleItemRow) => {
@@ -409,7 +396,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
             // Перенос после первого слова (решение владельца 2026-09-26): «Корреляция» /
             // «с остатком шкалы», а не как придётся по ширине колонки. Пробел перед <br /> держит
             // термин одним текстом для поиска и экранного диктора.
-            header: <TermHint term={<>Корреляция <br />с остатком шкалы</>} hint={HINT.itemRest} />,
+            header: <TermHint entry="scaleItemRest" term={<>Корреляция <br />с остатком шкалы</>} />,
             align: "center" as const,
             numeric: true,
             render: (row: ScaleItemRow) => <Text variant="body-s">{num(row.itemRest)}</Text>,
@@ -418,7 +405,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
             key: "distribution",
             align: "center" as const,
             width: "34%",
-            header: <TermHint term="Распределение ответов" hint={HINT.distribution} />,
+            header: <TermHint entry="scaleDistribution" />,
             render: (row: ScaleItemRow) => (
               <GradeHistogram distribution={row.distribution} labels={row.gradeLabels} />
             ),
@@ -427,7 +414,7 @@ export function ScaleQualityPanel({ scales }: ScaleQualityPanelProps) {
             key: "flag",
             align: "center" as const,
             width: "20%",
-            header: <TermHint term="Качество пункта" hint={HINT.quality} />,
+            header: <TermHint entry="scaleItemQuality" />,
             render: (row: ScaleItemRow) => {
               if (row.againstScale) {
                 return (
