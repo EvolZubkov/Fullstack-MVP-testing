@@ -249,6 +249,7 @@
   
       /* Э7: дерево банка в оболочке приложения — во всю ширину области, как в продукте. */
       .ou-shell__main .cb-wrap { max-width: none; margin: 0; padding: 0; }
+      .ou-filterbar__search .ou-field { width: 100%; }
       /* Колонки, как в продукте сегодня: Название | Владелец | Индекс | Сложность | Вопросов | ⋯ */
       .wf-cb-content .cb-thead, .wf-cb-content .cb-row { grid-template-columns: 1fr 160px 96px 110px 110px 48px; }
       /* Набор «Качество»: Название | На ревизии | Переэкспонированы | Не выдавались | Тестов | ⋯ */
@@ -407,8 +408,6 @@
       <span class="wf-nav-title">Банк:</span>
       <button type="button" class="active" onclick="showState(this, 'bank-content')">Содержание</button>
       <button type="button" onclick="showState(this, 'bank-quality')">Качество</button>
-      <button type="button" onclick="showState(this, 'bank-filters')">фильтр</button>
-      <button type="button" onclick="showState(this, 'bank-filtered')">отобрано</button>
       <button type="button" onclick="showState(this, 'bank-qmenu')">меню вопроса</button>
       <button type="button" onclick="showState(this, 'bank-drawer')">ящик вопроса</button>
       <span class="wf-nav-sep"></span>
@@ -617,16 +616,19 @@
             <p class="ou-text ou-text--body-m ou-text--tone-muted">Единое дерево: папки, темы и вопросы в них.</p>
           </div>
           <div class="cb-wrap">
-    <div class="cb-toolbar">
-      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
-      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null, 'bank-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
-      <span class="cb-spacer"></span>
-      <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
-      <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
-      <span class="tb-fold-actions">
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
-      </span>
+    <div class="ou-filterbar">
+      <div class="ou-filterbar__row">
+        <div class="ou-filterbar__search"><div class="ou-field ou-field--s"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span></button>
+        <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+          <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
+          <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
+          <span class="tb-fold-actions">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+          </span>
+        </div>
+      </div>
     </div>
 
 
@@ -695,16 +697,19 @@
             <p class="ou-text ou-text--body-m ou-text--tone-muted">Единое дерево: папки, темы и вопросы в них.</p>
           </div>
           <div class="cb-wrap">
-    <div class="cb-toolbar">
-      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
-      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null, 'bank-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
-      <span class="cb-spacer"></span>
-      <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
-      <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
-      <span class="tb-fold-actions">
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
-      </span>
+    <div class="ou-filterbar">
+      <div class="ou-filterbar__row">
+        <div class="ou-filterbar__search"><div class="ou-field ou-field--s"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span></button>
+        <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+          <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
+          <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
+          <span class="tb-fold-actions">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+          </span>
+        </div>
+      </div>
     </div>
 
 
@@ -756,218 +761,6 @@
         <div class="cb-cell"><span class="cb-zero">0</span></div><div class="cb-cell">2</div><div class="cb-cell">11</div><div class="cb-cell">3</div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
-    </div>
-          </div>
-        </main>
-      </div>
-
-    </div>
-
-    <div id="wf-bank-filters" class="wf-state">
-      <div class="ou-shell">
-        <div class="ou-shell__side" data-wf-side-bank></div>
-        <header class="ou-shell__header" data-wf-header></header>
-        <main class="ou-shell__main">
-          <div class="wf-bank-head">
-            <h1 class="ou-text ou-text--heading-l">Темы и вопросы</h1>
-            <p class="ou-text ou-text--body-m ou-text--tone-muted">Единое дерево: папки, темы и вопросы в них.</p>
-          </div>
-          <div class="cb-wrap">
-    <div class="cb-toolbar">
-      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
-      <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null, 'bank-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры <span class="ou-tag ou-tag--neutral ou-tag--s">1</span></button>
-      <span class="cb-spacer"></span>
-      <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
-      <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
-      <span class="tb-fold-actions">
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
-      </span>
-    </div>
-
-    <div class="ou-card ou-card--outlined cb-filterpop" role="dialog" aria-label="Фильтры">
-      <div class="cb-filterpop__body">
-        <div class="cb-facet">
-          <span class="cb-facet__lbl">Тип вопроса</span>
-          <div class="cb-facet__row">
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Один ответ</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Несколько ответов</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Соответствие</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Ранжирование</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Шкала</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Распределение баллов</span></span></label>
-          </div>
-        </div>
-        <div class="cb-facet cb-facet--wide">
-          <span class="cb-facet__lbl">Сложность</span>
-          <div class="cb-diffrow">
-            <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.cb-facet').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задана</span></span></label>
-            <div class="cb-cond cb-diffrow__ctrl">
-              <div class="ou-slider ou-slider--h" aria-label="Интервал сложности">
-                <div class="ou-slider__header"><span class="ou-slider__lbl">Интервал</span><span class="ou-slider__val"><strong>0 — 100</strong></span></div>
-                <div class="ou-slider__rail">
-                  <div class="ou-slider__fill" style="left:0%;right:0%"></div>
-                  <div class="ou-slider__marks">
-                    <span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span>
-                    <span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span>
-                    <span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span>
-                  </div>
-                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:0%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Сложность — нижняя граница"></div>
-                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:100%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100" aria-label="Сложность — верхняя граница"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="cb-facet cb-facet--wide">
-          <span class="cb-facet__lbl">Теги (подтемы)</span>
-          <div class="ou-field ou-field--m">
-            <div class="ou-field__box wf-tags-box">
-              
-              <input class="wf-tags-input" type="text" placeholder="Добавить тег…" aria-label="Добавить тег" />
-            </div>
-          </div>
-        </div>
-        <div class="cb-facet">
-          <span class="cb-facet__lbl">Медиа</span>
-          <div class="cb-facet__row">
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С изображением</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С аудио</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С видео</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Без медиа</span></span></label>
-          </div>
-        </div>
-        <!-- Э7: состояние вопроса по аналитике — те же признаки, что в наборе «Качество». -->
-        <div class="cb-facet">
-          <span class="cb-facet__lbl">Состояние</span>
-          <div class="cb-facet__row">
-            <label class="ou-check"><input class="ou-check__input" type="checkbox" checked><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__label">Требуют ревизии</span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__label">Переэкспонированы</span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__label">Не выдавались</span></label>
-          </div>
-        </div>
-        <div class="cb-facet">
-          <span class="cb-facet__lbl">Владелец</span>
-          <select class="ou-select ou-field--m" aria-label="Автор"><option selected>Любой</option><option>Иванов И.</option><option>Петрова А.</option></select>
-        </div>
-        <div class="cb-facet cb-facet--wide">
-          <span class="cb-facet__lbl">Область</span>
-          <div class="ou-seg ou-seg--m" role="group" aria-label="Область">
-            <button type="button" class="ou-seg__item is-active" aria-pressed="true">Все</button>
-            <button type="button" class="ou-seg__item" aria-pressed="false">Мои</button>
-            <button type="button" class="ou-seg__item" aria-pressed="false">Доступные</button>
-            <button type="button" class="ou-seg__item" aria-pressed="false">Общие</button>
-          </div>
-        </div>
-      </div>
-      <div class="cb-filterpop__foot">
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Сбросить всё</button>
-        <span class="qd-spacer"></span>
-        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-filtered')">Применить</button>
-      </div>
-    </div>
-    <div class="cb-tree wf-cb-quality" aria-label="Папки, темы и вопросы">
-      <div class="cb-thead"><div>Название</div><div><span class="ou-tip" data-placement="bottom" tabindex="0">На ревизии&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">Вопрос, у которого есть признак «под подозрением» хотя бы в одном тесте — то же правило, что во «Вопросах» теста. У темы и папки — сколько таких вопросов.</span></span></div><div><span class="ou-tip" data-placement="bottom" tabindex="0">Переэкспонированы&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">В тесте со случайной выборкой вопрос выдаётся не реже чем в 1,5 раза чаще ожидаемого (квота раздела / размер пула), при 10 и более прохождениях за 12 месяцев.</span></span></div><div><span class="ou-tip" data-placement="bottom" tabindex="0">Не выдавались&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">Вопрос входит в пул выдачи, но за 12 месяцев не выдавался ни в одном тесте.</span></span></div><div><span class="ou-tip" data-placement="bottom" tabindex="0">Тестов&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">В скольких тестах вопрос выдавался за 12 месяцев. Общих чисел по тестам нет — у каждого теста своя выборка и своя цена.</span></span></div><div></div></div>
-      <div class="cb-rootrow"><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span>Все темы <span class="cb-foldercount">2 папки · 8 тем · 166 вопросов</span></div>
-      <div class="cb-row cb-row--folder">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Комплаенс</span><span class="cb-foldercount">3 темы · 46 вопросов</span></div>
-        <div class="cb-cell">2</div><div class="cb-cell">1</div><div class="cb-cell">4</div><div class="cb-cell">4</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--topic is-open">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Право и комплаенс</span></div>
-        <div class="cb-cell">1</div><div class="cb-cell">1</div><div class="cb-cell">1</div><div class="cb-cell">3</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--q" onclick="showState(null, 'bank-drawer')">
-        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Какая мера относится к антикоррупционным?</span></div>
-        <div class="cb-cell"></div><div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--s">чаще ожидаемого</span><span class="ou-grid__cell-sub">82 % при 40 % · 1 из 3 тестов</span></div><div class="cb-cell"></div><div class="cb-cell">3</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--q" onclick="showState(null, 'bank-drawer')">
-        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что считается подарком по политике компании?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--error ou-tag--s">Сильные ошибаются чаще</span><span class="ou-grid__cell-sub">в 1 из 2 тестов · ещё 1 признак</span></div><div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-cell">2</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса" onclick="event.stopPropagation(); showState(null, 'bank-qmenu')"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--q" onclick="showState(null, 'bank-drawer')">
-        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Несколько ответов"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Кто утверждает перечень должностей с риском коррупции?</span></div>
-        <div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-cell"><span class="ou-tag ou-tag--neutral ou-tag--s">не выдавался</span></div><div class="cb-cell"><span class="cb-zero">0</span></div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--q" onclick="showState(null, 'bank-drawer')">
-        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Как сообщить о конфликте интересов?</span></div>
-        <div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-cell">2</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--topic">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Охрана труда</span></div>
-        <div class="cb-cell">1</div><div class="cb-cell"><span class="cb-zero">0</span></div><div class="cb-cell">3</div><div class="cb-cell">2</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--topic">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Деловая этика</span></div>
-        <div class="cb-cell"><span class="cb-zero">0</span></div><div class="cb-cell"><span class="cb-zero">0</span></div><div class="cb-cell"><span class="cb-zero">0</span></div><div class="cb-cell">1</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--folder">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Продажи</span><span class="cb-foldercount">5 тем · 120 вопросов</span></div>
-        <div class="cb-cell"><span class="cb-zero">0</span></div><div class="cb-cell">2</div><div class="cb-cell">11</div><div class="cb-cell">3</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-    </div>
-          </div>
-        </main>
-      </div>
-
-    </div>
-
-    <div id="wf-bank-filtered" class="wf-state">
-      <div class="ou-shell">
-        <div class="ou-shell__side" data-wf-side-bank></div>
-        <header class="ou-shell__header" data-wf-header></header>
-        <main class="ou-shell__main">
-          <div class="wf-bank-head">
-            <h1 class="ou-text ou-text--heading-l">Темы и вопросы</h1>
-            <p class="ou-text ou-text--body-m ou-text--tone-muted">Единое дерево: папки, темы и вопросы в них.</p>
-          </div>
-          <div class="cb-wrap">
-    <div class="cb-toolbar">
-      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
-      <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null, 'bank-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры <span class="ou-tag ou-tag--neutral ou-tag--s">1</span></button>
-      <span class="cb-spacer"></span>
-      <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
-      <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
-      <span class="tb-fold-actions">
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
-      </span>
-    </div>
-    <div class="cb-chips"><span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">Состояние: требуют ревизии</button><button type="button" class="ou-chip__close" aria-label="Снять условие"><svg width="12" height="12"><use href="#i-x"/></svg></button></span></div>
-
-    <div class="cb-tree wf-cb-quality" aria-label="Папки, темы и вопросы">
-      <div class="cb-thead"><div>Название</div><div><span class="ou-tip" data-placement="bottom" tabindex="0">На ревизии&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">Вопрос, у которого есть признак «под подозрением» хотя бы в одном тесте — то же правило, что во «Вопросах» теста. У темы и папки — сколько таких вопросов.</span></span></div><div><span class="ou-tip" data-placement="bottom" tabindex="0">Переэкспонированы&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">В тесте со случайной выборкой вопрос выдаётся не реже чем в 1,5 раза чаще ожидаемого (квота раздела / размер пула), при 10 и более прохождениях за 12 месяцев.</span></span></div><div><span class="ou-tip" data-placement="bottom" tabindex="0">Не выдавались&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">Вопрос входит в пул выдачи, но за 12 месяцев не выдавался ни в одном тесте.</span></span></div><div><span class="ou-tip" data-placement="bottom" tabindex="0">Тестов&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip">В скольких тестах вопрос выдавался за 12 месяцев. Общих чисел по тестам нет — у каждого теста своя выборка и своя цена.</span></span></div><div></div></div>
-      <div class="cb-rootrow"><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span>Все темы <span class="cb-foldercount">2 папки · 8 тем · 166 вопросов</span></div>
-      <div class="cb-row cb-row--folder">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Комплаенс</span><span class="cb-foldercount">3 темы · 46 вопросов</span></div>
-        <div class="cb-cell">2</div><div class="cb-cell">1</div><div class="cb-cell">4</div><div class="cb-cell">4</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--topic is-open">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Право и комплаенс</span></div>
-        <div class="cb-cell">1</div><div class="cb-cell">1</div><div class="cb-cell">1</div><div class="cb-cell">3</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--q" onclick="showState(null, 'bank-drawer')">
-        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что считается подарком по политике компании?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--error ou-tag--s">Сильные ошибаются чаще</span><span class="ou-grid__cell-sub">в 1 из 2 тестов · ещё 1 признак</span></div><div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-cell">2</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса" onclick="event.stopPropagation(); showState(null, 'bank-qmenu')"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-      <div class="cb-row cb-row--topic">
-        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Охрана труда</span></div>
-        <div class="cb-cell">1</div><div class="cb-cell"><span class="cb-zero">0</span></div><div class="cb-cell">3</div><div class="cb-cell">2</div>
-        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
-      </div>
-
     </div>
           </div>
         </main>
@@ -985,16 +778,19 @@
             <p class="ou-text ou-text--body-m ou-text--tone-muted">Единое дерево: папки, темы и вопросы в них.</p>
           </div>
           <div class="cb-wrap">
-    <div class="cb-toolbar">
-      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
-      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null, 'bank-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
-      <span class="cb-spacer"></span>
-      <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
-      <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
-      <span class="tb-fold-actions">
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
-      </span>
+    <div class="ou-filterbar">
+      <div class="ou-filterbar__row">
+        <div class="ou-filterbar__search"><div class="ou-field ou-field--s"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span></button>
+        <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+          <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
+          <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
+          <span class="tb-fold-actions">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+          </span>
+        </div>
+      </div>
     </div>
 
 
@@ -1072,16 +868,19 @@
             <p class="ou-text ou-text--body-m ou-text--tone-muted">Единое дерево: папки, темы и вопросы в них.</p>
           </div>
           <div class="cb-wrap">
-    <div class="cb-toolbar">
-      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
-      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null, 'bank-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
-      <span class="cb-spacer"></span>
-      <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
-      <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
-      <span class="tb-fold-actions">
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
-      </span>
+    <div class="ou-filterbar">
+      <div class="ou-filterbar__row">
+        <div class="ou-filterbar__search"><div class="ou-field ou-field--s"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам…" aria-label="Поиск по темам и вопросам"></div></div></div>
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span></button>
+        <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+          <div class="ou-seg ou-seg--s" role="group" aria-label="Набор колонок"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'bank-content')"><span>Содержание</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'bank-quality')"><span>Качество</span></button></div>
+          <!-- Пара сворачивания — FoldAllButtons ДС продукта (approved/prd53-profile-indicator.html), как в редакторе и в профиле экспозиции. -->
+          <span class="tb-fold-actions">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+          </span>
+        </div>
+      </div>
     </div>
 
 
@@ -1740,7 +1539,7 @@
               <tr><td>«На ревизии»</td><td>Признак «под подозрением» хотя бы в одном тесте — одно правило с таблицей «Вопросы» теста (<code>question-flag.ts</code>)</td><td>Решение владельца 2026-10-05 (К1): общего среднего по тестам нет нигде, включая сортировку</td></tr>
               <tr><td>«Переэкспонированы»</td><td>В тесте со случайной выборкой доля прохождений с вопросом не меньше 1,5 × ожидаемой (квота раздела / размер пула), от 10 прохождений за 12 месяцев</td><td>Раздел «весь банк», варианты и адаптив признака не дают. Коэффициент — в конфиге экземпляра</td></tr>
               <tr><td>«Не выдавались»</td><td>Вопрос пула выдачи, не выданный за 12 месяцев ни в одном тесте</td><td>Вопрос, которого нет ни в одном пуле, сюда не попадает: выдать его нечем</td></tr>
-              <tr><td>Фильтр «Состояние»</td><td>Три отметки, условие — чипом, как остальные условия дерева. Работает в обоих наборах</td><td>—</td></tr>
+              <tr><td>Фильтр «Состояние»</td><td>Три отметки в панели фильтра дерева, условие — чипом. Работает в обоих наборах. Вид полосы и панели — по эскизу <code>filters-unified.html</code> (единый фильтр)</td><td>Решение владельца 2026-10-05: формы фильтра гармонизируются</td></tr>
               <tr><td>Вход в статистику</td><td>Пункт «Статистика» в меню вопроса, кнопка «Статистика» в подвале ящика (у сохранённого вопроса), метка «на ревизии», карточка в «Требует внимания»</td><td>Ящик редактора не перестраивается (решение владельца 2026-10-05)</td></tr>
               <tr><td>Страница вопроса банка</td><td>Адрес <code>/author/analytics/questions/:id</code>. Таблица «По тестам»: строка на тест, без итоговой строки; строка открывает вопрос в тесте. «Версии содержания» — здесь; выбор редакции переключает числа таблицы</td><td>Только тесты, доступные читателю. Мало данных — как в Э4а</td></tr>
               <tr><td>Вопрос в тесте</td><td>Карточки «Версии содержания» и «Этот вопрос в других тестах» заменены карточкой «Вопрос в банке» с переходом; выбор редакции — в шапке</td><td>План §11, задача 5</td></tr>
