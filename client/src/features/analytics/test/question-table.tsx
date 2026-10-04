@@ -130,6 +130,11 @@ export interface QuestionPsychometrics {
   /** Корреляция задание-остаток; `null` — считать не на чем. */
   itemRest: number | null;
   observations: number;
+  /**
+   * `insufficient` — наблюдений меньше порога трудности (`analytics.minObservations`). Число
+   * движок всё равно отдаёт, но на шести ответах оно случайно, и таблица его не печатает (Э4а).
+   */
+  difficultyConfidence?: "insufficient" | "tentative" | "reliable";
   /** `insufficient` — наблюдений меньше порога коэффициентов (FR-38a). */
   coefficientConfidence: "insufficient" | "tentative" | "reliable";
 }
@@ -327,7 +332,7 @@ export function QuestionTable({
     {
       key: "spread",
       header: <TermHint entry={measurement ? "spreadMeasure" : "spread"} />,
-      ...share(measurement ? "35%" : "17%"),
+      ...share(measurement ? "35%" : "16%"),
       render: (row: QuestionRow) => {
         if (row.totalAnswers < minObservations) {
           return <NoValue kind="insufficient" need={minObservations} have={row.totalAnswers} align="start" />;
@@ -362,7 +367,7 @@ export function QuestionTable({
         render: (row: QuestionRow) => {
           const psycho = psychometrics?.[row.questionId];
           if (row.correctPercent === null) return <NoValue kind="notApplicable" reason={notGradedReason(row)} />;
-          if (!psycho || psycho.difficulty === null) {
+          if (!psycho || psycho.difficulty === null || psycho.difficultyConfidence === "insufficient") {
             return <NoValue kind="insufficient" need={minObservations} have={psycho?.observations ?? row.totalAnswers} />;
           }
           return num(psycho.difficulty);
@@ -467,7 +472,9 @@ export function QuestionTable({
       sortable: true,
       render: (row: QuestionRow) => {
         const psycho = psychometrics?.[row.questionId];
-        const p = row.correctPercent === null ? null : psycho?.difficulty ?? null;
+        const p = row.correctPercent === null || psycho?.difficultyConfidence === "insufficient"
+          ? null
+          : psycho?.difficulty ?? null;
         return (
           <IntentCell
             declared={row.difficulty}
@@ -480,7 +487,7 @@ export function QuestionTable({
       // Колонка «Вес» отчёта WebTutor. Цена та же, что у движка оценивания: иначе таблица
       // называла бы одну цену, а результат участника считался бы по другой.
       key: "points",
-      ...share("6%"),
+      ...share("7%"),
       header: <TermHint entry="points" />,
       numeric: true,
       align: "center" as const,

@@ -22,6 +22,7 @@
     "exposure:rebuild": "tsx scripts/db/rebuild-exposure.ts",
     "psycho:backfill": "tsx scripts/db/backfill-psycho-hash.ts",
     "psycho:demo": "tsx scripts/db/seed-psychometrics-demo.ts",
+    "answers:demo": "tsx scripts/db/seed-answer-types-demo.ts",
     "changelog": "gen-changelog",
     "test": "vitest run",
     "test:cov": "vitest run --coverage.enabled=true",

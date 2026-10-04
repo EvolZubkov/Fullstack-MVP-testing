@@ -17,6 +17,7 @@ import { ChevronRight } from "lucide-react";
 import {
   Button, Card, CardBody, CardHeader, DataGrid, Grid, IconButton, Stack, Tag, Text,
 } from "@skillum/ui-kit";
+import { renderBlanksText } from "@shared/questions/blanks-render";
 
 import { num } from "./psychometrics-format";
 
@@ -74,6 +75,11 @@ export interface QuestionInTestCardProps {
   /** С какого дня действует текущая редакция; `null` — неизвестно. */
   currentSince: string | null;
   onOpenInTopic: () => void;
+  /**
+   * Э4а: вопрос опросника — баллов, правила начисления и сложности у него нет, и поля не
+   * показываются: «Балл 1» у вопроса без верного ответа читался бы как цена.
+   */
+  measurement?: boolean;
 }
 
 /**
@@ -82,7 +88,7 @@ export interface QuestionInTestCardProps {
  * @param props - вопрос, дата текущей редакции, переход к правке в теме
  * @returns карточка с текстом вопроса и его настройками в тесте
  */
-export function QuestionInTestCard({ card, currentSince, onOpenInTopic }: QuestionInTestCardProps) {
+export function QuestionInTestCard({ card, currentSince, onOpenInTopic, measurement = false }: QuestionInTestCardProps) {
   return (
     <Card>
       <CardHeader
@@ -94,7 +100,8 @@ export function QuestionInTestCard({ card, currentSince, onOpenInTopic }: Questi
       />
       <CardBody>
         <Stack gap={4}>
-          <Text variant="body-m">{card.prompt}</Text>
+          {/* Э4а: маркеры пропусков ({{kind}}) — прочерком, как их видит участник. */}
+          <Text variant="body-m">{renderBlanksText(card.prompt, { mode: "dash" })}</Text>
           {card.media?.type === "image" ? (
             <img src={card.media.url} alt="Изображение вопроса" className="tb-question-card__media" />
           ) : null}
@@ -107,24 +114,35 @@ export function QuestionInTestCard({ card, currentSince, onOpenInTopic }: Questi
                     {(card.tags ?? []).map(tag => <Tag key={tag} size="s">{tag}</Tag>)}
                   </Stack>
                 )
-                : <Text variant="body-s" tone="muted">—</Text>}
+                : <Text variant="body-s" tone="muted">нет</Text>}
             </Field>
             <Field label="Выдача">
               {card.excluded
                 ? <Tag tone="warning" size="s">Исключён из выдачи</Tag>
                 : <Text variant="body-s">выдаётся</Text>}
             </Field>
-            <Field label="Балл" note={card.pointsInTest ? "настроено в тесте" : undefined}>
-              <Text variant="body-s">{card.points}</Text>
-            </Field>
-            <Field label="Цена ответа" note={card.scoringInTest ? "настроено в тесте" : undefined}>
-              <Tag variant="outline" size="s">{KIND_LABEL[card.scoringKind] ?? card.scoringKind}</Tag>
-            </Field>
-            <Field label="Сложность" note={card.difficultyInTest ? "настроено в тесте" : "из вопроса"}>
-              <Text variant="body-s">{card.difficulty ?? "—"}</Text>
-            </Field>
+            {measurement ? null : (
+              <>
+                <Field label="Балл" note={card.pointsInTest ? "настроено в тесте" : undefined}>
+                  <Text variant="body-s">{card.points}</Text>
+                </Field>
+                <Field label="Цена ответа" note={card.scoringInTest ? "настроено в тесте" : undefined}>
+                  <Tag variant="outline" size="s">{KIND_LABEL[card.scoringKind] ?? card.scoringKind}</Tag>
+                </Field>
+                {/* Э4а: незаданная сложность — «не задана», а не прочерк и не подставленная 50. */}
+                <Field
+                  label="Сложность"
+                  note={card.difficulty === null ? undefined : card.difficultyInTest ? "настроено в тесте" : "из вопроса"}
+                >
+                  {card.difficulty === null
+                    ? <Text variant="body-s" tone="muted">не задана</Text>
+                    : <Text variant="body-s">{card.difficulty}</Text>}
+                </Field>
+              </>
+            )}
           </Grid>
-          {card.correctAnswer ? (
+          {/* Э4а: у развёрнутого ответа эталона нет — поле с прочерком не показывается. */}
+          {card.correctAnswer && card.correctAnswer !== "—" ? (
             <Field label="Верный ответ"><Text variant="body-s">{card.correctAnswer}</Text></Field>
           ) : null}
         </Stack>

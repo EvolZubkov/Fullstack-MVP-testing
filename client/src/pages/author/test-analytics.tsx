@@ -96,6 +96,14 @@ import {
     type QuestionCardView,
 } from "@/features/analytics/test/question-card";
 import { DeliveryExclusionDialog, type ExclusionTarget } from "@/features/analytics/test/delivery-exclusion-dialog";
+import { renderBlanksText } from "@shared/questions/blanks-render";
+import type { UnitsView } from "@/features/analytics/test/answer-distribution";
+import {
+    NotGradedTiles,
+    QuestionAnswersCard,
+    SpreadCard,
+    UnitsCard,
+} from "@/features/analytics/test/question-distribution";
 import { questionInTopicHref } from "@/features/content/question-link";
 import { ResultsByAxis } from "@/features/analytics/slices/results-by-axis";
 import { SaveSliceDialog } from "@/features/analytics/slices/save-slice-dialog";
@@ -196,6 +204,8 @@ interface TestAnalytics {
         spread?: { options: Array<{ label: string; share: number; correct?: boolean }>; answered: number } | null;
         /** PRD-57 FR-32: сводка свободного текста — объём и длина вместо частот. */
         volume?: { answered: number; medianLength: number; minLength: number; maxLength: number } | null;
+        /** Э4а: разбор сопоставления, ранжирования и пропусков по единицам. */
+        units?: UnitsView | null;
         // PRD-55 (FR-31/FR-31a/FR-32). Необязательные: ответ старой сборки сервера этих полей
         // не несёт, и карточка тогда показывает прочерки вместо выдуманных нулей.
         exposureCount?: number;
@@ -455,6 +465,7 @@ export default function TestAnalyticsPage() {
             difficulty: item.difficulty,
             itemRest: item.itemRest,
             observations: item.observations,
+            difficultyConfidence: item.difficultyConfidence,
             coefficientConfidence: item.coefficientConfidence,
         }]));
     }, [itemQuality]);
@@ -535,7 +546,7 @@ export default function TestAnalyticsPage() {
         queryKey: [`/api/analytics/slices/saved?testId=${testId}`],
         enabled: !!testId,
     });
-    const { data: breakdown } = useQuery<ItemBreakdownView>({
+    const { data: breakdown, isFetched: breakdownFetched } = useQuery<ItemBreakdownView>({
         queryKey: [psychometricsUrl(
             `/api/analytics/psychometrics/${testId}/items/${breakdownId}`,
             breakdownVersion === undefined ? {} : { version: breakdownVersion ?? "" },
@@ -982,6 +993,46 @@ export default function TestAnalyticsPage() {
         });
         const sourceTab = questionState?.questionFrom === "questions" ? "questions" : "quality";
         const currentSince = breakdown?.versions?.find(row => row.psychoHash === breakdown.currentVersion)?.firstAt ?? null;
+        /**
+         * Э4а: полный вид распределения ответов — по типу вопроса (эскиз approved/e4a). У выбора он
+         * — таблица «Варианты ответа» разбора; здесь — остальные типы. Сжатые данные (разброс,
+         * объём) — из строки таблицы вопросов, разрез по слабым и сильным — из разбора.
+         */
+        const questionRow = analytics.questionStats.find(row => row.questionId === routeQuestionId);
+        const questionType = questionRow?.questionType ?? breakdown?.questionType ?? questionCard?.questionType ?? "";
+        const measurementTest = analytics.summary.completedAttempts > 0 && analytics.summary.gradedAttempts === 0;
+        const units = breakdown?.units ?? questionRow?.units ?? null;
+        /**
+         * Э4а: вопрос без оценки (развёрнутый ответ, вопрос опросника) — психометрики у него нет по
+         * устройству. Движок всё равно отдаёт запись с нулём наблюдений, и плитки «мало данных ·
+         * собрано 0» неправду говорили бы о том, что данных просто не хватает.
+         */
+        const notGraded = questionRow?.correctPercent === null;
+        const answeredCaption = questionRow
+            ? [questionRow.topicName, `${questionRow.totalAnswers} ${pluralize(questionRow.totalAnswers, "ответ", "ответа", "ответов")}`].join(" · ")
+            : undefined;
+        const distribution = (
+            <>
+                {units ? <UnitsCard units={units} /> : null}
+                {!units && questionRow?.spread && ["short", "scale", "allocation"].includes(questionType) ? (
+                    <SpreadCard
+                        questionType={questionType}
+                        spread={questionRow.spread}
+                        testId={testId!}
+                        questionId={routeQuestionId}
+                        measurement={measurementTest}
+                    />
+                ) : null}
+                {questionType === "long" || questionType === "blanks" ? (
+                    <QuestionAnswersCard
+                        testId={testId!}
+                        questionId={routeQuestionId}
+                        questionType={questionType}
+                        volume={questionRow?.volume}
+                    />
+                ) : null}
+            </>
+        );
         return (
             <Stack gap={6}>
                 <AnalyticsHeader
@@ -993,10 +1044,10 @@ export default function TestAnalyticsPage() {
                             href: testHref(testId!, filter, sourceTab),
                             state: typeof window === "undefined" ? undefined : window.history.state,
                         },
-                        { label: breakdown?.prompt ?? questionCard?.prompt ?? "Вопрос" },
+                        { label: renderBlanksText(breakdown?.prompt ?? questionCard?.prompt ?? "Вопрос", { mode: "dash" }) },
                     ]}
-                    title={breakdown?.item ? <BreakdownTitle view={breakdown} /> : (questionCard?.prompt ?? "Вопрос")}
-                    subtitle={breakdown?.item ? breakdownSubtitle(breakdown) : undefined}
+                    title={breakdown?.item ? <BreakdownTitle view={breakdown} /> : renderBlanksText(questionCard?.prompt ?? "Вопрос", { mode: "dash" })}
+                    subtitle={notGraded ? answeredCaption : breakdown?.item ? breakdownSubtitle(breakdown) : answeredCaption}
                     actions={(
                         <>
                             <Button
@@ -1061,18 +1112,40 @@ export default function TestAnalyticsPage() {
                     <QuestionInTestCard
                         card={questionCard}
                         currentSince={currentSince}
+                        measurement={measurementTest || questionType === "scale" || questionType === "allocation"}
                         onOpenInTopic={() => navigate(questionInTopicHref(routeQuestionId))}
                     />
                 ) : null}
-                {breakdown?.item
+                {notGraded
+                    ? (
+                        <Stack gap={4}>
+                            {questionType === "long" && questionRow ? (
+                                <NotGradedTiles
+                                    declared={questionRow.difficulty}
+                                    // Время разбора — по ответам ЭТОГО вопроса в выборке; у строки
+                                    // таблицы его может не быть, когда не сработал сбор экспозиции.
+                                    latencyMedianMs={breakdown?.item?.timing?.medianMs ?? questionRow.latencyMedianMs}
+                                    latencySampleSize={breakdown?.item?.timing?.measured ?? questionRow.latencySampleSize}
+                                />
+                            ) : null}
+                            {distribution}
+                        </Stack>
+                    )
+                    : breakdown?.item
                     ? (
                         <ItemBreakdownPanel
                             view={breakdown}
                             version={breakdownVersion}
                             onSelectVersion={setBreakdownVersion}
+                            minObservations={analytics.minObservations}
+                            distribution={distribution}
                         />
                     )
-                    : <LoadingState message="Считаем психометрику..." />}
+                    : breakdownFetched
+                        // Э4а: разбора нет (ни одного ответа в выборке) — страница показывает то, что
+                        // известно, вместо вечного «Считаем психометрику».
+                        ? <Stack gap={4}>{distribution}</Stack>
+                        : <LoadingState message="Считаем психометрику..." />}
                 {questionCard?.questionId ? (
                     <OtherTestsCard
                         rows={questionCard.otherTests ?? []}

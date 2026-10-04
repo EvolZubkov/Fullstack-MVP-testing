@@ -112,17 +112,17 @@ describe("ItemBreakdownPanel", () => {
     expect(screen.getByText(termOrText("расхождения нет"))).toBeTruthy();
   });
 
-  it("задание оказалось легче задуманного — так и сказано", () => {
+  it("задание оказалось легче заданного — так и сказано", () => {
     // «Как расшифровывается ЭДО?»: задумано лёгким (20), решают 97 %.
     render(<ItemBreakdownPanel view={view({ item: { ...view().item, declaredDifficulty: 60, difficulty: 0.9 } })} onBack={() => {}} />);
     expect(screen.getByText(termOrText("60 → 10"))).toBeTruthy();
-    expect(screen.getByText(termOrText("легче задуманного на 50"))).toBeTruthy();
+    expect(screen.getByText(termOrText("легче заданной на 50"))).toBeTruthy();
   });
 
-  it("задание оказалось труднее задуманного — так и сказано", () => {
+  it("задание оказалось труднее заданного — так и сказано", () => {
     render(<ItemBreakdownPanel view={view({ item: { ...view().item, declaredDifficulty: 20, difficulty: 0.4 } })} onBack={() => {}} />);
     expect(screen.getByText(termOrText("20 → 60"))).toBeTruthy();
-    expect(screen.getByText(termOrText("труднее задуманного на 40"))).toBeTruthy();
+    expect(screen.getByText(termOrText("труднее заданной на 40"))).toBeTruthy();
   });
 
   it("поправка на угадывание называет число вариантов словом и ожидание (эскиз)", () => {
@@ -195,13 +195,29 @@ describe("ItemBreakdownPanel", () => {
     expect(screen.getByText(termOrText("Корреляция с остатком")).textContent).toBe("Корреляция с остатком");
   });
 
-  it("у задания без заявленной трудности сравнивать не с чем — плитки нет", () => {
-    // «Расхождения нет» и «сравнивать не с чем» — разные состояния (FR-18).
+  it("у задания без заданной сложности плитка говорит «не задана», расхождение не считается (Э4а)", () => {
+    // «Расхождения нет» и «сравнивать не с чем» — разные состояния (FR-18); подставленная 50
+    // была бы неотличима от заданной.
     render(<ItemBreakdownPanel view={view({
       item: { ...view().item, declaredDifficulty: null },
     })} onBack={() => {}} />);
 
-    expect(screen.queryByText(termOrText("Сложность: задана → по ответам"))).toBeNull();
+    expect(screen.getByText(termOrText("Сложность: задана → по ответам"))).toBeTruthy();
+    expect(screen.getByText(termOrText("не задана"))).toBeTruthy();
+    expect(screen.getByText(termOrText("расхождение не считается: сложность вопросу не задана"))).toBeTruthy();
+  });
+
+  it("мало наблюдений — плитки «мало данных» со счётом, варианты — пустым состоянием (Э4а)", () => {
+    render(<ItemBreakdownPanel
+      view={view({ item: { ...view().item, observations: 6, difficulty: null, itemRest: null, discrimination: null } })}
+      minObservations={10}
+    />);
+
+    // Трудность, поправка на угадывание, r и D — все ниже своих порогов.
+    expect(screen.getAllByText(termOrText("мало данных")).length).toBe(4);
+    expect(screen.getAllByText(termOrText("нужно ещё 4 наблюдения · собрано 6")).length).toBe(2);
+    expect(screen.getAllByText(termOrText("нужно ещё 24 наблюдения · собрано 6")).length).toBe(2);
+    expect(screen.getByText(termOrText(/Собрано 6 — нужно ещё 4/))).toBeTruthy();
   });
 
   it("работающие верный ответ и дистрактор — «Работает», мёртвый — «Мёртвый вариант» (эскиз)", () => {
@@ -228,10 +244,10 @@ describe("ItemBreakdownPanel", () => {
     expect(screen.queryByText(termOrText("Работает"))).toBeNull();
   });
 
-  it("для типа без вариантов разбор не выдумывается (FR-27)", () => {
-    render(<ItemBreakdownPanel view={view({ options: null })} onBack={() => {}} />);
+  it("для типа без вариантов разбор вариантов не выдумывается — вместо него полный вид страницы (FR-27, Э4а)", () => {
+    render(<ItemBreakdownPanel view={view({ options: null })} distribution={<p>Пары</p>} onBack={() => {}} />);
 
-    expect(screen.getByText(termOrText(/разбор вариантов не применяется/))).toBeTruthy();
+    expect(screen.getByText("Пары")).toBeTruthy();
     expect(screen.queryByText(termOrText("Работает"))).toBeNull();
   });
 

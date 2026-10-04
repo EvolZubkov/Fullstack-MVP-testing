@@ -3364,6 +3364,8 @@
 .tb-float-hint--legend .ou-donut__legend-item,
 .tb-float-hint--legend .ou-donut__legend-name { color: inherit; white-space: normal; }
 .tb-no-value { display: inline-flex; text-align: center; overflow-wrap: normal; }
+/* Метка цвета ответа в полном виде — та же, что в легенде полосы (размер метки легенды DS). */
+.tb-dist-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: var(--ou-space-2); vertical-align: 0; }
 /* Таблица «Вопросы»: значок сортировки стоит в строке заголовка, а не отдельным столбцом
    flex-ряда, и при нехватке ширины уходит на следующую строку под термин — иначе в колонке
    в 8 % он вылезал на соседний заголовок (приёмка Э4а). */

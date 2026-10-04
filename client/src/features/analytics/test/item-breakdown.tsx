@@ -13,15 +13,21 @@
  * Группы различают КОЛОНКИ и подписи, а не цвет (FR-26c): проверка палитры показала, что пара
  * «акцент + синий» неразличима при дейтеранопии.
  */
+import type { ReactNode } from "react";
 import {
-  Button, Card, CardBody, CardHeader, DataGrid, Grid, Stack, Tag, Text,
+  Button, Card, CardBody, CardHeader, DataGrid, EmptyState, Grid, Stack, Tag, Text,
 } from "@skillum/ui-kit";
 import { ArrowLeft } from "lucide-react";
+
+import { renderBlanksText } from "@shared/questions/blanks-render";
+
+import type { GlossaryKey } from "../glossary";
+import type { UnitsView } from "./answer-distribution";
 
 import { TermHint } from "./term-hint";
 // Общий формат чисел: типографский минус (U+2212). Своя копия без него печатала «-0,33» на
 // плитке поправки — дефис в колонке чисел читается как прочерк (приёмка 5.5).
-import { num } from "./psychometrics-format";
+import { COEFFICIENT_MIN, num } from "./psychometrics-format";
 import { percentOfShare } from "../format";
 
 import { QuestionTypeIcon } from "@/features/tests/editor/sections/question-type-icon";
@@ -51,6 +57,10 @@ export interface ItemBreakdownView {
   item: {
     observations: number;
     difficulty: number | null;
+    /** `insufficient` — наблюдений меньше порога трудности: число случайно, плитка его не печатает (Э4а). */
+    difficultyConfidence?: "insufficient" | "tentative" | "reliable";
+    /** `insufficient` — наблюдений меньше порога коэффициентов (30): r и D случайны (Э4а). */
+    coefficientConfidence?: "insufficient" | "tentative" | "reliable";
     correctedDifficulty: number | null;
     itemRest: number | null;
     discrimination: number | null;
@@ -59,6 +69,8 @@ export interface ItemBreakdownView {
   };
   groups: { size: number; share: number; topDifficulty: number; bottomDifficulty: number } | null;
   options: OptionRow[] | null;
+  /** Э4а: сопоставление, ранжирование, пропуски — разбор по единицам со слабыми и сильными. */
+  units?: UnitsView | null;
   /** Редакции содержания, встреченные в выборке (FR-49). */
   versions?: VersionRow[];
   /** Тема вопроса — первая часть подзаголовка «Тема · подтема · N наблюдений». */
@@ -99,6 +111,13 @@ export interface ItemBreakdownPanelProps {
   version?: string | null;
   /** Показать другую редакцию — это смена ВЫБОРКИ, а не отдельный экран (FR-49a). */
   onSelectVersion?: (version: string | null | undefined) => void;
+  /** Э4а: порог наблюдений инстанса — с него считаются трудность и доли вариантов. */
+  minObservations?: number;
+  /**
+   * Э4а: полный вид распределения ответов у вопроса без вариантов (сопоставление, ранжирование,
+   * пропуски, короткий ответ) — его собирает страница, у которой есть строка таблицы вопросов.
+   */
+  distribution?: ReactNode;
 }
 
 
@@ -152,12 +171,81 @@ function optionFlag(option: OptionRow): { tone: "success" | "warning" | "error";
  */
 const INTENT_TOLERANCE = 10;
 
-/** Вывод о расхождении замысла и наблюдения словами (FR-18a). */
-function intentVerdict(declared: number, observed: number | null): string {
-  if (observed === null) return "наблюдения нет";
+/** Вывод о расхождении заданной и полученной по ответам сложности словами (FR-18a, Э4а). */
+function intentVerdict(declared: number, observed: number): string {
   const gap = observed - declared;
   if (Math.abs(gap) <= INTENT_TOLERANCE) return "расхождения нет";
-  return gap > 0 ? `труднее задуманного на ${gap}` : `легче задуманного на ${-gap}`;
+  return gap > 0 ? `труднее заданной на ${gap}` : `легче заданной на ${-gap}`;
+}
+
+/** «Нужно ещё 4 наблюдения · собрано 6» — подпись плитки «мало данных» (Э4а). */
+function missingCaption(need: number, have: number): string {
+  const missing = Math.max(0, need - have);
+  return `нужно ещё ${missing} ${pluralize(missing, "наблюдение", "наблюдения", "наблюдений")} · собрано ${have}`;
+}
+
+/**
+ * Плитка разбора: число, термин с подсказкой, подпись. Пустое значение («мало данных», «не
+ * применимо», «не задана») — словом тоном потише и меньшим кеглем: крупное слово рядом с
+ * крупными числами читалось бы как число (эскиз Э4а).
+ */
+export function Tile({ value, entry, term, caption, empty = false }: {
+  value: ReactNode;
+  entry: GlossaryKey;
+  term?: string;
+  caption: ReactNode;
+  empty?: boolean;
+}) {
+  return (
+    <Card variant="outlined">
+      <CardBody>
+        <Stack gap={1} align="center">
+          {empty
+            ? <Text variant="heading-m" tone="muted">{value}</Text>
+            : <Text variant="display-s" weight="bold">{value}</Text>}
+          <Text variant="body-s" tone="muted"><TermHint entry={entry} term={term} /></Text>
+          <Text variant="body-xs" tone="subtle">{caption}</Text>
+        </Stack>
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * Плитка «Сложность: задана → по ответам» (решение владельца 2026-10-04).
+ *
+ * Показывается всегда: незаданная — «не задана», а не подставленная 50, и расхождение с ней не
+ * считается; нет наблюдаемой — заданная и подпись, почему по ответам числа нет.
+ */
+export function IntentTile({ declared, observed, missing }: {
+  declared: number | null;
+  /** Сложность по ответам 0-100; `null` — её нет, и подпись говорит почему. */
+  observed: number | null;
+  /** Почему по ответам числа нет. */
+  missing: string;
+}) {
+  if (observed === null) {
+    return (
+      <Tile
+        entry="intent"
+        value={declared === null ? "не задана" : declared}
+        empty={declared === null}
+        caption={missing}
+      />
+    );
+  }
+  if (declared === null) {
+    return (
+      <Tile
+        entry="intent"
+        value={<><Text as="span" variant="display-s" tone="muted">не задана</Text> → {observed}</>}
+        caption="расхождение не считается: сложность вопросу не задана"
+      />
+    );
+  }
+  return (
+    <Tile entry="intent" value={`${declared} → ${observed}`} caption={intentVerdict(declared, observed)} />
+  );
 }
 
 /** Ориентир трудности из FR-13 — стоит под числом всегда, чтобы было с чем сравнить. */
@@ -256,17 +344,26 @@ export function BreakdownTitle({ view }: { view: ItemBreakdownView }) {
       {view.questionType
         ? <QuestionTypeIcon type={view.questionType as QuestionType} size={20} />
         : null}
-      {" "}{view.prompt}
+      {/* Э4а: маркеры пропусков ({{kind}}) — прочерком, как их видит участник. */}
+      {" "}{renderBlanksText(view.prompt, { mode: "dash" })}
     </>
   );
 }
 
-export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: ItemBreakdownPanelProps) {
+export function ItemBreakdownPanel({
+  view, onBack, version, onSelectVersion, minObservations = 10, distribution,
+}: ItemBreakdownPanelProps) {
   const { item, groups, options } = view;
+  // Э4а: у множественного выбора человек отмечает несколько вариантов — доли в сумме больше 100 %.
+  const multiple = view.questionType === "multiple";
+  const fewForOptions = item.observations < minObservations;
   // FR-18a: наблюдение — в шкале автора (0 — легко, 100 — сложно). Трудность p растёт в
   // обратную сторону (1 — решили все), и сравнивать их напрямую значило бы читать лёгкое
   // задание как трудное.
-  const observedHardness = item.difficulty === null ? null : Math.round((1 - item.difficulty) * 100);
+  const fewForDifficulty = item.difficulty === null || item.difficultyConfidence === "insufficient";
+  // Движок отдаёт коэффициенты и на шести наблюдениях; ниже порога плитка их не печатает.
+  const fewForCoefficients = item.coefficientConfidence === "insufficient";
+  const observedHardness = fewForDifficulty || item.difficulty === null ? null : Math.round((1 - item.difficulty) * 100);
   // Порядок эскиза: текущая редакция первой, за ней прежние от новых к старым, серия «версия
   // неизвестна» — последней. Автор после правки сравнивает «стало» с «было», и «стало» — сверху.
   const versions = [...(view.versions ?? [])].sort((a, b) => {
@@ -302,7 +399,7 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
     {
       key: "share",
       width: "9%",
-      header: <TermHint entry="optionShare" />,
+      header: <TermHint entry={multiple ? "optionMarked" : "optionShare"} />,
       align: "center" as const,
       numeric: true,
       render: (row: OptionRow) => <Text variant="body-s">{percent(row.share)}</Text>,
@@ -358,16 +455,12 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
       {/* FR-48b: СТРОГО три в ряд. Автоподбор давал на широком мониторе пять плиток и одну
           на второй строке, а пары величин разъезжались по разным строкам. */}
       <Grid cols={3} gap={1}>
-        <Card variant="outlined">
-          <CardBody>
-            <Stack gap={1} align="center">
-              <Text variant="display-s" weight="bold">{num(item.difficulty)}</Text>
-              <Text variant="body-s" tone="muted"><TermHint entry="difficulty" /></Text>
-              <Text variant="body-xs" tone="subtle">{difficultyCaption(item.difficulty)}</Text>
-            </Stack>
-          </CardBody>
-        </Card>
-        {item.correctedDifficulty !== null ? (
+        {fewForDifficulty || item.difficulty === null
+          ? <Tile entry="difficulty" value="мало данных" empty caption={missingCaption(minObservations, item.observations)} />
+          : <Tile entry="difficulty" value={num(item.difficulty)} caption={difficultyCaption(item.difficulty)} />}
+        {item.correctedDifficulty !== null && fewForDifficulty ? (
+          <Tile entry="corrected" value="мало данных" empty caption={missingCaption(minObservations, item.observations)} />
+        ) : item.correctedDifficulty !== null ? (
           <Card variant="outlined">
             <CardBody>
               <Stack gap={1} align="center">
@@ -385,44 +478,28 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
             </CardBody>
           </Card>
         ) : null}
-        <Card variant="outlined">
-          <CardBody>
-            <Stack gap={1} align="center">
-              <Text variant="display-s" weight="bold">{num(item.itemRest)}</Text>
-              <Text variant="body-s" tone="muted"><TermHint entry="itemRest" term="Дискриминативность (r)" /></Text>
-              <Text variant="body-xs" tone="subtle">корреляция вопрос-остаток · хорошо от 0,30</Text>
-            </Stack>
-          </CardBody>
-        </Card>
-        <Card variant="outlined">
-          <CardBody>
-            <Stack gap={1} align="center">
-              <Text variant="display-s" weight="bold">{num(item.discrimination)}</Text>
-              <Text variant="body-s" tone="muted"><TermHint entry="discrimination" /></Text>
-              <Text variant="body-xs" tone="subtle">
-                {/* Эскиз: «крайние четверти, 27 % · хорошо 0,30 — 0,39» — расшифровка из FR-14a
-                    и полоса FR-14, в которую попало число. */}
-                {groups
-                  ? `крайние четверти, ${percentOfShare(groups.share)}${item.discrimination === null ? "" : ` · ${discriminationBand(item.discrimination)}`}`
-                  : "крайние группы не сложились"}
-              </Text>
-            </Stack>
-          </CardBody>
-        </Card>
-        {item.declaredDifficulty !== null ? (
-          <Card variant="outlined">
-            <CardBody>
-              <Stack gap={1} align="center">
-                <Text variant="display-s" weight="bold">
-                  {item.declaredDifficulty} → {observedHardness === null ? "—" : observedHardness}
-                </Text>
-                <Text variant="body-s" tone="muted"><TermHint entry="intent" /></Text>
-                {/* FR-18a: два числа и вывод о расхождении — без вывода плитка ничего не утверждает. */}
-                <Text variant="body-xs" tone="subtle">{intentVerdict(item.declaredDifficulty, observedHardness)}</Text>
-              </Stack>
-            </CardBody>
-          </Card>
-        ) : null}
+        {item.itemRest === null || fewForCoefficients
+          ? <Tile entry="itemRest" term="Дискриминативность (r)" value="мало данных" empty caption={missingCaption(COEFFICIENT_MIN, item.observations)} />
+          : <Tile entry="itemRest" term="Дискриминативность (r)" value={num(item.itemRest)} caption="корреляция вопрос-остаток · хорошо от 0,30" />}
+        {item.discrimination === null || fewForCoefficients
+          ? <Tile entry="discrimination" value="мало данных" empty caption={missingCaption(COEFFICIENT_MIN, item.observations)} />
+          : (
+            <Tile
+              entry="discrimination"
+              value={num(item.discrimination)}
+              // Эскиз: «крайние четверти, 27 % · хорошо 0,30 — 0,39» — расшифровка из FR-14a и
+              // полоса FR-14, в которую попало число.
+              caption={groups && item.discrimination !== null
+                ? `крайние четверти, ${percentOfShare(groups.share)} · ${discriminationBand(item.discrimination)}`
+                : "крайние группы не сложились"}
+            />
+          )}
+        {/* FR-18a, Э4а: два числа и вывод о расхождении; незаданная сложность — «не задана». */}
+        <IntentTile
+          declared={item.declaredDifficulty}
+          observed={observedHardness}
+          missing={`по ответам — мало данных, ${missingCaption(minObservations, item.observations)}`}
+        />
         {item.timing ? (
           <Card variant="outlined">
             <CardBody>
@@ -442,9 +519,18 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
         <Card variant="outlined">
           <CardHeader
             title="Варианты ответа"
-            subtitle={`Частота выбора и связь с остальным баллом · ${item.observations} ${pluralize(item.observations, "наблюдение", "наблюдения", "наблюдений")}`}
+            subtitle={`${multiple
+              ? "Доля отметивших каждый вариант: человек отмечает несколько, поэтому в сумме больше 100 %"
+              : "Частота выбора и связь с остальным баллом"} · ${item.observations} ${pluralize(item.observations, "наблюдение", "наблюдения", "наблюдений")}`}
           />
           <CardBody>
+            {fewForOptions ? (
+              <EmptyState
+                layout="inline"
+                title="Мало данных"
+                description={`Доли вариантов появятся с ${minObservations} ответов: на меньшей выборке они случайны. Собрано ${item.observations} — нужно ещё ${minObservations - item.observations}.`}
+              />
+            ) : (
             <DataGrid
               // Фиксированная раскладка по долям эскиза: иначе доли колонок — лишь пожелание, и
               // таблица на карточке ~1000 px уходила в горизонтальную прокрутку (приёмка 5.5).
@@ -454,19 +540,10 @@ export function ItemBreakdownPanel({ view, onBack, version, onSelectVersion }: I
               rowKey={row => String(row.index)}
               emptyMessage="Вариантов ответа у вопроса нет"
             />
+            )}
           </CardBody>
         </Card>
-      ) : (
-        <Card variant="outlined">
-          <CardBody>
-            {/* FR-27: у сопоставления и ранжирования «вариантов» нет — есть пары и порядок. */}
-            <Text variant="body-s" tone="muted">
-              Для этого типа вопроса разбор вариантов не применяется: по нему работают трудность и
-              дискриминативность.
-            </Text>
-          </CardBody>
-        </Card>
-      )}
+      ) : distribution}
 
       {/* FR-49: версии содержания — последним блоком: это разрез выборки, а не свойство задания. */}
       {versions.length > 1 && onSelectVersion ? (
