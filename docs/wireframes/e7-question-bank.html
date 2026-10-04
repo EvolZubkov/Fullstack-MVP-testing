@@ -256,6 +256,9 @@
       .wf-cb-quality .cb-cell { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-1); padding-block: var(--ou-space-2); }
       .wf-cb-quality .cb-cell .ou-grid__cell-sub { text-align: center; }
       .cb-name .ou-tag { flex: none; }
+      /* Шапка дерева — капсом, текст подсказки — нет: в продукте пузырь выводится порталом и
+         правил шапки не наследует. */
+      .cb-thead .ou-tip__bubble { text-transform: none; letter-spacing: normal; font: var(--ou-text-body-s); font-weight: 400; text-align: left; width: var(--wf-size-300, 300px); max-width: none; white-space: normal; }
       .cb-zero { color: var(--ou-fg-muted); }
       .wf-bank-head { display: flex; flex-direction: column; gap: var(--ou-space-1); }
       /* Меню строки: якорь нулевой высоты под строкой, меню — у кнопки ⋯ этой строки. */
