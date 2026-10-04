@@ -35,6 +35,11 @@ import { COEFFICIENT_MIN, num } from "./psychometrics-format";
 import { QuestionRowMenu } from "./question-row-menu";
 import { TermHint } from "./term-hint";
 import { percent, percentNumber, percentOfShare } from "../format";
+import {
+  isSuspicious, isThin, questionFlag, suspicionRank, THIN_RANK, withinRank, type ReviewHeuristic,
+} from "@shared/psychometrics/question-flag";
+
+export type { ReviewHeuristic } from "@shared/psychometrics/question-flag";
 
 /** Порог и его интервал — десятая там значима: «65,8 %» и «66 %» говорят о разных участниках. */
 const PRECISE = { precise: true } as const;
@@ -279,19 +284,6 @@ function reliabilityCaption(reliability: Exclude<ReliabilityView, string>): stri
   return `${alphaVerdict(reliability.alpha)} · ${reliability.respondents} ${pluralize(reliability.respondents, "прохождение", "прохождения", "прохождений")}`;
 }
 
-/**
- * Эвристики PRD-56 «Требуют ревизии» одного задания и числа, которые их вызвали (FR-05).
- *
- * Приходят из статистики вопросов «Обзора» (`questionStats`): эвристики считает PRD-56, и
- * второй копии их правил здесь нет.
- */
-export interface ReviewHeuristic {
-  /** Виды сработавших эвристик: `hard-and-frequent`, `fast-and-wrong`. */
-  kinds: string[];
-  exposurePercent: number | null;
-  correctPercent: number | null;
-  latencyMedianMs: number | null;
-}
 
 /** Строка статистики вопроса из ответа «Обзора» — поля, нужные эвристикам. */
 export interface ReviewHeuristicSource {
@@ -326,164 +318,13 @@ export function reviewHeuristicsOf(
   );
 }
 
-/** Процент без десятых — как в подписях PRD-56. */
-const wholePercent = (value: number | null): string => percent(value);
-
-/** Признак-эвристика словами и числами; подписи — из эскизов PRD-66 и PRD-56. */
-function heuristicFlag(heuristic: ReviewHeuristic | undefined): { tone: "warning"; title: string; detail: string } | null {
-  if (!heuristic) return null;
-  if (heuristic.kinds.includes("hard-and-frequent")) {
-    return {
-      tone: "warning",
-      title: "Заезжено и трудно",
-      detail: `${wholePercent(heuristic.exposurePercent)} показов, ${wholePercent(heuristic.correctPercent)} верных`,
-    };
-  }
-  if (heuristic.kinds.includes("fast-and-wrong")) {
-    const latency = heuristic.latencyMedianMs === null ? "—" : `${Math.round(heuristic.latencyMedianMs / 1000)} с`;
-    return {
-      tone: "warning",
-      title: "Слишком быстрые ответы",
-      detail: `медиана ${latency} при ${wholePercent(heuristic.correctPercent)} верных`,
-    };
-  }
-  return null;
-}
-
 /**
- * Признак задания: заголовок-симптом и числа, которые его вызвали (FR-50).
- *
- * Порядок проверок — это и есть «сила подозрения»: прямой дефект вперёд, спокойное задание в
- * конец. Первым идёт отрицательная дискриминативность: сильные, ошибающиеся чаще слабых, почти
- * всегда означают испорченный ключ, и это чинят раньше всего остального.
- *
- * Экспортируется для «Вопросов теста» в редакторе: строка вопроса там показывает тот же
- * признак теми же словами, второй копии правил нет.
+ * Признак вопроса — правило из `shared/psychometrics/question-flag` (Э4б): одно на вкладку,
+ * «Вопросы теста» в редакторе и фоновый пересчёт сервера. Имя `flagOf` оставлено прежним для
+ * существующих читателей.
  */
-export function flagOf(row: ItemQualityRow, heuristic?: ReviewHeuristic): { tone: "error" | "warning" | "info"; title: string; detail: string } | null {
-  if (row.flags.negativeDiscrimination) {
-    return {
-      tone: "error",
-      title: "Сильные ошибаются чаще",
-      // FR-16a: заголовок — симптом, подпись — вероятная причина и числа, на которых она стоит.
-      detail: `вероятна ошибка в ключе: r = ${num(row.itemRest)}, D = ${num(row.discrimination)}`,
-    };
-  }
-  if (row.flags.atChanceLevel) {
-    return {
-      tone: "error",
-      title: "На уровне угадывания",
-      detail: `с поправкой ${num(row.correctedDifficulty)}`,
-    };
-  }
-  // FR-05, FR-48: эвристики PRD-56 — сразу за прямыми дефектами. На малой выборке они стоят
-  // вместо «мало данных»: там это единственное, что можно сказать о задании.
-  const byHeuristic = heuristicFlag(heuristic);
-  if (byHeuristic) return byHeuristic;
-  if (row.flags.weakDiscrimination) {
-    // FR-16a: имя — симптом, а не «Низкая дискриминативность»; числа — подписью, как в эскизе.
-    return { tone: "warning", title: "Сильные и слабые отвечают одинаково", detail: discriminationDetail(row) };
-  }
-  if (row.timingFlags.rushed) {
-    return { tone: "warning", title: "Отвечают не читая", detail: "ответ быстрее, чем вопрос можно прочесть" };
-  }
-  if (row.flags.tooHard) {
-    return { tone: "warning", title: "Слишком трудный", detail: `трудность ${num(row.difficulty)}` };
-  }
-  if (row.flags.tooEasy) {
-    return { tone: "warning", title: "Слишком лёгкий", detail: `трудность ${num(row.difficulty)}` };
-  }
-  if (row.timingFlags.slow) {
-    return { tone: "warning", title: "Тормозит прогон", detail: "время заметно выше медианы теста" };
-  }
-  if (row.coefficientConfidence === "insufficient") {
-    // Сколько СОБРАНО и сколько НУЖНО — оба числа, иначе «мало данных» не подсказывает
-    // действия: ждать ещё неделю или бросать задание вовсе (AC-05).
-    const needed = COEFFICIENT_MIN - row.observations;
-    return {
-      tone: "info",
-      title: "Мало данных",
-      detail: `${row.observations} из ${COEFFICIENT_MIN} · нужно ещё ${needed} ${pluralize(needed, "наблюдение", "наблюдения", "наблюдений")}`,
-    };
-  }
-  return null;
-}
-
-/**
- * Числа дискриминативности подписью: `r = 0,11, D = 0,08`. Индекса крайних групп может не быть
- * (групп не собралось) — тогда подпись называет только `r`, а не печатает прочерк.
- */
-function discriminationDetail(row: ItemQualityRow): string {
-  return row.discrimination === null
-    ? `r = ${num(row.itemRest)}`
-    : `r = ${num(row.itemRest)}, D = ${num(row.discrimination)}`;
-}
-
-/**
- * Есть ли у задания хоть один признак — по нему считается «под подозрением».
- *
- * Одна функция на плитку, счётчик переключателя и сам отбор: три места, считающие по-своему,
- * разошлись бы на первом же новом признаке.
- */
-function suspicious(row: ItemQualityRow, heuristic?: ReviewHeuristic): boolean {
-  // Невыданный вопрос не подозрителен и не здоров: судить о нём не по чему.
-  if (row.neverDelivered) return false;
-  const flag = flagOf(row, heuristic);
-  return flag !== null && flag.tone !== "info";
-}
-
-/**
- * Ранг признака — порядок FR-48: сначала прямые дефекты, потом эвристики, потом спокойные.
- *
- * Сортировка идёт по РАНГУ, а не по алфавиту ярлыков (FR-48a): «На уровне угадывания» стоит
- * впереди «Слишком лёгкого» не потому, что буква раньше, а потому что чинят его первым.
- * Задания с пометкой «мало данных» — последние в обоих направлениях: признака у них нет не
- * потому, что они здоровы, а потому, что судить не на чем.
- */
-/** Ранг задания «мало данных» без эвристики: последние в любом порядке (FR-48a). */
-const THIN_RANK = 90;
-
-/**
- * Попадает ли вопрос в «Мало данных»: коэффициенты не считаются — либо наблюдений мало, либо
- * их нет вовсе, потому что вопрос ещё не выдавался.
- */
-function isThin(row: ItemQualityRow): boolean {
-  return row.neverDelivered === true || row.coefficientConfidence === "insufficient";
-}
-
-function suspicionRank(row: ItemQualityRow, heuristic?: ReviewHeuristic): number {
-  const hasHeuristic = heuristicFlag(heuristic) !== null;
-  // Эвристика поднимает задание и на малой выборке (FR-05): «мало данных» — последними, только
-  // когда сказать о задании больше нечего.
-  if (row.coefficientConfidence === "insufficient") return hasHeuristic ? 3 : THIN_RANK;
-  if (row.flags.negativeDiscrimination) return 1;
-  if (row.flags.atChanceLevel) return 2;
-  if (hasHeuristic) return 3;
-  // Решение владельца 2026-09-25: слабая дискриминативность — сразу за эвристиками PRD-56 и
-  // перед признаками времени и трудности.
-  if (row.flags.weakDiscrimination) return 4;
-  if (row.timingFlags.rushed) return 5;
-  if (row.flags.tooHard) return 6;
-  if (row.flags.tooEasy) return 7;
-  if (row.timingFlags.slow) return 8;
-  return 50;
-}
-
-/**
- * Внутри одного ранга — по величине, вызвавшей признак (FR-48a).
- *
- * У отрицательной дискриминации это сама дискриминативность: чем глубже минус, тем раньше
- * строка. У прочих рангов — трудность, потому что именно она вызвала признак.
- */
-function withinRank(row: ItemQualityRow, heuristic?: ReviewHeuristic): number {
-  if (row.flags.negativeDiscrimination) return row.itemRest ?? 0;
-  if (row.flags.atChanceLevel) return row.correctedDifficulty ?? 0;
-  // У эвристики признак вызвала доля верных: чем она ниже, тем раньше строка.
-  if (heuristicFlag(heuristic)) return (heuristic?.correctPercent ?? 0) / 100;
-  // У слабой дискриминативности признак вызвала `r`: чем она ближе к нулю, тем раньше строка.
-  if (row.flags.weakDiscrimination) return row.itemRest ?? 0;
-  return row.difficulty ?? 0;
-}
+export const flagOf = (row: ItemQualityRow, heuristic?: ReviewHeuristic) => questionFlag(row, heuristic);
+const suspicious = isSuspicious;
 
 /**
  * Толкования терминов вкладки (FR-14b) — дословно из эскиза prd66-item-quality, состояния

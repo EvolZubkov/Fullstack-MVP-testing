@@ -46,6 +46,7 @@ import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
 import { hasOwnExternalIdFormat } from "../../utils/crypto";
 import type { ObservationFilter, ObservationSource } from "../../services/analytics/observations";
 import { analyticsScope } from "./helpers";
+import { isSuspicious, type FlagSource } from "@shared/psychometrics/question-flag";
 
 const router = Router();
 
@@ -726,19 +727,12 @@ router.get(
 /**
  * Э3.4: под подозрением ли вопрос — по ПСИХОМЕТРИЧЕСКИМ признакам.
  *
- * Те же признаки, что вид «Под подозрением» на «Качестве вопросов» (`flagOf` на клиенте), кроме
- * эвристик ревизии: те считаются по статистике выдачи сводкой теста, и на общем уровне они идут
- * отдельной строкой «Требуют ревизии» (решение владельца 2026-10-04). Невыданный вопрос не
- * подозрителен и не здоров — судить о нём не по чему.
+ * Правило — то же, что у таблицы вопросов (`shared/psychometrics/question-flag`, Э4б), только без
+ * эвристик ревизии: те считаются по статистике выдачи сводкой теста, а фоновый пересчёт её не
+ * строит (решение владельца 2026-10-04). Невыданный вопрос не подозрителен и не здоров.
  */
-export function suspiciousByPsychometrics(item: {
-  neverDelivered?: true;
-  flags: { negativeDiscrimination: boolean; atChanceLevel: boolean; weakDiscrimination: boolean; tooHard: boolean; tooEasy: boolean };
-  timingFlags: { rushed: boolean; slow: boolean };
-}): boolean {
-  if (item.neverDelivered) return false;
-  return item.flags.negativeDiscrimination || item.flags.atChanceLevel || item.flags.weakDiscrimination
-    || item.timingFlags.rushed || item.flags.tooHard || item.flags.tooEasy || item.timingFlags.slow;
+export function suspiciousByPsychometrics(item: FlagSource): boolean {
+  return isSuspicious(item);
 }
 
 /**
