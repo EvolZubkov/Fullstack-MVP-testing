@@ -86,6 +86,7 @@
       td.wf-c .ou-stack--ai-end { align-items: center; }
       td.wf-c .ou-grid__cell-sub { text-align: center; }
       .wf-row-link { cursor: pointer; }
+      .wf-dot { display: inline-block; margin-right: var(--ou-space-2); vertical-align: 0; }
       /* Длинный заголовок вопроса не выталкивает кнопки перехода за край. */
       .ou-shell__main > .ou-stack--row > .ou-stack--row { flex-shrink: 0; }
       /* Таблица вопросов: текст вопроса и подписи переносятся, как в продукте; обрезается только
@@ -526,9 +527,9 @@
                       </tr>
                       <tr class="wf-row-link" onclick="showState(null, 'q-long')">
                         <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="tb-qscoring__qtype" title="Развёрнутый ответ" aria-label="Развёрнутый ответ"><svg width="16" height="16" aria-hidden="true"><use href="#i-q-long" /></svg></span>Опишите свои действия при выявлении конфликта интересов у подчинённого<span class="ou-grid__cell-sub">Право и комплаенс</span></td>
-                        <td><div class="ou-stack ou-stack--gap-1 ou-stack--ai-start"><span class="ou-grid__cell-sub">34 ответа · медиана 412 знаков (от 38 до 1 920)</span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Прочитать ответы</span></button></div></td>
-                        <td class="wf-c"><span class="ou-tip wf-novalue" data-placement="bottom" tabindex="0"><span class="ou-text ou-text--body-s ou-text--tone-muted">не применимо</span><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">У развёрнутого ответа нет автоматической оценки, поэтому трудность и дискриминативность не считаются. Ответы читает и оценивает человек.</span></span></td>
-                        <td class="wf-c"><span class="ou-tip wf-novalue" data-placement="bottom" tabindex="0"><span class="ou-text ou-text--body-s ou-text--tone-muted">не применимо</span><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">У развёрнутого ответа нет автоматической оценки, поэтому трудность и дискриминативность не считаются. Ответы читает и оценивает человек.</span></span></td>
+                        <td><span class="ou-grid__cell-sub">34 ответа · медиана 412 знаков (от 38 до 1 920) · читать — на странице вопроса</span></td>
+                        <td class="wf-c"><span class="ou-tip wf-novalue" data-placement="bottom" tabindex="0"><span class="ou-text ou-text--body-s ou-text--tone-muted">не применимо</span><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">У развёрнутого ответа нет автоматической оценки, поэтому трудность и дискриминативность не считаются.</span></span></td>
+                        <td class="wf-c"><span class="ou-tip wf-novalue" data-placement="bottom" tabindex="0"><span class="ou-text ou-text--body-s ou-text--tone-muted">не применимо</span><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">У развёрнутого ответа нет автоматической оценки, поэтому трудность и дискриминативность не считаются.</span></span></td>
                         <td class="is-numeric wf-c">3 %</td>
                         <td class="is-numeric wf-c">100 %</td>
                         <td class="is-numeric wf-c">0</td>
@@ -1541,7 +1542,7 @@
                 <p class="ou-card__subtitle">Частые написания и засчитали ли их правила · 14 разных написаний · 286 ответов</p>
               </div>
               <div class="ou-card__trail">
-                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Прочитать ответы</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Выгрузить ответы в Excel</span></button>
               </div>
             </header>
             <div class="ou-card__body">
@@ -1558,33 +1559,33 @@
                     </thead>
                     <tbody>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">декларация</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">46 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 46%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-success-default)"></span>декларация</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">46 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 46%; background: var(--ou-success-default)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">декларация о конфликте интересов</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">21 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 21%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-success-default)"></span>декларация о конфликте интересов</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">21 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 21%; background: var(--ou-success-default)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">уведомление</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">18 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 18%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-business)"></span>уведомление</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">18 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 18%; background: var(--ou-cat-business)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--neutral ou-tag--s">не засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">декларацыя</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">5 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 5%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-bti)"></span>декларацыя</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">5 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 5%; background: var(--ou-cat-bti)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--neutral ou-tag--s">не засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">справка</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">4 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 4%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-digital)"></span>справка</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">4 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 4%; background: var(--ou-cat-digital)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--neutral ou-tag--s">не засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow">ещё 9 написаний</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">6 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 6%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong is-muted col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-border-strong)"></span>ещё 9 написаний</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">6 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 6%; background: var(--ou-border-strong)"></span></span></span></td>
                         <td class="wf-c"></td>
                       </tr>
                     </tbody>
@@ -1713,7 +1714,7 @@
                 <p class="ou-card__subtitle">Значения по интервалам и засчитали ли их правила · 254 ответа</p>
               </div>
               <div class="ou-card__trail">
-                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Прочитать ответы</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Выгрузить ответы в Excel</span></button>
               </div>
             </header>
             <div class="ou-card__body">
@@ -1730,23 +1731,23 @@
                     </thead>
                     <tbody>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">3</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">54 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 54%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-success-default)"></span>3</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">54 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 54%; background: var(--ou-success-default)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--success ou-tag--s">засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">1 — 2</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">20 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 20%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-business)"></span>1 — 2</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">20 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 20%; background: var(--ou-cat-business)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--neutral ou-tag--s">не засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">5</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">18 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 18%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-bti)"></span>5</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">18 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 18%; background: var(--ou-cat-bti)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--neutral ou-tag--s">не засчитано</span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">10 и больше</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">8 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 8%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-digital)"></span>10 и больше</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">8 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 8%; background: var(--ou-cat-digital)"></span></span></span></td>
                         <td class="wf-c"><span class="ou-tag ou-tag--neutral ou-tag--s">не засчитано</span></td>
                       </tr>
                     </tbody>
@@ -1874,9 +1875,6 @@
                 <h2 class="ou-card__title">Пропуски</h2>
                 <p class="ou-card__subtitle">Доля верно заполнивших каждый пропуск · 241 наблюдение</p>
               </div>
-              <div class="ou-card__trail">
-                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Прочитать ответы</span></button>
-              </div>
             </header>
             <div class="ou-card__body">
               <div class="ou-grid">
@@ -1909,6 +1907,40 @@
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="ou-card ou-card--outlined">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Ответы</h2>
+                <p class="ou-card__subtitle">Новые сверху · что вписал каждый участник</p>
+              </div>
+              <div class="ou-card__trail">
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Выгрузить ответы в Excel</span></button>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-4">
+                <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-center ou-stack--wrap"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Петрова Анна · 03.10.2026, 14:20 · 1:05</span><span class="ou-tag ou-tag--success ou-tag--s">верно</span></div>
+                  <p class="ou-text ou-text--body-m">1-й пропуск: «личная» · 2-й пропуск: «3»</p>
+                </div>
+                <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-center ou-stack--wrap"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Соколов Игорь · 02.10.2026, 10:52 · 1:40</span><span class="ou-tag ou-tag--warning ou-tag--s">частично</span></div>
+                  <p class="ou-text ou-text--body-m">1-й пропуск: «личная» · 2-й пропуск: «5»</p>
+                </div>
+                <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-center ou-stack--wrap"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Участник 7f3a · 01.10.2026, 16:10 · 0:48</span><span class="ou-tag ou-tag--neutral ou-tag--s">неверно</span></div>
+                  <p class="ou-text ou-text--body-m">1-й пропуск: «прямая» · 2-й пропуск: «10»</p>
+                </div>
+                <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-center">
+                  <div class="ou-spinner-wrap is-inline" role="status" aria-label="Загружаем следующие ответы…"><span class="ou-spinner ou-spinner--s ou-spinner--accent"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="ou-spinner__track" cx="12" cy="12" r="10" /><circle class="ou-spinner__head" cx="12" cy="12" r="10" /></svg></span><span class="ou-spinner__label">Загружаем следующие ответы…</span></div>
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Показано 20 из 241</span>
                 </div>
               </div>
             </div>
@@ -2023,13 +2055,14 @@
             <header class="ou-card__header">
               <div class="ou-card__heading">
                 <h2 class="ou-card__title">Ответы</h2>
-                <p class="ou-card__subtitle">Развёрнутые ответы читает и оценивает человек, поэтому частот и долей у них нет</p>
+                <p class="ou-card__subtitle">Новые сверху · у развёрнутого ответа нет автоматической оценки, поэтому частот и долей нет</p>
               </div>
               <div class="ou-card__trail">
-                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Прочитать ответы</span></button>
+                <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Выгрузить ответы в Excel</span></button>
               </div>
             </header>
             <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-6">
               <div class="ou-stack ou-stack--gap-4 ou-stack--ai-start">
                 <div class="ou-lgrid ou-lgrid--cols-3 ou-lgrid--gap-4">
                   <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
@@ -2045,6 +2078,27 @@
                     <span class="ou-text ou-text--body-s">38 и 1 920 знаков</span>
                   </div>
                 </div>
+              </div>
+              <div class="ou-stack ou-stack--gap-4">
+                <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-center ou-stack--wrap"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Петрова Анна · 03.10.2026, 14:12 · 512 знаков · 7:05</span></div>
+                  <p class="ou-text ou-text--body-m">Сначала поговорю с сотрудником и попрошу его письменно уведомить работодателя о возникшем конфликте. Затем сообщу в отдел комплаенса и, до решения комиссии, передам задачи, связанные с контрагентом, другому сотруднику. Проконтролирую, чтобы решение было оформлено приказом.</p>
+                </div>
+                <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-center ou-stack--wrap"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Соколов Игорь · 02.10.2026, 10:47 · 186 знаков · 3:20</span></div>
+                  <p class="ou-text ou-text--body-m">Сообщу руководителю и в службу безопасности, отстраню сотрудника от работы с этим контрагентом до проверки.</p>
+                </div>
+                <div class="ou-separator ou-separator--horizontal" role="separator"></div>
+                <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--row ou-stack--gap-2 ou-stack--ai-center ou-stack--wrap"><span class="ou-text ou-text--body-xs ou-text--tone-muted">Участник 7f3a · 01.10.2026, 16:03 · 38 знаков · 0:54</span></div>
+                  <p class="ou-text ou-text--body-m">Уведомлю комплаенс и отстраню от сделки.</p>
+                </div>
+                <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-center">
+                  <div class="ou-spinner-wrap is-inline" role="status" aria-label="Загружаем следующие ответы…"><span class="ou-spinner ou-spinner--s ou-spinner--accent"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle class="ou-spinner__track" cx="12" cy="12" r="10" /><circle class="ou-spinner__head" cx="12" cy="12" r="10" /></svg></span><span class="ou-spinner__label">Загружаем следующие ответы…</span></div>
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">Показано 20 из 34</span>
+                </div>
+              </div>
               </div>
             </div>
           </section>
@@ -2255,29 +2309,29 @@
                     <thead class="wf-th-wrap">
                       <tr>
                         <th class="col-stick col-stick--shadow"><div class="ou-grid__th">Градация</div></th>
-                        <th class="wf-c"><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Выбрали&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля участников, выбравших градацию. Тона нет: у опросника нет верного ответа, высокая доля не хороша и не плоха.</span></span></div></th>
+                        <th class="wf-c"><div class="ou-grid__th wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Выбрали&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля участников, выбравших градацию. Цвет — тот же, что у градации в полосе таблицы вопросов; оценки он не несёт: у опросника нет верного ответа.</span></span></div></th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Полностью не согласен</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">6 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 6%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-business)"></span>Полностью не согласен</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">6 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 6%; background: var(--ou-cat-business)"></span></span></span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Скорее не согласен</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">14 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 14%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-bti)"></span>Скорее не согласен</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">14 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 14%; background: var(--ou-cat-bti)"></span></span></span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Затрудняюсь ответить</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">22 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 22%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-digital)"></span>Затрудняюсь ответить</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">22 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 22%; background: var(--ou-cat-digital)"></span></span></span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Скорее согласен</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">38 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 38%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-b2c)"></span>Скорее согласен</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">38 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 38%; background: var(--ou-cat-b2c)"></span></span></span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Полностью согласен</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">20 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 20%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-leadership)"></span>Полностью согласен</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">20 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 20%; background: var(--ou-cat-leadership)"></span></span></span></td>
                       </tr>
                     </tbody>
                   </table>
@@ -2368,20 +2422,20 @@
                     </thead>
                     <tbody>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Интересные задачи</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">34 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 34%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-business)"></span>Интересные задачи</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">34 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 34%; background: var(--ou-cat-business)"></span></span></span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Признание результатов</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">27 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 27%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-bti)"></span>Признание результатов</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">27 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 27%; background: var(--ou-cat-bti)"></span></span></span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Уровень дохода</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">23 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 23%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-digital)"></span>Уровень дохода</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">23 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 23%; background: var(--ou-cat-digital)"></span></span></span></td>
                       </tr>
                       <tr>
-                        <td class="ou-grid__cell-strong col-stick col-stick--shadow">Гибкий график</td>
-                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">16 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 16%"></span></span></span></td>
+                        <td class="ou-grid__cell-strong col-stick col-stick--shadow"><span class="ou-donut__dot wf-dot" style="background: var(--ou-cat-b2c)"></span>Гибкий график</td>
+                        <td class="wf-c"><span class="wf-scale"><span class="wf-scale__value ou-text ou-text--body-s">16 %</span><span class="wf-scale__track"><span class="wf-scale__fill" style="width: 16%; background: var(--ou-cat-b2c)"></span></span></span></td>
                       </tr>
                     </tbody>
                   </table>
@@ -2403,8 +2457,8 @@
               <tr><td>Колонка «Что отвечали» — компактный вид</td><td>Одна разметка у всех типов: полоса из отрезков и подпись не длиннее двух строк; строка ведёт на страницу вопроса. У каждого ответа свой цвет из палитры категорий дизайн-системы, цвет закреплён за вариантом (его местом в вопросе), а не за долей. Верные варианты и засчитанные ответы — зелёным; у оцениваемого вопроса бирюзовый из палитры исключён, чтобы не читался «почти верным»; «ещё N написаний» — серым. По наведению — легенда: цвет, ответ, доля. У сопоставления, ранжирования и пропусков два отрезка — верно и неверно — и под легендой строка на пару, элемент или пропуск. Подсказка выводится поверх страницы (существующий FloatingHint) и рамкой таблицы не обрезается.</td><td>Сегодня подпись перечисляет варианты до шести строк в узкой колонке. Колонка показывается у любого теста, а не только у измерительного и с письменными ответами</td></tr>
               <tr><td>Множественный выбор</td><td>Доли отметивших; в подсказке и подзаголовке полного вида сказано, что в сумме больше 100 %. Полоса масштабируется к сумме долей</td><td>Как сегодня в <code>answerSegments</code></td></tr>
               <tr><td>Сопоставление, ранжирование, пропуски</td><td>Компактно — доля верного (пар, элементов на своём месте, пропусков) и самое слабое место. Полный вид — по строке на пару, элемент или пропуск: доля верного, у слабых и у сильных, частая ошибка; у ранжирования — среднее место и средний сдвиг</td><td>Новый серверный расчёт в <code>answer-spread.ts</code>; сегодня у этих типов в колонке «—»</td></tr>
-              <tr><td>Короткий ответ</td><td>Частые написания с пометкой «засчитано / не засчитано» правилами вопроса; число — по интервалам. Полный вид — таблица и «Прочитать ответы»</td><td>Пометка — тем же проверяющим кодом, что ставит балл (<code>shared/answer-check</code>)</td></tr>
-              <tr><td>Развёрнутый ответ</td><td>Объём и длина плюс «Прочитать ответы» — как сегодня. Трудность и дискриминативность — «не применимо»</td><td>Окно чтения ответов — существующее</td></tr>
+              <tr><td>Короткий ответ</td><td>Частые написания с пометкой «засчитано / не засчитано» правилами вопроса; число — по интервалам. Полный вид — таблица с теми же цветами, что в полосе, и «Выгрузить ответы в Excel»</td><td>Пометка — тем же проверяющим кодом, что ставит балл (<code>shared/answer-check</code>)</td></tr>
+              <tr><td>Развёрнутый ответ и пропуски</td><td>Ответы читаются прямо на странице вопроса, без отдельного окна: новые сверху, по 20, следующие подгружаются при прокрутке к концу списка. Над списком — объём и длина (развёрнутый ответ) или таблица пропусков; в шапке карточки — «Выгрузить ответы в Excel». В таблице вопросов у развёрнутого ответа — только сводка, строка ведёт на страницу. Трудность и дискриминативность развёрнутого ответа — «не применимо»</td><td>Сегодня ответы открываются окном «Прочитать ответы», и сервер отдаёт их все разом. Нужны порции: <code>GET .../answers?offset=&amp;limit=</code> и общий <code>total</code>; окно уходит</td></tr>
               <tr><td>Пустые значения</td><td>Три вида и больше никаких: «не применимо» (величина у вопроса не определена, причина — в подсказке), «мало данных» с числом «ещё N» (сколько не хватает до порога; подсказка называет порог и собранное), ноль — обычным числом. Прочерк «—» уходит</td><td>Порог трудности и долей — <code>analytics.minObservations</code> (10), коэффициентов — 30. В таблице вопросов значение по умолчанию 0 заменяется настоящим порогом</td></tr>
               <tr><td>«Сложность: задана → по ответам»</td><td>Колонка и плитка: «60 → 59» в шкале редактора (0 — легко, 100 — сложно) и вывод — «расхождения нет» или тег «легче / труднее заданной на N» при расхождении больше 10. Не задана — «не задана → 42», расхождение не считается. Нет наблюдаемой — заданная и «по ответам — мало данных / не применимо»</td><td>Решение владельца 2026-10-04, вариант Б. Сервер перестаёт подставлять 50 вместо незаданной</td></tr>
               <tr><td>Карточка «Вопрос в этом тесте»</td><td>Поле «Сложность» — «не задана», если не задана. У вопроса опросника полей «Балл», «Цена ответа», «Сложность» нет</td><td>—</td></tr>
