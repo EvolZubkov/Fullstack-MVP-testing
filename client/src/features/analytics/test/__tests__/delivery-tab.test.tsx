@@ -132,7 +132,7 @@ describe("ExposureProfile (FR-20)", () => {
     render(<ExposureProfile profiles={[PROFILE]} />);
 
     expect(screen.getByText("14 вопросов в банке")).toBeTruthy();
-    expect(screen.getByText("на прохождение выдаётся 6")).toBeTruthy();
+    expect(screen.getByText("На прохождение выдаётся 6")).toBeTruthy();
     expect(screen.getByText("486 прохождений за окно наблюдения")).toBeTruthy();
   });
 
@@ -191,8 +191,8 @@ describe("ExposureProfile (FR-20)", () => {
       />,
     );
 
-    expect(screen.getByText(/вопросы выбирает уровень адаптивного прогона/)).toBeTruthy();
-    expect(screen.getByText(/выдаётся вариант раздела/)).toBeTruthy();
+    expect(screen.getByText(/Вопросы выбирает уровень адаптивного прогона/)).toBeTruthy();
+    expect(screen.getByText(/Выдаётся вариант раздела/)).toBeTruthy();
     expect(screen.queryByText(/выдаётся 0/)).toBeNull();
   });
 

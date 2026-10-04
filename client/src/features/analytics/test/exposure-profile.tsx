@@ -73,10 +73,10 @@ export interface ExposureProfileProps {
  */
 function drawPhrase(profile: ExposureProfileView): string {
   const mode = profile.drawMode ?? (profile.drawCount === null ? "all" : "quota");
-  if (mode === "adaptive") return "вопросы выбирает уровень адаптивного прогона";
-  if (mode === "forms") return "выдаётся вариант раздела";
-  if (mode === "all" || profile.drawCount === null) return "выдаётся весь банк";
-  return `на прохождение выдаётся ${profile.drawCount}`;
+  if (mode === "adaptive") return "Вопросы выбирает уровень адаптивного прогона";
+  if (mode === "forms") return "Выдаётся вариант раздела";
+  if (mode === "all" || profile.drawCount === null) return "Выдаётся весь банк";
+  return `На прохождение выдаётся ${profile.drawCount}`;
 }
 
 /*
