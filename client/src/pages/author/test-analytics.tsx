@@ -177,7 +177,7 @@ interface TestAnalytics {
         questionType: string;
         topicId: string;
         topicName: string;
-        difficulty: number;
+        difficulty: number | null;
         totalAnswers: number;
         correctAnswers: number;
         /** `null` — оценивать было нечего: у измерительного вопроса эталона нет. */

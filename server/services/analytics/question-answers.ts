@@ -12,6 +12,8 @@
  */
 
 import { formatUserAnswerText } from "../../routes/analytics/helpers";
+import { blankIds } from "@shared/questions/blanks";
+import { hasBlanks } from "@shared/questions/question-type";
 
 import type { AnswerFact } from "./answers";
 import type { ObservationSource } from "./observations";
@@ -29,6 +31,11 @@ export interface QuestionAnswerRow {
   /** Длина ответа в символах — по ней список сортируется, когда автор ищет отписки. */
   length: number;
   result: AnswerFact["result"];
+  /**
+   * Э4а: исход с частичным кредитом. `result` знает только «верно / неверно», а ответ на
+   * задание с пропусками или парами бывает верен наполовину — список ответов это называет.
+   */
+  outcome: "correct" | "partial" | "incorrect" | "neutral";
   latencyMs: number | null;
 }
 
@@ -42,7 +49,7 @@ export interface AnswerObservation {
 
 export interface QuestionAnswersInput {
   questionId: string;
-  question: { type: string; dataJson?: unknown };
+  question: { type: string; dataJson?: unknown; prompt?: string };
   facts: readonly AnswerFact[];
   /** Прохождения по идентификатору — подпись участника и дата. */
   observations: ReadonlyMap<string, AnswerObservation>;
@@ -66,7 +73,9 @@ export function buildQuestionAnswerRows(input: QuestionAnswersInput): QuestionAn
   const rows: QuestionAnswerRow[] = [];
   for (const fact of facts) {
     if (fact.questionId !== questionId) continue;
-    const text = formatUserAnswerText(question.type, question.dataJson ?? {}, fact.answer).trim();
+    const text = (hasBlanks(question.type) && question.prompt
+      ? blanksText(question.prompt, fact.answer)
+      : formatUserAnswerText(question.type, question.dataJson ?? {}, fact.answer)).trim();
     if (text === "" || text === "(нет ответа)") continue;
 
     const observation = observations.get(fact.attemptId);
@@ -79,6 +88,7 @@ export function buildQuestionAnswerRows(input: QuestionAnswersInput): QuestionAn
       answer: text,
       length: text.length,
       result: fact.result,
+      outcome: outcomeOf(fact),
       latencyMs: fact.latencyMs,
     });
   }
@@ -89,4 +99,30 @@ export function buildQuestionAnswerRows(input: QuestionAnswersInput): QuestionAn
     if (b.at === null) return -1;
     return a.at < b.at ? 1 : -1;
   });
+}
+
+/** Исход ответа с частичным кредитом: по баллам, если они есть, иначе по `result`. */
+function outcomeOf(fact: AnswerFact): QuestionAnswerRow["outcome"] {
+  if (fact.result === "neutral") return "neutral";
+  if (fact.result === "correct") return "correct";
+  const earned = fact.earnedPoints ?? 0;
+  return earned > 0 ? "partial" : "incorrect";
+}
+
+/**
+ * Ответ на задание с пропусками — «1-й пропуск: «написанное»» по порядку пропусков в тексте.
+ *
+ * Имя поля (`city`) автор видит в редакторе, а читатель списка — нет; порядок в тексте он видит.
+ * Пропуск, оставленный пустым, назван — по нему видно, где участник остановился.
+ */
+function blanksText(prompt: string, answer: unknown): string {
+  const written = answer && typeof answer === "object" && !Array.isArray(answer) ? (answer as Record<string, unknown>) : {};
+  const ids = blankIds(prompt);
+  if (!ids.some((id) => typeof written[id] === "string" && (written[id] as string).trim() !== "")) return "";
+  return ids
+    .map((id, index) => {
+      const value = typeof written[id] === "string" ? (written[id] as string).trim() : "";
+      return `${index + 1}-й пропуск: ${value === "" ? "(нет ответа)" : `«${value}»`}`;
+    })
+    .join(" · ");
 }

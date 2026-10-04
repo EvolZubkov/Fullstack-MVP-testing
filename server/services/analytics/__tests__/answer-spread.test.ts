@@ -247,3 +247,27 @@ describe("сводка свободного текста (FR-32)", () => {
     expect(textVolume(["  пять  "])?.medianLength).toBe(4);
   });
 });
+
+describe("answerSpread — пометка «засчитано» (Э4а)", () => {
+  const rules = { answerKind: "text" as const, join: "any" as const, rules: [{ kind: "text" as const, match: "wildcard" as const, value: "декларация" }] };
+
+  it("строка текста помечается правилами задания", () => {
+    const spread = answerSpread({ type: "short", options: [], answers: ["декларация", "уведомление", "Декларация"], rules });
+    expect(spread?.options).toEqual([
+      { label: "декларация", share: 66.7, correct: true },
+      { label: "уведомление", share: 33.3, correct: false },
+    ]);
+  });
+
+  it("без правил пометки нет", () => {
+    const spread = answerSpread({ type: "short", options: [], answers: ["да"] });
+    expect(spread?.options[0]).not.toHaveProperty("correct");
+  });
+
+  it("у числа засчитанные значения — отдельной строкой, первой", () => {
+    const numeric = { answerKind: "number" as const, join: "any" as const, rules: [{ kind: "number" as const, op: "eq" as const, value: 3 }] };
+    const spread = answerSpread({ type: "short", options: [], answers: ["3", "3", "5", "10"], answerKind: "number", rules: numeric });
+    expect(spread?.options[0]).toEqual({ label: "3", share: 50, correct: true });
+    expect(spread?.options.slice(1).every(option => option.correct === false)).toBe(true);
+  });
+});

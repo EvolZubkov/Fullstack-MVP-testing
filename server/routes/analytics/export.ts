@@ -268,7 +268,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
           plainPromptOf(question),
           topicMap.get(question.topicId) || "Unknown",
           formatQuestionType(question.type),
-          scoring.difficultyOf(question) || 50,
+          scoring.difficultyOf(question) ?? "",
           formatAllOptions(question.type, dataJson, correctJson),
           formatCorrectAnswerText(question.type, dataJson, correctJson),
           formatUserAnswerText(question.type, dataJson, userAnswer),
@@ -325,7 +325,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         plainPromptOf(question),
         topicMap.get(question.topicId) || "Unknown",
         formatQuestionType(question.type),
-        scoring.difficultyOf(question) || 50,
+        scoring.difficultyOf(question) ?? "",
         formatAllOptions(question.type, dataJson, correctJson),
         formatCorrectAnswerText(question.type, dataJson, correctJson),
         stats.total,
@@ -776,7 +776,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
             plainPromptOf(q),
             topicMap.get(q.topicId) || "Unknown",
             formatQuestionType(q.type),
-            (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
+            (scoring ? scoring.difficultyOf(q) : q.difficulty) ?? "",
             formatAllOptions(q.type, dataJson, correctJson),
             formatCorrectAnswerText(q.type, dataJson, correctJson),
             formatUserAnswerText(q.type, dataJson, userAnswer),
@@ -876,7 +876,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           plainPromptOf(q),
           topicMap.get(q.topicId) || "Unknown",
           formatQuestionType(q.type),
-          (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
+          (scoring ? scoring.difficultyOf(q) : q.difficulty) ?? "",
           s.total,
           // A measurement question is never checked — «0 правильных» was a verdict on
           // a question that has none (see the per-test export).
@@ -1182,7 +1182,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
             plainPromptOf({ prompt: ans.questionPrompt || q?.prompt || "—", promptFormat: q?.promptFormat }),
             ans.topicName || topicMap.get(ans.topicId || "") || "—",
             formatQuestionType(ans.questionType || q?.type || "unknown"),
-            ans.difficulty || q?.difficulty || 50,
+            ans.difficulty ?? q?.difficulty ?? "",
             formatAllOptions(ans.questionType || q?.type, dataJson, ans.correctAnswerJson || q?.correctJson),
             formatCorrectAnswerText(ans.questionType || q?.type, dataJson, ans.correctAnswerJson || q?.correctJson),
             formatUserAnswerText(ans.questionType || q?.type, dataJson, ans.userAnswerJson),
@@ -1198,7 +1198,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
 
     // Sheet: Question stats
     if (includeSheets.questionStats) {
-      const stat = new Map<string, { prompt: string; testId: string; total: number; correct: number; topicName: string; type: string; difficulty: number }>();
+      const stat = new Map<string, { prompt: string; testId: string; total: number; correct: number; topicName: string; type: string; difficulty: number | null }>();
 
       for (const attempt of completed) {
         const pkg = attemptPackage(attempt, packageMap);
@@ -1216,7 +1216,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
             correct: 0,
             topicName: ans.topicName || topicMap.get(ans.topicId || q?.topicId || "") || "—",
             type: ans.questionType || q?.type || "—",
-            difficulty: ans.difficulty || q?.difficulty || 50,
+            difficulty: ans.difficulty ?? q?.difficulty ?? null,
           };
           s.total++;
           if (ans.isCorrect) s.correct++;
@@ -1231,7 +1231,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
           s.prompt,
           s.topicName,
           formatQuestionType(s.type),
-          s.difficulty,
+          s.difficulty ?? "",
           s.total,
           s.correct,
           s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",

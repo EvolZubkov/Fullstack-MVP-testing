@@ -229,7 +229,7 @@ export async function loadWebAttemptDetail(req: Request, attemptId: string): Pro
         measurementOnly: isMeasurementOnly(question),
         earnedPoints: ratio * effective.points,
         possiblePoints: effective.points,
-        difficulty: scoring.difficultyOf(question) || 50,
+        difficulty: scoring.difficultyOf(question),
         contribs,
         levelName,
         levelIndex,

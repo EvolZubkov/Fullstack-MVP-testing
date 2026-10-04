@@ -38,6 +38,7 @@ const SOURCE_TITLE: Record<string, string> = {
 /** Исход ответа словами: у неоценённого ответа «неверно» было бы ложью. */
 const RESULT_TITLE: Record<string, string> = {
   correct: "Верно",
+  partial: "Частично",
   incorrect: "Неверно",
   neutral: "Без оценки",
 };
@@ -85,11 +86,17 @@ router.get(
       const { testId, questionId } = req.params;
       const found = await collect(testId, questionId);
       if (!found) return res.status(404).json({ error: "Задание не входит в этот тест" });
+      // Э4а: страница вопроса читает ответы порциями при прокрутке. Без `limit` — все разом,
+      // как раньше: так ответ остаётся совместимым с прежними читателями.
+      const offset = Math.max(0, Number.parseInt(String(req.query.offset ?? "0"), 10) || 0);
+      const limitRaw = Number.parseInt(String(req.query.limit ?? ""), 10);
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : null;
       res.json({
         questionId,
         questionType: found.question.type,
         total: found.rows.length,
-        rows: found.rows,
+        offset,
+        rows: limit === null ? found.rows.slice(offset) : found.rows.slice(offset, offset + limit),
       });
     } catch (error) {
       logger.error("GET question answers error: " + (error as Error).message);
@@ -117,7 +124,7 @@ router.get(
           row.at ? new Date(row.at).toLocaleString("ru-RU") : "—",
           row.answer,
           row.length,
-          RESULT_TITLE[row.result] ?? row.result,
+          RESULT_TITLE[row.outcome] ?? row.outcome,
           row.latencyMs === null ? "—" : Math.round(row.latencyMs / 1000),
         ]),
       ];

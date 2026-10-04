@@ -208,7 +208,7 @@ describe("GET /:testId — question stats branches", () => {
     const res = await asAuthor(request(app).get("/api/analytics/test1"));
     expect(res.status).toBe(200);
     expect(res.body.questionStats).toHaveLength(1); // qGhost skipped
-    expect(res.body.questionStats[0].difficulty).toBe(50); // null difficulty -> 50 default
+    expect(res.body.questionStats[0].difficulty).toBeNull(); // Э4а: незаданная сложность — null, не 50
     expect(res.body.questionStats[0].correctAnswers).toBe(0); // wrong answer
     expect(res.body.questionStats[0].correctPercent).toBe(0);
   });

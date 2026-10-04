@@ -84,7 +84,7 @@ interface DetailedAnswer {
   questionType: string;
   topicId: string;
   topicName: string;
-  difficulty: number;
+  difficulty: number | null;
   userAnswer: any;
   correctAnswer: any;
   options?: string[]; // для single/multiple

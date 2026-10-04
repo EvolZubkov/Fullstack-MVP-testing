@@ -22,7 +22,7 @@
  * Тона у полос нет намеренно (FR-21b): высокая доля градации не «хорошо» и не «плохо» —
  * эталона, относительно которого это оценивать, у опросника не существует.
  */
-import { normalizeForCompare, parseNumericAnswer } from "@shared/answer-check";
+import { checkRuleSet, normalizeForCompare, parseNumericAnswer, type AnswerRuleSet } from "@shared/answer-check";
 
 /** Доля одного варианта в разбросе. */
 export interface SpreadOption {
@@ -33,7 +33,10 @@ export interface SpreadOption {
    * У множественного выбора доли в сумме больше ста: человек отмечает несколько вариантов.
    */
   share: number;
-  /** Вариант верный по эталону; есть только у выбора — у шкалы и распределения эталона нет. */
+  /**
+   * Вариант верный по эталону (выбор) либо ответ засчитан правилами задания (короткий ответ,
+   * Э4а). У шкалы и распределения эталона нет, и поля нет.
+   */
   correct?: boolean;
 }
 
@@ -66,6 +69,11 @@ export interface AnswerSpreadInput {
    * а автору нужно «куда уходят те, кто ошибся».
    */
   correctIndices?: readonly number[];
+  /**
+   * Э4а: правила проверки короткого ответа. По ним строка разброса помечается «засчитано»:
+   * автору важно видеть, какое частое написание правила НЕ ловят. Без правил пометки нет.
+   */
+  rules?: AnswerRuleSet | null;
 }
 
 /** Разброс выбора: доля людей, выбравших каждый вариант (FR-28x для оцениваемых заданий). */
@@ -129,7 +137,7 @@ function allocationOf(answer: unknown): Record<string, number> | null {
  *
  * Строки идут по убыванию доли: сверху то, что пишут чаще всего.
  */
-function textSpread(answers: readonly unknown[]): AnswerSpread | null {
+function textSpread(answers: readonly unknown[], rules?: AnswerRuleSet | null): AnswerSpread | null {
   const groups = new Map<string, { total: number; spellings: Map<string, number> }>();
   let counted = 0;
 
@@ -158,7 +166,10 @@ function textSpread(answers: readonly unknown[]): AnswerSpread | null {
           label = spelling;
         }
       }
-      return { label, share: Math.round((group.total / counted) * 1000) / 10 };
+      const option: SpreadOption = { label, share: Math.round((group.total / counted) * 1000) / 10 };
+      // Группа сведена по форме сравнения, поэтому проверяется её подпись — самое частое написание.
+      if (hasCheck(rules)) option.correct = checkRuleSet(rules, label).passed;
+      return option;
     })
     .sort((a, b) => b.share - a.share);
 
@@ -198,8 +209,10 @@ function widerStep(step: number): number {
  * последней: это не диапазон, а сообщение о том, что участник не понял, чего от него
  * ждут.
  */
-function numericSpread(answers: readonly unknown[]): AnswerSpread | null {
+function numericSpread(answers: readonly unknown[], rules?: AnswerRuleSet | null): AnswerSpread | null {
   const values: number[] = [];
+  /** Э4а: засчитанные значения — отдельной строкой, иначе корзина «от 2 до 4» смешала бы верное с неверным. */
+  const accepted: number[] = [];
   let notNumbers = 0;
 
   for (const raw of answers) {
@@ -207,20 +220,32 @@ function numericSpread(answers: readonly unknown[]): AnswerSpread | null {
     if (answer === null || answer.trim() === "") continue;
     const parsed = parseNumericAnswer(answer);
     if (parsed === null) notNumbers += 1;
+    else if (hasCheck(rules) && checkRuleSet(rules, answer).passed) accepted.push(parsed);
     else values.push(parsed);
   }
 
-  const counted = values.length + notNumbers;
+  const counted = values.length + accepted.length + notNumbers;
   if (counted === 0) return null;
 
   const share = (times: number) => Math.round((times / counted) * 1000) / 10;
   const nan: SpreadOption[] = notNumbers > 0 ? [{ label: "не число", share: share(notNumbers) }] : [];
-  if (values.length === 0) return { options: nan, answered: counted };
+  const ok: SpreadOption[] = [];
+  if (accepted.length > 0) {
+    const low = Math.min(...accepted);
+    const high = Math.max(...accepted);
+    ok.push({
+      label: low === high ? formatValue(low) : `от ${formatValue(low)} до ${formatValue(high)}`,
+      share: share(accepted.length),
+      correct: true,
+    });
+  }
+  const mark = (options: SpreadOption[]) => (hasCheck(rules) ? options.map(o => ({ ...o, correct: o.correct ?? false })) : options);
+  if (values.length === 0) return { options: mark([...ok, ...nan]), answered: counted };
 
   const min = Math.min(...values);
   const max = Math.max(...values);
   if (min === max) {
-    return { options: [{ label: formatValue(min), share: share(values.length) }, ...nan], answered: counted };
+    return { options: mark([...ok, { label: formatValue(min), share: share(values.length) }, ...nan]), answered: counted };
   }
 
   let step = niceStep((max - min) / 10);
@@ -243,7 +268,12 @@ function numericSpread(answers: readonly unknown[]): AnswerSpread | null {
       share: share(times),
     }));
 
-  return { options: [...options, ...nan], answered: counted };
+  return { options: mark([...ok, ...options, ...nan]), answered: counted };
+}
+
+/** Есть ли у задания правила, по которым можно пометить «засчитано». */
+function hasCheck(rules: AnswerRuleSet | null | undefined): rules is AnswerRuleSet {
+  return !!rules && Array.isArray(rules.rules) && rules.rules.length > 0;
 }
 
 /** Сводка свободного текста: сколько написали и как длинно (PRD-57 FR-32). */
@@ -308,7 +338,7 @@ export function answerSpread(input: AnswerSpreadInput): AnswerSpread | null {
   const { type, options, answers, answerKind } = input;
   // Короткий ответ проверяется ПЕРВЫМ: вариантов у него нет по устройству, и общая
   // проверка «нет вариантов — считать не из чего» отбросила бы его целиком.
-  if (type === "short") return answerKind === "number" ? numericSpread(answers) : textSpread(answers);
+  if (type === "short") return answerKind === "number" ? numericSpread(answers, input.rules) : textSpread(answers, input.rules);
   if (options.length === 0 || answers.length === 0) return null;
   if (type === "single" || type === "multiple") return choiceSpread(input);
 

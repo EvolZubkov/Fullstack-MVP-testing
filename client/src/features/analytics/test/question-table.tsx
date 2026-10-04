@@ -60,7 +60,8 @@ export interface QuestionRow {
   questionPrompt: string;
   questionType: string;
   topicName: string;
-  difficulty: number;
+  /** Сложность, заданная автором; `null` — не задана (Э4а). */
+  difficulty: number | null;
   totalAnswers: number;
   gradedAnswers: number;
   correctAnswers: number;

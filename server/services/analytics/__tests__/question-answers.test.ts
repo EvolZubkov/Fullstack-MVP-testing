@@ -45,6 +45,7 @@ describe("список ответов задания", () => {
       answer: "Мой ответ",
       length: 9,
       result: "neutral",
+      outcome: "neutral",
       latencyMs: 42_000,
     }]);
   });
@@ -117,5 +118,34 @@ describe("список ответов задания", () => {
       observations: new Map(),
     });
     expect(rows[0]).toMatchObject({ participant: "Неизвестный участник", source: "telemetry", at: null });
+  });
+});
+
+describe("список ответов задания — Э4а", () => {
+  it("называет частичный кредит: «неверно» с баллами — это «частично»", () => {
+    const rows = buildQuestionAnswerRows({
+      questionId: "q1",
+      question,
+      facts: [
+        fact({ attemptId: "a1", result: "incorrect", earnedPoints: 1, possiblePoints: 2 }),
+        fact({ attemptId: "a2", result: "incorrect", earnedPoints: 0, possiblePoints: 2 }),
+        fact({ attemptId: "a3", result: "correct", earnedPoints: 2, possiblePoints: 2 }),
+      ],
+      observations: new Map(),
+    });
+    expect(rows.map(row => row.outcome)).toEqual(["partial", "incorrect", "correct"]);
+  });
+
+  it("пропуски подписывает по порядку в тексте, пустой — называет", () => {
+    const rows = buildQuestionAnswerRows({
+      questionId: "q1",
+      question: { type: "blanks", dataJson: {}, prompt: "Столица — {{city}}, основана в {{year}} году." },
+      facts: [fact({ answer: { year: "1147", city: "Москва" } }), fact({ attemptId: "a2", answer: { city: "Питер" } }), fact({ attemptId: "a3", answer: {} })],
+      observations: new Map(),
+    });
+    expect(rows.map(row => row.answer)).toEqual([
+      "1-й пропуск: «Москва» · 2-й пропуск: «1147»",
+      "1-й пропуск: «Питер» · 2-й пропуск: (нет ответа)",
+    ]);
   });
 });

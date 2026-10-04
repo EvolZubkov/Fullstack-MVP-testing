@@ -18,6 +18,8 @@ import { summariseTopics } from "../../services/analytics/topic-stats";
 import { summariseObservations } from "../../services/analytics/test-summary";
 import { declaresPassThreshold, thresholdPercentOfTest } from "./helpers";
 import { plainPromptOf } from "@shared/questions/prompt-format";
+import { analyseUnits, type UnitAnalysis } from "@shared/psychometrics/units";
+import type { AnswerRuleSet } from "@shared/answer-check";
 
 const router = Router();
 
@@ -147,7 +149,8 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
       questionType: string;
       topicId: string;
       topicName: string;
-      difficulty: number;
+      /** Сложность, заданная автором (0–100); `null` — не задана. */
+      difficulty: number | null;
       /** Сколько раз ответили — включая ответы, которым нечего было оценивать. */
       totalAnswers: number;
       /** Сколько из них оценивалось: только по ним законна доля верных. */
@@ -166,16 +169,24 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
        * развёрнутому ответу не годится: двух одинаковых ответов не бывает.
        */
       volume: TextVolume | null;
+      /** Э4а: разбор по единицам у сопоставления, ранжирования и пропусков; иначе `null`. */
+      units: UnitAnalysis | null;
     }
 
     const questionStatsMap = new Map<string, QuestionStatsEntry>();
 
     /** Ответы по заданиям — сырьё разброса (FR-22). Собираются один раз, не в цикле. */
     const answersOfQuestion = new Map<string, unknown[]>();
+    /** Те же ответы с прохождением — разбору по единицам нужен ответивший (Э4а). */
+    const unitResponses = new Map<string, Array<{ respondentId: string; answer: unknown }>>();
     for (const fact of facts) {
       const list = answersOfQuestion.get(fact.questionId);
       if (list) list.push(fact.answer);
       else answersOfQuestion.set(fact.questionId, [fact.answer]);
+      const responses = unitResponses.get(fact.questionId);
+      const response = { respondentId: fact.attemptId, answer: fact.answer };
+      if (responses) responses.push(response);
+      else unitResponses.set(fact.questionId, [response]);
     }
 
     for (const stats of summariseAnswers(facts)) {
@@ -209,7 +220,24 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
           correctIndices: typeof key.correctIndex === "number"
             ? [key.correctIndex]
             : Array.isArray(key.correctIndices) ? key.correctIndices.filter((i): i is number => typeof i === "number") : [],
+          // Э4а: у короткого ответа строка разброса помечается «засчитано» его же правилами.
+          rules: isTextEntry(question.type) ? (question.correctJson as AnswerRuleSet) : null,
         })
+        : null;
+
+      // Э4а: у сопоставления, ранжирования и пропусков вариантов нет — ответ складывается из
+      // единиц (пар, мест, пропусков), и разброс по ним говорит, какая единица не даётся.
+      // Крайние группы здесь не нужны: их показывает страница вопроса.
+      const units = question.type === "matching" || question.type === "ranking" || hasBlanks(question.type)
+        ? analyseUnits(
+          {
+            type: question.type as "matching" | "ranking" | "blanks",
+            prompt: question.prompt,
+            data: question.dataJson,
+            correct: question.correctJson,
+          },
+          (unitResponses.get(stats.questionId) ?? []),
+        )
         : null;
 
       // PRD-57 FR-32: у свободного текста вместо частот — объём и длина. Считается и у
@@ -229,6 +257,7 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
       questionStatsMap.set(stats.questionId, {
         volume,
         spread,
+        units,
         questionId: stats.questionId,
         questionPrompt: plainPromptOf({
           ...question,
@@ -237,7 +266,8 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
         questionType: question.type,
         topicId: question.topicId,
         topicName: topicMap.get(question.topicId) || "Unknown",
-        difficulty: difficultyOf(question) || 50,
+        // Э4а: незаданная сложность — `null`, а не 50: подставленная 50 неотличима от заданной.
+        difficulty: difficultyOf(question),
         totalAnswers: stats.answered,
         gradedAnswers: stats.graded,
         correctAnswers: stats.correct,

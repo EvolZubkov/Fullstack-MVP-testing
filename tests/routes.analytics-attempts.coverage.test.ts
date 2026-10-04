@@ -190,7 +190,7 @@ describe("GET /attempts/:attemptId — data branches", () => {
     expect(res.body.username).toBe("Unknown");
     expect(res.body.startedAt).toBeNull();
     const byId = Object.fromEntries(res.body.answers.map((a: any) => [a.questionId, a]));
-    expect(byId.q1.difficulty).toBe(50);            // null difficulty -> 50 default
+    expect(byId.q1.difficulty).toBeNull();          // Э4а: незаданная сложность — null, не 50
     expect(byId.q1.userAnswer).toBe(5);             // options[5] undefined -> raw index
     expect(byId.q2.userAnswer).toEqual([]);         // out-of-range filtered out
     expect(byId.q4.userAnswer).toEqual([]);         // ranking filtered out
