@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 
 import {
-  Button, Checkbox, Combobox, FormField, Input, ModalDialog, Stack, Text,
+  Button, Checkbox, Combobox, FormField, Grid, Input, ModalDialog, Stack, Text,
 } from "@skillum/ui-kit";
 
 import {
@@ -228,24 +228,37 @@ export function RegistryFilterDialog({
           />
         )}
 
+        {/* Период — один заголовок и две даты в строку: «Период» над каждым полем повторял одно
+            и то же, а поля столбиком занимали две строки там, где хватает одной (замечание
+            владельца 2026-10-04). Полное имя поля — для экранного диктора. */}
         <Stack gap={1}>
           <Text variant="body-s" weight="medium">Период</Text>
-          <FormField label="Период с" htmlFor="registry-from">
-            <Input
-              id="registry-from"
-              type="date"
-              value={draft.from ?? ""}
-              onChange={event => setDraft(d => ({ ...d, from: event.target.value || undefined }))}
-            />
-          </FormField>
-          <FormField label="Период по" htmlFor="registry-to">
-            <Input
-              id="registry-to"
-              type="date"
-              value={draft.to ?? ""}
-              onChange={event => setDraft(d => ({ ...d, to: event.target.value || undefined }))}
-            />
-          </FormField>
+          <Grid cols={2} gap={4}>
+            {/* Каждое поле — в своей ячейке: у соседних полей формы верхний отступ на случай
+                столбика, и второе поле в строке вставало ниже первого. */}
+            <div>
+            <FormField label="с" htmlFor="registry-from">
+              <Input
+                id="registry-from"
+                type="date"
+                aria-label="Период с"
+                value={draft.from ?? ""}
+                onChange={event => setDraft(d => ({ ...d, from: event.target.value || undefined }))}
+              />
+            </FormField>
+            </div>
+            <div>
+            <FormField label="по" htmlFor="registry-to">
+              <Input
+                id="registry-to"
+                type="date"
+                aria-label="Период по"
+                value={draft.to ?? ""}
+                onChange={event => setDraft(d => ({ ...d, to: event.target.value || undefined }))}
+              />
+            </FormField>
+            </div>
+          </Grid>
         </Stack>
       </Stack>
     </ModalDialog>
