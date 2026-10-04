@@ -203,8 +203,8 @@ export function Tile({ value, entry, term, caption, empty = false }: {
           {empty
             ? <Text variant="heading-m" tone="muted">{value}</Text>
             : <Text variant="display-s" weight="bold">{value}</Text>}
-          <Text variant="body-s" tone="muted"><TermHint entry={entry} term={term} /></Text>
-          <Text variant="body-xs" tone="subtle">{caption}</Text>
+          <Text variant="body-s" tone="muted" align="center"><TermHint entry={entry} term={term} /></Text>
+          <Text variant="body-xs" tone="subtle" align="center">{caption}</Text>
         </Stack>
       </CardBody>
     </Card>
@@ -465,12 +465,12 @@ export function ItemBreakdownPanel({
             <CardBody>
               <Stack gap={1} align="center">
                 <Text variant="display-s" weight="bold">{num(item.correctedDifficulty)}</Text>
-                <Text variant="body-s" tone="muted"><TermHint entry="corrected" /></Text>
+                <Text variant="body-s" tone="muted" align="center"><TermHint entry="corrected" /></Text>
                 {/* Сколько вариантов и какой доли ждать от случайного выбора — как в эскизе.
                     FR-17b (частичное знание модель не учитывает) эскиз перенёс в подсказку
                     термина: под числом у каждой плитки одна строка. */}
                 {view.options?.length ? (
-                  <Text variant="body-xs" tone="subtle">
+                  <Text variant="body-xs" tone="subtle" align="center">
                     {`${optionsCount(view.options.length)}, ожидание ${num(1 / view.options.length)}`}
                   </Text>
                 ) : null}
@@ -505,8 +505,8 @@ export function ItemBreakdownPanel({
             <CardBody>
               <Stack gap={1} align="center">
                 <Text variant="display-s" weight="bold">{duration(item.timing.medianMs)}</Text>
-                <Text variant="body-s" tone="muted"><TermHint entry="latency" /></Text>
-                <Text variant="body-xs" tone="subtle">
+                <Text variant="body-s" tone="muted" align="center"><TermHint entry="latency" /></Text>
+                <Text variant="body-xs" tone="subtle" align="center">
                   половина ответов {duration(item.timing.q1Ms)} — {duration(item.timing.q3Ms)} · {item.timing.measured} {pluralize(item.timing.measured, "наблюдение", "наблюдения", "наблюдений")}
                 </Text>
               </Stack>

@@ -706,20 +706,20 @@ export function ItemQualityPanel({
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{reliability ? num(reliability.alpha) : "—"}</Text>
               {/* FR-20: оценка по связям заданий — не альфа полного набора, и заголовок это говорит. */}
-              <Text variant="body-s" tone="muted">
+              <Text variant="body-s" tone="muted" align="center">
                 <TermHint
                   entry="testAlpha"
                   term={reliability?.method === "pairwise" ? "Надёжность (оценка)" : "Надёжность (альфа)"}
                 />
               </Text>
-              <Text variant="body-xs" tone="subtle">
+              <Text variant="body-xs" tone="subtle" align="center">
                 {reliability
                   ? reliabilityCaption(reliability)
                   : RELIABILITY_GAP[view.reliability as string] ?? "посчитать не на чем"}
               </Text>
               {/* FR-20: альфа по общему ядру — рядом с оценкой, когда у теста есть такие задания. */}
               {view.coreReliability ? (
-                <Text variant="body-xs" tone="subtle">
+                <Text variant="body-xs" tone="subtle" align="center">
                   {`по общему ядру из ${view.coreReliability.items} ${pluralize(view.coreReliability.items, "вопроса", "вопросов", "вопросов")} — ${num(view.coreReliability.alpha)}`}
                 </Text>
               ) : null}
@@ -745,8 +745,8 @@ export function ItemQualityPanel({
               <Text variant="display-s" weight="bold">
                 {view.semPercent === null || view.semPercent === undefined ? "—" : `${num(view.semPercent, 1)} п.п.`}
               </Text>
-              <Text variant="body-s" tone="muted"><TermHint entry="sem" /></Text>
-              <Text variant="body-xs" tone="subtle">интервал вокруг балла</Text>
+              <Text variant="body-s" tone="muted" align="center"><TermHint entry="sem" /></Text>
+              <Text variant="body-xs" tone="subtle" align="center">интервал вокруг балла</Text>
             </Stack>
           </CardBody>
         </Card>
@@ -754,8 +754,8 @@ export function ItemQualityPanel({
           <CardBody>
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{suspiciousCount}</Text>
-              <Text variant="body-s" tone="muted"><TermHint entry="suspicious" /></Text>
-              <Text variant="body-xs" tone="subtle">из {view.items.length} {pluralize(view.items.length, "вопроса", "вопросов", "вопросов")}</Text>
+              <Text variant="body-s" tone="muted" align="center"><TermHint entry="suspicious" /></Text>
+              <Text variant="body-xs" tone="subtle" align="center">из {view.items.length} {pluralize(view.items.length, "вопроса", "вопросов", "вопросов")}</Text>
             </Stack>
           </CardBody>
         </Card>
@@ -763,8 +763,8 @@ export function ItemQualityPanel({
           <CardBody>
             <Stack gap={1} align="center">
               <Text variant="display-s" weight="bold">{reliableCount}</Text>
-              <Text variant="body-s" tone="muted"><TermHint entry="reliable" /></Text>
-              <Text variant="body-xs" tone="subtle">n не меньше 100</Text>
+              <Text variant="body-s" tone="muted" align="center"><TermHint entry="reliable" /></Text>
+              <Text variant="body-xs" tone="subtle" align="center">n не меньше 100</Text>
             </Stack>
           </CardBody>
         </Card>
