@@ -72,7 +72,7 @@ describe("QuestionsTab", () => {
     expect(screen.getByText("Сильные ошибаются чаще")).toBeTruthy();
   });
 
-  it("«Выдача» — пропуски, экспозиция, другие тесты", () => {
+  it("«Показы и пропуски» — пропуски, экспозиция, другие тесты", () => {
     renderTab(<QuestionsTab {...base} initialSet="delivery" />);
     expect(screen.getByText(termOrText("Экспозиция"))).toBeTruthy();
     expect(screen.queryByText(termOrText("Что отвечали"))).toBeNull();

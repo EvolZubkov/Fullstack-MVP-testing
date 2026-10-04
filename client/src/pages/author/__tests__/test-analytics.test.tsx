@@ -327,8 +327,8 @@ describe("<TestAnalyticsPage />", () => {
     await waitFor(() => expect(screen.getByText("Что такое бюджет?")).toBeInTheDocument());
     // PRD-66 FR-02: место доли верных заняла трудность по доле балла.
     expect(screen.getByText("Трудность")).toBeInTheDocument();
-    // Э4б: экспозиция — в наборе колонок «Выдача».
-    fireEvent.click(screen.getByRole("button", { name: "Выдача" }));
+    // Э4б: экспозиция — в наборе колонок «Показы и пропуски».
+    fireEvent.click(screen.getByRole("button", { name: "Показы и пропуски" }));
     expect(await screen.findByText("80 %")).toBeInTheDocument();
   });
 
@@ -701,7 +701,7 @@ describe("<TestAnalyticsPage />", () => {
     it("качество шкал — на вкладке «Шкалы»; у опросника нет набора «Психометрика»", async () => {
       await renderLoaded();
       fireEvent.click(screen.getByRole("tab", { name: "Вопросы" }));
-      await screen.findByRole("button", { name: "Выдача" });
+      await screen.findByRole("button", { name: "Показы и пропуски" });
       expect(screen.queryByRole("button", { name: "Психометрика" })).toBeNull();
       fireEvent.click(screen.getByRole("tab", { name: "Шкалы" }));
 

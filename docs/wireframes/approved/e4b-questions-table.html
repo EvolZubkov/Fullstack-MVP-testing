@@ -213,12 +213,12 @@
       <span class="wf-nav-title">Оцениваемый тест:</span>
       <button type="button" class="active" onclick="showState(this, 'b-main')">Основное</button>
       <button type="button" onclick="showState(this, 'b-psy')">Психометрика</button>
-      <button type="button" onclick="showState(this, 'b-delivery')">Выдача</button>
+      <button type="button" onclick="showState(this, 'b-delivery')">Показы и пропуски</button>
       <button type="button" onclick="showState(this, 'b-suspicious')">вид «Под подозрением»</button>
       <span class="wf-nav-sep"></span>
       <span class="wf-nav-title">Опросник:</span>
       <button type="button" onclick="showState(this, 'b-measure')">Основное</button>
-      <button type="button" onclick="showState(this, 'b-measure-delivery')">Выдача</button>
+      <button type="button" onclick="showState(this, 'b-measure-delivery')">Показы и пропуски</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
       <span class="wf-nav-sep"></span>
@@ -413,7 +413,7 @@
                 <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений</p>
               </div>
               <div class="ou-card__trail">
-                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-delivery')"><span>Выдача</span></button></div>
+                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-delivery')"><span>Показы и пропуски</span></button></div>
               </div>
             </header>
             <div class="ou-card__body ou-stack ou-stack--gap-4">
@@ -608,7 +608,7 @@
                 <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений · отсортированы по силе подозрения</p>
               </div>
               <div class="ou-card__trail">
-                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-delivery')"><span>Выдача</span></button></div>
+                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-delivery')"><span>Показы и пропуски</span></button></div>
               </div>
             </header>
             <div class="ou-card__body ou-stack ou-stack--gap-4">
@@ -740,7 +740,7 @@
                 <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений</p>
               </div>
               <div class="ou-card__trail">
-                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-delivery')"><span>Выдача</span></button></div>
+                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-delivery')"><span>Показы и пропуски</span></button></div>
               </div>
             </header>
             <div class="ou-card__body ou-stack ou-stack--gap-4">
@@ -913,7 +913,7 @@
                 <p class="ou-card__subtitle">42 вопроса в банке, 1 исключён из выдачи · 486 прохождений · под подозрением 3: психометрические признаки и признаки ревизии</p>
               </div>
               <div class="ou-card__trail">
-                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-delivery')"><span>Выдача</span></button></div>
+                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-main')"><span>Основное</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-psy')"><span>Психометрика</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-delivery')"><span>Показы и пропуски</span></button></div>
               </div>
             </header>
             <div class="ou-card__body ou-stack ou-stack--gap-4">
@@ -989,7 +989,7 @@
                 <p class="ou-card__subtitle">18 вопросов · 214 прохождений</p>
               </div>
               <div class="ou-card__trail">
-                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-measure')"><span>Основное</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-measure-delivery')"><span>Выдача</span></button></div>
+                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-measure')"><span>Основное</span></button><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-measure-delivery')"><span>Показы и пропуски</span></button></div>
               </div>
             </header>
             <div class="ou-card__body ou-stack ou-stack--gap-4">
@@ -1056,7 +1056,7 @@
                 <p class="ou-card__subtitle">18 вопросов · 214 прохождений</p>
               </div>
               <div class="ou-card__trail">
-                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-measure')"><span>Основное</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-measure-delivery')"><span>Выдача</span></button></div>
+                <div class="ou-seg ou-seg--s" role="group"><button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'b-measure')"><span>Основное</span></button><button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="showState(null, 'b-measure-delivery')"><span>Показы и пропуски</span></button></div>
               </div>
             </header>
             <div class="ou-card__body ou-stack ou-stack--gap-4">
@@ -1116,7 +1116,7 @@
             <thead><tr><th>Элемент</th><th>Поведение</th><th>Примечание</th></tr></thead>
             <tbody>
               <tr><td>Вкладки теста</td><td>«Обзор, Прохождения, Вопросы, Срезы, Выдача, Шкалы» — вкладка «Качество вопросов» уходит, её содержимое — в «Вопросах»</td><td>Старая ссылка <code>?tab=quality</code> открывает «Вопросы» с набором «Психометрика»</td></tr>
-              <tr><td>Наборы колонок</td><td>«Основное» (по умолчанию): вопрос, что отвечали, трудность, дискриминативность, сложность «задана → по ответам», время, цена. «Психометрика»: вопрос, что не так, трудность, дискриминативность, n. «Выдача»: вопрос, пропуски, экспозиция, другие тесты, время. У опросника — «Основное» и «Выдача»</td><td>Решение владельца 2026-10-04: по умолчанию «Основное». Набор помнится в адресе (<code>?cols=</code>), как вкладка. Каждый набор помещается на 1440 без прокрутки — столбец «Вопрос» широкий</td></tr>
+              <tr><td>Наборы колонок</td><td>«Основное» (по умолчанию): вопрос, что отвечали, трудность, дискриминативность, сложность «задана → по ответам», время, цена. «Психометрика»: вопрос, что не так, трудность, дискриминативность, n. «Показы и пропуски»: вопрос, пропуски, экспозиция, другие тесты, время. У опросника — «Основное» и «Показы и пропуски»</td><td>Решение владельца 2026-10-04: по умолчанию «Основное». Набор помнится в адресе (<code>?cols=</code>), как вкладка. Каждый набор помещается на 1440 без прокрутки — столбец «Вопрос» широкий</td></tr>
               <tr><td>Блок качества теста</td><td>Плитки надёжности, ошибки измерения, «Под подозрением», «С надёжной оценкой», состав выборки, предупреждения и «Термины» — над таблицей при наборе «Психометрика»</td><td>Решение владельца 2026-10-04. Разметка — дословно из эскиза PRD-66</td></tr>
               <tr><td>Виды</td><td>«Все / Под подозрением / Мало данных / Исключённые». «Под подозрением» — психометрические признаки и признаки ревизии вместе, причина — в колонке «Что не так» (в наборах без неё — подписью под вопросом, как сегодня). Вид не зависит от набора колонок</td><td>Решение владельца 2026-10-04. «Требуют ревизии» уходит. Признаки — один расчёт на сервере (сейчас эвристики считаются и на сервере, и в клиенте)</td></tr>
               <tr><td>«Требует внимания» на «Обзоре» и общем уровне</td><td>«Показать» ведёт во «Вопросы»: вид «Под подозрением», набор «Психометрика»</td><td>Число на «Обзоре» и в виде совпадает. В общей корзине фоновый пересчёт остаётся только психометрическим — число там может быть меньше, это решение Э3.4</td></tr>
