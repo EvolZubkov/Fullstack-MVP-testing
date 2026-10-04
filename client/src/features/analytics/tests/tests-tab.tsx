@@ -9,8 +9,8 @@
  * строке открывает уровень теста. Это не сводка ПО ВСЕМ тестам — каждая строка своя выборка со
  * своим порогом, поэтому итоговой строки у таблицы нет.
  *
- * Колонка «Вопросов под подозрением» придёт в Э3б вместе с корзиной «Тесты с вопросами под
- * подозрением»: она считается той же сводкой психометрики.
+ * Колонка «Вопросов под подозрением» (Э3.4) — из фонового пересчёта, той же сводкой, что корзина
+ * «Тесты с вопросами под подозрением»; до первого прохода пересчёта — прочерк.
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -30,6 +30,8 @@ export interface TestSummaryRow {
   passRate: number | null;
   avgPercent: number | null;
   lastAttemptAt: string | null;
+  /** Э3.4: вопросов под подозрением — из фонового пересчёта; `null` — ещё не посчитано. */
+  suspicious?: { count: number; computedAt: string } | null;
 }
 
 /** Свойства вкладки. */
@@ -41,7 +43,7 @@ export interface TestsTabProps {
 /** Ключ запроса: «Обновить» общего уровня сбрасывает все запросы аналитики по префиксу. */
 export const TESTS_SUMMARY_KEY = ["/api/analytics/tests"] as const;
 
-type SortKey = "title" | "completed" | "passRate" | "avgPercent" | "last";
+type SortKey = "title" | "completed" | "passRate" | "avgPercent" | "suspicious" | "last";
 
 /** Значение строки для сортировки; пустое число уходит в конец при любом направлении. */
 function sortValue(row: TestSummaryRow, key: SortKey): string | number | null {
@@ -50,6 +52,7 @@ function sortValue(row: TestSummaryRow, key: SortKey): string | number | null {
     case "completed": return row.completedAttempts;
     case "passRate": return row.passRate;
     case "avgPercent": return row.avgPercent;
+    case "suspicious": return row.suspicious?.count ?? null;
     case "last": return row.lastAttemptAt;
   }
 }
@@ -143,6 +146,17 @@ export function TestsTab({ onOpenTest }: TestsTabProps) {
       align: "center" as const,
       numeric: true,
       render: (row: TestSummaryRow) => percent(row.avgPercent),
+    },
+    {
+      key: "suspicious",
+      header: "Вопросов под подозрением",
+      sortable: true,
+      align: "center" as const,
+      numeric: true,
+      // Э3.4: число из фонового пересчёта; до первого прохода — прочерк, а не ноль.
+      render: (row: TestSummaryRow) => (row.suspicious
+        ? row.suspicious.count
+        : <Text variant="body-s" tone="muted">—</Text>),
     },
     {
       key: "last",

@@ -252,6 +252,8 @@ describe("GET /analytics/tests", () => {
     expect(row.passRate).toBeCloseTo(66.67, 1);
     expect(row.avgPercent).toBeCloseTo(70, 1);
     expect(row.lastAttemptAt).toBe(now.toISOString());
+    // Э3.4: число вопросов под подозрением приходит из фонового пересчёта; до него — неизвестно.
+    expect(row.suspicious).toBeNull();
   });
 
   it("puts the test with the freshest passage first and names a deleted test", async () => {

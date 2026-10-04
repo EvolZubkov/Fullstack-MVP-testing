@@ -455,10 +455,8 @@ router.get(
           itemsCount: psychometrics.items.length,
           // Счётная величина: разницу между срезами по ней НЕ считают (FR-04b2) — она
           // говорит о размере группы, а не о качестве теста.
-          suspiciousCount: psychometrics.items.filter(item =>
-            item.flags.negativeDiscrimination || item.flags.atChanceLevel
-            || item.flags.weakDiscrimination
-            || item.flags.tooHard || item.flags.tooEasy).length,
+          // Э3.4: то же правило, что у корзины общего уровня и колонки «Тесты».
+          suspiciousCount: psychometrics.items.filter(suspiciousByPsychometrics).length,
           items: psychometrics.items.map(item => ({
             questionId: item.questionId,
             prompt: questionById.get(item.questionId)?.prompt ?? "",
@@ -723,5 +721,53 @@ router.get(
     }
   },
 );
+
+/**
+ * Э3.4: под подозрением ли вопрос — по ПСИХОМЕТРИЧЕСКИМ признакам.
+ *
+ * Те же признаки, что вид «Под подозрением» на «Качестве вопросов» (`flagOf` на клиенте), кроме
+ * эвристик ревизии: те считаются по статистике выдачи сводкой теста, и на общем уровне они идут
+ * отдельной строкой «Требуют ревизии» (решение владельца 2026-10-04). Невыданный вопрос не
+ * подозрителен и не здоров — судить о нём не по чему.
+ */
+export function suspiciousByPsychometrics(item: {
+  neverDelivered?: true;
+  flags: { negativeDiscrimination: boolean; atChanceLevel: boolean; weakDiscrimination: boolean; tooHard: boolean; tooEasy: boolean };
+  timingFlags: { rushed: boolean; slow: boolean };
+}): boolean {
+  if (item.neverDelivered) return false;
+  return item.flags.negativeDiscrimination || item.flags.atChanceLevel || item.flags.weakDiscrimination
+    || item.timingFlags.rushed || item.flags.tooHard || item.flags.tooEasy || item.timingFlags.slow;
+}
+
+/**
+ * Э3.4: сколько вопросов теста под подозрением — для фонового пересчёта корзины «Тесты с
+ * вопросами под подозрением» и колонки вкладки «Тесты».
+ *
+ * Выборка — та, что у «Качества вопросов» по умолчанию: весь тест, только первая попытка
+ * каждого участника (FR-51). Область видимости открыта: число хранится на тест, а кто его увидит,
+ * решает ручка, отдающая готовое.
+ *
+ * @param testId тест
+ * @returns вопросы под подозрением и всего вопросов в расчёте; `null` — теста нет
+ */
+export async function countSuspiciousItems(testId: string): Promise<{ suspicious: number; items: number } | null> {
+  const test = await storage.getTest(testId);
+  if (!test) return null;
+  const { grade, questionById } = await buildGrader(testId);
+  const matrix = await loadResponseMatrix({ testIds: [testId] }, { all: true, ids: new Set<string>() }, grade);
+  const sections = await storage.getTestSections(testId);
+  const psychometrics = computePsychometrics(firstAttemptOnly(matrix.responses), {
+    questionById,
+    minObservations: config.analytics.minObservations,
+    cutRatio: cutRatioOf(test.overallPassRuleJson),
+    unevenDelivery: deliveryIsUneven(test.mode, sections),
+    poolQuestionIds: (await loadDeliveryPool(testId)).questionIds,
+  });
+  return {
+    suspicious: psychometrics.items.filter(suspiciousByPsychometrics).length,
+    items: psychometrics.items.length,
+  };
+}
 
 export default router;

@@ -29,6 +29,8 @@ vi.mock("../server/storage", () => ({ storage: storageMock }));
 
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
 import attentionRouter from "../server/routes/analytics/attention";
+// eslint-disable-next-line import/first -- must import AFTER vi.mock
+import { refreshSuspicious, resetSuspiciousEntries } from "../server/routes/analytics/suspicious-refresh";
 
 const TEST = {
   id: "test1", title: "Сертификация", mode: "standard", maxAttempts: 3,
@@ -62,6 +64,7 @@ beforeEach(() => {
   storageMock.getAllAttempts.mockResolvedValue([]);
   storageMock.getAllScormAttempts.mockResolvedValue([]);
   storageMock.getAllAssignments.mockResolvedValue([]);
+  resetSuspiciousEntries();
 });
 
 describe("GET /api/analytics/attention", () => {
@@ -150,6 +153,33 @@ describe("GET /api/analytics/attention", () => {
 });
 
 /** Период вкладки (решение владельца 2026-09-25): по умолчанию месяц. */
+// Э3.4: корзина «Тесты с вопросами под подозрением» — из фонового пересчёта.
+describe("GET /api/analytics/attention — тесты с вопросами под подозрением (Э3.4)", () => {
+  beforeEach(async () => {
+    storageMock.getAllAttempts.mockResolvedValue(["test1", "test2"].map(testId => ({
+      id: `web-${testId}`, testId, userId: "u1",
+      startedAt: daysAgo(5), finishedAt: daysAgo(5), variantJson: {}, answersJson: {},
+      resultJson: { overallPercent: 80, overallPassed: true, totalPossiblePoints: 20, totalEarnedPoints: 16 },
+    })));
+    await refreshSuspicious(async testId => ({ suspicious: testId === "test1" ? 8 : 2, items: 42 }));
+  });
+
+  it("называет тесты с числом под подозрением, больше — выше", async () => {
+    const res = await ask();
+    expect(res.body.suspiciousTests.map((t: { testId: string; count: number }) => [t.testId, t.count]))
+      .toEqual([["test1", 8], ["test2", 2]]);
+    expect(res.body.suspiciousTests[0]).toMatchObject({ title: "Сертификация", items: 42, passages: 1 });
+    expect(typeof res.body.suspiciousTests[0].computedAt).toBe("string");
+  });
+
+  it("чужие тесты не называет", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTestIdsByOwner.mockResolvedValue(["test1"]);
+    const res = await ask();
+    expect(res.body.suspiciousTests.map((t: { testId: string }) => t.testId)).toEqual(["test1"]);
+  });
+});
+
 describe("GET /api/analytics/attention — период", () => {
   const assignments = [
     { id: "a1", testId: "test1", userId: "u2", groupId: null, dueDate: daysAgo(3) },

@@ -17,6 +17,7 @@ import {
   Box, Button, Card, CardBody, CardHeader, IconButton, SegmentedControl, Separator, Stack, Tag, Text,
 } from "@skillum/ui-kit";
 
+import type { SuspiciousTestRow } from "./suspicious-tests";
 import { pluralize } from "@/lib/i18n";
 import {
   ATTENTION_PERIOD_LABEL,
@@ -80,6 +81,8 @@ const PERIOD_ITEMS: Array<{ value: AttentionPeriod; label: string }> = [
 export interface AttentionData {
   items: AttentionRow[];
   counts: Record<AttentionKind, number>;
+  /** Э3.4: тесты с вопросами под подозрением — из фонового пересчёта. */
+  suspiciousTests?: SuspiciousTestRow[];
 }
 
 /** Сколько дел корзины видно сразу. Остальные — в реестре: экран не список, а рабочее место. */

@@ -18,6 +18,7 @@ import {
   type AttentionItem,
 } from "../../services/analytics/attention";
 import { loadObservations } from "../../services/analytics/observations";
+import { suspiciousEntry } from "./suspicious-refresh";
 import { analyticsScope } from "./helpers";
 
 const router = Router();
@@ -89,9 +90,26 @@ router.get("/attention", requirePermission("analytics.read"), async (req: Reques
       return [test.id, declared ? rule?.value ?? null : null];
     }));
 
+    // Э3.4: тесты с вопросами под подозрением — из фонового пересчёта, только видимые читателю.
+    // Это точка внимания по КАЧЕСТВУ вопросов: разбирают её на уровне теста, здесь — указатель.
+    const suspiciousTests = visible
+      .map(test => ({ test, entry: suspiciousEntry(test.id) }))
+      .filter((pair): pair is { test: typeof pair.test; entry: NonNullable<typeof pair.entry> } =>
+        !!pair.entry && pair.entry.count > 0)
+      .map(({ test, entry }) => ({
+        testId: test.id,
+        title: test.title,
+        count: entry.count,
+        items: entry.items,
+        passages: entry.passages,
+        computedAt: entry.computedAt,
+      }))
+      .sort((a, b) => b.count - a.count);
+
     res.json({
       period,
       counts: countAttention(items),
+      suspiciousTests,
       items: items.map((item: AttentionItem) => ({
         ...item,
         // Тест мог быть удалён: дело от этого не перестаёт существовать.

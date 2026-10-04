@@ -34,6 +34,7 @@ const GENERAL_ANALYTICS_TABS = ["tests", "attempts", "attention"] as const;
 import { percent } from "@/features/analytics/format";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import { AttentionQueue, type AttentionData, type AttentionRow } from "@/features/analytics/attention/attention-queue";
+import { SuspiciousTests } from "@/features/analytics/attention/suspicious-tests";
 import { DEFAULT_ATTENTION_PERIOD, type AttentionPeriod } from "@shared/analytics/attention-period";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Stack, Tabs } from "@skillum/ui-kit";
@@ -236,6 +237,12 @@ export default function AnalyticsPage() {
             label: "Требует внимания",
             badge: attentionTotal ? attentionTotal : undefined,
             content: (
+              <Stack gap={4}>
+              {/* Э3.4: где на уровне теста есть дела по качеству вопросов — указатель, а не разбор. */}
+              <SuspiciousTests
+                rows={attentionData?.suspiciousTests ?? []}
+                onOpen={(id) => openTestLevel(id, EMPTY_FILTER, "quality", { qualityView: "suspicious" })}
+              />
               <AttentionQueue
                 data={attentionData}
                 period={attentionPeriod}
@@ -245,6 +252,7 @@ export default function AnalyticsPage() {
                 // Очередь условий реестра не читает — и в тест уходит без них.
                 onOpenTestAnalytics={(id) => openTestLevel(id, EMPTY_FILTER)}
               />
+              </Stack>
             ),
           },
         ]}

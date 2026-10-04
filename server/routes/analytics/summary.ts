@@ -21,6 +21,7 @@ import { loadObservations } from "../../services/analytics/observations";
 import { summariseObservations } from "../../services/analytics/test-summary";
 import { analyticsScope } from "./helpers";
 import { storage } from "../../storage";
+import { suspiciousEntry } from "./suspicious-refresh";
 
 const router = Router();
 
@@ -85,6 +86,11 @@ export interface TestSummaryRow {
   avgPercent: number | null;
   /** Последнее завершённое прохождение — по дате окончания, без неё — начала. */
   lastAttemptAt: string | null;
+  /**
+   * Э3.4: вопросов под подозрением — из фонового пересчёта; `null` — ещё не посчитано.
+   * Время расчёта рядом: число может отставать от последних прохождений.
+   */
+  suspicious: { count: number; computedAt: string } | null;
 }
 
 // GET /api/analytics/tests - Э3.0: тесты с прохождениями и их сводка — единая точка входа в
@@ -121,6 +127,10 @@ router.get("/tests", requirePermission("analytics.read"), async (req: Request, r
         passRate: stats.passRate,
         avgPercent: stats.avgPercent,
         lastAttemptAt: last ? last.toISOString() : null,
+        suspicious: (() => {
+          const entry = suspiciousEntry(testId);
+          return entry ? { count: entry.count, computedAt: entry.computedAt } : null;
+        })(),
       };
     });
     // Свежие — сверху: вкладка отвечает «где сейчас идёт работа».

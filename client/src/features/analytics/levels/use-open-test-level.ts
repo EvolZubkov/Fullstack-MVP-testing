@@ -16,14 +16,20 @@ import { filterIntoTest, testHref, type ReturnState } from "./analytics-routes";
 /**
  * Функция перехода на уровень теста.
  *
- * @returns `(testId, filter, tab?)` — тест, условия общего уровня, вкладка уровня теста
+ * @returns `(testId, filter, tab?, extra?)` — тест, условия общего уровня, вкладка уровня теста и
+ *   то, что ещё нужно странице теста при открытии (Э3.4: вид таблицы, `qualityView`)
  */
-export function useOpenTestLevel(): (testId: string, filter: RegistryFilter, tab?: string) => void {
+export function useOpenTestLevel(): (
+  testId: string, filter: RegistryFilter, tab?: string, extra?: Record<string, unknown>,
+) => void {
   const [location, navigate] = useLocation();
   const search = useSearch();
 
-  return useCallback((testId: string, filter: RegistryFilter, tab?: string) => {
-    const state: ReturnState = { analyticsReturn: `${location}${search ? `?${search}` : ""}` };
+  return useCallback((testId: string, filter: RegistryFilter, tab?: string, extra?: Record<string, unknown>) => {
+    const state: ReturnState & Record<string, unknown> = {
+      ...(extra ?? {}),
+      analyticsReturn: `${location}${search ? `?${search}` : ""}`,
+    };
     navigate(testHref(testId, filterIntoTest(filter, testId), tab), { state });
   }, [location, navigate, search]);
 }

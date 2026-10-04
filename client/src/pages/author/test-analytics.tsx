@@ -502,7 +502,11 @@ export default function TestAnalyticsPage() {
      * сами; переход задаёт начальный и пересоздаёт таблицу ключом.
      */
     const [questionsView, setQuestionsView] = useState<QuestionsView>("all");
-    const [qualityView, setQualityView] = useState<QualityView>("all");
+    // Э3.4: корзина общего «Требует внимания» открывает тест сразу в виде «Под подозрением».
+    const [qualityView, setQualityView] = useState<QualityView>(() => {
+        const wanted = (typeof window === "undefined" ? null : window.history.state as { qualityView?: string } | null)?.qualityView;
+        return wanted === "suspicious" || wanted === "thin" ? wanted : "all";
+    });
     /** Э3.3: окно «Исключить из выдачи» на уровне вопроса. */
     const [excludeTarget, setExcludeTarget] = useState<ExclusionTarget | null>(null);
     const cardKey = `/api/analytics/tests/${testId}/questions/${routeQuestionId}/card`;
