@@ -189,6 +189,9 @@ export function TestsTab({ onOpenTest }: TestsTabProps) {
         />
         <CardBody>
           <DataGrid
+            // Список тестов — главное на вкладке: во всю высоту окна, а не в окошке 540 px, под
+            // которым пустая страница (замечание владельца 2026-10-04).
+            fill
             columns={columns}
             rows={rows}
             rowKey={row => row.testId}

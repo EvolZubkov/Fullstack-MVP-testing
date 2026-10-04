@@ -82,6 +82,11 @@ export interface SliceRow {
 export interface SliceListProps {
   /** Тест — рамка расчёта. Без него средние не считаются (решение 2 спеки). */
   testId: string;
+  /**
+   * Таблица — главное на экране (вкладка «Срезы»): во всю высоту окна, прокрутка внутри.
+   * На «Обзоре», среди других блоков, — нет.
+   */
+  fill?: boolean;
   /** Период как рамка; пустой означает «за всё время» (FR-07j). */
   from?: string;
   to?: string;
@@ -227,7 +232,7 @@ type TopicsState = Record<string, SliceTopic[] | null>;
 
 export function SliceList({
   testId, from, to, axis, conditions, onOpenRegistry, onOpenTestAnalytics, onCompare, onLoaded,
-  nameHeader = "Срез",
+  nameHeader = "Срез", fill = false,
 }: SliceListProps) {
   /** Ключ условий: новый объект с теми же условиями не должен пересчитывать список. */
   const conditionsKey = axis && conditions && Object.keys(conditions).length > 0 ? JSON.stringify(conditions) : "";
@@ -545,6 +550,7 @@ export function SliceList({
   return (
     <>
       <DataGrid
+        fill={fill}
         columns={columns}
         rows={rows}
         sortKey={sortColumn}

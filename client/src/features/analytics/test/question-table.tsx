@@ -117,6 +117,12 @@ export interface QuestionTableProps {
    */
   psychometrics?: Record<string, QuestionPsychometrics>;
   /**
+   * Э4б: признак «что не так» по вопросу — то же правило, что колонка набора «Психометрика»
+   * (`shared/psychometrics/question-flag`). Задан — под текстом вопроса стоит он, а не одни
+   * эвристики ревизии: вопрос в виде «Под подозрением» обязан сказать, почему он там.
+   */
+  flags?: Record<string, { tone: "error" | "warning" | "info"; title: string; detail: string } | null>;
+  /**
    * Открыть разбор задания — уровень вопроса (FR-03, Э3.3). `order` — вопросы в порядке таблицы,
    * как она отсортирована сейчас: по нему ходят «Предыдущий / Следующий».
    */
@@ -252,7 +258,7 @@ function notGradedReason(row: QuestionRow): string | undefined {
 
 export function QuestionTable({
   questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 10,
-  psychometrics, onOpenQuality, passages, initialView = "all", columnSet = "full", bare = false,
+  psychometrics, onOpenQuality, passages, initialView = "all", columnSet = "full", bare = false, flags,
 }: QuestionTableProps) {
   const [view, setView] = useState<View>(initialView);
   const [sortKey, setSortKey] = useState(measurement ? "answers" : "difficulty");
@@ -348,7 +354,13 @@ export function QuestionTable({
           </span>
           <Text variant="body-xs" tone="muted">{row.topicName}</Text>
           {/* Признак назван прямо в строке: отбор без объяснения — это приговор без основания. */}
-          {row.reviewFlags.map(flag => (
+          {flags ? (
+            flags[row.questionId] && flags[row.questionId]!.tone !== "info" ? (
+              <Text variant="body-xs" tone={flags[row.questionId]!.tone === "error" ? "error" : "warning"}>
+                {`${flags[row.questionId]!.title}: ${flags[row.questionId]!.detail}`}
+              </Text>
+            ) : null
+          ) : row.reviewFlags.map(flag => (
             <Text key={flag.kind} variant="body-xs" tone="warning">{flag.reason}</Text>
           ))}
         </Stack>
@@ -569,6 +581,9 @@ export function QuestionTable({
   const grid = (
     <DataGrid
       className="tb-psy-grid tb-qtable"
+      // Таблица — главное на вкладке: во всю высоту окна, а не в окошке 540 px, под которым
+      // пустая страница (замечание владельца 2026-10-04). Прокрутка — внутри, шапка закреплена.
+      fill={bare}
       columns={shownColumns}
       rows={rows}
       rowKey={row => row.questionId}
@@ -607,10 +622,12 @@ export function QuestionTable({
   );
 
   if (bare) {
+    // Подпись о порогах — над таблицей: таблица во всю высоту окна (`fill`), и строка под ней
+    // уводила бы страницу во вторую прокрутку.
     return (
       <Stack gap={4}>
-        {grid}
         {footnote}
+        {grid}
         {exclusionDialog}
       </Stack>
     );

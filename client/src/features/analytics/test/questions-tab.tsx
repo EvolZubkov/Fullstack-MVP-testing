@@ -27,7 +27,7 @@ import {
   Button, Card, CardBody, CardHeader, EmptyState, SegmentedControl, Stack,
 } from "@skillum/ui-kit";
 
-import { isSuspicious, isThin } from "@shared/psychometrics/question-flag";
+import { isSuspicious, isThin, questionFlag } from "@shared/psychometrics/question-flag";
 import { LoadingState } from "@/components/loading-state";
 import { pluralize } from "@/lib/i18n";
 
@@ -147,6 +147,13 @@ export function QuestionsTab(props: QuestionsTabProps) {
     }]))
     : undefined;
 
+  // Причина «под подозрением» — подписью под вопросом в «Основном» и «Выдаче» (эскиз Э4б, docs).
+  const flags = useMemo(() => Object.fromEntries(rows.map(row => {
+    const item = items.get(row.questionId);
+    const heuristic = heuristics[row.questionId];
+    return [row.questionId, item ? questionFlag(item, heuristic) : null];
+  })), [rows, items, heuristics]);
+
   const inDelivery = rows.length - groups.excluded.size;
   const subtitle = [
     `${inDelivery} ${pluralize(inDelivery, "вопрос", "вопроса", "вопросов")} в выдаче${groups.excluded.size > 0 ? `, ${groups.excluded.size} ${pluralize(groups.excluded.size, "исключён", "исключено", "исключено")} из выдачи` : ""}`,
@@ -230,6 +237,7 @@ export function QuestionsTab(props: QuestionsTabProps) {
                   minObservations={minObservations}
                   testId={testId}
                   psychometrics={psychometrics}
+                  flags={quality?.items ? flags : undefined}
                   onOpenQuality={onOpenQuestion}
                   onOpenRegistry={onOpenRegistry}
                   onDeliveryChange={onDeliveryChange}

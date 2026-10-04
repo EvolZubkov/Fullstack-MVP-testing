@@ -135,6 +135,7 @@ export function TestSlicesTab({
         <CardBody>
           {mode === "list" ? (
             <SliceList
+              fill
               testId={testId}
               from={fromIso}
               to={toIso}

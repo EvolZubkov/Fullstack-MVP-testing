@@ -188,8 +188,8 @@ export function DataGrid<T>({
     const area = scrollArea.current;
     if (!fill || !area || typeof window === 'undefined') return;
 
-    /** Запас снизу: нижнее поле карточки и воздух страницы под ней. */
-    const GAP = 48;
+    /** Запас снизу: нижнее поле карточки и воздух страницы под ней (48 px давали 2 px второй прокрутки). */
+    const GAP = 56;
 
     const apply = () => {
       const top = area.getBoundingClientRect().top + window.scrollY;

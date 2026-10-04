@@ -640,6 +640,8 @@ export function ItemQualityPanel({
   const grid = (
       <DataGrid
         className="tb-psy-grid"
+        // Э4б: в «Психометрике» вкладки «Вопросы» — во всю высоту окна, как у остальных наборов.
+        fill={section === "table"}
         columns={columns}
         rows={rows}
         rowKey={row => row.questionId}
