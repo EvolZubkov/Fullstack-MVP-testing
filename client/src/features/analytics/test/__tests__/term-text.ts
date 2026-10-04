@@ -17,7 +17,8 @@ import type { MatcherFunction } from "@testing-library/react";
 
 /** Whitespace normalised the way Testing Library's default normaliser does it. */
 function normalise(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+  // A soft hyphen (a narrow column's «Дискриминативность», Э4а) is invisible to a reader.
+  return text.replace(/­/g, "").replace(/\s+/g, " ").trim();
 }
 
 /**

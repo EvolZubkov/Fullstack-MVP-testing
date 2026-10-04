@@ -42,7 +42,9 @@ function withIcon(term: ReactNode): ReactNode {
   if (typeof term !== "string") {
     return <span className="tb-term-hint__tail">{term}{HINT_ICON}</span>;
   }
-  const at = term.trimEnd().lastIndexOf(" ");
+  // Мягкий перенос — такое же место разрыва, как пробел: иначе слово со значком в неразрывном
+  // блоке не переносилось и в узкой колонке налезало на соседний заголовок (Э4а).
+  const at = Math.max(term.trimEnd().lastIndexOf(" "), term.trimEnd().lastIndexOf("\u00ad"));
   const head = at === -1 ? "" : term.slice(0, at + 1);
   const last = at === -1 ? term.trimEnd() : term.slice(at + 1).trimEnd();
   return (

@@ -16,7 +16,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { answerSegments, QuestionTable } from "../question-table";
+import { QuestionTable } from "../question-table";
 import { termOrText } from "./term-text";
 
 /**
@@ -68,12 +68,14 @@ describe("QuestionTable", () => {
     expect(screen.getByLabelText("Один ответ")).toBeTruthy();
   });
 
-  it("печатает прочерк там, где доли верных не существует", () => {
+  it("пишет «не применимо» там, где доли верных не существует", () => {
     render(<QuestionTable questions={QUESTIONS} />);
 
     const row = screen.getByText(termOrText("Насколько вы согласны?")).closest("tr")!;
-    // FR-22: у измерительного задания нет эталона — ноль здесь был бы ложью.
-    expect(within(row).getAllByText(termOrText("—")).length).toBeGreaterThanOrEqual(1);
+    // FR-22: у измерительного задания нет эталона — ноль здесь был бы ложью. Э4а: прочерк
+    // заменён словами, причина — в подсказке.
+    expect(within(row).getAllByText(termOrText("не применимо")).length).toBeGreaterThanOrEqual(1);
+    expect(within(row).queryByText(termOrText("—"))).toBeNull();
   });
 
   it("отбирает задания с признаками ревизии и считает их", async () => {
@@ -170,9 +172,10 @@ describe("QuestionTable — термины вкладки «Вопросы»", (
     const graded = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
     expect(within(graded).getByText("1,5")).toBeTruthy();
     expect(within(graded).getByText("2")).toBeTruthy();
-    // У измерительного задания цены нет: баллов оно не приносит.
+    // У измерительного задания цены нет: баллов оно не приносит. Э4а: словами, не прочерком.
     const measurement = screen.getByText(termOrText("Насколько вы согласны?")).closest("tr")!;
-    expect(within(measurement).getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    const cells = within(measurement).getAllByRole("cell");
+    expect(cells[cells.length - 2].textContent).toContain("не применимо");
   });
 
   it("опросник колонок выдачи и цены не держит", () => {
@@ -253,7 +256,8 @@ describe("QuestionTable — психометрика в строке (PRD-66)", 
 
     const row = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
     expect(within(row).getByText(termOrText("0,33"))).toBeTruthy();
-    expect(within(row).getByText(termOrText("мало данных"))).toBeTruthy();
+    // Э4а: «мало данных» говорит, сколько не хватает до порога коэффициента (30).
+    expect(within(row).getByText(termOrText("ещё 18"))).toBeTruthy();
   });
 
   it("разовое пояснение о смене числа закрывается навсегда", async () => {
@@ -271,7 +275,9 @@ describe("QuestionTable — психометрика в строке (PRD-66)", 
     render(<QuestionTable questions={QUESTIONS} />);
 
     const row = screen.getByText(termOrText("Какая мера относится к антикоррупционным?")).closest("tr")!;
-    expect(within(row).getAllByText(termOrText("—")).length).toBeGreaterThan(0);
+    // Э4а: пустое значение — «мало данных», прочерков в таблице больше нет.
+    expect(within(row).getAllByText(termOrText("мало данных")).length).toBeGreaterThan(0);
+    expect(within(row).queryByText(termOrText("—"))).toBeNull();
   });
 });
 
@@ -441,10 +447,8 @@ describe("QuestionTable — измерительный тест", () => {
 
     expect(screen.getByText(termOrText("Разброс ответов"))).toBeTruthy();
     expect(screen.queryByText(termOrText("Доля верных"))).toBeNull();
-    // Варианты идут по убыванию доли и только первые три: у распределения баллов их бывает
-    // десять, и полный перечень занял бы строку на весь экран. У шкалы подписи короткие,
-    // поэтому доля отделена тире: «3 44 %» читалось бы как одно число.
-    expect(screen.getByText(termOrText("3 — 44 % · 4 — 26 % · 2 — 14 % · 5 — 10 % · ещё 1"))).toBeTruthy();
+    // Э4а: под полосой — три частых градации, полный перечень — в легенде подсказки.
+    expect(screen.getByText(termOrText("3 — 44 % · 4 — 26 % · 2 — 14 % · ещё 2"))).toBeTruthy();
   });
 
   it("ниже порога наблюдений говорит «мало данных», а не рисует полосу", () => {
@@ -497,15 +501,16 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
     expect(screen.getByText(termOrText("Что отвечали"))).toBeTruthy();
     // PRD-66 FR-02: колонка оценки задания на месте, но считается долей балла.
     expect(screen.getByText(termOrText("Трудность"))).toBeTruthy();
-    expect(screen.getByText(termOrText("Ростехнадзор 55 % · РТН 30 %"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Ростехнадзор — 55 % · РТН — 30 %"))).toBeTruthy();
   });
 
-  it("у сопоставления в колонке прочерк, а не «мало данных»", () => {
-    // Разброса у сопоставления нет по устройству: «мало данных» при 60 ответах было бы неправдой.
+  it("сопоставление без посчитанного разбора — «не применимо», а не «мало данных»", () => {
+    // Э4а: разбор сопоставления сервер считает по парам; если его нет при 60 ответах,
+    // «мало данных» было бы неправдой.
     const matching = { ...QUESTIONS[0], questionId: "m1", questionPrompt: "Сопоставьте", questionType: "matching" };
     render(<QuestionTable questions={[...WRITTEN, matching]} minObservations={10} />);
     const row = screen.getByText(termOrText("Сопоставьте")).closest("tr")!;
-    expect(within(row).getAllByRole("cell")[1].textContent).toBe("—");
+    expect(within(row).getAllByRole("cell")[1].textContent).toContain("не применимо");
   });
 
   it("у выбора — доли вариантов, верный помечен галочкой", () => {
@@ -521,7 +526,7 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
       },
     };
     render(<QuestionTable questions={[choice]} minObservations={10} />);
-    expect(screen.getByText(termOrText("Подарок партнёру — 45 % · ✓ Проверка контрагента — 40 % · Скидка — 15 %"))).toBeTruthy();
+    expect(screen.getByText(termOrText("Подарок партнёру — 45 % · ✓ Проверка контрагента — 40 % · ещё 1"))).toBeTruthy();
   });
 
   /**
@@ -546,51 +551,15 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
     expect(bar.querySelectorAll(".ou-progress__stack-seg")).toHaveLength(3);
   });
 
-  it("answerSegments: по убыванию доли, верный зелёный, прочие чередуются", () => {
-    const { segments, max } = answerSegments([
-      { share: 40, correct: true },
-      { share: 45, correct: false },
-      { share: 15, correct: false },
-    ]);
-
-    expect(segments).toEqual([
-      { value: 45, color: "var(--ou-border-strong)" },
-      { value: 40, color: "var(--ou-success-default)" },
-      { value: 15, color: "var(--ou-fg-subtle)" },
-    ]);
-    expect(max).toBe(100);
-  });
-
-  it("answerSegments: у нескольких ответов шкала по сумме, полоса не вылезает за край", () => {
-    const { max } = answerSegments([{ share: 70, correct: true }, { share: 60 }, { share: 20 }]);
-
-    expect(max).toBe(150);
-  });
-
-  it("answerSegments: сегментов нулевой доли нет", () => {
-    expect(answerSegments([{ share: 100, correct: true }, { share: 0 }]).segments).toHaveLength(1);
-  });
-
   it("у свободного текста вместо долей — объём и длина", () => {
     render(<QuestionTable questions={WRITTEN} minObservations={10} />);
     expect(screen.getByText(termOrText(/12 ответов · медиана 340 знаков \(от 42 до 3000\)/))).toBeTruthy();
   });
 
-  it("сами работы открываются списком и отдаются выгрузкой", async () => {
-    const rows = [{
-      attemptId: "a1", source: "web", participant: "Иванов",
-      at: "2026-09-19T10:00:00.000Z", answer: "Сначала обесточить.", length: 19,
-      result: "neutral", latencyMs: 62_000,
-    }];
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ rows }) });
-    vi.stubGlobal("fetch", fetchMock);
-
+  it("развёрнутый ответ — сводка; читать — на странице вопроса, без окна (Э4а)", () => {
     render(<QuestionTable questions={WRITTEN} testId="t1" minObservations={10} />);
-    await userEvent.click(screen.getByRole("button", { name: /Прочитать ответы/ }));
-
-    expect(await screen.findByText(termOrText("Сначала обесточить."))).toBeTruthy();
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/analytics/tests/t1/questions/w2/answers");
-    expect(screen.getByRole("button", { name: "Выгрузить в Excel" })).toBeTruthy();
+    expect(screen.getByText(termOrText(/читать — на странице вопроса/))).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Прочитать ответы/ })).toBeNull();
   });
 });
 
@@ -671,5 +640,46 @@ describe("QuestionTable — меню строки", () => {
     expect(screen.getAllByRole("menuitem").map(item => item.textContent)).toEqual([
       "Разбор вопроса", "Открыть вопрос в теме", "Прохождения с ошибкой", "Исключить из выдачи…",
     ]);
+  });
+});
+
+/**
+ * Э4а: «Сложность: задана → по ответам» (решение владельца 2026-10-04, вариант Б эскиза).
+ */
+describe("QuestionTable — сложность: задана → по ответам", () => {
+  const cellOf = (prompt: string) => {
+    const row = screen.getByText(termOrText(prompt)).closest("tr")!;
+    const cells = within(row).getAllByRole("cell");
+    return cells[cells.length - 3];
+  };
+
+  it("обе величины в шкале редактора и вывод о расхождении", () => {
+    render(<QuestionTable questions={QUESTIONS} psychometrics={{
+      q1: { difficulty: 0.41, itemRest: 0.3, observations: 60, coefficientConfidence: "tentative" },
+      q2: { difficulty: 0.62, itemRest: 0.3, observations: 50, coefficientConfidence: "tentative" },
+    }} />);
+
+    expect(cellOf("Какая мера относится к антикоррупционным?").textContent).toBe("60 → 59расхождения нет");
+    // 40 задано, по ответам 38: расхождение 2 — нет; у q2 (1 − 0,62) × 100 = 38.
+    expect(cellOf("Быстрый и мимо").textContent).toBe("40 → 38расхождения нет");
+  });
+
+  it("расхождение больше 10 пунктов — тег «легче / труднее заданной»", () => {
+    render(<QuestionTable questions={[{ ...QUESTIONS[0], difficulty: 50 }]} psychometrics={{
+      q1: { difficulty: 0.62, itemRest: 0.3, observations: 60, coefficientConfidence: "tentative" },
+    }} />);
+    expect(cellOf("Какая мера относится к антикоррупционным?").textContent).toBe("50 → 38легче заданной на 12");
+  });
+
+  it("незаданная — «не задана», расхождение не считается", () => {
+    render(<QuestionTable questions={[{ ...QUESTIONS[0], difficulty: null }]} psychometrics={{
+      q1: { difficulty: 0.58, itemRest: 0.3, observations: 60, coefficientConfidence: "tentative" },
+    }} />);
+    expect(cellOf("Какая мера относится к антикоррупционным?").textContent).toBe("не задана → 42расхождение не считается");
+  });
+
+  it("без наблюдаемой — заданная и причина", () => {
+    render(<QuestionTable questions={[QUESTIONS[0], QUESTIONS[2]]} />);
+    expect(cellOf("Какая мера относится к антикоррупционным?").textContent).toBe("60по ответам — мало данных");
   });
 });

@@ -12,14 +12,13 @@
  * У измерительного задания доли верных нет вовсе (FR-22): эталона у него не существует, и ноль
  * в этой колонке был бы про него ложью — поэтому прочерк.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Ban } from "lucide-react";
 import { useLocation } from "wouter";
 
 import {
-  Banner, Button, Card, CardBody, CardHeader, DataGrid, ModalDialog, ProgressBar, ProgressStacked,
-  SegmentedControl, Stack, Text,
+  Banner, Button, Card, CardBody, CardHeader, DataGrid, SegmentedControl, Stack, Tag, Text,
 } from "@skillum/ui-kit";
 
 import type { QuestionType } from "@shared/questions/question-type";
@@ -29,6 +28,8 @@ import { pluralize } from "@/lib/i18n";
 
 import { percent } from "../format";
 import { DeliveryExclusionDialog, type ExclusionTarget } from "./delivery-exclusion-dialog";
+import { CompactDistribution, compactModel, type UnitsView } from "./answer-distribution";
+import { NoValue } from "./no-value";
 import { COEFFICIENT_MIN, num } from "./psychometrics-format";
 import { QuestionRowMenu } from "./question-row-menu";
 import { TermHint } from "./term-hint";
@@ -80,18 +81,8 @@ export interface QuestionRow {
    * таблица развёрнутому ответу не годится: двух одинаковых ответов не бывает.
    */
   volume?: { answered: number; medianLength: number; minLength: number; maxLength: number } | null;
-}
-
-/** Строка списка ответов — то, что отдаёт `GET .../questions/:id/answers` (FR-32). */
-interface AnswerRow {
-  attemptId: string;
-  source: string;
-  participant: string;
-  at: string | null;
-  answer: string;
-  length: number;
-  result: string;
-  latencyMs: number | null;
+  /** Э4а: разбор сопоставления, ранжирования и пропусков по единицам. */
+  units?: UnitsView | null;
 }
 
 export interface QuestionTableProps {
@@ -174,92 +165,60 @@ function sortValue(row: QuestionRow, key: string, psycho?: QuestionPsychometrics
   return value ?? Number.POSITIVE_INFINITY;
 }
 
-/**
- * Сколько долей печатается в строке разброса; остальные — «ещё N».
- *
- * У шкалы подписи — градации в слово или цифру, их влезает четыре. У распределения баллов
- * подпись это утверждение на строку, и больше двух в колонку не помещается никак.
- */
-const SPREAD_VISIBLE: Record<string, number> = { scale: 4, allocation: 2 };
-
-/** Типы, у которых сервер считает разброс ответов (`answer-spread.ts`); у прочих его нет. */
-const SPREAD_TYPES = new Set(["scale", "allocation", "short", "single", "multiple"]);
-
-/** Предел длины подписи варианта: утверждения опросника бывают в целое предложение. */
-const SPREAD_LABEL_MAX = 44;
+/** Э4а: расхождение больше стольких пунктов — вопрос оказался легче или труднее заданного. */
+const INTENT_GAP = 10;
 
 /**
- * Разброс ответов строкой: «Командный 62 % · Вдохновляющий 21 % · ещё 2» (FR-22).
+ * «Сложность: задана → по ответам» — решение владельца 2026-10-04, вариант Б эскиза.
  *
- * Два ограничения, и оба из данных, а не из вкуса. Варианты печатаются по убыванию доли и
- * только первые три: у распределения баллов их бывает десять, и полный перечень занял бы
- * строку на весь экран, ничего к ответу не добавив — хвост из процента-двух не о чём.
- * Подпись варианта режется, потому что у распределения это не слово «Командный», а целое
- * утверждение на строку; полный текст и полный перечень остаются в подсказке.
- *
- * У шкалы подписи короткие («1», «Иногда»), и между меткой и долей ставится тире: без него
- * «1 6 %» читается как одно число. У распределения тире лишнее — эскиз
- * prd56-test-analytics.html, состояние items-measurement.
+ * Обе величины в шкале редактора (0 — легко, 100 — сложно): заданная автором и полученная по
+ * ответам, `(1 − трудность) × 100`. Незаданная — «не задана», а не подставленная 50: та была
+ * неотличима от заданной 50, и расхождение с ней ничего не значило. Нет наблюдаемой —
+ * заданная и под ней, почему по ответам числа нет.
  */
-function spreadLabel(
-  options: ReadonlyArray<{ label: string; share: number; correct?: boolean }>,
-  type: string,
-): { short: string; full: string } {
-  // У выбора подпись — текст варианта, и бывает числом («3389»): без тире доля сливается с ним.
-  const dash = type === "scale" || type === "single" || type === "multiple" ? " — " : " ";
-  const say = (option: { label: string; share: number; correct?: boolean }, cut: boolean) => {
-    const label = cut && option.label.length > SPREAD_LABEL_MAX
-      ? `${option.label.slice(0, SPREAD_LABEL_MAX).trimEnd()}…`
-      : option.label;
-    // Верный вариант помечается: у оцениваемого задания разброс читают как «куда уходят
-    // ошибившиеся», и без пометки лидирующий неверный вариант не отличить от верного.
-    return `${option.correct ? "✓ " : ""}${label}${dash}${percent(option.share)}`;
-  };
-
-  const ranked = [...options].sort((a, b) => b.share - a.share);
-  const visible = ranked.slice(0, SPREAD_VISIBLE[type] ?? 3);
-  const hidden = ranked.length - visible.length;
-
-  return {
-    short: visible.map(option => say(option, true)).join(" · ")
-      + (hidden > 0 ? ` · ещё ${hidden}` : ""),
-    full: ranked.map(option => say(option, false)).join(" · "),
-  };
+function IntentCell({ declared, hardness, missing }: {
+  declared: number | null;
+  /** Наблюдаемая сложность 0-100; `null` — её нет, и `missing` говорит почему. */
+  hardness: number | null;
+  missing: "notApplicable" | "insufficient";
+}) {
+  const declaredText = declared === null
+    ? <Text as="span" variant="body-s" tone="muted">не задана</Text>
+    : <Text as="span" variant="body-s">{declared}</Text>;
+  if (hardness === null) {
+    return (
+      <Stack gap={1} align="center">
+        {declaredText}
+        <Text variant="body-xs" tone="muted">
+          {missing === "notApplicable" ? "по ответам — не применимо" : "по ответам — мало данных"}
+        </Text>
+      </Stack>
+    );
+  }
+  const gap = declared === null ? null : hardness - declared;
+  return (
+    <Stack gap={1} align="center">
+      <Text as="span" variant="body-s">{declaredText} → {hardness}</Text>
+      {gap === null ? (
+        <Text variant="body-xs" tone="muted">расхождение не считается</Text>
+      ) : Math.abs(gap) <= INTENT_GAP ? (
+        <Text variant="body-xs" tone="muted">расхождения нет</Text>
+      ) : (
+        <Tag tone="warning" size="s">{gap > 0 ? `труднее заданной на ${gap}` : `легче заданной на ${-gap}`}</Tag>
+      )}
+    </Stack>
+  );
 }
 
-/** Цвет сегмента верного варианта и два чередующихся оттенка прочих — эскиз, items-answers-b. */
-const CORRECT_SEGMENT = "var(--ou-success-default)";
-const OTHER_SEGMENTS = ["var(--ou-border-strong)", "var(--ou-fg-subtle)"] as const;
-
-/**
- * Полоса «Что отвечали» оцениваемого вопроса: сегмент на каждый вариант (этап Э1 UX-аудита).
- *
- * Прежняя полоса показывала долю САМОГО ЧАСТОГО ответа нейтральным цветом, и 80 % читалось как
- * «80 % верных», даже когда лидировал неверный вариант. Теперь видно и долю верного (зелёный
- * сегмент), и куда уходят остальные. Порядок — как в подписи под полосой, по убыванию доли;
- * прочие варианты красятся через один, чтобы соседние не сливались.
- *
- * У «нескольких ответов» доли в сумме больше 100 % (каждый отмечает несколько вариантов): шкала
- * тогда берётся по сумме, иначе сегменты вылезли бы за край полосы.
- *
- * @param options доли вариантов из разброса ответов
- * @returns сегменты и масштаб для `ProgressStacked`
- */
-export function answerSegments(
-  options: ReadonlyArray<{ share: number; correct?: boolean }>,
-): { segments: Array<{ value: number; color: string }>; max: number } {
-  const ranked = [...options].filter(option => option.share > 0).sort((a, b) => b.share - a.share);
-  let other = 0;
-  const segments = ranked.map(option => ({
-    value: option.share,
-    color: option.correct ? CORRECT_SEGMENT : OTHER_SEGMENTS[other++ % OTHER_SEGMENTS.length],
-  }));
-  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
-  return { segments, max: Math.max(100, total) };
+/** Почему у вопроса нет трудности: оценивать нечего (развёрнутый ответ, опросник). */
+function notGradedReason(row: QuestionRow): string | undefined {
+  return row.questionType === "long"
+    ? undefined
+    : "У вопроса нет верного ответа, поэтому трудность и дискриминативность не считаются.";
 }
 
 export function QuestionTable({
-  questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 0,
+  questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 10,
   psychometrics, onOpenQuality, passages, initialView = "all",
 }: QuestionTableProps) {
   const [view, setView] = useState<View>(initialView);
@@ -268,9 +227,6 @@ export function QuestionTable({
   /** Вопрос, для которого открыто окно подтверждения исключения. */
   const [pending, setPending] = useState<ExclusionTarget | null>(null);
   const [, navigate] = useLocation();
-  /** Задание, ответы которого открыты списком (FR-32). */
-  const [reading, setReading] = useState<QuestionRow | null>(null);
-  const [answers, setAnswers] = useState<AnswerRow[] | null>(null);
   /**
    * Закрыто ли разовое пояснение о смене числа в колонке (FR-02).
    *
@@ -305,51 +261,12 @@ export function QuestionTable({
     [questions],
   );
   /**
-   * Есть ли в тесте задания, на которые ПИШУТ (PRD-57 FR-28x, FR-32).
-   *
-   * У них своя колонка, и в ОБЫЧНОМ тесте тоже: у короткого ответа разброс написаний
-   * дополняет долю верных (варианты там не заданы заранее), а у свободного текста заменяет
-   * её объёмом и длиной. До этого колонка показывалась только у теста, целиком собранного
-   * из измерительных заданий, — и всё, что считал сервер с Э3, автор не видел.
+   * Фиксированная раскладка с долями колонок эскиза (approved/e4a-answer-distribution.html): при
+   * `table-layout: auto` доли — лишь пожелание, и заголовки-термины со значком подсказки
+   * распирали таблицу до горизонтальной прокрутки. Э4а: колонка распределения есть у любого теста,
+   * и раскладка одна на все составы — у опросника свои доли.
    */
-  const hasWrittenAnswers = useMemo(
-    () => questions.some(question => question.volume || (question.spread && question.correctPercent !== null)),
-    [questions],
-  );
-
-  /**
-   * Фиксированная раскладка с долями колонок эскиза (prd66-item-quality, состояние wf-items):
-   * 24 / 11 / 17 / 10 / 11 / 12 / 11 / 4 %. При `table-layout: auto` доли — лишь пожелание, и
-   * заголовки-термины со значком подсказки распирали таблицу до горизонтальной прокрутки
-   * («Замысел» уезжал за край, приёмка 5.2). Только для обычного набора колонок: у опросника и
-   * у теста с письменными ответами свой состав, и там раскладка прежняя.
-   */
-  const fixedLayout = !measurement && !hasWrittenAnswers;
-  const share = (width: string) => (fixedLayout ? { width } : {});
-
-  // FR-32: сами ответы приходят отдельным запросом и только по открытию окна — свободный
-  // текст участника не грузится вместе с таблицей, где его никто не просил.
-  useEffect(() => {
-    if (!reading) {
-      setAnswers(null);
-      return;
-    }
-    let alive = true;
-    void (async () => {
-      try {
-        const response = await fetch(
-          `/api/analytics/tests/${testId}/questions/${reading.questionId}/answers`,
-          { credentials: "include" },
-        );
-        if (!response.ok) throw new Error(String(response.status));
-        const data = await response.json() as { rows: AnswerRow[] };
-        if (alive) setAnswers(data.rows);
-      } catch {
-        if (alive) setAnswers([]);
-      }
-    })();
-    return () => { alive = false; };
-  }, [reading, testId]);
+  const share = (width: string) => ({ width });
 
   const rows = useMemo(() => {
     const shown = view === "review" ? flagged : view === "excluded" ? excludedRows : questions;
@@ -369,14 +286,16 @@ export function QuestionTable({
       frozen: true,
       // У опросника колонка ограничена: рядом с ней стоит разброс ответов, и текст вопроса,
       // растянувший её по себе, вытолкнул бы за край экрана всё, что правее.
-      ...(measurement ? { width: "40%" } : share("20%")),
+      ...share(measurement ? "33%" : "15%"),
       render: (row: QuestionRow) => (
         // Текст задания переносится, иначе строка вопроса распирает столбец по себе: ячейки
         // стола по умолчанию не переносятся, и это верно для чисел, но не для предложения.
         // `tb-psy-question` держит НИЖНИЙ предел ширины: с приходом колонки
         // «Дискриминативность» условие сжималось в столбик по три слова (PRD-66, приёмка).
-        <Stack gap={1} className={`ou-grid__cell-wrap${measurement || fixedLayout ? "" : " tb-psy-question"}`}>
-          <Stack direction="row" gap={2} align="center">
+        <Stack gap={1} className="ou-grid__cell-wrap">
+          {/* Э4а: значок типа — в строке текста, и текст его обтекает: рядом отдельным столбцом
+              он сжимал вопрос в узкую полосу по два слова. */}
+          <span className="ou-grid__cell-strong">
             <QuestionTypeIcon type={row.questionType as QuestionType} />
             {/*
               FR-17a: состояние выдачи метится перечёркнутым кругом с подсказкой, а НЕ тегом:
@@ -392,8 +311,8 @@ export function QuestionTable({
                 <Ban size={16} color="var(--ou-error-default)" aria-hidden="true" />
               </span>
             )}
-            <span className="ou-grid__cell-strong">{row.questionPrompt}</span>
-          </Stack>
+            {row.questionPrompt}
+          </span>
           <Text variant="body-xs" tone="muted">{row.topicName}</Text>
           {/* Признак назван прямо в строке: отбор без объяснения — это приговор без основания. */}
           {row.reviewFlags.map(flag => (
@@ -402,85 +321,29 @@ export function QuestionTable({
         </Stack>
       ),
     },
-    // FR-22: у опросника эталона нет, и доля верных заменяется разбросом ответов — полосой
-    // с долей лидирующего варианта и полным перечнем долей подписью. Полоса АКЦЕНТНАЯ, без
-    // тонов «успех / предупреждение»: высокая доля градации не хороша и не плоха, оценивать
-    // её не относительно чего (FR-21b). У оцениваемого теста эталон есть, и колонка «Что
-    // отвечали» рисует полосу из сегментов по всем вариантам с верным зелёным
-    // (`answerSegments`, эскиз prd56-test-analytics, состояние items-answers-b).
-    ...(measurement || hasWrittenAnswers ? [{
+    // FR-22, Э4а: распределение ответов — у ЛЮБОГО теста и любого типа вопроса, одной разметкой
+    // (`CompactDistribution`). У опросника цвет оценки не несёт, у оцениваемого верное — зелёным.
+    // Развёрнутый ответ — сводка объёма; сами ответы читаются на странице вопроса.
+    {
       key: "spread",
-      header: measurement ? "Разброс ответов" : "Что отвечали",
-      // Ширина задана, иначе перечень долей растягивает колонку и выталкивает за край
-      // экрана те, что стоят правее: у распределения баллов подпись варианта — утверждение.
-      width: "34%",
+      header: <TermHint entry={measurement ? "spreadMeasure" : "spread"} />,
+      ...share(measurement ? "35%" : "17%"),
       render: (row: QuestionRow) => {
-        // PRD-57 FR-32: у свободного текста вместо долей — объём и длина, а сами работы
-        // открываются списком: частот у написанного не бывает, и читать их незачем.
-        if (row.volume) {
-          if (row.totalAnswers < minObservations) {
-            return <Text variant="body-s" tone="muted">мало данных</Text>;
-          }
-          return (
-            <Stack gap={1} className="ou-grid__cell-wrap">
-              <Text variant="body-xs" tone="muted">
-                {row.volume.answered} {pluralize(row.volume.answered, "ответ", "ответа", "ответов")}
-                {" · медиана "}{row.volume.medianLength} {pluralize(row.volume.medianLength, "знак", "знака", "знаков")}
-                {" (от "}{row.volume.minLength}{" до "}{row.volume.maxLength}{")"}
-              </Text>
-              <Button
-                variant="ghost"
-                size="s"
-                aria-label={`Прочитать ответы: ${row.questionPrompt}`}
-                onClick={() => setReading(row)}
-              >
-                Прочитать ответы
-              </Button>
-            </Stack>
-          );
+        if (row.totalAnswers < minObservations) {
+          return <NoValue kind="insufficient" need={minObservations} have={row.totalAnswers} align="start" />;
         }
-        // Разброс считается только у шкалы, распределения и короткого ответа. У выбора,
-        // сопоставления и ранжирования его нет по устройству: «мало данных» там читалось как
-        // нехватка ответов у вопроса, на который ответили сотни человек.
-        if (!SPREAD_TYPES.has(row.questionType)) {
-          return <Text variant="body-s" tone="muted">—</Text>;
-        }
-        if (!row.spread || row.totalAnswers < minObservations) {
-          return <Text variant="body-s" tone="muted">мало данных</Text>;
-        }
-        const label = spreadLabel(row.spread.options, row.questionType);
-        if (measurement) {
-          const leader = row.spread.options.reduce(
-            (top, option) => (option.share > top.share ? option : top),
-            row.spread.options[0],
-          );
-          return (
-            <Stack gap={1} className="ou-grid__cell-wrap">
-              <ProgressBar size="s" value={Math.round(leader.share)} hideHeader />
-              <Text variant="body-xs" tone="muted" title={label.full}>
-                {label.short}
-              </Text>
-            </Stack>
-          );
-        }
-        return (
-          <Stack gap={1} className="ou-grid__cell-wrap">
-            <ProgressStacked
-              size="s"
-              role="img"
-              aria-label={label.full}
-              {...answerSegments(row.spread.options)}
-            />
-            <Text variant="body-xs" tone="muted" title={label.full}>
-              {label.short}
-            </Text>
-          </Stack>
-        );
+        const model = compactModel(row, measurement);
+        // Ответы есть, а распределения сервер не посчитал (например, ответы в незнакомом виде):
+        // «мало данных» при сотне ответов было бы неправдой.
+        return model
+          ? <CompactDistribution model={model} />
+          : <NoValue kind="notApplicable" reason="Распределение ответов для этого вопроса не посчитано." />;
       },
-    }] : []),
+    },
     ...(measurement ? [{
       key: "answers",
-      header: "Ответов",
+      ...share("9%"),
+      header: <TermHint entry="answers" />,
       align: "center" as const,
       numeric: true,
       sortable: true,
@@ -491,19 +354,27 @@ export function QuestionTable({
       // колонки значило бы закрепить неверное число рядом с верным.
       {
         key: "difficulty",
-        ...share("10%"),
+        ...share("8%"),
         header: <TermHint entry="difficulty" />,
         numeric: true,
         align: "center" as const,
         sortable: true,
-        render: (row: QuestionRow) => num(psychometrics?.[row.questionId]?.difficulty ?? null),
+        render: (row: QuestionRow) => {
+          const psycho = psychometrics?.[row.questionId];
+          if (row.correctPercent === null) return <NoValue kind="notApplicable" reason={notGradedReason(row)} />;
+          if (!psycho || psycho.difficulty === null) {
+            return <NoValue kind="insufficient" need={minObservations} have={psycho?.observations ?? row.totalAnswers} />;
+          }
+          return num(psycho.difficulty);
+        },
       },
       // FR-03: главное психометрическое число обязано быть видно там, где автор работает, —
       // иначе новая вкладка становится складом, куда никто не заходит.
       {
         key: "itemRest",
-        ...share("15%"),
-        header: <TermHint entry="itemRest" />,
+        ...share("9%"),
+        // Мягкий перенос: в колонке 9 % термин не помещается одной строкой (эскиз Э4а).
+        header: <TermHint entry="itemRest" term={"Дискрими\u00adнативность"} />,
         numeric: true,
         align: "center" as const,
         sortable: true,
@@ -512,8 +383,9 @@ export function QuestionTable({
           // FR-38a: у коэффициента свой порог, и он ВЫШЕ порога трудности. Строка, где
           // трудность есть, а дискриминативности нет, — это не сбой, и сказать об этом надо
           // словами: прочерк читался бы как «ноль» или «сломалось».
+          if (row.correctPercent === null) return <NoValue kind="notApplicable" reason={notGradedReason(row)} />;
           if (!psycho || psycho.itemRest === null || psycho.coefficientConfidence === "insufficient") {
-            return <Text variant="body-s" tone="muted">мало данных</Text>;
+            return <NoValue kind="insufficient" need={COEFFICIENT_MIN} have={psycho?.observations ?? row.totalAnswers} />;
           }
           if (!onOpenQuality) return num(psycho.itemRest);
           return (
@@ -531,72 +403,90 @@ export function QuestionTable({
     ]),
     {
       key: "skip",
-      ...share("9%"),
+      ...share(measurement ? "9%" : "8%"),
       header: <TermHint entry="skip" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
-      render: (row: QuestionRow) => percent(row.skipShare),
+      render: (row: QuestionRow) => (row.skipShare === null
+        ? <NoValue kind="notApplicable" reason="Пропуски считаются по веб-прохождениям, а их в выборке нет: состав выданной формы пакет SCORM не сообщает." />
+        : percent(row.skipShare)),
     },
     // Экспозиция — свойство ВЫДАЧИ, и у опросника она есть, но эскиз её в этой таблице не
     // держит: строка опросника отвечает на «что выбирали», а как часто задание показывали —
     // вопрос вкладки «Выдача», где профиль банка и стоит (FR-20).
     ...(measurement ? [] : [{
       key: "exposure",
-      ...share("10%"),
+      ...share("9%"),
       // «Экспозиция» — как в эскизе и в пояснении под таблицей: то же слово, что у профиля
       // банка на вкладке «Выдача» (PRD-55).
       header: <TermHint entry="exposure" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
-      render: (row: QuestionRow) => percent(row.exposurePercent),
+      render: (row: QuestionRow) => (row.exposurePercent === null
+        ? <NoValue kind="notApplicable" reason="Попыток теста за окно наблюдения нет — сравнивать не с чем." />
+        : percent(row.exposurePercent)),
     }, {
       // Колонка «Количество тестов» отчёта WebTutor. Считается по ВЫДАЧАМ, а не по составу
       // тестов: задание в теме чужого теста, которое там ни разу не выпало, участники не
       // видели, и для износа задания оно не в счёт (PRD-55 FR-32).
       key: "otherTests",
-      ...share("7%"),
+      ...share("6%"),
       header: <TermHint entry="otherTests" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
-      render: (row: QuestionRow) => row.otherTestsCount ?? "—",
+      render: (row: QuestionRow) => (row.otherTestsCount === null || row.otherTestsCount === undefined
+        ? <NoValue kind="notApplicable" reason="Выдачу в других тестах посчитать не удалось." />
+        : row.otherTestsCount),
     }]),
     {
       key: "latency",
-      ...share("10%"),
+      ...share(measurement ? "9%" : "8%"),
       header: <TermHint entry="latency" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
-      render: (row: QuestionRow) => duration(row.latencyMedianMs),
+      // Время не измерялось — пакеты до 2026-09-12 его не сообщают (PRD-55): это не ноль.
+      render: (row: QuestionRow) => (row.latencyMedianMs === null
+        ? <NoValue kind="notApplicable" reason="Время на вопрос не измерялось: пакеты SCORM до 12.09.2026 его не сообщают." />
+        : duration(row.latencyMedianMs)),
     },
     // Авторская трудность у опросника бессмысленна: трудным бывает задание с верным ответом,
     // а здесь верного ответа нет вовсе.
     //
-    // Называется «Замысел», потому что с PRD-66 FR-02 в таблице появилась НАБЛЮДАЕМАЯ
-    // трудность: две колонки «Трудность» с разными числами читались бы как поломка, а
-    // заявленная автором величина — это именно замысел, а не измерение.
+    // Э4а: «Сложность: задана → по ответам» (решение владельца 2026-10-04) вместо «Замысла»:
+    // заданная автором и полученная по ответам — рядом, в одной шкале, с выводом о расхождении.
     ...(measurement ? [] : [{
       key: "declared",
-      ...share("8%"),
+      ...share("10%"),
       header: <TermHint entry="intent" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
-      render: (row: QuestionRow) => row.difficulty,
+      render: (row: QuestionRow) => {
+        const psycho = psychometrics?.[row.questionId];
+        const p = row.correctPercent === null ? null : psycho?.difficulty ?? null;
+        return (
+          <IntentCell
+            declared={row.difficulty}
+            hardness={p === null ? null : Math.round((1 - p) * 100)}
+            missing={row.correctPercent === null ? "notApplicable" : "insufficient"}
+          />
+        );
+      },
     }, {
       // Колонка «Вес» отчёта WebTutor. Цена та же, что у движка оценивания: иначе таблица
       // называла бы одну цену, а результат участника считался бы по другой.
       key: "points",
-      ...share("7%"),
+      ...share("6%"),
       header: <TermHint entry="points" />,
       numeric: true,
       align: "center" as const,
       sortable: true,
       render: (row: QuestionRow) => (row.points === null || row.points === undefined
-        ? "—"
+        ? <NoValue kind="notApplicable" reason="Вопрос не оценивается: баллов он не приносит." />
         : row.points.toLocaleString("ru-RU")),
     }]),
     // Действия строки — ПОД ТРОЕТОЧИЕМ, как в эскизе (prd66-item-quality, состояние
@@ -606,7 +496,7 @@ export function QuestionTable({
     // сначала куда перейти, потом что сделать с выдачей.
     {
       key: "rowActions",
-      ...share("4%"),
+      ...share(measurement ? "5%" : "4%"),
       header: "",
       render: (row: QuestionRow) => (
         <QuestionRowMenu
@@ -673,7 +563,7 @@ export function QuestionTable({
       />
       <CardBody>
         <DataGrid
-          className={fixedLayout ? "tb-psy-grid" : undefined}
+          className="tb-psy-grid tb-qtable"
           columns={columns}
           rows={rows}
           rowKey={row => row.questionId}
@@ -697,7 +587,7 @@ export function QuestionTable({
         {!measurement ? (
           <Text variant="body-xs" tone="muted">
             Трудность и дискриминативность считаются по доле балла в первой попытке участника ·
-            пропуски, экспозиция и время — от {minObservations || 10} наблюдений,
+            доли ответов, пропуски, экспозиция и время — от {minObservations} наблюдений,
             дискриминативность — от {COEFFICIENT_MIN}
           </Text>
         ) : null}
@@ -711,56 +601,6 @@ export function QuestionTable({
         onConfirm={questionId => onDeliveryChange?.(questionId, true)}
       />
 
-      {/*
-        PRD-57 FR-32: сами работы — списком, с выгрузкой. Отдельного экрана трек не заводит:
-        список читают оттуда же, где увидели сводку, и тем же окном, каким таблица уже
-        пользуется для подтверждения исключения.
-      */}
-      <ModalDialog
-        open={reading !== null}
-        onClose={() => setReading(null)}
-        size="l"
-        title="Ответы на вопрос"
-        description={reading?.questionPrompt}
-        footer={
-          <>
-            <Button variant="ghost" size="m" onClick={() => setReading(null)}>Закрыть</Button>
-            {reading && (
-              <Button
-                variant="primary"
-                size="m"
-                // Ссылкой, а не запросом: файл отдаёт сервер, и браузер сохраняет его сам.
-                onClick={() => {
-                  window.location.href =
-                    `/api/analytics/tests/${testId}/questions/${reading.questionId}/answers/export/excel`;
-                }}
-              >
-                Выгрузить в Excel
-              </Button>
-            )}
-          </>
-        }
-      >
-        <Stack gap={3}>
-          {answers === null ? (
-            <Text tone="muted">Читаем ответы…</Text>
-          ) : answers.length === 0 ? (
-            <Text tone="muted">На этот вопрос пока никто не ответил</Text>
-          ) : (
-            answers.map(row => (
-              <Stack key={`${row.attemptId}-${row.length}`} gap={1} className="ou-grid__cell-wrap">
-                <Text variant="body-xs" tone="muted">
-                  {row.participant}
-                  {row.at ? ` · ${new Date(row.at).toLocaleString("ru-RU")}` : ""}
-                  {` · ${row.length} ${pluralize(row.length, "знак", "знака", "знаков")}`}
-                  {row.latencyMs === null ? "" : ` · ${duration(row.latencyMs)}`}
-                </Text>
-                <Text>{row.answer}</Text>
-              </Stack>
-            ))
-          )}
-        </Stack>
-      </ModalDialog>
       </Card>
     </Stack>
   );

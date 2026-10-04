@@ -3363,7 +3363,18 @@
 .tb-float-hint--legend .ou-donut__legend { flex: none; gap: var(--ou-space-1); }
 .tb-float-hint--legend .ou-donut__legend-item,
 .tb-float-hint--legend .ou-donut__legend-name { color: inherit; white-space: normal; }
-.tb-no-value { display: inline-flex; text-align: center; }
+.tb-no-value { display: inline-flex; text-align: center; overflow-wrap: normal; }
+/* Таблица «Вопросы»: значок сортировки стоит в строке заголовка, а не отдельным столбцом
+   flex-ряда, и при нехватке ширины уходит на следующую строку под термин — иначе в колонке
+   в 8 % он вылезал на соседний заголовок (приёмка Э4а). */
+.tb-qtable .ou-grid__th.ou-grid__th--center { display: block; text-align: center; }
+.tb-qtable .ou-grid__th.ou-grid__th--center > svg { display: inline-block; vertical-align: -2px; margin-left: var(--ou-space-1); }
+/* Колонки чисел в 8 % (1440 px — около 85 px): слово «Трудность» со значком и «применимо»
+   не помещались в ячейку с отступами по 8 px. Боковой отступ — 4 px, сетка 4 px. */
+.tb-qtable .ou-grid__th.ou-grid__th--center,
+.tb-qtable tbody td.is-align-center { padding-inline: var(--ou-space-1); }
+/* Вывод «легче заданной на 12» шире колонки сложности (10 %): тег переносится в две строки. */
+.tb-qtable tbody td .ou-tag { white-space: normal; height: auto; text-align: center; }
 
 /* ─── PRD-66: таблица «Качество вопросов» — фиксированная раскладка ───────────
    Колонка «n» уезжала за горизонтальную прокрутку: при `table-layout: auto`
