@@ -254,7 +254,7 @@
     <nav class="wf-nav" aria-label="Wireframe state switcher">
       <span class="wf-nav-title">Э4 — замысел рядом с наблюдением:</span>
       <button type="button" class="active" onclick="showState(this, 'a')">А — как сейчас</button>
-      <button type="button" onclick="showState(this, 'b')">Б — как плитка</button>
+      <button type="button" onclick="showState(this, 'b')">Б — выбран</button>
       <button type="button" onclick="showState(this, 'c')">В — подписи шкал</button>
       <button type="button" onclick="showState(this, 'd')">Г — общая полоса</button>
       <span class="wf-nav-sep"></span>
@@ -361,7 +361,7 @@
       </div>
     </div>
 
-    <!-- ════════════════ Вариант Б — как плитка «Замысел и наблюдение» ════════════════ -->
+    <!-- ════════════════ Вариант Б — как плитка (ВЫБРАН владельцем 2026-10-04) ════════════════ -->
     <!-- Замысел и наблюдение — в шкале автора (0–100, больше — сложнее), с выводом; правило — как у плитки разбора: расхождение больше 10 пунктов. -->
     <div id="wf-b" class="wf-state" data-tab="items">
       <div class="ou-shell">
@@ -400,7 +400,7 @@
                         <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Пропуски&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля показов, в которых на вопрос не ответили. Считается по веб-прохождениям: состав выданной формы пакет SCORM не сообщает.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Экспозиция&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Доля прохождений, в которые попал вопрос. Высокая экспозиция при малом банке — ответ быстро становится известен.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Время, медиана&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Типичное время на вопрос: половина участников отвечает быстрее, половина — дольше. Медиана не зависит от брошенных и забытых открытыми вкладок.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
-                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Замысел и наблюдение&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Сложность, заявленная автором, и наблюдаемая — в одной шкале автора: 0 — легко, 100 — сложно. Наблюдаемая — (1 − трудность) × 100. Расхождение больше 10 пунктов: вопрос оказался легче или труднее задуманного.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
+                        <th><div class="ou-grid__th is-sortable wf-th-end"><span class="ou-tip wf-tip-end" data-placement="bottom" tabindex="0">Сложность: задана → по ответам&#8288;<svg class="wf-tip-ico" width="12" height="12" aria-hidden="true"><use href="#i-info" /></svg><span class="ou-tip__bubble ou-tip__bubble--wrap wf-tip-wide">Слева — сложность, которую автор задал вопросу; справа — какой она получилась по ответам участников. Обе в шкале редактора: 0 — легко, 100 — сложно; по ответам — (1 − трудность) × 100. Расхождение больше 10 пунктов: вопрос оказался легче или труднее заданного.</span></span><svg width="12" height="12"><use href="#i-sort" /></svg></div></th>
                         <th class="ou-grid__control-cell" aria-label="Действия"></th>
                       </tr>
                     </thead>
@@ -422,7 +422,7 @@
                         <td class="is-numeric">1 %</td>
                         <td class="is-numeric">54 %</td>
                         <td class="is-numeric">1:12</td>
-                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>50 → 21</span><span class="ou-tag ou-tag--warning ou-tag--s">легче задуманного на 29</span></span></td>
+                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>50 → 21</span><span class="ou-tag ou-tag--warning ou-tag--s">легче заданной на 29</span></span></td>
                         <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
                       </tr>
                       <tr>
@@ -442,7 +442,7 @@
                         <td class="is-numeric">8 %</td>
                         <td class="is-numeric">2 %</td>
                         <td class="is-numeric is-muted">—</td>
-                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>не задана → 67</span><span class="ou-grid__cell-sub">замысел не задан</span></span></td>
+                                                <td class="is-numeric"><span class="ou-stack ou-stack--gap-1 ou-stack--ai-end"><span>не задана → 67</span><span class="ou-grid__cell-sub">сложность не задана</span></span></td>
                         <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
                       </tr>
                     </tbody>
@@ -618,7 +618,7 @@
                         <td class="is-numeric">1 %</td>
                         <td class="is-numeric">54 %</td>
                         <td class="is-numeric">1:12</td>
-                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--intent" style="left: 50%"></span><span class="wf-dual__mark wf-dual__mark--seen" style="left: 21%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">легче задуманного на 29</span></span></td>
+                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--intent" style="left: 50%"></span><span class="wf-dual__mark wf-dual__mark--seen" style="left: 21%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">легче заданной на 29</span></span></td>
                         <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
                       </tr>
                       <tr>
@@ -638,7 +638,7 @@
                         <td class="is-numeric">8 %</td>
                         <td class="is-numeric">2 %</td>
                         <td class="is-numeric is-muted">—</td>
-                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--seen" style="left: 67%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">замысел не задан</span></span></td>
+                                                <td><span class="wf-dual-wrap"><span class="wf-dual"><span class="wf-dual__mark wf-dual__mark--seen" style="left: 67%"></span></span><span class="ou-text ou-text--body-xs ou-text--tone-muted">сложность не задана</span></span></td>
                         <td class="wf-rowmenu-cell"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия с вопросом" aria-haspopup="menu" aria-expanded="false"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-dots" /></svg></span></button></td>
                       </tr>
                     </tbody>
