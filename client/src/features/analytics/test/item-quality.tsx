@@ -211,6 +211,15 @@ export interface ItemQualityPanelProps {
    * таблица знает только психометрические признаки.
    */
   heuristics?: Record<string, ReviewHeuristic>;
+  /**
+   * Э4б: какую часть рисовать. Вкладки «Качество вопросов» больше нет — её содержимое живёт во
+   * «Вопросах»: блок качества теста (`block`) над таблицей и сама таблица психометрики
+   * (`table`, без своей карточки) в наборе колонок «Психометрика». `all` — прежняя вкладка
+   * целиком (по умолчанию).
+   */
+  section?: "all" | "block" | "table";
+  /** Э4б: только эти вопросы — вид («Под подозрением», «Исключённые») выбирает контейнер вкладки. */
+  only?: ReadonlySet<string>;
 }
 
 /** Как источник наблюдений подписывается человеку. */
@@ -396,7 +405,7 @@ function compareRows(
 /** Вкладка «Качество вопросов». */
 export function ItemQualityPanel({
   view, exportHref, matrixHref, onOpenItem, onRestoreFirstAttempt, heuristics = {},
-  onDeliveryChange, testId, excluded = {}, initialTab = "all",
+  onDeliveryChange, testId, excluded = {}, initialTab = "all", section = "all", only,
 }: ItemQualityPanelProps) {
   const [tab, setTab] = useState<View>(initialTab);
   const [glossary, setGlossary] = useState(false);
@@ -412,6 +421,7 @@ export function ItemQualityPanel({
   const reliableCount = view.items.filter(r => r.coefficientConfidence === "reliable").length;
 
   const rows = view.items
+    .filter(row => !only || only.has(row.questionId))
     .filter(row =>
       tab === "all" ? true
         : tab === "suspicious" ? suspicious(row, heuristics[row.questionId])
@@ -627,8 +637,42 @@ export function ItemQualityPanel({
   // что тест измерительный, говорит подзаголовок страницы.
   if (view.measurementOnly) return null;
 
+  const grid = (
+      <DataGrid
+        className="tb-psy-grid"
+        columns={columns}
+        rows={rows}
+        rowKey={row => row.questionId}
+        sortKey={sortColumn}
+        sortDir={sortDir}
+        onSort={(key, dir) => { setSortColumn(key as SortColumn); setSortDir(dir); }}
+        emptyMessage={tab === "suspicious"
+          ? "Признаки не сошлись ни у одного вопроса"
+          : tab === "thin"
+            ? "Данных хватает по всем вопросам"
+            : "Наблюдений пока нет"}
+      />
+  );
+  const exportLinks = exportHref || matrixHref ? (
+    <Stack direction="row" gap={1} align="center">
+      {exportHref ? (
+        <a className="ou-btn ou-btn--secondary ou-btn--s" href={exportHref} download>
+          <span className="ou-btn__ico"><Download size={14} /></span>
+          <span>Психометрический отчёт</span>
+        </a>
+      ) : null}
+      {matrixHref ? (
+        <a className="ou-btn ou-btn--ghost ou-btn--s" href={matrixHref} download>
+          <span className="ou-btn__ico"><Download size={14} /></span>
+          <span>Матрица ответов</span>
+        </a>
+      ) : null}
+    </Stack>
+  ) : null;
+
   return (
     <Stack gap={4}>
+      {section !== "table" && (<>
       {/*
         FR-51: по всем попыткам считать можно, но осознанно. Повторная попытка того же человека —
         не второй участник, и предупреждение стоит первым, над числами, которые оно касается.
@@ -797,6 +841,16 @@ export function ItemQualityPanel({
         </CardBody>
       </Card>
 
+      </>)}
+
+      {section === "table" ? (
+        <Stack gap={4}>
+          {grid}
+          {exportLinks}
+        </Stack>
+      ) : null}
+
+      {section === "all" ? (
       <Card variant="outlined">
         <CardHeader
           title="Вопросы"
@@ -821,42 +875,17 @@ export function ItemQualityPanel({
           )}
         />
         <CardBody>
-          <DataGrid
-            className="tb-psy-grid"
-            columns={columns}
-            rows={rows}
-            rowKey={row => row.questionId}
-            sortKey={sortColumn}
-            sortDir={sortDir}
-            onSort={(key, dir) => { setSortColumn(key as SortColumn); setSortDir(dir); }}
-            emptyMessage={tab === "suspicious"
-              ? "Признаки не сошлись ни у одного вопроса"
-              : tab === "thin"
-                ? "Данных хватает по всем вопросам"
-                : "Наблюдений пока нет"}
-          />
+          {grid}
         </CardBody>
         {exportHref || matrixHref ? (
           <CardFooter>
-            <Stack direction="row" gap={1} align="center">
-              {exportHref ? (
-                <a className="ou-btn ou-btn--secondary ou-btn--s" href={exportHref} download>
-                  <span className="ou-btn__ico"><Download size={14} /></span>
-                  <span>Психометрический отчёт</span>
-                </a>
-              ) : null}
-              {matrixHref ? (
-                <a className="ou-btn ou-btn--ghost ou-btn--s" href={matrixHref} download>
-                  <span className="ou-btn__ico"><Download size={14} /></span>
-                  <span>Матрица ответов</span>
-                </a>
-              ) : null}
-            </Stack>
+            {exportLinks}
           </CardFooter>
         ) : null}
       </Card>
+      ) : null}
 
-      <GlossaryDialog open={glossary} onClose={() => setGlossary(false)} />
+      {section === "all" ? <GlossaryDialog open={glossary} onClose={() => setGlossary(false)} /> : null}
       {/* FR-17b: то же окно подтверждения, что у вкладки «Вопросы». */}
       <DeliveryExclusionDialog
         target={pending}
@@ -945,7 +974,7 @@ const GLOSSARY: Array<{ term: string; what: string; marks: string }> = [
 ];
 
 /** Окно «Термины» — развёрнутый разбор величин, который не помещается в подсказку (FR-14b). */
-function GlossaryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function GlossaryDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <ModalDialog
       open={open}

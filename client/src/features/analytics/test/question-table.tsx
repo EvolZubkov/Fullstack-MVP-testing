@@ -121,7 +121,35 @@ export interface QuestionTableProps {
    * как она отсортирована сейчас: по нему ходят «Предыдущий / Следующий».
    */
   onOpenQuality?: (questionId: string, order: string[]) => void;
+  /**
+   * Э4б: набор колонок одной таблицы вопросов (эскиз approved/e4b-questions-table.html).
+   * `full` — прежний состав всех колонок (по умолчанию).
+   */
+  columnSet?: QuestionColumnSet;
+  /**
+   * Э4б: только таблица и подпись под ней — без пояснения, карточки и переключателя видов: их
+   * рисует контейнер вкладки «Вопросы», общий для всех наборов колонок.
+   */
+  bare?: boolean;
 }
+
+/** Набор колонок таблицы вопросов (Э4б). */
+export type QuestionColumnSet = "full" | "main" | "delivery";
+
+/**
+ * Колонки наборов и их доли (эскиз approved/e4b-questions-table.html). Колонок в наборе меньше,
+ * чем было в общей таблице, поэтому «Вопрос» широкий и длинный текст не идёт столбцом.
+ */
+const SET_WIDTHS: Record<"main" | "delivery", { graded: Record<string, string>; measurement: Record<string, string> }> = {
+  main: {
+    graded: { question: "26%", spread: "24%", difficulty: "9%", itemRest: "10%", declared: "12%", latency: "9%", points: "6%", rowActions: "4%" },
+    measurement: { question: "36%", spread: "40%", answers: "10%", latency: "10%", rowActions: "4%" },
+  },
+  delivery: {
+    graded: { question: "43%", skip: "12%", exposure: "14%", otherTests: "12%", latency: "13%", rowActions: "6%" },
+    measurement: { question: "44%", skip: "16%", answers: "18%", latency: "16%", rowActions: "6%" },
+  },
+};
 
 /** Психометрика одного задания — ровно то, что нужно строке таблицы. */
 export interface QuestionPsychometrics {
@@ -224,7 +252,7 @@ function notGradedReason(row: QuestionRow): string | undefined {
 
 export function QuestionTable({
   questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 10,
-  psychometrics, onOpenQuality, passages, initialView = "all",
+  psychometrics, onOpenQuality, passages, initialView = "all", columnSet = "full", bare = false,
 }: QuestionTableProps) {
   const [view, setView] = useState<View>(initialView);
   const [sortKey, setSortKey] = useState(measurement ? "answers" : "difficulty");
@@ -532,6 +560,61 @@ export function QuestionTable({
       ),
     },
   ];
+  // Э4б: набор колонок — подмножество общего состава со своими долями.
+  const widths = columnSet === "full" ? null : SET_WIDTHS[columnSet][measurement ? "measurement" : "graded"];
+  const shownColumns = widths
+    ? columns.filter(column => column.key in widths).map(column => ({ ...column, width: widths[column.key] }))
+    : columns;
+
+  const grid = (
+    <DataGrid
+      className="tb-psy-grid tb-qtable"
+      columns={shownColumns}
+      rows={rows}
+      rowKey={row => row.questionId}
+      sortKey={sortKey}
+      sortDir={sortDir}
+      onSort={(key, dir) => { setSortKey(key); setSortDir(dir); }}
+      // Э3.3: строка открывает вопрос — прежде клик по ней не делал ничего.
+      onRowClick={onOpenQuality ? row => onOpenQuality(row.questionId, rows.map(item => item.questionId)) : undefined}
+      emptyMessage={view === "review"
+        ? "Признаки проблем не сошлись ни у одного вопроса: чинить нечего"
+        : view === "excluded"
+          ? "Из выдачи ничего не исключено"
+          : bare ? "В этом виде вопросов нет" : "Вопросов в выдаче пока нет"}
+    />
+  );
+  /*
+    PRD-66 FR-04, FR-38a: два порога сосуществуют в одной строке, и экран обязан сказать, какой к
+    какому числу относится. Выборка названа там же: трудность считается по первой попытке
+    участника, а пропуски и время — по всем ответам.
+  */
+  const footnote = !measurement ? (
+    <Text variant="body-xs" tone="muted">
+      Трудность и дискриминативность считаются по доле балла в первой попытке участника ·
+      доли ответов, пропуски, экспозиция и время — от {minObservations} наблюдений,
+      дискриминативность — от {COEFFICIENT_MIN}
+    </Text>
+  ) : null;
+  /* FR-17b: исключение подтверждается отдельным окном — тем же, что у «Качества вопросов». */
+  const exclusionDialog = (
+    <DeliveryExclusionDialog
+      target={pending}
+      testId={testId}
+      onClose={() => setPending(null)}
+      onConfirm={questionId => onDeliveryChange?.(questionId, true)}
+    />
+  );
+
+  if (bare) {
+    return (
+      <Stack gap={4}>
+        {grid}
+        {footnote}
+        {exclusionDialog}
+      </Stack>
+    );
+  }
 
   return (
     <Stack gap={4}>
@@ -569,44 +652,10 @@ export function QuestionTable({
         }
       />
       <CardBody>
-        <DataGrid
-          className="tb-psy-grid tb-qtable"
-          columns={columns}
-          rows={rows}
-          rowKey={row => row.questionId}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={(key, dir) => { setSortKey(key); setSortDir(dir); }}
-          // Э3.3: строка открывает вопрос — прежде клик по ней не делал ничего.
-          onRowClick={onOpenQuality ? row => onOpenQuality(row.questionId, rows.map(item => item.questionId)) : undefined}
-          emptyMessage={view === "review"
-            ? "Признаки проблем не сошлись ни у одного вопроса: чинить нечего"
-            : view === "excluded"
-              ? "Из выдачи ничего не исключено"
-              : "Вопросов в выдаче пока нет"}
-        />
-        {/*
-          PRD-66 FR-04, FR-38a: два порога сосуществуют в одной строке, и экран обязан
-          сказать, какой к какому числу относится. Выборка названа там же: трудность считается
-          по первой попытке участника, а пропуски и время — по всем ответам, и автор, который
-          сверит таблицу со вкладкой «Качество вопросов», должен знать почему.
-        */}
-        {!measurement ? (
-          <Text variant="body-xs" tone="muted">
-            Трудность и дискриминативность считаются по доле балла в первой попытке участника ·
-            доли ответов, пропуски, экспозиция и время — от {minObservations} наблюдений,
-            дискриминативность — от {COEFFICIENT_MIN}
-          </Text>
-        ) : null}
+        {grid}
+        {footnote}
       </CardBody>
-
-      {/* FR-17b: исключение подтверждается отдельным окном — тем же, что у «Качества вопросов». */}
-      <DeliveryExclusionDialog
-        target={pending}
-        testId={testId}
-        onClose={() => setPending(null)}
-        onConfirm={questionId => onDeliveryChange?.(questionId, true)}
-      />
+      {exclusionDialog}
 
       </Card>
     </Stack>

@@ -241,7 +241,7 @@ export default function AnalyticsPage() {
               {/* Э3.4: где на уровне теста есть дела по качеству вопросов — указатель, а не разбор. */}
               <SuspiciousTests
                 rows={attentionData?.suspiciousTests ?? []}
-                onOpen={(id) => openTestLevel(id, EMPTY_FILTER, "quality", { qualityView: "suspicious" })}
+                onOpen={(id) => openTestLevel(id, EMPTY_FILTER, "questions", { questionsView: "suspicious", questionsSet: "psychometrics" })}
               />
               <AttentionQueue
                 data={attentionData}

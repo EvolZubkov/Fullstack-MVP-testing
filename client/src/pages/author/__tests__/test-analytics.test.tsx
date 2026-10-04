@@ -191,6 +191,12 @@ async function renderLoaded() {
   await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Тест по финансам" })).toBeInTheDocument());
 }
 
+/** Э4б: «Качество вопросов» — набор колонок «Психометрика» вкладки «Вопросы». */
+async function openPsychometrics() {
+  fireEvent.click(screen.getByRole("tab", { name: "Вопросы" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Психометрика" }));
+}
+
 describe("<TestAnalyticsPage />", () => {
   it("shows the loading state before analytics arrive", async () => {
     renderPage();
@@ -321,7 +327,9 @@ describe("<TestAnalyticsPage />", () => {
     await waitFor(() => expect(screen.getByText("Что такое бюджет?")).toBeInTheDocument());
     // PRD-66 FR-02: место доли верных заняла трудность по доле балла.
     expect(screen.getByText("Трудность")).toBeInTheDocument();
-    expect(screen.getByText("80 %")).toBeInTheDocument();
+    // Э4б: экспозиция — в наборе колонок «Выдача».
+    fireEvent.click(screen.getByRole("button", { name: "Выдача" }));
+    expect(await screen.findByText("80 %")).toBeInTheDocument();
   });
 
   it("берёт трудность и дискриминативность из расчёта психометрики (PRD-66 FR-02, FR-03)", async () => {
@@ -394,9 +402,9 @@ describe("<TestAnalyticsPage />", () => {
     const crumbs = await screen.findByRole("navigation", { name: "Хлебные крошки" });
     await waitFor(() => expect(within(crumbs).getByText("Какая мера относится к антикоррупционным?")).toBeInTheDocument());
     expect(within(crumbs).getByRole("link", { name: "Аналитика" })).toHaveAttribute("href", "/author/analytics?testId=t1&tab=attempts");
-    // Крошка теста возвращает на вкладку, где живёт таблица вопросов.
+    // Крошка теста возвращает на вкладку, где живёт таблица вопросов (Э4б — «Вопросы»).
     expect(within(crumbs).getByRole("link", { name: "Тест по финансам" }))
-      .toHaveAttribute("href", "/author/analytics/tests/t1?tab=quality");
+      .toHaveAttribute("href", "/author/analytics/tests/t1?tab=questions");
     expect(screen.queryByRole("tab", { name: "Обзор" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Ко всем вопросам" })).toBeNull();
 
@@ -470,7 +478,7 @@ describe("<TestAnalyticsPage />", () => {
 
     it("расчёт «Качества вопросов» идёт по отобранной выборке, а не по всему тесту", async () => {
       await renderLoaded();
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
+      await openPsychometrics();
 
       // Без условий в запросе автор видел бы числа по всем прохождениям, выбрав одну группу.
       await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
@@ -482,7 +490,7 @@ describe("<TestAnalyticsPage />", () => {
 
     it("отчёт и матрица выгружаются по тем же условиям, что на экране", async () => {
       await renderLoaded();
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
+      await openPsychometrics();
 
       // Файл, собранный по другим условиям, чем показанные, невоспроизводим (FR-54b).
       const report = await screen.findByRole("link", { name: /Психометрический отчёт/ });
@@ -523,7 +531,7 @@ describe("<TestAnalyticsPage />", () => {
 
     it("по умолчанию включено и стоит чипом в строке фильтра «Качества вопросов»", async () => {
       await renderLoaded();
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
+      await openPsychometrics();
 
       expect(await screen.findByText("Только первая попытка")).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith("/api/analytics/psychometrics/t1", expect.anything());
@@ -536,7 +544,7 @@ describe("<TestAnalyticsPage />", () => {
 
     it("снятие чипа пересчитывает по всем попыткам и предупреждает о зависимости наблюдений", async () => {
       await renderLoaded();
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
+      await openPsychometrics();
       await screen.findByText("Только первая попытка");
 
       fireEvent.click(removeChip("Только первая попытка"));
@@ -550,7 +558,7 @@ describe("<TestAnalyticsPage />", () => {
 
     it("кнопка в предупреждении возвращает первую попытку", async () => {
       await renderLoaded();
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
+      await openPsychometrics();
       await screen.findByText("Только первая попытка");
       fireEvent.click(removeChip("Только первая попытка"));
 
@@ -599,14 +607,15 @@ describe("<TestAnalyticsPage />", () => {
       expect(compare).toBeDisabled();
       expect(save).toBeDisabled();
       // Прежнего входа в сравнение на «Качестве вопросов» нет: сравнение одно, во «Срезах».
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
+      await openPsychometrics();
       expect(screen.queryByRole("button", { name: /Сравнить срезы/ })).toBeNull();
     });
 
-    it("вкладка «Срезы» стоит за «Качеством вопросов»; сравнение по качеству — вторая метрика", async () => {
+    it("вкладка «Срезы» стоит за «Вопросами» (Э4б); сравнение по качеству — вторая метрика", async () => {
       await renderLoaded();
       const tabs = screen.getAllByRole("tab").map(tab => tab.textContent);
-      expect(tabs.indexOf("Срезы")).toBe(tabs.indexOf("Качество вопросов") + 1);
+      expect(tabs).not.toContain("Качество вопросов");
+      expect(tabs.indexOf("Срезы")).toBe(tabs.indexOf("Вопросы") + 1);
 
       fireEvent.click(screen.getByRole("tab", { name: "Срезы" }));
       fireEvent.click(await screen.findByRole("button", { name: "Сравнение" }));
@@ -621,7 +630,7 @@ describe("<TestAnalyticsPage />", () => {
   });
 
   /** План сверки 5.6, эскиз prd66-item-quality (состояние wf-scales). */
-  describe("измерительный тест на «Качестве вопросов» (PRD-66 FR-52)", () => {
+  describe("измерительный тест: качество шкал (PRD-66 FR-52, Э4б)", () => {
     beforeEach(() => {
       // Измерительный тест: прохождения есть, оценённых среди них нет — по этому признаку шапка
       // говорит «измерительный тест» сразу, ещё до загрузки вкладки качества.
@@ -665,9 +674,12 @@ describe("<TestAnalyticsPage />", () => {
       });
     });
 
-    it("вкладка — только раздел шкал: ни плиток, ни таблицы вопросов, ни поясняющей карточки", async () => {
+    it("качество шкал — на вкладке «Шкалы»; у опросника нет набора «Психометрика»", async () => {
       await renderLoaded();
-      fireEvent.click(screen.getByRole("tab", { name: "Качество вопросов" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Вопросы" }));
+      await screen.findByRole("button", { name: "Выдача" });
+      expect(screen.queryByRole("button", { name: "Психометрика" })).toBeNull();
+      fireEvent.click(screen.getByRole("tab", { name: "Шкалы" }));
 
       expect(await screen.findByText("Шкалы методики")).toBeInTheDocument();
       expect(screen.getByText("Пункты шкалы «Деперсонализация»")).toBeInTheDocument();

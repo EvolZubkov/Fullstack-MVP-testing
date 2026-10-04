@@ -10,10 +10,9 @@
  * `features/analytics/test/*`, здесь остаётся только сборка и запросы: данные «Выдачи» и
  * «Шкал» грузятся своими ручками и ТОЛЬКО на своей вкладке.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PassTrend } from "@/features/analytics/test/pass-trend";
 import { ScoreDistribution } from "@/features/analytics/test/score-distribution";
-import { QuestionTable } from "@/features/analytics/test/question-table";
 import { TopicBreakdown } from "@/features/analytics/test/topic-breakdown";
 import { VariantTable, type VariantSectionView } from "@/features/analytics/test/variant-table";
 import { VersionTable, type VersionRowView } from "@/features/analytics/test/version-table";
@@ -27,12 +26,10 @@ import {
 } from "@/features/analytics/test/scale-profile";
 import {
     countSuspicious,
-    ItemQualityPanel,
     reviewHeuristicsOf,
     type ItemQualityView,
-    type QualityView,
 } from "@/features/analytics/test/item-quality";
-import { type QuestionsView } from "@/features/analytics/test/question-table";
+import { QuestionsTab, type ColumnSet, type QuestionsTabView } from "@/features/analytics/test/questions-tab";
 import { TestAttention } from "@/features/analytics/test/test-attention";
 import {
     BreakdownTitle,
@@ -47,7 +44,7 @@ import {
 } from "@/features/analytics/test/scale-quality";
 import { invalidateAnalytics } from "@/features/analytics/invalidate-analytics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useParams } from "wouter";
+import { Link, useLocation, useParams, useSearch } from "wouter";
 import {
     filterOutOfTest,
     generalHref,
@@ -321,8 +318,18 @@ export default function TestAnalyticsPage() {
 
     // Э2: вкладка — в адресе (`?tab=`): «Назад» возвращает на прежнюю, ссылка открывает ту же.
     const [tabState, setActiveTab] = useAnalyticsTab(TEST_ANALYTICS_TABS, "overview");
-    // Разбор вопроса живёт во вкладке «Качество вопросов»: адрес вопроса открывает её.
-    const activeTab = routeQuestionId ? "quality" : tabState;
+    // Э4б: вкладки «Качество вопросов» нет. Старая ссылка `?tab=quality` открывает «Вопросы» с
+    // набором колонок «Психометрика» — её содержимое живёт там.
+    const search = useSearch();
+    useEffect(() => {
+        const params = new URLSearchParams(search);
+        if (params.get("tab") !== "quality") return;
+        params.set("tab", "questions");
+        params.set("cols", "psychometrics");
+        navigate(`${window.location.pathname}?${params.toString()}`, { replace: true, state: window.history.state });
+    }, [search, navigate]);
+    // Разбор вопроса — уровень вопроса; запросы психометрики на нём включены, как у «Вопросов».
+    const activeTab = routeQuestionId ? "questions" : tabState;
     /** PRD-54: окно загрузки выгрузки отчёта LMS. Тест здесь задан страницей. */
     /**
      * PRD-56 FR-20: тема профиля экспозиции. Держится в состоянии, а не выводится из данных:
@@ -374,7 +381,7 @@ export default function TestAnalyticsPage() {
      */
     const [firstAttemptOnly, setFirstAttemptOnly] = useState(true);
     /** Чип «Только первая попытка» — только там, где он что-то значит: у психометрики. */
-    const showsAttemptChip = firstAttemptOnly && (activeTab === "quality" || activeTab === "questions");
+    const showsAttemptChip = firstAttemptOnly && activeTab === "questions";
     /**
      * Адрес ручки психометрики с условиями экрана (PRD-66 FR-04a, FR-54b).
      *
@@ -447,28 +454,8 @@ export default function TestAnalyticsPage() {
         // второй расчёт, а колонка и карточка не могут разойтись в числах.
         // Э3.4: и на «Обзоре» — блок «Требует внимания» считает вопросы под подозрением тем же
         // расчётом, что вид «Под подозрением»; ключ общий, переход между вкладками не платит.
-        enabled: !!testId && (activeTab === "quality" || activeTab === "questions" || activeTab === "overview"),
+        enabled: !!testId && (activeTab === "questions" || activeTab === "overview"),
     });
-
-    /**
-     * Психометрика строкой таблицы: задание -> трудность и дискриминативность.
-     *
-     * Выборка у неё СВОЯ — первая попытка каждого участника (`firstAttemptOnly` движка), и
-     * это сказано подписью под таблицей. Считать её по всем попыткам значило бы складывать
-     * зависимые наблюдения: повторная попытка того же человека — не второй участник.
-     */
-    const questionPsychometrics = useMemo(() => {
-        // Списка может не быть вовсе: расчёт ещё в пути либо ручка ответила иначе, чем ждём.
-        // Пустая карта тут честнее исключения — колонка покажет прочерк и дождётся чисел.
-        if (!itemQuality?.items) return undefined;
-        return Object.fromEntries(itemQuality.items.map(item => [item.questionId, {
-            difficulty: item.difficulty,
-            itemRest: item.itemRest,
-            observations: item.observations,
-            difficultyConfidence: item.difficultyConfidence,
-            coefficientConfidence: item.coefficientConfidence,
-        }]));
-    }, [itemQuality]);
 
     /**
      * PRD-66 FR-05, FR-48: эвристики PRD-56 «Требуют ревизии» для таблицы качества.
@@ -499,7 +486,7 @@ export default function TestAnalyticsPage() {
     const setBreakdownId = (questionId: string | null, order?: string[]) => {
         if (!testId) return;
         const current = (typeof window === "undefined" ? null : window.history.state) as Record<string, unknown> | null;
-        navigate(questionId ? questionHref(testId, questionId, filter) : testHref(testId, filter, "quality"), {
+        navigate(questionId ? questionHref(testId, questionId, filter) : testHref(testId, filter, "questions"), {
             state: questionId
                 ? { ...(current ?? {}), ...(order ? { questionOrder: order, questionFrom: activeTab } : {}) }
                 : current,
@@ -512,11 +499,15 @@ export default function TestAnalyticsPage() {
      * Э3.4: вид таблиц, в который ведёт блок «Требует внимания» на «Обзоре». Таблицы держат вид
      * сами; переход задаёт начальный и пересоздаёт таблицу ключом.
      */
-    const [questionsView, setQuestionsView] = useState<QuestionsView>("all");
-    // Э3.4: корзина общего «Требует внимания» открывает тест сразу в виде «Под подозрением».
-    const [qualityView, setQualityView] = useState<QualityView>(() => {
-        const wanted = (typeof window === "undefined" ? null : window.history.state as { qualityView?: string } | null)?.qualityView;
-        return wanted === "suspicious" || wanted === "thin" ? wanted : "all";
+    // Э3.4, Э4б: корзина общего «Требует внимания» открывает тест сразу в виде «Под подозрением»
+    // набора «Психометрика»; блок «Требует внимания» на «Обзоре» — тоже.
+    const [questionsView, setQuestionsView] = useState<QuestionsTabView>(() => {
+        const wanted = (typeof window === "undefined" ? null : window.history.state as { questionsView?: string } | null)?.questionsView;
+        return wanted === "suspicious" || wanted === "thin" || wanted === "excluded" ? wanted : "all";
+    });
+    const [questionsSet, setQuestionsSet] = useState<ColumnSet | undefined>(() => {
+        const wanted = (typeof window === "undefined" ? null : window.history.state as { questionsSet?: string } | null)?.questionsSet;
+        return wanted === "psychometrics" || wanted === "delivery" || wanted === "main" ? wanted : undefined;
     });
     /** Э3.3: окно «Исключить из выдачи» на уровне вопроса. */
     const [excludeTarget, setExcludeTarget] = useState<ExclusionTarget | null>(null);
@@ -551,7 +542,7 @@ export default function TestAnalyticsPage() {
             `/api/analytics/psychometrics/${testId}/items/${breakdownId}`,
             breakdownVersion === undefined ? {} : { version: breakdownVersion ?? "" },
         )],
-        enabled: !!testId && !!breakdownId && activeTab === "quality",
+        enabled: !!testId && !!breakdownId,
     });
 
     /**
@@ -562,7 +553,7 @@ export default function TestAnalyticsPage() {
      */
     const { data: scaleQuality } = useQuery<{ scales: ScaleQualityRow[] }>({
         queryKey: [psychometricsUrl(`/api/analytics/psychometrics/${testId}/scales`)],
-        enabled: !!testId && activeTab === "quality" && !!analytics?.hasScales,
+        enabled: !!testId && activeTab === "scales" && !!analytics?.hasScales,
     });
 
     // Функция экспорта в Excel
@@ -661,21 +652,16 @@ export default function TestAnalyticsPage() {
                         title: "Вопросы под подозрением",
                         count: itemQuality ? countSuspicious(itemQuality, reviewHeuristics) : 0,
                         caption: "сильные ошибаются чаще, на уровне угадывания, слишком лёгкие или трудные",
-                        onShow: () => { setQualityView("suspicious"); setActiveTab("quality"); },
+                        // Э4б: «Требуют ревизии» вошли в «Под подозрением» — отбор один, причина
+                        // названа в колонке «Что не так».
+                        onShow: () => { setQuestionsView("suspicious"); setQuestionsSet("psychometrics"); setActiveTab("questions"); },
                     }]),
-                    {
-                        key: "review",
-                        title: "Требуют ревизии",
-                        count: questionStats.filter(question => (question.reviewFlags ?? []).length > 0).length,
-                        caption: "часто выдаются и трудны, отвечают не читая",
-                        onShow: () => { setQuestionsView("review"); setActiveTab("questions"); },
-                    },
                     {
                         key: "excluded",
                         title: "Исключены из выдачи",
                         count: questionStats.filter(question => question.excludedFromDelivery).length,
                         caption: "не попадают в новые прохождения",
-                        onShow: () => { setQuestionsView("excluded"); setActiveTab("questions"); },
+                        onShow: () => { setQuestionsView("excluded"); setQuestionsSet(undefined); setActiveTab("questions"); },
                     },
                 ]}
             />
@@ -740,12 +726,20 @@ export default function TestAnalyticsPage() {
           собой — а разбор задания начинается со сравнения: где доля верных ниже, где чаще
           выдаётся, где отвечают подозрительно быстро.
         */
-        <QuestionTable
-            key={`questions-${questionsView}`}
+        <QuestionsTab
+            key={`questions-${questionsView}-${questionsSet ?? ""}`}
             initialView={questionsView}
+            initialSet={questionsSet}
             questions={questionStats}
             testId={testId ?? undefined}
             passages={summary.completedAttempts}
+            quality={itemQuality}
+            qualityLoading={qualityLoading}
+            heuristics={reviewHeuristics}
+            excluded={excludedFromDelivery}
+            exportHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/export`)}
+            matrixHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/matrix`)}
+            onRestoreFirstAttempt={() => setFirstAttemptOnly(true)}
             // FR-22: измерительным тест считается по ФАКТУ — прохождения есть, а оценённых
             // среди них нет ни одного. Объявленный проходной балл признаком не годится:
             // опросник нередко несёт его по умолчанию, ничего при этом не оценивая, и тест
@@ -769,8 +763,7 @@ export default function TestAnalyticsPage() {
                     state: typeof window === "undefined" ? undefined : window.history.state,
                 });
             }}
-            psychometrics={questionPsychometrics}
-            onOpenQuality={(questionId, order) => {
+            onOpenQuestion={(questionId, order) => {
                 // PRD-66 FR-03: дискриминативность — вход в разбор задания, а не просто
                 // число. Переход открывает КАРТОЧКУ на своей вкладке: возвращать автора к
                 // списку, из которого он только что пришёл, значит заставить искать строку
@@ -991,7 +984,8 @@ export default function TestAnalyticsPage() {
         const goTo = (questionId: string) => navigate(questionHref(testId!, questionId, filter), {
             state: typeof window === "undefined" ? undefined : window.history.state,
         });
-        const sourceTab = questionState?.questionFrom === "questions" ? "questions" : "quality";
+        // Э4б: вопросы живут на одной вкладке — крошка теста ведёт на неё.
+        const sourceTab = "questions";
         const currentSince = breakdown?.versions?.find(row => row.psychoHash === breakdown.currentVersion)?.firstAt ?? null;
         /**
          * Э4а: полный вид распределения ответов — по типу вопроса (эскиз approved/e4a). У выбора он
@@ -1226,46 +1220,6 @@ export default function TestAnalyticsPage() {
                         ),
                     },
                     { id: "questions", label: "Вопросы", content: underFilter(questionsPanel) },
-                    // PRD-66: пригодность задания как инструмента — отдельный вопрос от того,
-                    // что с ним происходит, и потому отдельная вкладка.
-                    {
-                        id: "quality",
-                        label: "Качество вопросов",
-                        content: underFilter(qualityLoading
-                            ? <LoadingState message="Считаем психометрику..." />
-                            // Э3.2: сравнение срезов переехало во вкладку «Срезы».
-                            // Э2: разбор вопроса — свой уровень (ранний возврат выше), здесь — таблица.
-                            : itemQuality?.measurementOnly
-                                    // FR-52, эскиз wf-scales: у измерительного теста вкладка —
-                                    // только раздел шкал, без плиток и таблицы вопросов.
-                                    ? (scaleQuality
-                                        ? <ScaleQualityPanel scales={scaleQuality.scales} />
-                                        : analytics.hasScales
-                                            ? <LoadingState message="Считаем психометрику..." />
-                                            : <ScaleQualityPanel scales={[]} />)
-                                : itemQuality
-                                    ? (
-                                        <Stack gap={4}>
-                                            <ItemQualityPanel
-                                                key={`quality-${qualityView}`}
-                                                initialTab={qualityView}
-                                                view={itemQuality}
-                                                exportHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/export`)}
-                                                matrixHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/matrix`)}
-                                                onOpenItem={setBreakdownId}
-                                                testId={testId ?? undefined}
-                                                onDeliveryChange={changeDelivery}
-                                                excluded={excludedFromDelivery}
-                                                onRestoreFirstAttempt={() => setFirstAttemptOnly(true)}
-                                                heuristics={reviewHeuristics}
-                                            />
-                                            {scaleQuality?.scales.length
-                                                ? <ScaleQualityPanel scales={scaleQuality.scales} />
-                                                : null}
-                                        </Stack>
-                                    )
-                                    : <EmptyState title="Психометрика недоступна" description="Не удалось посчитать показатели по этому тесту" />),
-                    },
                     {
                         // Э3.2: сохранённые срезы теста и их сравнение. Фильтра уровня теста над
                         // вкладкой нет: у каждого среза свои условия, рамка — только период.
@@ -1292,10 +1246,17 @@ export default function TestAnalyticsPage() {
                             id: "scales",
                             label: "Шкалы",
                             content: underFilter(
-                                <ScaleProfilePanel
-                                    scales={scaleProfile?.scales ?? []}
-                                    observations={scaleProfile?.observations ?? 0}
-                                />
+                                <Stack gap={4}>
+                                    <ScaleProfilePanel
+                                        scales={scaleProfile?.scales ?? []}
+                                        observations={scaleProfile?.observations ?? 0}
+                                    />
+                                    {/* Э4б: качество шкал — здесь, при самих шкалах: вкладки «Качество
+                                        вопросов», где оно стояло, больше нет. */}
+                                    {scaleQuality
+                                        ? <ScaleQualityPanel scales={scaleQuality.scales} />
+                                        : <LoadingState message="Считаем качество шкал..." />}
+                                </Stack>
                             ),
                         }]
                         : []),

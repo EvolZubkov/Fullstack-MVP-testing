@@ -19,23 +19,28 @@ import { TAB_PARAM } from "./analytics-routes";
  * @param tabs допустимые вкладки уровня
  * @param fallback вкладка по умолчанию — для пустого и неизвестного значения
  */
-export function useAnalyticsTab<T extends string>(tabs: readonly T[], fallback: T): [T, (next: string) => void] {
+export function useAnalyticsTab<T extends string>(
+  tabs: readonly T[],
+  fallback: T,
+  /** Параметр адреса: вкладка (`tab`) или, у таблицы вопросов, набор колонок (`cols`, Э4б). */
+  param: string = TAB_PARAM,
+): [T, (next: string) => void] {
   const search = useSearch();
   const [location, navigate] = useLocation();
-  const raw = new URLSearchParams(search).get(TAB_PARAM);
+  const raw = new URLSearchParams(search).get(param);
   const tab = (tabs as readonly string[]).includes(raw ?? "") ? (raw as T) : fallback;
 
   const setTab = useCallback((next: string) => {
     // Строка запроса — от маршрутизатора: он видит и замены условий фильтра (`replaceState`).
     const params = new URLSearchParams(search);
     // Вкладка по умолчанию в адрес не пишется: голый адрес уровня и есть она.
-    if (next === fallback) params.delete(TAB_PARAM);
-    else params.set(TAB_PARAM, next);
+    if (next === fallback) params.delete(param);
+    else params.set(param, next);
     const query = params.toString();
     navigate(`${location}${query ? `?${query}` : ""}`, {
       state: typeof window === "undefined" ? null : window.history.state,
     });
-  }, [fallback, location, navigate, search]);
+  }, [fallback, location, navigate, param, search]);
 
   return [tab, setTab];
 }
