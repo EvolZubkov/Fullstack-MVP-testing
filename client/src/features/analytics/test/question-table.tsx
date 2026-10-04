@@ -104,6 +104,8 @@ interface AnswerRow {
 
 export interface QuestionTableProps {
   questions: QuestionRow[];
+  /** Э3.4: вид, с которым таблица открывается, — блок «Требует внимания» ведёт в нужный. */
+  initialView?: QuestionsView;
   /**
    * Тест измерительный: вместо доли верных таблица показывает разброс ответов (FR-22).
    *
@@ -149,7 +151,9 @@ export interface QuestionPsychometrics {
   coefficientConfidence: "insufficient" | "tentative" | "reliable";
 }
 
-type View = "all" | "review" | "excluded";
+/** Вид таблицы «Вопросы». */
+export type QuestionsView = "all" | "review" | "excluded";
+type View = QuestionsView;
 type SortDir = "asc" | "desc";
 
 /** Где браузер помнит, что пояснение о смене числа уже прочитано (FR-02). */
@@ -264,9 +268,9 @@ export function answerSegments(
 
 export function QuestionTable({
   questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 0,
-  psychometrics, onOpenQuality, passages,
+  psychometrics, onOpenQuality, passages, initialView = "all",
 }: QuestionTableProps) {
-  const [view, setView] = useState<View>("all");
+  const [view, setView] = useState<View>(initialView);
   const [sortKey, setSortKey] = useState(measurement ? "answers" : "difficulty");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   /** Вопрос, для которого открыто окно подтверждения исключения. */

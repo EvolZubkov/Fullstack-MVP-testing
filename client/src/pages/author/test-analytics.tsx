@@ -26,10 +26,14 @@ import {
     type ScaleProfileView,
 } from "@/features/analytics/test/scale-profile";
 import {
+    countSuspicious,
     ItemQualityPanel,
     reviewHeuristicsOf,
     type ItemQualityView,
+    type QualityView,
 } from "@/features/analytics/test/item-quality";
+import { type QuestionsView } from "@/features/analytics/test/question-table";
+import { TestAttention } from "@/features/analytics/test/test-attention";
 import {
     BreakdownTitle,
     breakdownSubtitle,
@@ -431,7 +435,9 @@ export default function TestAnalyticsPage() {
         // PRD-66 FR-02, FR-03: те же числа стоят в строке таблицы «Вопросы», поэтому расчёт
         // нужен и там. Ключ запроса ОДИН на обе вкладки: переход между ними не платит за
         // второй расчёт, а колонка и карточка не могут разойтись в числах.
-        enabled: !!testId && (activeTab === "quality" || activeTab === "questions"),
+        // Э3.4: и на «Обзоре» — блок «Требует внимания» считает вопросы под подозрением тем же
+        // расчётом, что вид «Под подозрением»; ключ общий, переход между вкладками не платит.
+        enabled: !!testId && (activeTab === "quality" || activeTab === "questions" || activeTab === "overview"),
     });
 
     /**
@@ -491,6 +497,12 @@ export default function TestAnalyticsPage() {
     /** Э3.3: состояние перехода на уровень вопроса — порядок таблицы и вкладка, откуда пришли. */
     const questionState = (typeof window === "undefined" ? null : window.history.state) as
         { questionOrder?: string[]; questionFrom?: string } | null;
+    /**
+     * Э3.4: вид таблиц, в который ведёт блок «Требует внимания» на «Обзоре». Таблицы держат вид
+     * сами; переход задаёт начальный и пересоздаёт таблицу ключом.
+     */
+    const [questionsView, setQuestionsView] = useState<QuestionsView>("all");
+    const [qualityView, setQualityView] = useState<QualityView>("all");
     /** Э3.3: окно «Исключить из выдачи» на уровне вопроса. */
     const [excludeTarget, setExcludeTarget] = useState<ExclusionTarget | null>(null);
     const cardKey = `/api/analytics/tests/${testId}/questions/${routeQuestionId}/card`;
@@ -623,6 +635,35 @@ export default function TestAnalyticsPage() {
             />
             <TopicBreakdown topics={topicStats} />
             <PassTrend points={passTrend} />
+            {/* Э3.4: точки внимания уровня теста — качество вопросов. Сводка посчитанного; строка
+                ведёт в тот вид таблицы, чьё число в ней стоит. */}
+            <TestAttention
+                questions={questionStats.length}
+                pending={!itemQuality && qualityLoading}
+                lines={[
+                    ...(itemQuality?.measurementOnly ? [] : [{
+                        key: "suspicious",
+                        title: "Вопросы под подозрением",
+                        count: itemQuality ? countSuspicious(itemQuality, reviewHeuristics) : 0,
+                        caption: "сильные ошибаются чаще, на уровне угадывания, слишком лёгкие или трудные",
+                        onShow: () => { setQualityView("suspicious"); setActiveTab("quality"); },
+                    }]),
+                    {
+                        key: "review",
+                        title: "Требуют ревизии",
+                        count: questionStats.filter(question => (question.reviewFlags ?? []).length > 0).length,
+                        caption: "часто выдаются и трудны, отвечают не читая",
+                        onShow: () => { setQuestionsView("review"); setActiveTab("questions"); },
+                    },
+                    {
+                        key: "excluded",
+                        title: "Исключены из выдачи",
+                        count: questionStats.filter(question => question.excludedFromDelivery).length,
+                        caption: "не попадают в новые прохождения",
+                        onShow: () => { setQuestionsView("excluded"); setActiveTab("questions"); },
+                    },
+                ]}
+            />
             {/* Э3.2: разбивка по полю участника — бывший «Список срезов» по оси. Это не срез:
                 строку можно сохранить срезом, сравнить или открыть её прохождения. */}
             <ResultsByAxis
@@ -685,6 +726,8 @@ export default function TestAnalyticsPage() {
           выдаётся, где отвечают подозрительно быстро.
         */
         <QuestionTable
+            key={`questions-${questionsView}`}
+            initialView={questionsView}
             questions={questionStats}
             testId={testId ?? undefined}
             passages={summary.completedAttempts}
@@ -1127,6 +1170,8 @@ export default function TestAnalyticsPage() {
                                     ? (
                                         <Stack gap={4}>
                                             <ItemQualityPanel
+                                                key={`quality-${qualityView}`}
+                                                initialTab={qualityView}
                                                 view={itemQuality}
                                                 exportHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/export`)}
                                                 matrixHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/matrix`)}

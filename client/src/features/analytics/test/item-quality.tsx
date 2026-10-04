@@ -158,8 +158,23 @@ export interface ItemQualityView {
   measurementOnly?: boolean;
 }
 
+/**
+ * Э3.4: сколько вопросов «под подозрением» — тем же правилом, что вид «Под подозрением» этой
+ * вкладки. Блок «Требует внимания» на «Обзоре» ведёт в этот вид, и число в нём обязано совпасть
+ * со списком, который откроется.
+ *
+ * @param view ответ психометрики теста
+ * @param heuristics эвристики ревизии по вопросам
+ * @returns число вопросов под подозрением
+ */
+export function countSuspicious(view: ItemQualityView, heuristics: Record<string, ReviewHeuristic> = {}): number {
+  return (view.items ?? []).filter(row => suspicious(row, heuristics[row.questionId])).length;
+}
+
 export interface ItemQualityPanelProps {
   view: ItemQualityView;
+  /** Э3.4: вид, с которым вкладка открывается, — блок «Требует внимания» ведёт в нужный. */
+  initialTab?: QualityView;
   /** Ссылки выгрузок: отчёт и матрица. Без них кнопки не рисуются. */
   exportHref?: string;
   matrixHref?: string;
@@ -484,7 +499,9 @@ const HINTS = {
   reliable: "Сколько вопросов набрали 100 наблюдений и больше: их коэффициенты устойчивы. У остальных числа ориентировочные или ещё не считаются.",
 } as const;
 
-type View = "all" | "suspicious" | "thin";
+/** Вид таблицы «Качества вопросов». */
+export type QualityView = "all" | "suspicious" | "thin";
+type View = QualityView;
 
 /** Колонки, по которым сортируется таблица заданий (FR-48a). */
 type SortColumn = "question" | "flag" | "difficulty" | "itemRest" | "observations";
@@ -548,9 +565,9 @@ function compareRows(
 /** Вкладка «Качество вопросов». */
 export function ItemQualityPanel({
   view, exportHref, matrixHref, onOpenItem, onRestoreFirstAttempt, heuristics = {},
-  onDeliveryChange, testId, excluded = {},
+  onDeliveryChange, testId, excluded = {}, initialTab = "all",
 }: ItemQualityPanelProps) {
-  const [tab, setTab] = useState<View>("all");
+  const [tab, setTab] = useState<View>(initialTab);
   const [glossary, setGlossary] = useState(false);
   /** Вопрос, для которого открыто окно подтверждения исключения (FR-17b). */
   const [pending, setPending] = useState<ExclusionTarget | null>(null);
