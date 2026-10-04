@@ -17,6 +17,12 @@
  *
  * У сопоставления, ранжирования и пропусков вариантов нет: полоса из двух отрезков — «верно» и
  * «неверно», — а под легендой по строке на пару, элемент или пропуск.
+ *
+ * Решение владельца 2026-10-04 (после приёмки): у вопросов с вариантами и написаниями ячейка —
+ * горизонтальные полосы, по полосе на ответ, не больше пяти, по убыванию доли; цвета — те же, что
+ * в легенде. Полоса из отрезков показывала части целого, но не давала сравнить ответы: отрезки
+ * начинаются в разных местах, и 34 % на глаз не отличались от 41 %. У горизонтальных полос общее
+ * начало, и лидер виден сразу. Легенда подсказки — тоже по убыванию доли.
  */
 import type { ReactNode } from "react";
 
@@ -103,8 +109,8 @@ const REST = "var(--ou-border-strong)";
 
 /** Сколько написаний короткого ответа показывать поимённо, остальное — «ещё N». */
 const WRITTEN_VISIBLE = 5;
-/** Сколько ответов называть в подписи под полосой. */
-const SUMMARY_VISIBLE: Record<string, number> = { scale: 3, allocation: 2 };
+/** Сколько полос в ячейке — остальные ответы в легенде подсказки. */
+const BARS_MAX = 5;
 /** Длина подписи варианта в сводке, дальше — многоточие. */
 const SUMMARY_LABEL_MAX = 44;
 
@@ -136,6 +142,13 @@ export type CompactModel =
     head?: string;
     /** Строки под легендой — по паре, элементу или пропуску. */
     extra?: string[];
+    /**
+     * Горизонтальные полосы ячейки — ответы по убыванию доли, не больше пяти. Нет — ячейка
+     * рисует одну полосу «верно / неверно» с подписью (сопоставление, ранжирование, пропуски).
+     */
+    rows?: ColoredOption[];
+    /** Сколько ответов не попало в полосы. */
+    more?: number;
   }
   | { kind: "volume"; summary: string };
 
@@ -167,11 +180,13 @@ function headOf(type: string, measurement: boolean, graded: boolean): string | u
 
 function spreadModel(source: CompactSource, spread: SpreadView, measurement: boolean): CompactModel {
   let options: Array<Omit<ColoredOption, "color">> = spread.options.map(o => ({ ...o }));
+  let hiddenWritten = 0;
   // У короткого ответа написаний бывают десятки: пять частых поимённо, остальное — одной суммой.
   if (source.questionType === "short" && options.length > WRITTEN_VISIBLE + 1) {
     const ranked = [...options].sort((a, b) => b.share - a.share);
     const shown = new Set(ranked.slice(0, WRITTEN_VISIBLE));
     const hidden = options.filter(o => !shown.has(o));
+    hiddenWritten = hidden.length;
     options = [
       ...options.filter(o => shown.has(o)),
       {
@@ -183,15 +198,16 @@ function spreadModel(source: CompactSource, spread: SpreadView, measurement: boo
   }
   const colored = colorize(options);
   const named = colored.filter(o => !o.rest).sort((a, b) => b.share - a.share);
-  const visible = SUMMARY_VISIBLE[source.questionType] ?? 2;
-  const restCount = colored.length - Math.min(visible, named.length);
-  const summary = named.slice(0, visible).map(o => said(o, true)).join(" · ")
-    + (restCount > 0 ? ` · ещё ${restCount}` : "");
+  const rows = named.slice(0, BARS_MAX);
+  const more = named.length - rows.length + hiddenWritten;
   return {
     kind: "bar",
     options: colored,
-    summary,
+    // Подпись для экранного диктора — те же ответы, что в полосах.
+    summary: rows.map(o => said(o, false)).join(" · ") + (more > 0 ? ` · ещё ${more}` : ""),
     head: headOf(source.questionType, measurement, colored.some(o => o.correct !== undefined)),
+    rows,
+    more,
   };
 }
 
@@ -246,7 +262,8 @@ function Legend({ model }: { model: Extract<CompactModel, { kind: "bar" }> }): R
     <Stack gap={2}>
       {model.head ? <span>{model.head}</span> : null}
       <ChartLegendList
-        items={model.options.map((option, index) => ({
+        // По убыванию доли (решение владельца 2026-10-04): лидер — первой строкой.
+        items={[...model.options].sort((a, b) => b.share - a.share).map((option, index) => ({
           id: String(index),
           color: option.color,
           label: `${option.correct ? "✓ " : ""}${option.label}`,
@@ -272,6 +289,28 @@ export interface CompactDistributionProps {
 export function CompactDistribution({ model }: CompactDistributionProps) {
   if (model.kind === "volume") {
     return <Text variant="body-xs" tone="muted" className="ou-grid__cell-wrap">{model.summary}</Text>;
+  }
+  if (model.rows) {
+    return (
+      <FloatingHint content={<Legend model={model} />} className="tb-dist" bubbleClassName="tb-float-hint--legend">
+        <Stack gap={1} role="img" aria-label={model.summary}>
+          {model.rows.map((row, index) => (
+            <Stack key={`${row.label}-${index}`} gap={1}>
+              <Stack direction="row" justify="between" gap={2} className="tb-hbar__head">
+                <Text variant="body-xs" tone="muted" className="tb-hbar__label">
+                  {`${row.correct ? "✓ " : ""}${row.label}`}
+                </Text>
+                <Text variant="body-xs" tone="muted" className="tb-hbar__value">{percent(row.share)}</Text>
+              </Stack>
+              {/* Одна полоса на ответ: доля от ста, цвет ответа. У множественного выбора доля —
+                  отметивших этот вариант, и полосы честно складываются больше чем в сто. */}
+              <ProgressStacked size="s" max={100} segments={[{ value: Math.min(100, row.share), color: row.color }]} />
+            </Stack>
+          ))}
+          {model.more ? <Text variant="body-xs" tone="muted">{`ещё ${model.more}`}</Text> : null}
+        </Stack>
+      </FloatingHint>
+    );
   }
   const total = model.options.reduce((sum, option) => sum + option.share, 0);
   return (

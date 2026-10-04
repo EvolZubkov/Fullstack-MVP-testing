@@ -36,7 +36,7 @@ describe("colorize", () => {
 });
 
 describe("compactModel", () => {
-  it("выбор: сводка — два частых ответа с пометкой верного", () => {
+  it("выбор: полосы по убыванию доли, не больше пяти, верный помечен (2026-10-04)", () => {
     const model = bar(compactModel({
       questionType: "single",
       spread: { answered: 100, options: [
@@ -44,8 +44,16 @@ describe("compactModel", () => {
         { label: "Обучение", share: 24, correct: false }, { label: "Журнал", share: 1, correct: false },
       ] },
     }));
-    expect(model.summary).toBe("✓ Проверка — 41 % · Подарок — 34 % · ещё 2");
+    expect(model.rows?.map(o => o.label)).toEqual(["Проверка", "Подарок", "Обучение", "Журнал"]);
+    expect(model.more).toBe(0);
     expect(model.options.map(o => o.label)).toEqual(["Проверка", "Подарок", "Обучение", "Журнал"]);
+  });
+
+  it("больше пяти ответов — пять полос и «ещё N»", () => {
+    const options = Array.from({ length: 7 }, (_, i) => ({ label: `G${i}`, share: 10 + i }));
+    const model = bar(compactModel({ questionType: "scale", spread: { answered: 10, options } }, true));
+    expect(model.rows?.map(o => o.label)).toEqual(["G6", "G5", "G4", "G3", "G2"]);
+    expect(model.more).toBe(2);
   });
 
   it("множественный выбор объясняет сумму больше ста", () => {
@@ -58,6 +66,9 @@ describe("compactModel", () => {
     const model = bar(compactModel({ questionType: "short", spread: { answered: 50, options } }));
     expect(model.options).toHaveLength(6);
     expect(model.options[5]).toMatchObject({ label: "ещё 3 написания", rest: true, color: "var(--ou-border-strong)" });
+    // Сумма написаний — не полоса: полос пять, остальное — «ещё 3».
+    expect(model.rows).toHaveLength(5);
+    expect(model.more).toBe(3);
     expect(model.head).toBe("Зелёным — засчитанные правилами ответы");
   });
 

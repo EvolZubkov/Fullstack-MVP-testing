@@ -142,7 +142,7 @@ export type QuestionColumnSet = "full" | "main" | "delivery";
  */
 const SET_WIDTHS: Record<"main" | "delivery", { graded: Record<string, string>; measurement: Record<string, string> }> = {
   main: {
-    graded: { question: "26%", spread: "24%", difficulty: "9%", itemRest: "10%", declared: "12%", latency: "9%", points: "6%", rowActions: "4%" },
+    graded: { question: "26%", spread: "23%", difficulty: "9%", itemRest: "10%", declared: "12%", latency: "9%", points: "7%", rowActions: "4%" },
     measurement: { question: "36%", spread: "40%", answers: "10%", latency: "10%", rowActions: "4%" },
   },
   delivery: {

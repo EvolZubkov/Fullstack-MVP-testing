@@ -3352,6 +3352,11 @@
    наследуют его цвет, базовая высота легенды кольца (flex 200px) снята — в столбике
    она растягивала пузырь на 200 px пустоты. */
 .tb-dist { display: block; width: 100%; outline-offset: 2px; }
+/* Горизонтальные полосы ячейки (решение владельца 2026-10-04): подпись ответа обрезается
+   многоточием, доля справа не переносится. */
+.tb-hbar__head { min-width: 0; }
+.tb-hbar__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-hbar__value { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .tb-clamp-2 {
   display: -webkit-box;
   -webkit-line-clamp: 2;

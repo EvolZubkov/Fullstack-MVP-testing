@@ -447,8 +447,10 @@ describe("QuestionTable — измерительный тест", () => {
 
     expect(screen.getByText(termOrText("Разброс ответов"))).toBeTruthy();
     expect(screen.queryByText(termOrText("Доля верных"))).toBeNull();
-    // Э4а: под полосой — три частых градации, полный перечень — в легенде подсказки.
-    expect(screen.getByText(termOrText("3 — 44 % · 4 — 26 % · 2 — 14 % · ещё 2"))).toBeTruthy();
+    // Э4а, решение владельца 2026-10-04: горизонтальные полосы, до пяти, по убыванию доли.
+    const cell = screen.getByRole("img", { name: /3 — 44/ });
+    const labels = [...cell.querySelectorAll(".tb-hbar__label")].map(node => node.textContent);
+    expect(labels).toEqual(["3", "4", "2", "5", "1"]);
   });
 
   it("ниже порога наблюдений говорит «мало данных», а не рисует полосу", () => {
@@ -501,7 +503,8 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
     expect(screen.getByText(termOrText("Что отвечали"))).toBeTruthy();
     // PRD-66 FR-02: колонка оценки задания на месте, но считается долей балла.
     expect(screen.getByText(termOrText("Трудность"))).toBeTruthy();
-    expect(screen.getByText(termOrText("Ростехнадзор — 55 % · РТН — 30 %"))).toBeTruthy();
+    const labels = [...document.querySelectorAll(".tb-hbar__label")].map(node => node.textContent);
+    expect(labels).toEqual(["Ростехнадзор", "РТН"]);
   });
 
   it("сопоставление без посчитанного разбора — «не применимо», а не «мало данных»", () => {
@@ -526,7 +529,9 @@ describe("QuestionTable — написанные ответы (PRD-57)", () => {
       },
     };
     render(<QuestionTable questions={[choice]} minObservations={10} />);
-    expect(screen.getByText(termOrText("Подарок партнёру — 45 % · ✓ Проверка контрагента — 40 % · ещё 1"))).toBeTruthy();
+    // Полосы — по убыванию доли; верный помечен галочкой и зелёным.
+    const labels = [...document.querySelectorAll(".tb-hbar__label")].map(node => node.textContent);
+    expect(labels).toEqual(["Подарок партнёру", "✓ Проверка контрагента", "Скидка"]);
   });
 
   /**
