@@ -3346,6 +3346,25 @@
 }
 .tb-float-hint__title { display: block; font-weight: 600; margin-bottom: 2px; }
 
+/* ─── Э4а: распределение ответов (approved/e4a-answer-distribution.html) ─────
+   Сжатый вид в ячейке: подпись не длиннее двух строк, полоса на всю ширину. Легенда
+   подсказки — разметка ChartLegendList (как у DonutChart): на тёмном пузыре подписи
+   наследуют его цвет, базовая высота легенды кольца (flex 200px) снята — в столбике
+   она растягивала пузырь на 200 px пустоты. */
+.tb-dist { display: block; width: 100%; outline-offset: 2px; }
+.tb-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.tb-float-hint--legend { width: 300px; max-width: 300px; }
+.tb-float-hint--legend .ou-donut__legend { flex: none; gap: var(--ou-space-1); }
+.tb-float-hint--legend .ou-donut__legend-item,
+.tb-float-hint--legend .ou-donut__legend-name { color: inherit; white-space: normal; }
+.tb-no-value { display: inline-flex; text-align: center; }
+
 /* ─── PRD-66: таблица «Качество вопросов» — фиксированная раскладка ───────────
    Колонка «n» уезжала за горизонтальную прокрутку: при `table-layout: auto`
    доли в процентах лишь пожелание, и признак с подписью растягивал свою

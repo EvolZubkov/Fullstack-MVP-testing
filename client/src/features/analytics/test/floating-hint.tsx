@@ -29,6 +29,8 @@ export interface FloatingHintProps {
   placement?: "top" | "bottom" | "left" | "right";
   /** Класс триггера — метка для раскладки (например, заголовка колонки). */
   className?: string;
+  /** Дополнительный класс пузыря — например, шире обычного под легенду (Э4а). */
+  bubbleClassName?: string;
 }
 
 /**
@@ -37,7 +39,7 @@ export interface FloatingHintProps {
  * @param props - триггер, текст подсказки, заголовок и сторона открытия
  * @returns триггер со скрытым для глаз текстом подсказки и пузырём в портале
  */
-export function FloatingHint({ children, content, title, placement = "bottom", className }: FloatingHintProps) {
+export function FloatingHint({ children, content, title, placement = "bottom", className, bubbleClassName }: FloatingHintProps) {
   const anchor = useRef<HTMLSpanElement | null>(null);
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -71,7 +73,7 @@ export function FloatingHint({ children, content, title, placement = "bottom", c
         closeOnOutside={false}
         // Для экранного диктора пояснение уже есть в триггере; второй раз его не озвучивать.
         aria-hidden="true"
-        className="tb-float-hint"
+        className={bubbleClassName ? `tb-float-hint ${bubbleClassName}` : "tb-float-hint"}
       >
         {title ? <span className="tb-float-hint__title">{title}</span> : null}
         {content}
