@@ -3402,3 +3402,7 @@
 .ou-tbl.tb-tbl--menus thead th:last-child { border-top-right-radius: var(--ou-radius-l); }
 .ou-tbl.tb-tbl--menus tbody tr:last-child td:first-child { border-bottom-left-radius: var(--ou-radius-l); }
 .ou-tbl.tb-tbl--menus tbody tr:last-child td:last-child { border-bottom-right-radius: var(--ou-radius-l); }
+
+/* ─── Шапка уровней аналитики: кнопки — одной строкой справа, переносится заголовок ─── */
+.tb-analytics-head__title { min-width: 0; flex: 1 1 auto; }
+.tb-analytics-head__actions { flex-shrink: 0; }

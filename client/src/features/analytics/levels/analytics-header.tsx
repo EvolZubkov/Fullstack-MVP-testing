@@ -47,17 +47,18 @@ export function AnalyticsHeader({ crumbs = [], title, subtitle, actions }: Analy
   }));
 
   return (
-    // Кнопки держатся справа: при нехватке места переносится подзаголовок и сами кнопки —
-    // вторым рядом справа, а не под название.
+    // Кнопки держатся справа одной строкой: при нехватке места переносится заголовок, а не
+    // кнопки. Прежде группа переносилась сама, и при длинном вопросе «Предыдущий», «Следующий» и
+    // меню вставали в столбик по одной (замечание владельца 2026-10-04).
     <Cluster justify="between" align="start" wrap={false}>
-      <Stack gap={1} align="start">
+      <Stack gap={1} align="start" className="tb-analytics-head__title">
         {items.length > 0 && <Breadcrumbs items={items} />}
         <Text as="h1" variant="heading-l">{title}</Text>
         {subtitle && <Text tone="muted">{subtitle}</Text>}
       </Stack>
       {actions && (
         // Кнопки одной группы — 4 px, как в эскизе (план сверки 6.2, 6.4).
-        <Cluster gap={1} justify="end" align="center">{actions}</Cluster>
+        <Cluster gap={1} justify="end" align="center" wrap={false} className="tb-analytics-head__actions">{actions}</Cluster>
       )}
     </Cluster>
   );
