@@ -464,6 +464,32 @@ describe("computeItemBreakdown", () => {
   it("задания, которого нет в наблюдениях, разбирать нечего", () => {
     expect(computeItemBreakdown(CHOICES, CTX_4, "q-unknown", [])).toBeNull();
   });
+
+  it("сопоставление разбирается по парам со слабыми и сильными (Э4а)", () => {
+    const pairs: ResponseFact[] = [];
+    for (const [respondentId, ratio] of rows) {
+      // Сильные сопоставляют пару верно, слабые — путают с правым «b».
+      pairs.push(fact({ respondentId, questionId: "q1", scoreRatio: ratio, answer: { 0: ratio === 1 ? 0 : 1 } }));
+      pairs.push(fact({ respondentId, questionId: "q2", scoreRatio: ratio, answer: 0 }));
+    }
+    const matching = new Map(CTX_4.questionById);
+    matching.set("q1", question("q1", {
+      type: "matching",
+      dataJson: { left: ["Приказы"], right: ["75 лет", "50 лет"] },
+      correctJson: { pairs: [{ left: 0, right: 0 }] },
+    }));
+
+    const breakdown = computeItemBreakdown(pairs, { ...CTX_4, questionById: matching }, "q1", [])!;
+
+    expect(breakdown.units?.units[0]).toMatchObject({
+      label: "Приказы", reference: "75 лет", share: 0.5, bottomShare: 0, topShare: 1,
+      mistake: { label: "50 лет", share: 0.5 },
+    });
+  });
+
+  it("у выбора разбора по единицам нет", () => {
+    expect(computeItemBreakdown(CHOICES, CTX_4, "q1", [0])!.units).toBeNull();
+  });
 });
 
 describe("приёмка PRD-66 (AC-02 — AC-04)", () => {

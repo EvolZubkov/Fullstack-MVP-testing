@@ -133,6 +133,7 @@ async function buildGrader(testId: string): Promise<{
       type: q.type,
       prompt: q.prompt,
       dataJson: q.dataJson,
+      correctJson: q.correctJson,
       difficulty: q.difficulty ?? null,
     }]),
   );

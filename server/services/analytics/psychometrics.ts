@@ -34,6 +34,7 @@ import {
   type Reliability,
   type ReliabilityGap,
 } from "@shared/psychometrics/reliability";
+import { analyseUnits, type UnitAnalysis } from "@shared/psychometrics/units";
 import {
   coefficientConfidence,
   descriptiveConfidence,
@@ -60,6 +61,11 @@ export interface QuestionInfo {
   type: string;
   prompt: string;
   dataJson: unknown;
+  /**
+   * Эталон задания. Нужен разбору по единицам (Э4а): верная пара, верное место, правила
+   * пропуска; необязателен — без него разбора по единицам нет.
+   */
+  correctJson?: unknown;
   /** Трудность, заявленная автором (PRD-16, необязательна); `null` — сравнивать не с чем. */
   difficulty: number | null;
 }
@@ -594,6 +600,11 @@ export interface ItemBreakdown {
     inverted: boolean;
     correctButWeak: boolean;
   }> | null;
+  /**
+   * Э4а: сопоставление, ранжирование и пропуски — разбор по единицам (пары, места, пропуски) с
+   * теми же крайними группами, что у вариантов; `null` — у задания единиц нет.
+   */
+  units: UnitAnalysis | null;
 }
 
 /**
@@ -681,6 +692,19 @@ export function computeItemBreakdown(
     ? analyseOptions(choices, correctIndexes, labels.length, ability)
     : null;
 
+  const unitType = question?.type === "matching" || question?.type === "ranking" || question?.type === "blanks"
+    ? question.type
+    : null;
+  const units = unitType && question
+    ? analyseUnits(
+      { type: unitType, prompt: question.prompt, data: question.dataJson, correct: question.correctJson ?? {} },
+      identified
+        .filter(response => response.questionId === questionId)
+        .map(response => ({ respondentId: response.respondentId!, answer: response.answer })),
+      ability,
+    )
+    : null;
+
   return {
     item,
     versions,
@@ -704,6 +728,7 @@ export function computeItemBreakdown(
         ...flagsOf(option),
       }))
       : null,
+    units,
   };
 }
 
