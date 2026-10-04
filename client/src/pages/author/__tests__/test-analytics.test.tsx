@@ -567,6 +567,30 @@ describe("<TestAnalyticsPage />", () => {
       expect(await screen.findByText("Только первая попытка")).toBeInTheDocument();
       await waitFor(() => expect(screen.queryByText("Посчитано по всем попыткам")).toBeNull());
     });
+
+    it("«Сбросить фильтры» снимает и «Только первая попытка» (замечание владельца 2026-10-04)", async () => {
+      await renderLoaded();
+      await openPsychometrics();
+      await screen.findByText("Только первая попытка");
+
+      fireEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
+
+      await waitFor(() => expect(screen.queryByText("Только первая попытка")).toBeNull());
+    });
+
+    it("снятое условие возвращается в окне «Условия отбора»", async () => {
+      await renderLoaded();
+      await openPsychometrics();
+      await screen.findByText("Только первая попытка");
+      fireEvent.click(removeChip("Только первая попытка"));
+      await waitFor(() => expect(screen.queryByText("Только первая попытка")).toBeNull());
+
+      fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+      fireEvent.click(await screen.findByLabelText("Только первая попытка"));
+      fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+      expect(await screen.findByText("Только первая попытка")).toBeInTheDocument();
+    });
   });
 
   /**

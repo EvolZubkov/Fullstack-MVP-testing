@@ -42,6 +42,12 @@ export interface RegistryFilterDialogProps {
    * теста, и без него их не из чего предложить.
    */
   scopeTestId?: string | null;
+  /**
+   * PRD-66 FR-51: «Только первая попытка» — условие психометрики уровня теста. Живёт не в общем
+   * фильтре (на «Обзоре» считаются все попытки), но в окне стоит рядом с остальными условиями:
+   * снятое чипом, оно иначе не возвращалось (замечание владельца 2026-10-04). Нет — раздела нет.
+   */
+  firstAttempt?: { value: boolean; onApply: (value: boolean) => void };
 }
 
 const SOURCES: Array<{ value: RegistrySource; label: string }> = [
@@ -90,9 +96,10 @@ function orgOptions(values: readonly OrgValueCount[], selected: readonly string[
 }
 
 export function RegistryFilterDialog({
-  open, filter, onApply, onClose, hideTest, scopeTestId,
+  open, filter, onApply, onClose, hideTest, scopeTestId, firstAttempt,
 }: RegistryFilterDialogProps) {
   const [draft, setDraft] = useState<RegistryFilter>(filter);
+  const [firstOnly, setFirstOnly] = useState(firstAttempt?.value ?? true);
   // Справочники спрашиваются только у открытого окна и тем же хуком, что зовут чипы: иначе
   // одно и то же условие называлось бы в двух местах по-разному.
   const { tests, groups, orgValues } = useRegistryDictionaries(open);
@@ -106,8 +113,11 @@ export function RegistryFilterDialog({
   // Открытие — момент, когда черновик берётся из применённых условий: окно, закрытое отменой,
   // не должно помнить набранное в прошлый раз.
   useEffect(() => {
-    if (open) setDraft(filter);
-  }, [open, filter]);
+    if (open) {
+      setDraft(filter);
+      setFirstOnly(firstAttempt?.value ?? true);
+    }
+  }, [open, filter, firstAttempt?.value]);
 
   return (
     <ModalDialog
@@ -118,9 +128,13 @@ export function RegistryFilterDialog({
       description="Условия применяются вместе и попадают в адрес страницы — ссылку можно переслать"
       footer={
         <>
-          <Button variant="ghost" size="m" onClick={() => setDraft(EMPTY_FILTER)}>Сбросить</Button>
+          <Button variant="ghost" size="m" onClick={() => { setDraft(EMPTY_FILTER); setFirstOnly(false); }}>Сбросить</Button>
           <Button variant="ghost" size="m" onClick={onClose}>Отмена</Button>
-          <Button variant="primary" size="m" onClick={() => { onApply(draft); onClose(); }}>
+          <Button
+            variant="primary"
+            size="m"
+            onClick={() => { onApply(draft); firstAttempt?.onApply(firstOnly); onClose(); }}
+          >
             Применить
           </Button>
         </>
@@ -140,6 +154,17 @@ export function RegistryFilterDialog({
             />
           ))}
         </Stack>
+
+        {firstAttempt ? (
+          <Stack gap={1}>
+            <Text variant="body-s" weight="medium">Попытки</Text>
+            <Checkbox
+              label="Только первая попытка"
+              checked={firstOnly}
+              onChange={() => setFirstOnly(value => !value)}
+            />
+          </Stack>
+        ) : null}
 
         <Stack gap={1}>
           <Text variant="body-s" weight="medium">Исход</Text>

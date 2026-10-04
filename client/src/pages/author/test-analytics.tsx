@@ -936,8 +936,10 @@ export default function TestAnalyticsPage() {
                     setFilter({ ...filter, from: undefined, to: undefined });
                 }
             }}
-            // Сброс возвращает умолчания — а умолчание психометрики «первая попытка».
-            onReset={() => { setFilter(EMPTY_FILTER); setFirstAttemptOnly(true); }}
+            // «Сбросить фильтры» снимает ВСЕ условия, и «Только первая попытка» тоже (замечание
+            // владельца 2026-10-04: чип оставался после сброса). Умолчание при открытии
+            // страницы — первая попытка (PRD-66 FR-51); вернуть условие можно в окне фильтра.
+            onReset={() => { setFilter(EMPTY_FILTER); setFirstAttemptOnly(false); }}
             resetLabel="Сбросить фильтры"
         />
     );
@@ -1195,6 +1197,8 @@ export default function TestAnalyticsPage() {
                 filter={filter}
                 hideTest
                 scopeTestId={testId ?? null}
+                // FR-51: условие психометрики — там, где его чип: на вкладке «Вопросы».
+                firstAttempt={activeTab === "questions" ? { value: firstAttemptOnly, onApply: setFirstAttemptOnly } : undefined}
                 onApply={setFilter}
                 onClose={() => setFilterOpen(false)}
             />
