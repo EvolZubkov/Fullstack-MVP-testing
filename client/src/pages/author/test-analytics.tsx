@@ -63,7 +63,6 @@ import {
     FilterBar,
     Grid,
     IconButton,
-    Menu,
     MenuItem,
     MenuTrigger,
     Stack,
@@ -255,8 +254,8 @@ interface ScaleAnalytics {
 interface DeliveryAnalytics {
     variants: VariantSectionView[];
     versions: VersionRowView[];
-    exposure: ExposureProfileView | null;
-    topics: Array<{ topicId: string; topicName: string }>;
+    /** По профилю на раздел теста (замечание владельца 2026-10-04: темы — блоками, без выбора). */
+    exposure: ExposureProfileView[];
     minObservations: number;
 }
 
@@ -335,7 +334,6 @@ export default function TestAnalyticsPage() {
      * PRD-56 FR-20: тема профиля экспозиции. Держится в состоянии, а не выводится из данных:
      * профиль строится по банку ОДНОЙ темы, и выбирать её должен читатель.
      */
-    const [exposureTopic, setExposureTopic] = useState<string | null>(null);
     /**
      * PRD-56 FR-13: экран считается по отобранному — источнику, группе и периоду. Форма
      * отбора та же, что у реестра, только без условия «тест»: он задан страницей.
@@ -419,13 +417,9 @@ export default function TestAnalyticsPage() {
      * открыли: варианты, версии и профиль банка не нужны тому, кто смотрит обзор.
      */
     const { data: delivery } = useQuery<DeliveryAnalytics>({
-        queryKey: [
-            `/api/analytics/tests/${testId}/delivery`,
-            ...(exposureTopic ? [exposureTopic] : []),
-        ],
+        queryKey: [`/api/analytics/tests/${testId}/delivery`],
         queryFn: async () => {
-            const query = exposureTopic ? `?topicId=${encodeURIComponent(exposureTopic)}` : "";
-            const response = await fetch(`/api/analytics/tests/${testId}/delivery${query}`, {
+            const response = await fetch(`/api/analytics/tests/${testId}/delivery`, {
                 credentials: "include",
             });
             if (!response.ok) throw new Error("Не удалось загрузить данные выдачи");
@@ -851,11 +845,7 @@ export default function TestAnalyticsPage() {
         <Stack gap={5}>
             <VariantTable sections={delivery?.variants ?? []} />
             <VersionTable versions={delivery?.versions ?? []} />
-            <ExposureProfile
-                profile={delivery?.exposure ?? null}
-                topics={delivery?.topics ?? []}
-                onTopicChange={setExposureTopic}
-            />
+            <ExposureProfile profiles={delivery?.exposure ?? []} />
             {analytics.testMode === "adaptive" && levelsPanel}
         </Stack>
     );
@@ -1066,6 +1056,7 @@ export default function TestAnalyticsPage() {
                             </Button>
                             {/* Те же пункты, что в меню строки таблицы вопросов (эскиз). */}
                             <MenuTrigger
+                              size="sm"
                                 placement="bottom-end"
                                 trigger={(
                                     <IconButton
@@ -1076,30 +1067,28 @@ export default function TestAnalyticsPage() {
                                     />
                                 )}
                             >
-                                <Menu size="sm">
-                                    <MenuItem onClick={() => navigate(questionInTopicHref(routeQuestionId))}>
-                                        Открыть вопрос в теме
-                                    </MenuItem>
-                                    <MenuItem onClick={() => openPassages({ ...filterConditions, wrongQuestionIds: [routeQuestionId] })}>
-                                        Прохождения с ошибкой
-                                    </MenuItem>
-                                    {questionCard?.excluded ? (
-                                        <MenuItem onClick={() => void changeDelivery(routeQuestionId, false)
-                                            .then(() => queryClient.invalidateQueries({ queryKey: [cardKey] }))}
-                                        >
-                                            Вернуть в выдачу
-                                        </MenuItem>
-                                    ) : (
-                                        <MenuItem onClick={() => setExcludeTarget({
-                                            questionId: routeQuestionId,
-                                            prompt: questionCard?.prompt ?? breakdown?.prompt ?? "",
-                                            caption: questionCard?.topicName ?? "",
-                                        })}
-                                        >
-                                            Исключить из выдачи…
-                                        </MenuItem>
-                                    )}
-                                </Menu>
+                                  <MenuItem onClick={() => navigate(questionInTopicHref(routeQuestionId))}>
+                                      Открыть вопрос в теме
+                                  </MenuItem>
+                                  <MenuItem onClick={() => openPassages({ ...filterConditions, wrongQuestionIds: [routeQuestionId] })}>
+                                      Прохождения с ошибкой
+                                  </MenuItem>
+                                  {questionCard?.excluded ? (
+                                      <MenuItem onClick={() => void changeDelivery(routeQuestionId, false)
+                                          .then(() => queryClient.invalidateQueries({ queryKey: [cardKey] }))}
+                                      >
+                                          Вернуть в выдачу
+                                      </MenuItem>
+                                  ) : (
+                                      <MenuItem onClick={() => setExcludeTarget({
+                                          questionId: routeQuestionId,
+                                          prompt: questionCard?.prompt ?? breakdown?.prompt ?? "",
+                                          caption: questionCard?.topicName ?? "",
+                                      })}
+                                      >
+                                          Исключить из выдачи…
+                                      </MenuItem>
+                                  )}
                             </MenuTrigger>
                         </>
                     )}

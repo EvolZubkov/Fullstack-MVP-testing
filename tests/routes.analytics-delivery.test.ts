@@ -23,6 +23,7 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestionsByTopic: vi.fn(),
     getTestQuestionScoring: vi.fn(),
     getDeliveryCountsForTest: vi.fn(),
+    getAdaptiveLevelsByTest: vi.fn().mockResolvedValue([]),
     getAllAttempts: vi.fn(), getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
@@ -131,7 +132,7 @@ describe("GET /api/analytics/tests/:testId/delivery", () => {
     expect(res.body.variants[0].rows.map((r: { label: string; attempts: number }) => [r.label, r.attempts]))
       .toEqual([["Форма A", 1], ["Форма B", 1]]);
     expect(res.body.versions.map((r: { version: number | null }) => r.version)).toEqual([2, 1]);
-    expect(res.body.exposure.topicId).toBe("tp-1");
+    expect(res.body.exposure[0].topicId).toBe("tp-1");
   });
 
   it("малая выборка печатает счёт, но не долю", async () => {
@@ -146,20 +147,22 @@ describe("GET /api/analytics/tests/:testId/delivery", () => {
     expect(res.body.minObservations).toBe(10);
   });
 
-  it("тема профиля выбирается параметром, а не порядком разделов", async () => {
-    const res = await ask("?topicId=tp-2");
-
-    expect(res.body.exposure.topicId).toBe("tp-2");
-    expect(storageMock.getQuestionsByTopic).toHaveBeenCalledWith("tp-2");
-  });
-
-  it("список тем отдаётся селектору профиля", async () => {
+  it("профиль — по каждому разделу, в порядке разделов (решение владельца 2026-10-04)", async () => {
     const res = await ask();
 
-    expect(res.body.topics).toEqual([
-      { topicId: "tp-1", topicName: "Право и комплаенс" },
-      { topicId: "tp-2", topicName: "Охрана труда" },
-    ]);
+    expect(res.body.exposure.map((p: { topicId: string; topicName: string }) => [p.topicId, p.topicName]))
+      .toEqual([["tp-1", "Право и комплаенс"], ["tp-2", "Охрана труда"]]);
+    expect(res.body.topics).toBeUndefined();
+    // Раздел с вариантами квоту не читает; второй — со случайной выборкой одного задания.
+    expect(res.body.exposure[0]).toMatchObject({ drawMode: "forms", drawCount: null });
+    expect(res.body.exposure[1]).toMatchObject({ drawMode: "quota", drawCount: 1 });
+  });
+
+  it("у адаптивного теста квоты нет: вопросы выбирает уровень", async () => {
+    storageMock.getTest.mockResolvedValue({ ...TEST, mode: "adaptive" });
+    const res = await ask();
+
+    expect(res.body.exposure[1]).toMatchObject({ drawMode: "adaptive", drawCount: null });
   });
 
   it("сбой счётчиков выдач не роняет экран", async () => {
@@ -169,7 +172,7 @@ describe("GET /api/analytics/tests/:testId/delivery", () => {
 
     expect(res.status).toBe(200);
     // Без счётчиков весь банк выглядит невыданным — это честнее выдуманных долей.
-    expect(res.body.exposure.neverDelivered).toBe(2);
+    expect(res.body.exposure[0].neverDelivered).toBe(2);
   });
 
   it("банк профиля — пул выдачи: исключённый вопрос не считается ни банком, ни простоем", async () => {
@@ -181,8 +184,8 @@ describe("GET /api/analytics/tests/:testId/delivery", () => {
 
     const res = await ask();
 
-    expect(res.body.exposure.bankSize).toBe(1);
-    expect(res.body.exposure.neverDelivered).toBe(0);
+    expect(res.body.exposure[0].bankSize).toBe(1);
+    expect(res.body.exposure[0].neverDelivered).toBe(0);
   });
 
   it("у раздела с вариантами банк профиля — вопросы вариантов", async () => {
@@ -194,8 +197,8 @@ describe("GET /api/analytics/tests/:testId/delivery", () => {
 
     const res = await ask();
 
-    expect(res.body.exposure.bankSize).toBe(2);
-    expect(res.body.exposure.neverDelivered).toBe(1);
+    expect(res.body.exposure[0].bankSize).toBe(2);
+    expect(res.body.exposure[0].neverDelivered).toBe(1);
   });
 
   it("несуществующий тест — 404", async () => {

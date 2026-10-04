@@ -9,7 +9,7 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ExposureProfile } from "../exposure-profile";
 import { VariantTable } from "../variant-table";
@@ -128,41 +128,77 @@ const PROFILE = {
 };
 
 describe("ExposureProfile (FR-20)", () => {
-  it("называет объём банка и квоту выдачи", () => {
-    render(<ExposureProfile profile={PROFILE} topics={[]} onTopicChange={() => {}} />);
+  it("называет объём банка и квоту выдачи темы, прохождения — в шапке", () => {
+    render(<ExposureProfile profiles={[PROFILE]} />);
 
-    expect(screen.getByText(/14 вопросов в банке, на прохождение выдаётся 6/)).toBeTruthy();
+    expect(screen.getByText("14 вопросов в банке")).toBeTruthy();
+    expect(screen.getByText("на прохождение выдаётся 6")).toBeTruthy();
+    expect(screen.getByText("486 прохождений за окно наблюдения")).toBeTruthy();
   });
 
   it("хвост банка сворачивает в одну строку", () => {
-    render(<ExposureProfile profile={PROFILE} topics={[]} onTopicChange={() => {}} />);
+    render(<ExposureProfile profiles={[PROFILE]} />);
 
     expect(screen.getByText(/Ещё 4 вопроса не выдавались ни разу/)).toBeTruthy();
   });
 
   it("исключённое задание метит перечёркнутым кругом, а не убирает", () => {
-    render(<ExposureProfile profile={PROFILE} topics={[]} onTopicChange={() => {}} />);
+    render(<ExposureProfile profiles={[PROFILE]} />);
 
     expect(screen.getByText("Что считается подарком по политике компании?")).toBeTruthy();
     expect(screen.getByLabelText("Исключён из выдачи")).toBeTruthy();
   });
 
-  it("смена темы уходит наверх: профиль строится по банку ОДНОЙ темы", async () => {
-    const onTopicChange = vi.fn();
+  it("все темы — блоками, без выбора темы (решение владельца 2026-10-04)", () => {
     render(
       <ExposureProfile
-        profile={PROFILE}
-        topics={[
-          { topicId: "tp-1", topicName: "Право и комплаенс" },
-          { topicId: "tp-2", topicName: "Охрана труда" },
-        ]}
-        onTopicChange={onTopicChange}
+        profiles={[PROFILE, { ...PROFILE, topicId: "tp-2", topicName: "Охрана труда", rows: [], neverDelivered: 0 }]}
       />,
     );
 
-    await userEvent.click(screen.getByLabelText("Тема"));
-    await userEvent.click(screen.getByText("Охрана труда"));
+    expect(screen.getByText("Право и комплаенс")).toBeTruthy();
+    expect(screen.getByText("Охрана труда")).toBeTruthy();
+    expect(screen.queryByLabelText("Тема")).toBeNull();
+    expect(screen.getByText("Ни один вопрос темы пока не выдавался")).toBeTruthy();
+  });
 
-    expect(onTopicChange).toHaveBeenCalledWith("tp-2");
+  it("тема сворачивается; «Свернуть все / Развернуть все» — когда тем несколько", async () => {
+    const second = { ...PROFILE, topicId: "tp-2", topicName: "Охрана труда" };
+    render(<ExposureProfile profiles={[PROFILE, second]} />);
+
+    await userEvent.click(screen.getByTestId("exposure-collapse-all"));
+    expect(screen.queryByText("Какая мера относится к антикоррупционным?")).toBeNull();
+    // Шапка темы с банком остаётся видна и в свёрнутом виде.
+    expect(screen.getByText("Право и комплаенс")).toBeTruthy();
+
+    await userEvent.click(screen.getByTestId("exposure-topic-0-toggle"));
+    expect(screen.getAllByText("Какая мера относится к антикоррупционным?")).toHaveLength(1);
+  });
+
+  it("одну тему сворачивать нечего: пары кнопок нет", () => {
+    render(<ExposureProfile profiles={[PROFILE]} />);
+
+    expect(screen.queryByTestId("exposure-collapse-all")).toBeNull();
+  });
+
+  it("у адаптива и вариантов квоту не печатает: draw_count там не применяется", () => {
+    render(
+      <ExposureProfile
+        profiles={[
+          { ...PROFILE, drawMode: "adaptive", drawCount: null },
+          { ...PROFILE, topicId: "tp-2", topicName: "Охрана труда", drawMode: "forms", drawCount: null },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText(/вопросы выбирает уровень адаптивного прогона/)).toBeTruthy();
+    expect(screen.getByText(/выдаётся вариант раздела/)).toBeTruthy();
+    expect(screen.queryByText(/выдаётся 0/)).toBeNull();
+  });
+
+  it("у теста без разделов — объяснение вместо пустой карточки", () => {
+    render(<ExposureProfile profiles={[]} />);
+
+    expect(screen.getByText(/У теста нет разделов/)).toBeTruthy();
   });
 });

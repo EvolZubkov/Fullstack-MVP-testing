@@ -13,7 +13,7 @@
  */
 import { MoreHorizontal } from "lucide-react";
 
-import { IconButton, Menu, MenuItem, MenuTrigger } from "@skillum/ui-kit";
+import { IconButton, MenuItem, MenuTrigger } from "@skillum/ui-kit";
 
 export interface QuestionRowMenuProps {
   /** Текст вопроса — для доступных имён кнопки и пунктов. */
@@ -45,6 +45,7 @@ export function QuestionRowMenu({
     // `tb-rowmenu` — метка ячейки меню для раскладки узкой колонки (`tb-components.css`).
     <span className="tb-rowmenu">
       <MenuTrigger
+        size="sm"
         placement="bottom-end"
         trigger={
           <IconButton
@@ -55,32 +56,30 @@ export function QuestionRowMenu({
           />
         }
       >
-        <Menu size="sm">
-          {onOpenQuality && (
-            <MenuItem aria-label={`Разбор вопроса: ${prompt}`} onClick={onOpenQuality}>
-              Разбор вопроса
-            </MenuItem>
-          )}
-          <MenuItem aria-label={`Открыть вопрос в теме: ${prompt}`} onClick={onOpenInTopic}>
-            Открыть вопрос в теме
+        {onOpenQuality && (
+          <MenuItem aria-label={`Разбор вопроса: ${prompt}`} onClick={onOpenQuality}>
+            Разбор вопроса
           </MenuItem>
-          {onOpenRegistry && (
-            <MenuItem aria-label={`Прохождения с ошибкой: ${prompt}`} onClick={onOpenRegistry}>
-              Прохождения с ошибкой
+        )}
+        <MenuItem aria-label={`Открыть вопрос в теме: ${prompt}`} onClick={onOpenInTopic}>
+          Открыть вопрос в теме
+        </MenuItem>
+        {onOpenRegistry && (
+          <MenuItem aria-label={`Прохождения с ошибкой: ${prompt}`} onClick={onOpenRegistry}>
+            Прохождения с ошибкой
+          </MenuItem>
+        )}
+        {excluded
+          ? onRestore && (
+            <MenuItem aria-label={`Вернуть в выдачу: ${prompt}`} onClick={onRestore}>
+              Вернуть в выдачу
+            </MenuItem>
+          )
+          : onExclude && (
+            <MenuItem aria-label={`Исключить из выдачи: ${prompt}`} onClick={onExclude}>
+              Исключить из выдачи…
             </MenuItem>
           )}
-          {excluded
-            ? onRestore && (
-              <MenuItem aria-label={`Вернуть в выдачу: ${prompt}`} onClick={onRestore}>
-                Вернуть в выдачу
-              </MenuItem>
-            )
-            : onExclude && (
-              <MenuItem aria-label={`Исключить из выдачи: ${prompt}`} onClick={onExclude}>
-                Исключить из выдачи…
-              </MenuItem>
-            )}
-        </Menu>
       </MenuTrigger>
     </span>
   );

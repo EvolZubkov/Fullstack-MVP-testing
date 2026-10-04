@@ -60,7 +60,6 @@ import {
   Combobox,
   IconButton,
   Input,
-  Menu,
   MenuItem,
   MenuTrigger,
   ModalDialog,
@@ -1399,6 +1398,7 @@ function SystemPageRow(props: {
             «скрыт» второй глаз читался как часть того же сообщения. Предпросмотр —
             команда меню. */}
         <MenuTrigger
+          size="sm"
           placement="bottom-end"
           trigger={
             <button
@@ -1411,39 +1411,37 @@ function SystemPageRow(props: {
             </button>
           }
         >
-          <Menu size="sm">
+          <MenuItem
+            disabled={!canSwitch}
+            onClick={canSwitch ? () => handlers.onReplaceVariant(page) : undefined}
+            data-testid={`${props.testId}-replace`}
+          >
+            Сменить макет
+          </MenuItem>
+          <MenuItem
+            onClick={() => handlers.onPreview(page)}
+            data-testid={`${props.testId}-preview`}
+          >
+            Предпросмотр
+          </MenuItem>
+          {/* Решение о ВЫДАЧЕ экрана, а не о его оформлении, поэтому последним
+              пунктом. Погашенный пункт у неснимаемого экрана объясняет причину. */}
+          {visibility && (
             <MenuItem
-              disabled={!canSwitch}
-              onClick={canSwitch ? () => handlers.onReplaceVariant(page) : undefined}
-              data-testid={`${props.testId}-replace`}
+              disabled={visibility.kind === "locked" || !visibility.onToggle}
+              onClick={
+                visibility.kind === "toggle" && visibility.onToggle
+                  ? visibility.onToggle
+                  : undefined
+              }
+              // Пояснений в меню нет (решение владельца 2026-09-20): команда называет
+              // себя сама, а у неснимаемого экрана пункт просто погашен. Причина
+              // запрета описана в руководстве автора, а не строкой под пунктом.
+              data-testid={`${props.testId}-visibility`}
             >
-              Сменить макет
+              {visibility.kind === "toggle" && visibility.hidden ? "Показать" : "Скрыть"}
             </MenuItem>
-            <MenuItem
-              onClick={() => handlers.onPreview(page)}
-              data-testid={`${props.testId}-preview`}
-            >
-              Предпросмотр
-            </MenuItem>
-            {/* Решение о ВЫДАЧЕ экрана, а не о его оформлении, поэтому последним
-                пунктом. Погашенный пункт у неснимаемого экрана объясняет причину. */}
-            {visibility && (
-              <MenuItem
-                disabled={visibility.kind === "locked" || !visibility.onToggle}
-                onClick={
-                  visibility.kind === "toggle" && visibility.onToggle
-                    ? visibility.onToggle
-                    : undefined
-                }
-                // Пояснений в меню нет (решение владельца 2026-09-20): команда называет
-                // себя сама, а у неснимаемого экрана пункт просто погашен. Причина
-                // запрета описана в руководстве автора, а не строкой под пунктом.
-                data-testid={`${props.testId}-visibility`}
-              >
-                {visibility.kind === "toggle" && visibility.hidden ? "Показать" : "Скрыть"}
-              </MenuItem>
-            )}
-          </Menu>
+          )}
         </MenuTrigger>
       </div>
       {(canSwitch || usingFallback || hasErr || page.templateKeyMissing) && (
@@ -1769,6 +1767,7 @@ function AuthorPageRow(props: {
               и строка читалась двусмысленно. Предпросмотр живёт командой меню. */}
           {props.readOnly ? null : !confirming ? (
             <MenuTrigger
+              size="sm"
               placement="bottom-end"
               trigger={
                 <button
@@ -1781,42 +1780,40 @@ function AuthorPageRow(props: {
                 </button>
               }
             >
-              <Menu size="sm">
-                {canReplaceVariant && (
-                  <MenuItem
-                    onClick={() => props.onReplaceVariant(page)}
-                    data-testid={`structure-page-replace-${page.id}`}
-                  >
-                    Сменить макет…
-                  </MenuItem>
-                )}
+              {canReplaceVariant && (
                 <MenuItem
-                  onClick={() => props.onPreview(page)}
-                  data-testid={`structure-page-preview-${page.id}`}
+                  onClick={() => props.onReplaceVariant(page)}
+                  data-testid={`structure-page-replace-${page.id}`}
                 >
-                  Предпросмотр
+                  Сменить макет…
                 </MenuItem>
-                {visibility && (
-                  <MenuItem
-                    disabled={visibility.kind === "locked" || !visibility.onToggle}
-                    onClick={
-                      visibility.kind === "toggle" && visibility.onToggle
-                        ? visibility.onToggle
-                        : undefined
-                    }
-                    data-testid={`structure-page-visibility-${page.id}`}
-                  >
-                    {visibility.kind === "toggle" && visibility.hidden ? "Показать" : "Скрыть"}
-                  </MenuItem>
-                )}
+              )}
+              <MenuItem
+                onClick={() => props.onPreview(page)}
+                data-testid={`structure-page-preview-${page.id}`}
+              >
+                Предпросмотр
+              </MenuItem>
+              {visibility && (
                 <MenuItem
-                  danger
-                  onClick={() => setConfirming(true)}
-                  data-testid={`structure-page-delete-${page.id}`}
+                  disabled={visibility.kind === "locked" || !visibility.onToggle}
+                  onClick={
+                    visibility.kind === "toggle" && visibility.onToggle
+                      ? visibility.onToggle
+                      : undefined
+                  }
+                  data-testid={`structure-page-visibility-${page.id}`}
                 >
-                  Удалить
+                  {visibility.kind === "toggle" && visibility.hidden ? "Показать" : "Скрыть"}
                 </MenuItem>
-              </Menu>
+              )}
+              <MenuItem
+                danger
+                onClick={() => setConfirming(true)}
+                data-testid={`structure-page-delete-${page.id}`}
+              >
+                Удалить
+              </MenuItem>
             </MenuTrigger>
           ) : (
             <>

@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3 } from "lucide-react";
 
 import {
-  Button, Card, CardBody, CardHeader, DataGrid, FilterBar, IconButton, Input, Menu, MenuItem, MenuTrigger,
+  Button, Card, CardBody, CardHeader, DataGrid, FilterBar, IconButton, Input, MenuItem, MenuTrigger,
   ModalDialog, Stack, Tag, Text,
   type SortDir,
 } from "@skillum/ui-kit";
@@ -408,21 +408,20 @@ export function PassageRegistry({
                   это тот же отбор, только набранный заранее.
                 */}
                 <MenuTrigger
+                  size="sm"
                   placement="bottom-end"
                   trigger={<Button variant="ghost" size="s" onClick={() => void loadFilters()}>Сохранённые</Button>}
                 >
-                  <Menu size="sm">
-                    {savedFilters.length === 0 ? (
-                      <MenuItem disabled>Сохранённых фильтров пока нет</MenuItem>
-                    ) : savedFilters.map(saved => (
-                      <MenuItem
-                        key={saved.id}
-                        onClick={() => onFilterChange({ ...EMPTY_FILTER, ...saved.conditions })}
-                      >
-                        {saved.name}
-                      </MenuItem>
-                    ))}
-                  </Menu>
+                  {savedFilters.length === 0 ? (
+                    <MenuItem disabled>Сохранённых фильтров пока нет</MenuItem>
+                  ) : savedFilters.map(saved => (
+                    <MenuItem
+                      key={saved.id}
+                      onClick={() => onFilterChange({ ...EMPTY_FILTER, ...saved.conditions })}
+                    >
+                      {saved.name}
+                    </MenuItem>
+                  ))}
                 </MenuTrigger>
                 <Button
                   variant="ghost"

@@ -219,9 +219,18 @@ export interface ExposureRow {
   excluded: boolean;
 }
 
+/**
+ * Как раздел выдаёт вопросы — от этого зависит, что подзаголовок профиля называет «выдаётся
+ * на прохождение»: квота, весь банк, вариант раздела или уровни адаптивного прогона. Поле
+ * `draw_count` у варианта и у адаптива не применяется, и читать его там — значит печатать ноль.
+ */
+export type ExposureDrawMode = "quota" | "all" | "forms" | "adaptive";
+
 export interface ExposureProfileInput {
   topicId: string;
   topicName: string;
+  /** Способ выдачи раздела; без поля — по `drawCount`: число — квота, `null` — весь банк. */
+  drawMode?: ExposureDrawMode;
   /** Сколько заданий темы выдаётся на прохождение; `null` — выдаётся весь банк. */
   drawCount: number | null;
   bank: readonly BankQuestion[];
@@ -235,6 +244,8 @@ export interface ExposureProfileResult {
   topicId: string;
   topicName: string;
   bankSize: number;
+  drawMode: ExposureDrawMode;
+  /** Квота раздела; есть только у `drawMode: "quota"`. */
   drawCount: number | null;
   attemptsInWindow: number;
   rows: ExposureRow[];
@@ -285,7 +296,8 @@ export function exposureProfile(input: ExposureProfileInput): ExposureProfileRes
     // Размер банка — размер ПУЛА выдачи (решение владельца 2026-09-26): исключённое задание
     // банк не пополняет, хотя строкой с историей выдач и остаётся.
     bankSize,
-    drawCount: input.drawCount,
+    drawMode: input.drawMode ?? (input.drawCount === null ? "all" : "quota"),
+    drawCount: (input.drawMode ?? "quota") === "quota" ? input.drawCount : null,
     attemptsInWindow: input.attemptsInWindow,
     rows,
     neverDelivered,

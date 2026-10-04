@@ -30,7 +30,7 @@ import {
   Scissors,
   Trash2,
 } from "lucide-react";
-import { Button, Menu, MenuItem, MenuTrigger, Switch, Tag } from "@skillum/ui-kit";
+import { Button, MenuItem, MenuTrigger, Switch, Tag } from "@skillum/ui-kit";
 import {
   DndContext,
   KeyboardSensor,
@@ -328,6 +328,7 @@ function ReportBlockRow(props: {
             </>
           ) : (
             <MenuTrigger
+              size="sm"
               placement="bottom-end"
               trigger={
                 <button
@@ -340,26 +341,24 @@ function ReportBlockRow(props: {
                 </button>
               }
             >
-              <Menu size="sm">
+              <MenuItem
+                disabled={!canSwitch}
+                onClick={canSwitch ? () => props.onReplaceVariant?.(index) : undefined}
+                data-testid={`report-document-replace-${index}`}
+              >
+                Сменить вариант
+              </MenuItem>
+              {/* Системный блок удалению не подлежит: его выключают тумблером, а
+                  удалённым он вернулся бы при следующем разрешении документа. */}
+              {nature === "page" && (
                 <MenuItem
-                  disabled={!canSwitch}
-                  onClick={canSwitch ? () => props.onReplaceVariant?.(index) : undefined}
-                  data-testid={`report-document-replace-${index}`}
+                  danger
+                  onClick={() => setConfirming(true)}
+                  data-testid={`report-document-delete-${index}`}
                 >
-                  Сменить вариант
+                  Удалить
                 </MenuItem>
-                {/* Системный блок удалению не подлежит: его выключают тумблером, а
-                    удалённым он вернулся бы при следующем разрешении документа. */}
-                {nature === "page" && (
-                  <MenuItem
-                    danger
-                    onClick={() => setConfirming(true)}
-                    data-testid={`report-document-delete-${index}`}
-                  >
-                    Удалить
-                  </MenuItem>
-                )}
-              </Menu>
+              )}
             </MenuTrigger>
           ))}
       </div>

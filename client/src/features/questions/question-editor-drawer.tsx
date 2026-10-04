@@ -47,7 +47,6 @@ import {
   IconButton,
   Input,
   Label,
-  Menu,
   MenuItem,
   MenuTrigger,
   ModalDialog,
@@ -924,6 +923,7 @@ export function QuestionEditorDrawer({
 
           <Cluster gap={2} wrap data-testid="prompt-insert-bar">
             <MenuTrigger
+              size="sm"
               placement="bottom-start"
               trigger={
                 <Button
@@ -938,17 +938,15 @@ export function QuestionEditorDrawer({
             >
               {/* Язык спрашивается ПРИ вставке: он часть открывающей строки, и дописывать
                   его потом руками — тот же барьер, ради снятия которого кнопка заведена. */}
-              <Menu size="sm">
-                {CODE_LANGUAGES.map((language) => (
-                  <MenuItem
-                    key={language.value || "plain"}
-                    onClick={() => insertAt("code", language.value)}
-                    data-testid={`insert-code-${language.value || "plain"}`}
-                  >
-                    {language.label}
-                  </MenuItem>
-                ))}
-              </Menu>
+              {CODE_LANGUAGES.map((language) => (
+                <MenuItem
+                  key={language.value || "plain"}
+                  onClick={() => insertAt("code", language.value)}
+                  data-testid={`insert-code-${language.value || "plain"}`}
+                >
+                  {language.label}
+                </MenuItem>
+              ))}
             </MenuTrigger>
             <Button
               variant="ghost"

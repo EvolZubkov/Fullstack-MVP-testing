@@ -113,29 +113,27 @@ router.get(
         })),
       }));
 
-      // Тема профиля: запрошенная, иначе первый раздел. Раздела нет вовсе — профиля тоже.
-      const requestedTopic = typeof req.query.topicId === "string" ? req.query.topicId : null;
-      const profileSection = sections.find(s => s.topicId === requestedTopic) ?? sections[0];
+      // Профиль — по КАЖДОМУ разделу (замечание владельца 2026-10-04: выбор темы прятал
+      // остальные). Темы не складываются в один список — у них разные квоты, — а идут блоками.
+      // Окно, пул выдачи и исключения общие, поэтому читаются один раз.
+      const windowStart = new Date();
+      windowStart.setMonth(windowStart.getMonth() - config.delivery.exposureWindowMonths);
+      // Доля считается от попыток за окно счётчика выдач (PRD-55), СЧИТАЯ брошенные — они
+      // показали задание так же, как доведённые до конца.
+      const attemptsInWindow = observations.filter(o => o.startedAt >= windowStart).length;
+      // Пул выдачи — ОДНО определение с «Качеством вопросов» и проверкой публикации
+      // (`delivery-pool`): без исключённых, для раздела с вариантами — вопросы вариантов, для
+      // адаптива — вопросы уровней. Банк темы читается целиком: задание, выданное раньше и
+      // выпавшее из пула, свою историю выдач сохраняет строкой профиля.
+      const deliveryPool = sections.length > 0 ? await loadDeliveryPool(testId) : null;
+      const excluded = deliveryPool?.excluded ?? new Set<string>();
 
-      let profile = null;
-      let attemptsInWindow = 0;
-      if (profileSection) {
-        // Окно наблюдения то же, что у счётчика выдач (PRD-55): доля считается от попыток за
-        // этот срок, СЧИТАЯ брошенные — они показали задание так же, как доведённые до конца.
-        const windowStart = new Date();
-        windowStart.setMonth(windowStart.getMonth() - config.delivery.exposureWindowMonths);
-        attemptsInWindow = observations.filter(o => o.startedAt >= windowStart).length;
-
-        // Пул выдачи — ОДНО определение с «Качеством вопросов» и проверкой публикации
-        // (`delivery-pool`): без исключённых, для раздела с вариантами — вопросы вариантов, для
-        // адаптива — вопросы уровней. Банк темы читается целиком: задание, выданное раньше и
-        // выпавшее из пула, свою историю выдач сохраняет строкой профиля.
-        const deliveryPool = await loadDeliveryPool(testId);
-        const sectionPool = deliveryPool.sections.find(p => p.section.id === profileSection.id)
-          ?? deliveryPool.sections.find(p => p.section.topicId === profileSection.topicId);
-        const bank = sectionPool?.bank ?? await storage.getQuestionsByTopic(profileSection.topicId);
+      const profiles = [];
+      for (const section of sections) {
+        const sectionPool = deliveryPool?.sections.find(p => p.section.id === section.id)
+          ?? deliveryPool?.sections.find(p => p.section.topicId === section.topicId);
+        const bank = sectionPool?.bank ?? await storage.getQuestionsByTopic(section.topicId);
         const inPool = new Set((sectionPool?.pool ?? []).map(question => question.id));
-        const excluded = deliveryPool.excluded;
         // Сбой чтения счётчиков не имеет права уронить экран: без них профиль показывает
         // «не выдавалось ни разу», что честнее выдуманных долей.
         let deliveredCounts = new Map<string, number>();
@@ -149,11 +147,16 @@ router.get(
           logger.warn("PRD-56: счётчики выдач не прочитаны — " + (error as Error).message);
         }
 
-        profile = exposureProfile({
-          topicId: profileSection.topicId,
-          topicName: topicNames.get(profileSection.topicId) ?? "Без темы",
-          // Раздел, выдающий весь банк, квоты не имеет — и доля у него всегда стопроцентная.
-          drawCount: profileSection.drawAll ? null : profileSection.drawCount,
+        profiles.push(exposureProfile({
+          topicId: section.topicId,
+          topicName: topicNames.get(section.topicId) ?? "Без темы",
+          // Квота применяется не всегда: вариант раздела и уровни адаптива её не читают.
+          drawMode: test.mode === "adaptive"
+            ? "adaptive"
+            : (section.formSetJson?.forms?.length ?? 0) > 0
+              ? "forms"
+              : section.drawAll ? "all" : "quota",
+          drawCount: section.drawAll ? null : section.drawCount,
           bank: bank.map(question => ({
             id: question.id,
             prompt: question.prompt,
@@ -164,7 +167,7 @@ router.get(
           })),
           deliveredCounts,
           attemptsInWindow,
-        });
+        }));
       }
 
       res.json({
@@ -176,9 +179,8 @@ router.get(
           snapshots.map(s => ({ id: s.id, version: s.version, publishedAt: s.publishedAt })),
           opts,
         ),
-        exposure: profile,
-        // Список тем — селектору профиля: тема выбирается, а не угадывается по порядку.
-        topics: sectionForms.map(s => ({ topicId: s.topicId, topicName: s.topicName })),
+        // По профилю на раздел, в порядке разделов теста.
+        exposure: profiles,
         minObservations: opts.minObservations,
       });
     } catch (error) {

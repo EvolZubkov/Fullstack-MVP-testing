@@ -35,7 +35,6 @@ import {
   DataGrid,
   IconButton,
   Input,
-  Menu,
   MenuDivider,
   MenuItem,
   MenuTrigger,
@@ -166,6 +165,7 @@ function SliceRowMenu({
     // `tb-rowmenu` — метка ячейки меню для раскладки узкой колонки (`tb-components.css`).
     <span className="tb-rowmenu">
       <MenuTrigger
+        size="sm"
         placement="bottom-end"
         trigger={
           <IconButton
@@ -176,15 +176,13 @@ function SliceRowMenu({
           />
         }
       >
-        <Menu size="sm">
-          {onOpenRegistry && <MenuItem onClick={onOpenRegistry}>Открыть прохождения</MenuItem>}
-          {onOpenTestAnalytics && <MenuItem onClick={onOpenTestAnalytics}>Аналитика теста</MenuItem>}
-          {onCompare && <MenuItem onClick={onCompare}>Сравнить с другим срезом</MenuItem>}
-          {onEdit && <MenuItem onClick={onEdit}>Изменить условия</MenuItem>}
-          <MenuDivider />
-          {onSave && <MenuItem onClick={onSave}>Сохранить как срез</MenuItem>}
-          <MenuItem onClick={onExport}>Выгрузить прохождения</MenuItem>
-        </Menu>
+        {onOpenRegistry && <MenuItem onClick={onOpenRegistry}>Открыть прохождения</MenuItem>}
+        {onOpenTestAnalytics && <MenuItem onClick={onOpenTestAnalytics}>Аналитика теста</MenuItem>}
+        {onCompare && <MenuItem onClick={onCompare}>Сравнить с другим срезом</MenuItem>}
+        {onEdit && <MenuItem onClick={onEdit}>Изменить условия</MenuItem>}
+        <MenuDivider />
+        {onSave && <MenuItem onClick={onSave}>Сохранить как срез</MenuItem>}
+        <MenuItem onClick={onExport}>Выгрузить прохождения</MenuItem>
       </MenuTrigger>
     </span>
   );

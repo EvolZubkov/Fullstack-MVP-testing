@@ -237,6 +237,15 @@ describe("exposureProfile (FR-20)", () => {
     expect(result.attemptsInWindow).toBe(0);
   });
 
+  it("способ выдачи: квота — числом, у адаптива и вариантов квоты нет (2026-10-04)", () => {
+    const base = { topicId: "tp-1", topicName: "Т", bank: BANK, deliveredCounts: new Map(), attemptsInWindow: 1 };
+    expect(exposureProfile({ ...base, drawCount: 2 })).toMatchObject({ drawMode: "quota", drawCount: 2 });
+    expect(exposureProfile({ ...base, drawCount: null })).toMatchObject({ drawMode: "all", drawCount: null });
+    // У адаптива `draw_count` хранится нулём — в профиль он не уходит.
+    expect(exposureProfile({ ...base, drawMode: "adaptive", drawCount: 0 })).toMatchObject({ drawMode: "adaptive", drawCount: null });
+    expect(exposureProfile({ ...base, drawMode: "forms", drawCount: 5 })).toMatchObject({ drawMode: "forms", drawCount: null });
+  });
+
   it("вопрос вне пула (не входит ни в один вариант) не считается ни банком, ни простоем", () => {
     const result = exposureProfile({
       topicId: "tp-1",

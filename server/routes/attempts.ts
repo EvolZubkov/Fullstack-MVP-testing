@@ -1351,6 +1351,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     if (firstQuestionId) {
       const questions = await src.getQuestionsByIds([firstQuestionId]);
       firstQuestion = questions[0] || null;
+      await recordAdaptiveDelivery(firstQuestionId, test.id);
     }
 
     res.status(201).json({
@@ -1570,6 +1571,8 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       resultJson: isFinished ? result : null,
       finishedAt: isFinished ? new Date() : null,
     });
+
+    if (nextQuestionData?.id) await recordAdaptiveDelivery(nextQuestionData.id, test.id);
 
     const response: any = {
       isCorrect,
@@ -2609,6 +2612,26 @@ router.get("/learner/attempts", requirePermission("attempts.self.read"), async (
 });
 
 // ===== Helper Functions =====
+
+/**
+ * PRD-55 / PRD-56 FR-20: записать выдачу вопроса адаптивного прогона.
+ *
+ * У адаптива нет состава, зафиксированного на старте: уровень решает, какой вопрос будет
+ * следующим, и большая часть вопросов уровня так и не показывается. Поэтому выдачей здесь
+ * считается ПОКАЗ — первый вопрос на старте и каждый следующий, отданный в ответе. Вопрос
+ * показывается один раз за прогон, так что пара «попытка × задание» и здесь даёт одну выдачу
+ * (FR-03). Сбой счётчика не роняет прохождение — как и у обычного старта.
+ *
+ * @param questionId показанный вопрос
+ * @param testId тест прогона
+ */
+async function recordAdaptiveDelivery(questionId: string, testId: string): Promise<void> {
+  try {
+    await storage.recordDeliveries([questionId], testId, new Date());
+  } catch (error) {
+    logger.warn("PRD-55: выдача адаптивного вопроса не записана — " + (error as Error).message);
+  }
+}
 
 async function getNextQuestionData(level: any, topic: any, questionIndex: number, storage: any) {
   const questionId = level.questionIds[questionIndex];

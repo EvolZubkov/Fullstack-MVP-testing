@@ -12,7 +12,9 @@
  *
  * ЧТО СЧИТАЕТСЯ ВЫДАЧЕЙ. Начатая попытка со всем её составом (FR-01/FR-02): брошенная попытка
  * показала содержание так же, как доведённая до конца. Для веба состав берётся из `variant_json`
- * — там лежит ровно выданная форма; для телеметрии — из строк ответов прохождения, потому что
+ * — там лежит ровно выданная форма; у адаптивной попытки формы нет (вопрос выбирает уровень по
+ * ходу прогона), и выданным считается показанное: отвеченные вопросы уровней плюс вопрос, на
+ * котором брошенная попытка остановилась; для телеметрии — из строк ответов прохождения, потому что
  * поле состава появилось в пакете только 2026-09-12, и у прохождений старше него другого следа
  * выдачи нет. Разница честная: по старой телеметрии восстанавливается «показано и отвечено», а
  * не «показано», и заниженный счётчик лучше выдуманного.
@@ -71,6 +73,33 @@ async function rebuild(pool: pg.Pool, windowMonths: number): Promise<{ rows: num
         CROSS JOIN LATERAL jsonb_array_elements(a.variant_json -> 'sections') AS s(section)
         CROSS JOIN LATERAL jsonb_array_elements(s.section -> 'questionIds') AS q(value)
         WHERE a.started_at >= date_trunc('month', now()) - make_interval(months => $1)
+      ) AS delivered
+      GROUP BY question_id, test_id, bucket_month
+      ON CONFLICT (question_id, test_id, bucket_month, source)
+      DO UPDATE SET delivered_count = question_exposure.delivered_count + EXCLUDED.delivered_count
+    `, [windowMonths]);
+
+    // Веб, адаптив: `variant_json.topics[].levelsState[].answeredQuestionIds` и текущий вопрос
+    // незавершённой попытки — показанное, а не банк уровня (см. шапку модуля).
+    await client.query(`
+      INSERT INTO question_exposure (question_id, test_id, bucket_month, delivered_count)
+      SELECT question_id, test_id, bucket_month, COUNT(*)::int
+      FROM (
+        SELECT DISTINCT a.id AS attempt_id, a.test_id,
+          date_trunc('month', a.started_at)::date AS bucket_month, shown.question_id
+        FROM attempts a
+        CROSS JOIN LATERAL (
+          SELECT q.value #>> '{}' AS question_id
+          FROM jsonb_array_elements(a.variant_json -> 'topics') AS t(topic)
+          CROSS JOIN LATERAL jsonb_array_elements(t.topic -> 'levelsState') AS l(level)
+          CROSS JOIN LATERAL jsonb_array_elements(
+            COALESCE(l.level -> 'answeredQuestionIds', '[]'::jsonb)) AS q(value)
+          UNION
+          SELECT a.variant_json ->> 'currentQuestionId'
+          WHERE a.finished_at IS NULL AND a.variant_json ->> 'currentQuestionId' IS NOT NULL
+        ) AS shown
+        WHERE a.variant_json ->> 'mode' = 'adaptive'
+          AND a.started_at >= date_trunc('month', now()) - make_interval(months => $1)
       ) AS delivered
       GROUP BY question_id, test_id, bucket_month
       ON CONFLICT (question_id, test_id, bucket_month, source)

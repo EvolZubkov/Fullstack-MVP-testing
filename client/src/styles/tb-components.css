@@ -3381,7 +3381,7 @@
 .tb-qtable .ou-grid__th.ou-grid__th--center,
 .tb-qtable tbody td.is-align-center { padding-inline: var(--ou-space-1); }
 /* Вывод «легче заданной на 12» шире колонки сложности (10 %): тег переносится в две строки. */
-.tb-qtable tbody td .ou-tag { white-space: normal; height: auto; text-align: center; }
+.tb-qtable tbody td .ou-tag { white-space: normal; height: auto; text-align: center; padding-block: var(--ou-space-1); }
 
 /* ─── PRD-66: таблица «Качество вопросов» — фиксированная раскладка ───────────
    Колонка «n» уезжала за горизонтальную прокрутку: при `table-layout: auto`
