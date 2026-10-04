@@ -181,6 +181,9 @@ export function DataGrid<T>({
    * не достаёт до низа экрана, либо вылезает за него и страница получает ВТОРУЮ прокрутку —
    * ту самую, из-за которой закреплённая шапка перестаёт держаться.
    *
+   * Если над столом высокий блок и места до низа окна меньше минимума, стол берёт высоту видимой
+   * области прокрутки — страница докручивается до него, а не держит окошко в пару строк.
+   *
    * Замер повторяется при изменении размера окна и при перекладке страницы. CSS-правило
    * `.ou-grid--fill` остаётся запасным: оно работает там, где скрипта нет вовсе (эскизы).
    */
@@ -191,12 +194,32 @@ export function DataGrid<T>({
     /** Запас снизу: нижнее поле карточки и воздух страницы под ней (48 px давали 2 px второй прокрутки). */
     const GAP = 56;
 
+    /** Меньше этого стол в окне не сжимается: окошко в пару строк хуже прокрутки страницы. */
+    const MIN = 240;
+
+    /** Ближайший прокручиваемый предок — видимая область, в которой стоит стол. */
+    const scrollParent = (): HTMLElement | null => {
+      for (let el = area.parentElement; el; el = el.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el;
+      }
+      return null;
+    };
+
     const apply = () => {
       const top = area.getBoundingClientRect().top + window.scrollY;
       const footer = area.nextElementSibling as HTMLElement | null;
       const below = footer ? footer.getBoundingClientRect().height : 0;
       const room = window.innerHeight - top - below - GAP;
-      area.style.maxHeight = `${Math.max(room, 240)}px`;
+      if (room >= MIN) {
+        area.style.maxHeight = `${room}px`;
+        return;
+      }
+      // Над столом стоит высокий блок (сводка, предупреждения), и до низа окна места нет. Тогда
+      // окошко в 240 px давало две прокрутки сразу — страницы и стола. Вместо него стол берёт
+      // высоту видимой области: страница докручивается до стола, и дальше он занимает экран.
+      const parent = scrollParent();
+      const viewport = parent ? parent.clientHeight : window.innerHeight;
+      area.style.maxHeight = `${Math.max(viewport - below - GAP, MIN)}px`;
     };
 
     apply();
