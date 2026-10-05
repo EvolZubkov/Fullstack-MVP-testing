@@ -14,6 +14,7 @@ import slicesRouter from "./slices";
 import exportRouter from "./export";
 import lmsImportRouter from "./lms-import";
 import psychometricsRouter from "./psychometrics";
+import questionBankRouter from "./question-bank";
 
 // Реэкспорт хелперов для использования в других модулях
 export {
@@ -54,6 +55,9 @@ router.use("/", scalesRouter);
 
 // PRD-66 FR-56: психометрика теста — GET /api/analytics/psychometrics/:testId
 router.use("/", psychometricsRouter);
+
+// PRD-70: ось банка вопросов — GET /api/analytics/bank/quality, ориентир сложности вопроса
+router.use("/", questionBankRouter);
 
 // PRD-56: реестр прохождений — GET /api/analytics/registry
 router.use("/", registryRouter);
