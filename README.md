@@ -443,6 +443,8 @@ test-builder/
 |   |   |-- content-pages.ts  result-variables.ts  scales.ts
 |   |   |-- templates.ts  admin-templates.ts (PRD-3)  workbook.ts  tests-workbook.ts (PRD-14)
 |   |   |-- analytics/  scorm-telemetry.ts  logs.ts  debug-player.ts (PRD-18)
+|   |   |-- analytics/question-bank.ts  # Качество вопросов банка по тестам читателя (PRD-70)
+|   |   |-- saved-filters.ts         # Сохранённые фильтры банка, «Тестов», «Пользователей» (PRD-70)
 |   |-- services/                    # Доменные сервисы (вне route-хендлеров)
 |   |   |-- result-compute.ts  result-context.ts  scoring-config.ts  effective-scoring.ts
 |   |   |-- retake-gate.ts (PRD-6)  template-render.ts  flow-policy-validator.ts
@@ -450,6 +452,8 @@ test-builder/
 |   |   |-- access.ts  test-access.ts  topic-access.ts (PRD-13/15)
 |   |   |-- content-guard.ts  draw-feasibility.ts  test-snapshot.ts (PRD-15)
 |   |   |-- workbook-import.ts  questions-import.ts  questions-export.ts (PRD-14)
+|   |   |-- analytics/               # Расчёты аналитики: психометрика теста (PRD-66),
+|   |   |                            #   качество вопросов и банка, статистика вопроса банка (PRD-70)
 |   |-- scorm/                       # SCORM 2004 генератор
 |   |   |-- builders/                # Сборщики пакета (manifest, metadata, test-json,
 |   |   |                            #   media-assets, shared-runtime — esbuild-бандл @shared)
@@ -461,7 +465,8 @@ test-builder/
 |   |   |-- debug-player/           # Ассеты плеера отладки: shim + TBInspector compute + стор (PRD-18)
 |   |   +-- zip.ts                  # ZIP-упаковка
 |   |-- middleware/                  # auth.ts, test-scope.ts, upload.ts (Multer)
-|   |-- utils/                       # crypto.ts (email AES + scrypt-хеш паролей PRD-9), excel.ts, mask-email.ts
+|   |-- utils/                       # crypto.ts (email AES + scrypt-хеш паролей PRD-9), excel.ts, mask-email.ts,
+|   |                                #   pg-error.ts (код PostgreSQL из `cause`: Drizzle заворачивает ошибку драйвера)
 |   |-- config.ts                    # Конфигурация (в т.ч. SUPERADMIN_EMAILS)
 |   |-- db.ts                        # Подключение к БД (Drizzle)
 |   |-- email.ts                     # Отправка email (сброс пароля)
@@ -668,7 +673,7 @@ Test
 
 ## База данных
 
-PostgreSQL + Drizzle ORM, **32 таблицы**. Схема и Zod-типы -- в [shared/schema.ts](shared/schema.ts).
+PostgreSQL + Drizzle ORM, **37 таблиц**. Схема и Zod-типы -- в [shared/schema.ts](shared/schema.ts).
 
 **Модель миграций.** Схема ведётся версионированными миграциями: `drizzle-kit generate` создаёт файл,
 деплой применяет их командой `drizzle-kit migrate`. Прежний `drizzle-kit push --force` из деплоя убран --
@@ -912,6 +917,11 @@ PostgreSQL + Drizzle ORM, **32 таблицы**. Схема и Zod-типы -- �
 | `tests.lms_attempt_result` | PRD-36 | Что пакет отдаёт в LMS при нескольких попытках: `best` / `last` (drizzle `0022`/`0023`) |
 | `report_blocks` | PRD-51 | Документ отчёта: упорядоченные блоки по ветви на режим теста (обычный / адаптивный); отсутствие строк = документ шаблона по умолчанию (drizzle `0024`) |
 | `media_assets`, `media_usages` | -- | Ядро медиатеки: схема и репозиторий есть, продуктового трека пока нет (drizzle `0009`) |
+| `test_review_comments` | PRD-52 | Комментарии рецензирования теста с якорем на сущность и пином содержимого (drizzle `0025`) |
+| `lms_import_batches` | PRD-54 | Партии загруженных выгрузок отчётов LMS: тест, файл (sha-256 содержимого), счётчики, журнал; откат удаляет по партии (drizzle `0029`) |
+| `question_exposure` | PRD-55 | Счётчик выдач вопроса по (вопрос, тест, месяц, источник `live` / `import`); агрегат, пересобирается `npm run exposure:rebuild` (drizzle `0031`, источник — `0045`) |
+| `analytics_slices` | PRD-56 | Сохранённые срезы (`kind = 'slice'`, ровно один тест) и фильтры аналитики (`kind = 'filter'`, без теста) владельца (drizzle `0032`; срез принадлежит тесту — `0047`) |
+| `saved_list_filters` | PRD-70 | Личные сохранённые фильтры банка, «Тестов» и «Пользователей» (`scope`: `content` / `tests` / `users`), имя уникально у владельца в пределах экрана (drizzle `0048`) |
 
 Все опциональные колонки nullable/с дефолтом: их отсутствие сохраняет легаси-поведение.
 
@@ -1073,8 +1083,10 @@ API разнесён по модульным роутерам (`server/routes/`)
 (PRD-1), `/api/tests/:id/result-variables` (PRD-2), `/api/tests/:id/scales` (PRD-5),
 `/api/tests/:id/workbook/import|export` + `/api/workbook/*` (PRD-14 Excel), `/api/templates`
 (PRD-7) и `/api/admin/templates` (PRD-3 админ-реестр), `/api/tests/:id/debug/*` (PRD-18
-встроенный плеер отладки), `/api/groups`, `/api/analytics`, `/access/*` (magic-link, до
-session guard), телеметрия SCORM и `/api/logs`. Полный список маршрутов -- `routerConfig`
+встроенный плеер отладки), `/api/groups`, `/api/analytics` (в том числе качество вопросов банка
+`/api/analytics/bank/quality` и статистика вопроса банка `/api/analytics/questions/:id`, PRD-70),
+`/api/saved-filters` (сохранённые фильтры банка, «Тестов» и «Пользователей», PRD-70), `/access/*`
+(magic-link, до session guard), телеметрия SCORM и `/api/logs`. Полный список маршрутов -- `routerConfig`
 в [server/routes/index.ts](server/routes/index.ts).
 
 ---
