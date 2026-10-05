@@ -84,6 +84,7 @@ import {
     conditionsOf,
     errorText,
     savedSetState,
+    testLevelFilters,
     useSavedFilters,
     withoutTests,
 } from "@/features/analytics/registry/use-saved-filters";
@@ -902,8 +903,8 @@ export default function TestAnalyticsPage() {
                 // FR-51: снимается крестиком; путь назад — кнопка в предупреждении вкладки.
                 ...(showsAttemptChip ? [{ id: FIRST_ATTEMPT_CHIP, label: "Только первая попытка" }] : []),
             ]}
-            savedSets={savedFilters.filters.map(item => ({ id: item.id, name: item.name }))}
-            {...savedSetState(savedFilters.filters.map(item => ({ ...item, conditions: withoutTests(conditionsOf(item)) })), appliedSetId, withoutTests(filter))}
+            savedSets={testLevelFilters(savedFilters.filters).map(item => ({ id: item.id, name: item.name }))}
+            {...savedSetState(testLevelFilters(savedFilters.filters).map(item => ({ ...item, conditions: withoutTests(conditionsOf(item)) })), appliedSetId, withoutTests(filter))}
             onApplySet={(id: string) => {
                 const item = savedFilters.filters.find(f => f.id === id);
                 if (!item) return;

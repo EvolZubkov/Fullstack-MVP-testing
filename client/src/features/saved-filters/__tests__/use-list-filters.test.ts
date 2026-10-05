@@ -43,6 +43,11 @@ describe("listSetState", () => {
     expect(listSetState(sets, "s1", "k9", keyOfSaved)).toEqual({ activeSetId: "s1", dirty: true });
   });
 
+  it("пустой фильтр не совпадает с набором, даже если ключи равны", () => {
+    const empty = [{ id: "e", name: "Пустой", conditions: "k0" }];
+    expect(listSetState(empty, null, "k0", keyOfSaved, "k0")).toEqual({ activeSetId: null, dirty: false });
+  });
+
   it("не выбирали — набор, совпавший с текущими условиями; иначе никакого", () => {
     expect(listSetState(sets, null, "k2", keyOfSaved)).toEqual({ activeSetId: "s2", dirty: false });
     expect(listSetState(sets, null, "k9", keyOfSaved)).toEqual({ activeSetId: null, dirty: false });

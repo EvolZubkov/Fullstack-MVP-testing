@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EMPTY_FILTER } from "../filter-state";
-import { conditionsOf, errorText, savedSetState, withoutTests } from "../use-saved-filters";
+import { conditionsOf, errorText, savedSetState, testLevelFilters, withoutTests } from "../use-saved-filters";
 
 const SAVED = [
   { id: "f1", name: "Импорт", conditions: { sources: ["import"] } },
@@ -41,5 +41,21 @@ describe("критерии сохранённого фильтра", () => {
   it("ошибка сервера читается словами, а не кодом", () => {
     expect(errorText(new Error('409: {"error":"Запись с таким именем уже есть"}'))).toBe("Запись с таким именем уже есть");
     expect(errorText(new Error("500: Internal Server Error"))).toBe("500: Internal Server Error");
+  });
+});
+
+describe("пустой отбор и уровень теста", () => {
+  // На уровне теста условие по тесту отбрасывается: набор «только тест» становился пустым и
+  // выдавал себя за применённый на странице без условий (найдено на снимке 2026-10-05).
+  const ONLY_TEST = [{ id: "t", name: "Тест: Базовые технологии", conditions: { testIds: ["t1"] } }];
+
+  it("пустые критерии не совпадают ни с одним набором", () => {
+    const sets = ONLY_TEST.map(item => ({ ...item, conditions: withoutTests(conditionsOf(item)) }));
+    expect(savedSetState(sets, null, withoutTests(EMPTY_FILTER))).toEqual({ activeSetId: null, dirty: false });
+  });
+
+  it("на уровне теста набор без условий кроме тестов не предлагается", () => {
+    const withGroup = { id: "g", name: "Группа", conditions: { testIds: ["t1"], groupIds: ["g1"] } };
+    expect(testLevelFilters([...ONLY_TEST, withGroup]).map(item => item.id)).toEqual(["g"]);
   });
 });

@@ -42,7 +42,8 @@ export function sameConditions(a: RegistryFilter, b: RegistryFilter): boolean {
  *
  * Применённым считается выбранный читателем набор; если он не выбирал, а критерии совпали с
  * каким-то набором (пришли ссылкой, набрали те же), — этот набор. Изменённым — выбранный набор,
- * критерии которого уже не совпадают с текущими.
+ * критерии которого уже не совпадают с текущими. Пустые критерии не совпадают ни с чем: иначе
+ * набор, у которого на уровне теста не осталось условий, выдавал себя за применённый.
  *
  * @param filters сохранённые фильтры
  * @param appliedId набор, который читатель применил или сохранил последним
@@ -57,8 +58,19 @@ export function savedSetState(
   if (applied) {
     return { activeSetId: applied.id, dirty: !sameConditions(conditionsOf(applied), current) };
   }
+  if (filterToSearch(current) === "") return { activeSetId: null, dirty: false };
   const matching = filters.find(f => sameConditions(conditionsOf(f), current));
   return { activeSetId: matching?.id ?? null, dirty: false };
+}
+
+/**
+ * Наборы, которые есть смысл предлагать на уровне теста: тест там задан страницей, и набор,
+ * в котором кроме тестов ничего не было, применил бы пустой отбор.
+ *
+ * @param filters сохранённые фильтры
+ */
+export function testLevelFilters(filters: readonly SavedFilter[]): SavedFilter[] {
+  return filters.filter(f => filterToSearch(withoutTests(conditionsOf(f))) !== "");
 }
 
 /** Критерии сохранённого фильтра в виде фильтра реестра. */

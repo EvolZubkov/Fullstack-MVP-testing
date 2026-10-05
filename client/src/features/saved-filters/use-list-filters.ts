@@ -94,15 +94,18 @@ export function errorText(error: unknown): string {
  * @param appliedId набор, выбранный или сохранённый последним
  * @param currentKey ключ текущего фильтра
  * @param keyOfSaved ключ фильтра из набора
+ * @param emptyKey ключ пустого фильтра: без условий совпадения не ищутся
  */
 export function listSetState(
   filters: readonly ListSavedFilter[],
   appliedId: string | null,
   currentKey: string,
   keyOfSaved: (saved: ListSavedFilter) => string,
+  emptyKey?: string,
 ): { activeSetId: string | null; dirty: boolean } {
   const applied = appliedId ? filters.find(f => f.id === appliedId) : undefined;
   if (applied) return { activeSetId: applied.id, dirty: keyOfSaved(applied) !== currentKey };
+  if (currentKey === emptyKey) return { activeSetId: null, dirty: false };
   const matching = filters.find(f => keyOfSaved(f) === currentKey);
   return { activeSetId: matching?.id ?? null, dirty: false };
 }
@@ -141,7 +144,7 @@ export function useListFilters<T>({ scope, current, apply, normalize, keyOf, ena
 
   return {
     savedSets: filters.map(item => ({ id: item.id, name: item.name })),
-    ...listSetState(filters, appliedId, keyOf(current), keyOfSaved),
+    ...listSetState(filters, appliedId, keyOf(current), keyOfSaved, keyOf(normalize({}))),
     onApplySet: (id: string) => {
       const item = filters.find(f => f.id === id);
       if (!item) return;
