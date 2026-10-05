@@ -24,10 +24,15 @@ export interface BankReviewRow {
   review: BankReview;
 }
 
+/** Сколько вопросов видно сразу — как у корзин очереди; полный список — в дереве банка. */
+const PREVIEW = 3;
+
 /** Свойства карточки. */
 export interface BankReviewCardProps {
   rows: BankReviewRow[];
   onOpen: (questionId: string) => void;
+  /** «Показать все N» — дерево «Темы и вопросы» с фильтром «Требуют ревизии». */
+  onOpenAll?: () => void;
 }
 
 /**
@@ -36,8 +41,9 @@ export interface BankReviewCardProps {
  * @param props - строки и переход на статистику вопроса банка
  * @returns карточка; без строк — ничего
  */
-export function BankReviewCard({ rows, onOpen }: BankReviewCardProps) {
+export function BankReviewCard({ rows, onOpen, onOpenAll }: BankReviewCardProps) {
   if (rows.length === 0) return null;
+  const shown = rows.slice(0, PREVIEW);
   return (
     <Card>
       <CardHeader
@@ -48,7 +54,7 @@ export function BankReviewCard({ rows, onOpen }: BankReviewCardProps) {
       />
       <CardBody>
         <Stack gap={0}>
-          {rows.map((row, index) => (
+          {shown.map((row, index) => (
             <Fragment key={row.questionId}>
               {index > 0 && <Separator />}
               <Box padY={4}>
@@ -71,6 +77,13 @@ export function BankReviewCard({ rows, onOpen }: BankReviewCardProps) {
           ))}
         </Stack>
       </CardBody>
+      {onOpenAll && rows.length > shown.length && (
+        <CardBody>
+          <Button variant="ghost" size="s" onClick={onOpenAll}>
+            Показать все {rows.length}
+          </Button>
+        </CardBody>
+      )}
     </Card>
   );
 }

@@ -249,6 +249,8 @@ export default function AnalyticsPage() {
               {/* PRD-70 FR-60: ось банка — вопросы тем читателя; переход несёт путь для крошки возврата. */}
               <BankReviewCard
                 rows={attentionData?.bankReview ?? []}
+                // Полный список — там, где вопросы исправляют: дерево с «Требуют ревизии» и «Качеством».
+                onOpenAll={() => navigate("/author/content?state=review&view=quality")}
                 onOpen={(questionId) => {
                   const target = bankQuestionHref(questionId);
                   navigate(target, {

@@ -43,6 +43,16 @@ describe("BankReviewCard", () => {
     expect(onOpen).toHaveBeenCalledWith("q2");
   });
 
+  it("видны три вопроса; «Показать все N» ведёт к полному списку", () => {
+    const onOpenAll = vi.fn();
+    const four = [...ROWS, { ...ROWS[0], questionId: "q3" }, { ...ROWS[1], questionId: "q4" }];
+    render(<BankReviewCard rows={four} onOpen={() => {}} onOpenAll={onOpenAll} />);
+
+    expect(screen.getAllByRole("button", { name: /Статистика/ })).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "Показать все 4" }));
+    expect(onOpenAll).toHaveBeenCalled();
+  });
+
   it("пусто — карточки нет", () => {
     const { container } = render(<BankReviewCard rows={[]} onOpen={() => {}} />);
     expect(container.textContent).toBe("");
