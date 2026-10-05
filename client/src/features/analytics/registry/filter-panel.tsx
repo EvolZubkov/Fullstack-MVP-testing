@@ -1,18 +1,20 @@
 /**
- * @module features/analytics/registry/filter-dialog
- * @description PRD-56 FR-02: окно условий отбора реестра.
+ * @module features/analytics/registry/filter-panel
+ * @description PRD-56 FR-02: условия отбора реестра — панелью под кнопкой «Фильтр» (PRD-70
+ * FR-70 - FR-78: единая форма фильтра продукта, ui-kit `FilterPanel`; окно «Условия отбора» снято).
  *
  * Условия набираются целиком и применяются разом. Пять полей, меняемых по одному прямо в
  * списке, означали бы перезапрос выборки на каждый щелчок — и мигающий список под руками.
- * Поэтому окно держит СВОЙ черновик и отдаёт его наверх только по «Применить».
+ * Поэтому панель держит СВОЙ черновик и отдаёт его наверх только по «Применить»; закрыть её
+ * иначе — и есть отмена.
  *
  * Справочники тестов и групп читаются при открытии: список тестов меняется чаще, чем живёт
  * открытая вкладка аналитики.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
 import {
-  Button, Checkbox, Combobox, FormField, Grid, Input, ModalDialog, Stack, Text,
+  Checkbox, Combobox, FilterPanel, FilterPanelGroup, FormField, Grid, Input,
 } from "@skillum/ui-kit";
 
 import {
@@ -25,8 +27,10 @@ import { NO_GROUP_ID, NO_GROUP_LABEL } from "@shared/analytics/no-group";
 import { useRegistryDictionaries, useTestDictionary } from "./use-dictionaries";
 import type { OrgField, OrgValueCount } from "@shared/org-fields";
 
-export interface RegistryFilterDialogProps {
+export interface RegistryFilterPanelProps {
   open: boolean;
+  /** Кнопка, под которой открывается панель: «Фильтр» полосы или «Изменить условия» среза. */
+  anchorRef: RefObject<HTMLElement | null>;
   filter: RegistryFilter;
   onApply: (filter: RegistryFilter) => void;
   onClose: () => void;
@@ -95,9 +99,9 @@ function orgOptions(values: readonly OrgValueCount[], selected: readonly string[
   return options;
 }
 
-export function RegistryFilterDialog({
-  open, filter, onApply, onClose, hideTest, scopeTestId, firstAttempt,
-}: RegistryFilterDialogProps) {
+export function RegistryFilterPanel({
+  open, anchorRef, filter, onApply, onClose, hideTest, scopeTestId, firstAttempt,
+}: RegistryFilterPanelProps) {
   const [draft, setDraft] = useState<RegistryFilter>(filter);
   const [firstOnly, setFirstOnly] = useState(firstAttempt?.value ?? true);
   // Справочники спрашиваются только у открытого окна и тем же хуком, что зовут чипы: иначе
@@ -110,8 +114,8 @@ export function RegistryFilterDialog({
   const scopedTestId = scopeTestId ?? (draft.testIds.length === 1 ? draft.testIds[0] : null);
   const { forms, versions } = useTestDictionary(scopedTestId, open);
 
-  // Открытие — момент, когда черновик берётся из применённых условий: окно, закрытое отменой,
-  // не должно помнить набранное в прошлый раз.
+  // Открытие — момент, когда черновик берётся из применённых условий: панель, закрытая без
+  // «Применить», не должна помнить набранное в прошлый раз.
   useEffect(() => {
     if (open) {
       setDraft(filter);
@@ -120,71 +124,54 @@ export function RegistryFilterDialog({
   }, [open, filter, firstAttempt?.value]);
 
   return (
-    <ModalDialog
+    <FilterPanel
       open={open}
       onClose={onClose}
-      size="m"
-      title="Условия отбора"
-      description="Условия применяются вместе и попадают в адрес страницы — ссылку можно переслать"
-      footer={
-        <>
-          <Button variant="ghost" size="m" onClick={() => { setDraft(EMPTY_FILTER); setFirstOnly(false); }}>Сбросить</Button>
-          <Button variant="ghost" size="m" onClick={onClose}>Отмена</Button>
-          <Button
-            variant="primary"
-            size="m"
-            onClick={() => { onApply(draft); firstAttempt?.onApply(firstOnly); onClose(); }}
-          >
-            Применить
-          </Button>
-        </>
-      }
+      anchorRef={anchorRef}
+      onReset={() => { setDraft(EMPTY_FILTER); setFirstOnly(false); }}
+      onApply={() => { onApply(draft); firstAttempt?.onApply(firstOnly); onClose(); }}
     >
-      {/* Модульная сетка 4 px (эскиз, дельта 6.2): поля формы — разные элементы, 4x; подпись
-          группы и её пункты, поля «с» и «по» одного периода — родственные, 1x. */}
-      <Stack gap={4}>
-        <Stack gap={1}>
-          <Text variant="body-s" weight="medium">Источник</Text>
-          {SOURCES.map(source => (
-            <Checkbox
-              key={source.value}
-              label={source.label}
-              checked={draft.sources.includes(source.value)}
-              onChange={() => setDraft(d => ({ ...d, sources: toggle(d.sources, source.value) }))}
-            />
-          ))}
-        </Stack>
+      <FilterPanelGroup title="Источник" inline>
+        {SOURCES.map(source => (
+          <Checkbox
+            key={source.value}
+            label={source.label}
+            checked={draft.sources.includes(source.value)}
+            onChange={() => setDraft(d => ({ ...d, sources: toggle(d.sources, source.value) }))}
+          />
+        ))}
+      </FilterPanelGroup>
 
-        {firstAttempt ? (
-          <Stack gap={1}>
-            <Text variant="body-s" weight="medium">Попытки</Text>
-            <Checkbox
-              label="Только первая попытка"
-              checked={firstOnly}
-              onChange={() => setFirstOnly(value => !value)}
-            />
-          </Stack>
-        ) : null}
+      {firstAttempt ? (
+        <FilterPanelGroup title="Попытки" inline>
+          <Checkbox
+            label="Только первая попытка"
+            checked={firstOnly}
+            onChange={() => setFirstOnly(value => !value)}
+          />
+        </FilterPanelGroup>
+      ) : null}
 
-        <Stack gap={1}>
-          <Text variant="body-s" weight="medium">Исход</Text>
-          {OUTCOMES.map(outcome => (
-            <Checkbox
-              key={outcome.value}
-              label={outcome.label}
-              checked={draft.outcomes.includes(outcome.value)}
-              onChange={() => setDraft(d => ({ ...d, outcomes: toggle(d.outcomes, outcome.value) }))}
-            />
-          ))}
-        </Stack>
+      <FilterPanelGroup title="Исход" inline>
+        {OUTCOMES.map(outcome => (
+          <Checkbox
+            key={outcome.value}
+            label={outcome.label}
+            checked={draft.outcomes.includes(outcome.value)}
+            onChange={() => setDraft(d => ({ ...d, outcomes: toggle(d.outcomes, outcome.value) }))}
+          />
+        ))}
+      </FilterPanelGroup>
 
-        {/*
-          Тесты и группы выбираются поиском, а не списком: тестов на инсталляции десятки, и
-          двадцать чекбоксов подряд — это не выбор, а прокрутка.
-        */}
-        {!hideTest && (
+      {/*
+        Тесты и группы выбираются поиском, а не списком: тестов на инсталляции десятки, и
+        двадцать чекбоксов подряд — это не выбор, а прокрутка. Подпись поля — заголовок группы
+        панели (PRD-70 FR-73), у самого поля — имя для экранного диктора.
+      */}
+      {!hideTest && (
+        <FilterPanelGroup title="Тест">
           <Combobox
-            label="Тест"
+            aria-label="Тест"
             multiple
             placeholder="Все тесты"
             options={tests.map(test => ({ value: test.id, label: test.title }))}
@@ -192,10 +179,12 @@ export function RegistryFilterDialog({
             onValuesChange={values => setDraft(d => ({ ...d, testIds: values }))}
             fullWidth
           />
-        )}
+        </FilterPanelGroup>
+      )}
 
+      <FilterPanelGroup title="Группа">
         <Combobox
-          label="Группа"
+          aria-label="Группа"
           multiple
           placeholder="Все группы"
           // «Без группы» — первым: прохождения людей вне групп иначе не отобрать (замечание
@@ -208,15 +197,16 @@ export function RegistryFilterDialog({
           onValuesChange={values => setDraft(d => ({ ...d, groupIds: values }))}
           fullWidth
         />
+      </FilterPanelGroup>
 
-        {/*
-          Оргструктура (FR-06b) — сразу за группой: это тоже свойство ЧЕЛОВЕКА, а не попытки.
-          Значения из справочника профилей и прохождений, разные написания уже свёрнуты.
-        */}
-        {ORG_FIELDS_OF_DIALOG.map(({ key, field, label, placeholder }) => (
+      {/*
+        Оргструктура (FR-06b) — сразу за группой: это тоже свойство ЧЕЛОВЕКА, а не попытки.
+        Значения из справочника профилей и прохождений, разные написания уже свёрнуты.
+      */}
+      {ORG_FIELDS_OF_DIALOG.map(({ key, field, label, placeholder }) => (
+        <FilterPanelGroup key={key} title={label}>
           <Combobox
-            key={key}
-            label={label}
+            aria-label={label}
             multiple
             placeholder={placeholder}
             options={orgOptions(orgValues?.[field] ?? [], draft[key])}
@@ -224,17 +214,19 @@ export function RegistryFilterDialog({
             onValuesChange={values => setDraft(d => ({ ...d, [key]: values }))}
             fullWidth
           />
-        ))}
+        </FilterPanelGroup>
+      ))}
 
-        {/*
-          Вариант выдачи и версия публикации — условия ВНУТРИ одного теста: у разных тестов
-          они свои, и общий список из них был бы перечнем несравнимого. Поэтому поля
-          появляются, когда тест в условиях ровно один, и исчезают, когда их несколько или
-          нет вовсе. На аналитике теста он задан страницей — там они есть всегда.
-        */}
-        {scopedTestId && forms.length > 0 && (
+      {/*
+        Вариант выдачи и версия публикации — условия ВНУТРИ одного теста: у разных тестов
+        они свои, и общий список из них был бы перечнем несравнимого. Поэтому поля
+        появляются, когда тест в условиях ровно один, и исчезают, когда их несколько или
+        нет вовсе. На аналитике теста он задан страницей — там они есть всегда.
+      */}
+      {scopedTestId && forms.length > 0 && (
+        <FilterPanelGroup title="Вариант выдачи">
           <Combobox
-            label="Вариант выдачи"
+            aria-label="Вариант выдачи"
             multiple
             placeholder="Все варианты"
             options={forms.map(form => ({ value: form.id, label: form.label }))}
@@ -242,11 +234,13 @@ export function RegistryFilterDialog({
             onValuesChange={values => setDraft(d => ({ ...d, formIds: values }))}
             fullWidth
           />
-        )}
+        </FilterPanelGroup>
+      )}
 
-        {scopedTestId && versions.length > 0 && (
+      {scopedTestId && versions.length > 0 && (
+        <FilterPanelGroup title="Версия публикации">
           <Combobox
-            label="Версия публикации"
+            aria-label="Версия публикации"
             multiple
             placeholder="Все версии"
             options={versions.map(snapshot => ({
@@ -257,17 +251,17 @@ export function RegistryFilterDialog({
             onValuesChange={values => setDraft(d => ({ ...d, snapshotIds: values }))}
             fullWidth
           />
-        )}
+        </FilterPanelGroup>
+      )}
 
-        {/* Период — один заголовок и две даты в строку: «Период» над каждым полем повторял одно
-            и то же, а поля столбиком занимали две строки там, где хватает одной (замечание
-            владельца 2026-10-04). Полное имя поля — для экранного диктора. */}
-        <Stack gap={1}>
-          <Text variant="body-s" weight="medium">Период</Text>
-          <Grid cols={2} gap={4}>
-            {/* Каждое поле — в своей ячейке: у соседних полей формы верхний отступ на случай
-                столбика, и второе поле в строке вставало ниже первого. */}
-            <div>
+      {/* Период — один заголовок и две даты в строку: «Период» над каждым полем повторял одно
+          и то же, а поля столбиком занимали две строки там, где хватает одной (замечание
+          владельца 2026-10-04). Полное имя поля — для экранного диктора. */}
+      <FilterPanelGroup title="Период">
+        <Grid cols={2} gap={2}>
+          {/* Каждое поле — в своей ячейке: у соседних полей формы верхний отступ на случай
+              столбика, и второе поле в строке вставало ниже первого. */}
+          <div>
             <FormField label="с" htmlFor="registry-from">
               <Input
                 id="registry-from"
@@ -277,8 +271,8 @@ export function RegistryFilterDialog({
                 onChange={event => setDraft(d => ({ ...d, from: event.target.value || undefined }))}
               />
             </FormField>
-            </div>
-            <div>
+          </div>
+          <div>
             <FormField label="по" htmlFor="registry-to">
               <Input
                 id="registry-to"
@@ -288,10 +282,9 @@ export function RegistryFilterDialog({
                 onChange={event => setDraft(d => ({ ...d, to: event.target.value || undefined }))}
               />
             </FormField>
-            </div>
-          </Grid>
-        </Stack>
-      </Stack>
-    </ModalDialog>
+          </div>
+        </Grid>
+      </FilterPanelGroup>
+    </FilterPanel>
   );
 }

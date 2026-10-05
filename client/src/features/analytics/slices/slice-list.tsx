@@ -26,7 +26,7 @@
  * «Сохранённые срезы» теста: под названием — условия среза, колонок «Назначено» и «Начато» нет.
  * С осью — разбивка «Результаты по …» на «Обзоре» теста, в выборке с условиями уровня теста.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MoreHorizontal } from "lucide-react";
 
@@ -46,7 +46,7 @@ import {
 
 import { percent } from "../format";
 import { ExportDialog } from "../registry/export-dialog";
-import { RegistryFilterDialog } from "../registry/filter-dialog";
+import { RegistryFilterPanel } from "../registry/filter-panel";
 import {
   conditionsToFilter, describeConditions, EMPTY_FILTER, type RegistryFilter,
 } from "../registry/filter-state";
@@ -147,7 +147,8 @@ interface SliceRowMenuProps {
   onOpenRegistry?: () => void;
   onOpenTestAnalytics?: () => void;
   onCompare?: () => void;
-  onEdit?: () => void;
+  /** Правка условий; `anchor` — ячейка меню строки, под которой встаёт панель. */
+  onEdit?: (anchor: HTMLElement | null) => void;
   onSave?: () => void;
   onExport: () => void;
 }
@@ -161,9 +162,11 @@ interface SliceRowMenuProps {
 function SliceRowMenu({
   name, onOpenRegistry, onOpenTestAnalytics, onCompare, onEdit, onSave, onExport,
 }: SliceRowMenuProps) {
+  const anchor = useRef<HTMLSpanElement>(null);
   return (
     // `tb-rowmenu` — метка ячейки меню для раскладки узкой колонки (`tb-components.css`).
-    <span className="tb-rowmenu">
+    // Она же — якорь панели «Изменить условия»: пункт меню исчезает вместе с меню.
+    <span className="tb-rowmenu" ref={anchor}>
       <MenuTrigger
         size="sm"
         placement="bottom-end"
@@ -179,7 +182,7 @@ function SliceRowMenu({
         {onOpenRegistry && <MenuItem onClick={onOpenRegistry}>Открыть прохождения</MenuItem>}
         {onOpenTestAnalytics && <MenuItem onClick={onOpenTestAnalytics}>Аналитика теста</MenuItem>}
         {onCompare && <MenuItem onClick={onCompare}>Сравнить с другим срезом</MenuItem>}
-        {onEdit && <MenuItem onClick={onEdit}>Изменить условия</MenuItem>}
+        {onEdit && <MenuItem onClick={() => onEdit(anchor.current)}>Изменить условия</MenuItem>}
         <MenuDivider />
         {onSave && <MenuItem onClick={onSave}>Сохранить как срез</MenuItem>}
         <MenuItem onClick={onExport}>Выгрузить прохождения</MenuItem>
@@ -248,6 +251,8 @@ export function SliceList({
   const [reloads, setReloads] = useState(0);
   /** Сохранённый срез, у которого открыта правка условий. */
   const [editing, setEditing] = useState<SliceRow | null>(null);
+  /** Меню строки, чьи условия правятся: панель встаёт под ним. */
+  const editAnchorRef = useRef<HTMLElement | null>(null);
   /** Срез по оси, который сохраняют как срез. */
   const [saving, setSaving] = useState<SliceRow | null>(null);
   const [saveName, setSaveName] = useState("");
@@ -530,7 +535,7 @@ export function SliceList({
             onOpenRegistry={onOpenRegistry && (() => onOpenRegistry(row.conditions))}
             onOpenTestAnalytics={onOpenTestAnalytics && (() => onOpenTestAnalytics(row.conditions))}
             onCompare={onCompare && describable ? () => onCompare(row.conditions, row.name) : undefined}
-            onEdit={saved ? () => setEditing(row) : undefined}
+            onEdit={saved ? (anchor: HTMLElement | null) => { editAnchorRef.current = anchor; setEditing(row); } : undefined}
             onSave={!saved && describable
               ? () => { setSaveError(null); setSaveName(row.name); setSaving(row); }
               : undefined}
@@ -609,8 +614,9 @@ export function SliceList({
 
       {/* Правка условий — той же формой отбора, что в реестре и в сравнении (FR-07b): двух
           языков условий в продукте нет. */}
-      <RegistryFilterDialog
+      <RegistryFilterPanel
         open={editing !== null}
+        anchorRef={editAnchorRef}
         filter={conditionsToFilter(editing?.conditions ?? {})}
         hideTest
         scopeTestId={testId}

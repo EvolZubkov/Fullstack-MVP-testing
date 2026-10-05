@@ -10,7 +10,7 @@
  * `features/analytics/test/*`, здесь остаётся только сборка и запросы: данные «Выдачи» и
  * «Шкал» грузятся своими ручками и ТОЛЬКО на своей вкладке.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PassTrend } from "@/features/analytics/test/pass-trend";
 import { ScoreDistribution } from "@/features/analytics/test/score-distribution";
 import { TopicBreakdown } from "@/features/analytics/test/topic-breakdown";
@@ -74,7 +74,7 @@ import { LoadingState } from "@/components/loading-state";
 import { TEST_ANALYTICS_TABS } from "@/features/analytics/test/question-analytics-link";
 import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
 import { pluralize } from "@/lib/i18n";
-import { RegistryFilterDialog } from "@/features/analytics/registry/filter-dialog";
+import { RegistryFilterPanel } from "@/features/analytics/registry/filter-panel";
 import {
     countConditions,
     describeConditions,
@@ -344,6 +344,7 @@ export default function TestAnalyticsPage() {
      */
     const [filter, setFilter] = useRegistryFilter();
     const [filterOpen, setFilterOpen] = useState(false);
+    const filterButtonRef = useRef<HTMLButtonElement>(null);
     /** Э3.1: окно «Детали попытки» — то же, что на общем уровне. */
     const [openedAttempt, setOpenedAttempt] = useState<CombinedAttempt | null>(null);
     /** Э3.1: выгрузка прохождений теста — по условиям фильтра уровня теста. */
@@ -901,7 +902,9 @@ export default function TestAnalyticsPage() {
                     )}
                 </>
             )}
-            onOpenFilter={() => setFilterOpen(true)}
+            filterButtonRef={filterButtonRef}
+            filterOpen={filterOpen}
+            onOpenFilter={() => setFilterOpen(value => !value)}
             onRemove={(id: string) => {
                 const [kind, value] = [id.slice(0, id.indexOf(":")), id.slice(id.indexOf(":") + 1)];
                 if (id === FIRST_ATTEMPT_CHIP) {
@@ -1181,8 +1184,9 @@ export default function TestAnalyticsPage() {
                 )}
             />
 
-            <RegistryFilterDialog
+            <RegistryFilterPanel
                 open={filterOpen}
+                anchorRef={filterButtonRef}
                 filter={filter}
                 hideTest
                 scopeTestId={testId ?? null}

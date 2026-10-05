@@ -1,15 +1,27 @@
 /**
- * @module features/analytics/registry/__tests__/filter-dialog
- * @description PRD-56 FR-02: окно условий отбора реестра.
+ * @module features/analytics/registry/__tests__/filter-panel
+ * @description PRD-56 FR-02: условия отбора реестра — панелью под кнопкой «Фильтр» (PRD-70 FR-71).
  *
- * Условия задаются целиком в одном окне и применяются разом: набор из пяти полей, меняемых по
+ * Условия задаются целиком в одной панели и применяются разом: набор из пяти полей, меняемых по
  * одному прямо в списке, заставлял бы перезапрашивать выборку на каждый щелчок.
  */
+import { useRef } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RegistryFilterDialog } from "../filter-dialog";
+import { RegistryFilterPanel, type RegistryFilterPanelProps } from "../filter-panel";
+
+/** The panel under its «Фильтр» button, as the screens mount it. */
+function Panel(props: Omit<RegistryFilterPanelProps, "anchorRef">) {
+  const anchorRef = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={anchorRef} type="button">Фильтр</button>
+      <RegistryFilterPanel {...props} anchorRef={anchorRef} />
+    </>
+  );
+}
 
 const EMPTY = { testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] };
 
@@ -35,10 +47,10 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("RegistryFilterDialog", () => {
+describe("RegistryFilterPanel", () => {
   it("применяет отмеченные условия разом, а не по одному", async () => {
     const onApply = vi.fn();
-    render(<RegistryFilterDialog open filter={EMPTY} onApply={onApply} onClose={() => {}} />);
+    render(<Panel open filter={EMPTY} onApply={onApply} onClose={() => {}} />);
 
     await userEvent.click(await screen.findByLabelText("Импорт"));
     await userEvent.click(screen.getByLabelText("Не сдал"));
@@ -50,13 +62,14 @@ describe("RegistryFilterDialog", () => {
     );
   });
 
-  it("не трогает условия, если окно закрыли отменой", async () => {
+  it("не трогает условия, если панель закрыли без «Применить» — отмены отдельной кнопкой нет", async () => {
     const onApply = vi.fn();
     const onClose = vi.fn();
-    render(<RegistryFilterDialog open filter={EMPTY} onApply={onApply} onClose={onClose} />);
+    render(<Panel open filter={EMPTY} onApply={onApply} onClose={onClose} />);
 
     await userEvent.click(await screen.findByLabelText("Веб"));
-    await userEvent.click(screen.getByRole("button", { name: "Отмена" }));
+    expect(screen.queryByRole("button", { name: "Отмена" })).toBeNull();
+    await userEvent.keyboard("{Escape}");
 
     expect(onApply).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
@@ -64,7 +77,7 @@ describe("RegistryFilterDialog", () => {
 
   it("показывает уже применённые условия отмеченными", async () => {
     render(
-      <RegistryFilterDialog
+      <Panel
         open
         filter={{ ...EMPTY, sources: ["telemetry"], from: "2026-09-01" }}
         onApply={() => {}}
@@ -78,7 +91,7 @@ describe("RegistryFilterDialog", () => {
 
   it("отбирает по подразделению из справочника оргзначений (FR-06b)", async () => {
     const onApply = vi.fn();
-    render(<RegistryFilterDialog open filter={EMPTY} onApply={onApply} onClose={() => {}} />);
+    render(<Panel open filter={EMPTY} onApply={onApply} onClose={() => {}} />);
 
     await userEvent.click(await screen.findByRole("combobox", { name: "Подразделение" }));
     await userEvent.click(await screen.findByRole("option", { name: /Логистика/ }));
@@ -88,11 +101,11 @@ describe("RegistryFilterDialog", () => {
   });
 
   it("показывает применённое оргзначение, даже если его написания нет в справочнике", async () => {
-    // Значение пришло ссылкой в другом написании: сервер отберёт по нему, а окно обязано
+    // Значение пришло ссылкой в другом написании: сервер отберёт по нему, а панель обязана
     // показать его, иначе «Применить» молча сняло бы условие.
     const onApply = vi.fn();
     render(
-      <RegistryFilterDialog open filter={{ ...EMPTY, units: ["отдел продаж"] }} onApply={onApply} onClose={() => {}} />,
+      <Panel open filter={{ ...EMPTY, units: ["отдел продаж"] }} onApply={onApply} onClose={() => {}} />,
     );
 
     expect(await screen.findByText("отдел продаж")).toBeInTheDocument();
@@ -103,7 +116,7 @@ describe("RegistryFilterDialog", () => {
   it("сбрасывает все условия одной кнопкой", async () => {
     const onApply = vi.fn();
     render(
-      <RegistryFilterDialog
+      <Panel
         open
         filter={{ ...EMPTY, sources: ["web"], outcomes: ["passed"] }}
         onApply={onApply}

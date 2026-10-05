@@ -24,7 +24,7 @@ import {
 
 import { pluralize } from "@/lib/i18n";
 
-import { RegistryFilterDialog } from "./filter-dialog";
+import { RegistryFilterPanel } from "./filter-panel";
 import { useRegistryDictionaries, useTestDictionary } from "./use-dictionaries";
 
 import {
@@ -147,6 +147,7 @@ export function PassageRegistry({
   /** Условия запроса: внутри теста к ним добавляется сам тест (Э3.1). */
   const scoped = useMemo(() => (testId ? { ...filter, testIds: [testId] } : filter), [filter, testId]);
   const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   /**
    * Окно «Сохранить фильтр» открыто. Э3.2: «Сохранить как срез» с окном выбора теста ушло на
    * уровень теста — срез без теста существовать не может, а здесь теста нет.
@@ -435,7 +436,9 @@ export function PassageRegistry({
                 </Button>
               </>
             }
-            onOpenFilter={() => setFilterOpen(true)}
+            filterButtonRef={filterButtonRef}
+            filterOpen={filterOpen}
+            onOpenFilter={() => setFilterOpen(value => !value)}
             onRemove={removeCondition}
             onReset={() => onFilterChange(EMPTY_FILTER)}
             resetLabel="Сбросить фильтры"
@@ -484,8 +487,9 @@ export function PassageRegistry({
           </Stack>
         </ModalDialog>
 
-        <RegistryFilterDialog
+        <RegistryFilterPanel
           open={filterOpen}
+          anchorRef={filterButtonRef}
           filter={filter}
           onApply={onFilterChange}
           onClose={() => setFilterOpen(false)}

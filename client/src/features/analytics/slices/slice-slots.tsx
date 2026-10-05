@@ -12,13 +12,13 @@
  * Экраны различаются только содержимым таблиц и тем, в чём считается объём среза, — его
  * подпись приходит снаружи (`countLabel`).
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   Accordion, AccordionItem, Box, Button, Select, Stack, Text,
 } from "@skillum/ui-kit";
 
-import { RegistryFilterDialog } from "../registry/filter-dialog";
+import { RegistryFilterPanel } from "../registry/filter-panel";
 import { conditionsToFilter } from "../registry/filter-state";
 
 /** Срез в слоте: то, что про него знает любой из экранов сравнения. */
@@ -61,6 +61,8 @@ export function SliceSlots<T extends SlotSlice>({
 }: SliceSlotsProps<T>) {
   /** Срез, у которого открыта правка условий (FR-07b). */
   const [editing, setEditing] = useState<T | null>(null);
+  /** Кнопка «Изменить условия» того слота, чьи условия правятся: панель встаёт под ней. */
+  const editAnchorRef = useRef<HTMLElement | null>(null);
 
   return (
     <>
@@ -121,7 +123,11 @@ export function SliceSlots<T extends SlotSlice>({
                     {/* Править можно СОХРАНЁННЫЙ срез: «тест целиком» условий не имеет вовсе, а
                         набранный отбор правится там, где набран, — в фильтре реестра. */}
                     {slice.id !== "whole" && slice.id !== "adhoc" && (
-                      <Button variant="secondary" size="s" onClick={() => setEditing(slice)}>
+                      <Button
+                        variant="secondary"
+                        size="s"
+                        onClick={event => { editAnchorRef.current = event.currentTarget; setEditing(slice); }}
+                      >
                         Изменить условия
                       </Button>
                     )}
@@ -164,8 +170,9 @@ export function SliceSlots<T extends SlotSlice>({
 
       {/* Правка условий среза — той же формой отбора, что в реестре (FR-07b): двух языков
           условий в продукте нет, и заводить второй ради правки было бы худшим из решений. */}
-      <RegistryFilterDialog
+      <RegistryFilterPanel
         open={editing !== null}
+        anchorRef={editAnchorRef}
         filter={conditionsToFilter(editing?.conditions ?? {})}
         hideTest
         onClose={() => setEditing(null)}
