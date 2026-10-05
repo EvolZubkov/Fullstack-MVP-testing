@@ -37,7 +37,6 @@ import {
   ChevronsUpDown,
   ClipboardList,
   Download,
-  Filter,
   FileSpreadsheet,
   Folder,
   FolderOpen,
@@ -63,8 +62,7 @@ import {
 import {
   Banner,
   Button,
-  Chip,
-  Cluster,
+  FilterBar,
   Input,
   Label,
   ModalDialog,
@@ -233,6 +231,7 @@ export function TestsListPage(): React.JSX.Element {
   const [testFilter, setTestFilter] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // applied
   const [testDraft, setTestDraft] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // edited in the panel
   const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
 
   const authorOptions = useMemo(() => {
     const names = new Map<string, string>();
@@ -254,8 +253,13 @@ export function TestsListPage(): React.JSX.Element {
     [entries, testFilter, userId],
   );
 
-  const openFilters = () => { setTestDraft(testFilter); setFilterOpen(true); };
+  // The panel edits a draft of what is applied; closing it without «Применить» drops the draft
+  // (PRD-70 FR-74), so every opening starts from the applied filter.
+  const toggleFilters = () => { if (!filterOpen) setTestDraft(testFilter); setFilterOpen(!filterOpen); };
   const applyFilters = () => { setTestFilter(testDraft); setFilterOpen(false); };
+  /** «Сбросить» of the panel: clears the draft only. */
+  const resetDraft = () => setTestDraft(EMPTY_TEST_FILTER);
+  /** «Сбросить фильтры» of the bar: clears what is applied. */
   const resetFilters = () => { setTestDraft(EMPTY_TEST_FILTER); setTestFilter(EMPTY_TEST_FILTER); };
   const commitFilter = (next: TestFilterValue) => { setTestFilter(next); setTestDraft(next); };
 
@@ -544,9 +548,11 @@ export function TestsListPage(): React.JSX.Element {
       <div className="tl-header">
         <PageHeader title={t.tests.title} description={t.tests.description} />
       </div>
-      <div className="toolbar" role="search">
-        <div className="tl-search">
+      <FilterBar
+        role="search"
+        search={(
           <Input
+            size="s"
             iconLeft={<Search size={16} />}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -555,53 +561,64 @@ export function TestsListPage(): React.JSX.Element {
             fullWidth
             data-testid="tests-list-search-input"
           />
-        </div>
-        <Button
-          variant={filterOpen || filterActiveCount > 0 ? "secondary" : "ghost"}
-          leadingIcon={<Filter size={16} />}
-          onClick={() => (filterOpen ? setFilterOpen(false) : openFilters())}
-          data-testid="tests-list-filter"
-        >
-          {t.content.filters}{filterActiveCount > 0 ? ` (${filterActiveCount})` : ""}
-        </Button>
-        {!isSearchMode && (
-          <div className="toolbar-sort">
-            <span className="toolbar-sort__label">Сортировка:</span>
-            <Select<SortKey>
-              size="s"
-              value={sortBy}
-              options={[
-                { value: "created_desc", label: "Новые сначала" },
-                { value: "updated_desc", label: "Недавно изменённые" },
-                { value: "title_asc", label: "По названию (А→Я)" },
-              ]}
-              onChange={(value) => handleSortChange(value)}
-              aria-label="Сортировка тестов"
-              data-testid="tests-list-sort"
-            />
-          </div>
         )}
-        <span className="tl-spacer" />
-        {!isSearchMode && (
-          <Button variant="ghost" leadingIcon={<ChevronsUpDown size={16} />} onClick={expandAll}>{t.content.expandAll}</Button>
+        count={filterActiveCount}
+        applied={filterChips.map((c) => ({ id: c.key, label: c.label }))}
+        filterButtonRef={filterButtonRef}
+        filterOpen={filterOpen}
+        onOpenFilter={toggleFilters}
+        onRemove={(id) => filterChips.find((c) => c.key === id)?.remove()}
+        onReset={resetFilters}
+        data-testid="tests-list-filterbar"
+        actions={(
+          <>
+            {!isSearchMode && (
+              <div className="toolbar-sort">
+                <span className="toolbar-sort__label">Сортировка:</span>
+                <Select<SortKey>
+                  size="s"
+                  value={sortBy}
+                  options={[
+                    { value: "created_desc", label: "Новые сначала" },
+                    { value: "updated_desc", label: "Недавно изменённые" },
+                    { value: "title_asc", label: "По названию (А→Я)" },
+                  ]}
+                  onChange={(value) => handleSortChange(value)}
+                  aria-label="Сортировка тестов"
+                  data-testid="tests-list-sort"
+                />
+              </div>
+            )}
+            {!isSearchMode && (
+              <Button variant="ghost" size="s" leadingIcon={<ChevronsUpDown width={14} height={14} aria-hidden="true" />} onClick={expandAll}>{t.content.expandAll}</Button>
+            )}
+            {!isSearchMode && (
+              <Button variant="ghost" size="s" leadingIcon={<ChevronsDownUp width={14} height={14} aria-hidden="true" />} onClick={collapseAll}>{t.content.collapseAll}</Button>
+            )}
+            {canImportPackage && (
+              <Button
+                variant="ghost"
+                size="s"
+                leadingIcon={<PackageOpen size={14} />}
+                onClick={() => setTransferOpen(true)}
+                data-testid="tests-list-import-package"
+              >
+                Импорт из пакета
+              </Button>
+            )}
+          </>
         )}
-        {!isSearchMode && (
-          <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
-        )}
-        {canImportPackage && (
-          <Button
-            variant="ghost"
-            leadingIcon={<PackageOpen size={16} />}
-            onClick={() => setTransferOpen(true)}
-            data-testid="tests-list-import-package"
-          >
-            Импорт из пакета
-          </Button>
-        )}
-        {filterOpen && (
-          <TestFilters value={testDraft} onChange={setTestDraft} onApply={applyFilters} onReset={resetFilters} authorOptions={authorOptions} />
-        )}
-      </div>
+      />
+      <TestFilters
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        anchorRef={filterButtonRef}
+        value={testDraft}
+        onChange={setTestDraft}
+        onApply={applyFilters}
+        onReset={resetDraft}
+        authorOptions={authorOptions}
+      />
 
       {transferOpen && (
         <TransferImportDialog
@@ -609,15 +626,6 @@ export function TestsListPage(): React.JSX.Element {
           onClose={() => setTransferOpen(false)}
           onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/tests"] })}
         />
-      )}
-
-      {filterChips.length > 0 && (
-        <div className="tl-chips">
-          <Cluster gap={2} wrap>
-            {filterChips.map((c) => <Chip key={c.key} size="s" onRemove={c.remove}>{c.label}</Chip>)}
-            <Button variant="ghost" size="s" onClick={resetFilters}>Очистить всё</Button>
-          </Cluster>
-        </div>
       )}
 
       {isError ? (

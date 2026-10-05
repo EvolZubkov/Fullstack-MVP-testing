@@ -215,7 +215,7 @@ describe("<TestsListPage /> — toolbar sort + filters", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Черновик"));
     fireEvent.click(screen.getByRole("button", { name: "Применить" }));
 
@@ -224,15 +224,15 @@ describe("<TestsListPage /> — toolbar sort + filters", () => {
     expect(chip).toBeInTheDocument();
 
     // Remove the single chip (commitFilter path).
-    fireEvent.click(screen.getByLabelText("Удалить"));
+    fireEvent.click(screen.getByLabelText(/^Снять условие/));
     await waitFor(() => expect(screen.queryByText(/Статус: Черновик/i)).toBeNull());
 
-    // Re-apply, then clear everything via «Очистить всё».
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
+    // Re-apply, then clear everything via «Сбросить фильтры».
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Черновик"));
     fireEvent.click(screen.getByRole("button", { name: "Применить" }));
     await screen.findByText(/Статус: Черновик/i);
-    fireEvent.click(screen.getByRole("button", { name: "Очистить всё" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сбросить фильтры" }));
     await waitFor(() => expect(screen.queryByText(/Статус: Черновик/i)).toBeNull());
   });
 });

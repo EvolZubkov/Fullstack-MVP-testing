@@ -2,9 +2,10 @@
  * @module features/tests/list/tests-filters
  *
  * Facet filter PANEL for the tests list — the «Тесты» analogue of the content
- * section's {@link ContentFilters}. A floating `tl-filterpop` card anchored under
- * the toolbar with a vertical stack of facets (Статус / Режим / Сценарий /
- * Владелец / Область) and a «Сбросить всё» / «Применить» footer. Edits a DRAFT;
+ * section's {@link ContentFilters}: the one filter form of the product (PRD-70 FR-70 -
+ * FR-78) — a ui-kit `FilterPanel` under the «Фильтр» button of the list's `FilterBar`,
+ * facets Статус / Режим / Сценарий / Владелец / Область and a «Сбросить» / «Применить»
+ * footer. Edits a DRAFT;
  * the list re-filters only on «Применить» (batched). Active-condition chips are
  * rendered by the page. Mirrors the content section so both author lists share
  * one filter UX.
@@ -12,7 +13,8 @@
  * Note: the list excludes archived tests upstream, so the «Статус» facet offers
  * Черновик / Опубликован only (the archive is a separate, deferred view).
  */
-import { Button, Checkbox, SegmentedControl, Select } from "@skillum/ui-kit";
+import type { RefObject } from "react";
+import { Checkbox, FilterPanel, FilterPanelGroup, SegmentedControl, Select } from "@skillum/ui-kit";
 import type { TestListEntry, TestListMode, TestListStatus, TestListFlowMode } from "./tests-list.types";
 
 export type TestScope = "all" | "mine" | "accessible";
@@ -29,7 +31,7 @@ export const EMPTY_TEST_FILTER: TestFilterValue = {
   statuses: [], modes: [], scenarios: [], author: "", scope: "all",
 };
 
-/** Number of active conditions (drives the "Фильтры (N)" badge + chips). */
+/** Number of active conditions (drives the counter of the «Фильтр» button + chips). */
 export function testFilterCount(f: TestFilterValue): number {
   return f.statuses.length + f.modes.length + f.scenarios.length + (f.author ? 1 : 0) + (f.scope !== "all" ? 1 : 0);
 }
@@ -69,61 +71,49 @@ export function testFacetMatch(e: TestListEntry, f: TestFilterValue): boolean {
 }
 
 interface TestFiltersProps {
+  /** The panel is open. */
+  open: boolean;
+  /** Closes without applying — the draft is dropped. */
+  onClose: () => void;
+  /** The «Фильтр» button of the bar the panel opens under. */
+  anchorRef: RefObject<HTMLElement | null>;
   value: TestFilterValue;
   onChange: (next: TestFilterValue) => void;
   onApply: () => void;
+  /** Clears the draft (not what is applied). */
   onReset: () => void;
   authorOptions: { value: string; label: string }[];
 }
 
-/** The facet popover (caller renders it only when open). */
-export function TestFilters({ value, onChange, onApply, onReset, authorOptions }: TestFiltersProps) {
+/** The facet panel — the one filter form of the product (PRD-70 FR-71). */
+export function TestFilters({ open, onClose, anchorRef, value, onChange, onApply, onReset, authorOptions }: TestFiltersProps) {
   return (
-    <div className="tl-filterpop" role="dialog" aria-label="Фильтры">
-      <div className="tl-filterpop__body">
-        <div className="tl-facet">
-          <span className="tl-facet__lbl">Статус</span>
-          <div className="tl-facet__row">
-            {STATUS_OPTS.map((o) => (
-              <Checkbox key={o.value} label={o.label} checked={value.statuses.includes(o.value)} onChange={(e) => onChange({ ...value, statuses: toggle(value.statuses, o.value, e.target.checked) })} />
-            ))}
-          </div>
-        </div>
+    <FilterPanel open={open} onClose={onClose} anchorRef={anchorRef} onApply={onApply} onReset={onReset}>
+      <FilterPanelGroup title="Статус" inline>
+        {STATUS_OPTS.map((o) => (
+          <Checkbox key={o.value} label={o.label} checked={value.statuses.includes(o.value)} onChange={(e) => onChange({ ...value, statuses: toggle(value.statuses, o.value, e.target.checked) })} />
+        ))}
+      </FilterPanelGroup>
 
-        <div className="tl-facet">
-          <span className="tl-facet__lbl">Режим</span>
-          <div className="tl-facet__row">
-            {MODE_OPTS.map((o) => (
-              <Checkbox key={o.value} label={o.label} checked={value.modes.includes(o.value)} onChange={(e) => onChange({ ...value, modes: toggle(value.modes, o.value, e.target.checked) })} />
-            ))}
-          </div>
-        </div>
+      <FilterPanelGroup title="Режим" inline>
+        {MODE_OPTS.map((o) => (
+          <Checkbox key={o.value} label={o.label} checked={value.modes.includes(o.value)} onChange={(e) => onChange({ ...value, modes: toggle(value.modes, o.value, e.target.checked) })} />
+        ))}
+      </FilterPanelGroup>
 
-        <div className="tl-facet">
-          <span className="tl-facet__lbl">Сценарий</span>
-          <div className="tl-facet__row">
-            {SCENARIO_OPTS.map((o) => (
-              <Checkbox key={o.value} label={o.label} checked={value.scenarios.includes(o.value)} onChange={(e) => onChange({ ...value, scenarios: toggle(value.scenarios, o.value, e.target.checked) })} />
-            ))}
-          </div>
-        </div>
+      <FilterPanelGroup title="Сценарий" inline>
+        {SCENARIO_OPTS.map((o) => (
+          <Checkbox key={o.value} label={o.label} checked={value.scenarios.includes(o.value)} onChange={(e) => onChange({ ...value, scenarios: toggle(value.scenarios, o.value, e.target.checked) })} />
+        ))}
+      </FilterPanelGroup>
 
-        <div className="tl-facet">
-          <span className="tl-facet__lbl">Владелец</span>
-          <Select value={value.author} onChange={(v) => onChange({ ...value, author: v })} options={[{ value: "", label: "Любой" }, ...authorOptions]} aria-label="Владелец" />
-        </div>
+      <FilterPanelGroup title="Владелец">
+        <Select value={value.author} onChange={(v) => onChange({ ...value, author: v })} options={[{ value: "", label: "Любой" }, ...authorOptions]} aria-label="Владелец" />
+      </FilterPanelGroup>
 
-        <div className="tl-facet">
-          <span className="tl-facet__lbl">Область</span>
-          <SegmentedControl<TestScope> value={value.scope} onChange={(v) => onChange({ ...value, scope: v })} items={TEST_SCOPE_OPTS} />
-        </div>
-      </div>
-
-      <div className="tl-filterpop__foot">
-        <Button variant="ghost" onClick={onReset}>Сбросить всё</Button>
-        <span className="tl-spacer" />
-        <Button variant="primary" onClick={onApply}>Применить</Button>
-      </div>
-    </div>
+      <FilterPanelGroup title="Область">
+        <SegmentedControl<TestScope> value={value.scope} onChange={(v) => onChange({ ...value, scope: v })} items={TEST_SCOPE_OPTS} />
+      </FilterPanelGroup>
+    </FilterPanel>
   );
 }

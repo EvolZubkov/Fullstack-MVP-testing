@@ -145,8 +145,8 @@ describe("<TestsListPage /> — filter facets", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     // Owner Select trigger shows «Любой» until a specific author is chosen.
     fireEvent.click(within(panel).getByRole("button", { name: "Любой" }));
     fireEvent.click(within(panel).getByRole("option", { name: "Марина Иванова" }));
@@ -155,7 +155,7 @@ describe("<TestsListPage /> — filter facets", () => {
     const chip = await screen.findByText(/Владелец: Марина Иванова/i);
     expect(chip).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Удалить"));
+    fireEvent.click(screen.getByLabelText(/^Снять условие/));
     await waitFor(() => expect(screen.queryByText(/Владелец: Марина Иванова/i)).toBeNull());
   });
 
@@ -164,8 +164,8 @@ describe("<TestsListPage /> — filter facets", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     fireEvent.click(within(panel).getByRole("button", { name: "Мои" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Применить" }));
 
@@ -179,8 +179,8 @@ describe("<TestsListPage /> — filter facets", () => {
     renderPage();
     await waitFor(() => screen.getByText("Основы информационной безопасности"));
 
-    fireEvent.click(screen.getByTestId("tests-list-filter"));
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     fireEvent.click(within(panel).getByRole("button", { name: "Доступные" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Применить" }));
 

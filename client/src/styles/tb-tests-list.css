@@ -84,59 +84,12 @@
 }
 .tb-unmapped-mark:hover { color: var(--ou-warning-strong, var(--ou-warning-default)); }
 
-/* ─── Toolbar (search + sort) ────────────────────────────────────────────── */
-.tb-tests-list .toolbar {
-  display: flex; align-items: center; gap: var(--ou-space-2);
-  margin-bottom: var(--ou-space-4);
-  flex-shrink: 0;
-}
-.tb-tests-list .search-input-wrap {
-  position: relative; flex: 1; max-width: var(--wf-size-340);
-}
-.tb-tests-list .search-input-wrap input { height: var(--wf-size-34); padding-left: var(--ou-space-7); width: 100%; }
-.tb-tests-list .search-icon {
-  position: absolute; left: var(--wf-space-9); top: 50%; transform: translateY(-50%);
-  width: var(--wf-space-14); height: var(--wf-space-14); color: var(--ou-fg-muted); pointer-events: none;
-}
-.tb-tests-list .search-clear {
-  font: var(--ou-text-body-s); color: var(--ou-accent-default);
-  background: none; border: none; cursor: pointer; padding: 0 var(--ou-space-1);
-  font-family: inherit; white-space: nowrap; flex-shrink: 0; text-decoration: underline;
-}
-.tb-tests-list .toolbar-sort {
-  display: flex; align-items: center; gap: var(--ou-space-2);
-  margin-left: auto; flex-shrink: 0;
-}
-.tb-tests-list .toolbar-sort__label {
-  font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap;
-}
-.tb-tests-list .toolbar-sort select {
-  height: var(--wf-size-34); padding: 0 var(--ou-space-3);
-  font: var(--ou-text-body-s); color: var(--ou-fg-default);
-  border: var(--wf-border-w) solid var(--ou-border-default);
-  border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated);
-}
-
-/* ─── Page title + filter (выравнивание со страницей «Темы и вопросы») ────── */
+/* ─── Filter bar (DS FilterBar; its panel is a FilterPanel — PRD-70 FR-70) ── */
 .tb-tests-list .tl-header { flex-shrink: 0; }
-.tb-tests-list .toolbar { position: relative; flex-wrap: wrap; }
-.tb-tests-list .tl-search { flex: 1; min-width: var(--wf-size-200); }
-.tb-tests-list .tl-search .ou-field { width: 100%; }
-.tb-tests-list .tl-spacer { flex: 1; }
-.tb-tests-list .toolbar-sort { margin-left: 0; }
-
-.tb-tests-list .tl-filterpop {
-  position: absolute; top: calc(100% + var(--ou-space-1)); left: 0; z-index: 30;
-  width: var(--wf-size-340); max-width: calc(100% - var(--ou-space-6) * 2);
-  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
-  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg);
-}
-.tb-tests-list .tl-filterpop__body { display: flex; flex-direction: column; gap: var(--ou-space-5); padding: var(--ou-space-4); max-height: 70vh; overflow: auto; }
-.tb-tests-list .tl-facet { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
-.tb-tests-list .tl-facet__lbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
-.tb-tests-list .tl-facet__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
-.tb-tests-list .tl-filterpop__foot { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-default); }
-.tb-tests-list .tl-chips { margin-bottom: var(--ou-space-3); }
+.tb-tests-list > .ou-filterbar { margin-bottom: var(--ou-space-4); flex-shrink: 0; }
+/* Sort sits among the bar's actions: a label and its select, as before. */
+.tb-tests-list .toolbar-sort { display: flex; align-items: center; gap: var(--ou-space-2); flex-shrink: 0; }
+.tb-tests-list .toolbar-sort__label { font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap; }
 
 /* ─── Tree container + 9-column grid (PRD-13: + "Владелец") ──────────────── */
 /* `scrollbar-gutter: stable` always reserves the scrollbar strip so opening a
