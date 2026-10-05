@@ -64,6 +64,20 @@
 .tb-content-tree .ct-ico--topic { color: var(--ou-accent-default); }
 .tb-content-tree .ct-cell { font: var(--ou-text-body-s); color: var(--ou-fg-default); text-align: center; padding: 0 var(--ou-space-2); }
 .tb-content-tree .ct-na { color: var(--ou-fg-muted); }
+/* PRD-70 FR-20 - FR-22: набор колонок «Качество» — Название | На ревизии | Переэкспонированы |
+   Не выдавались | Тестов | ⋯ (эскиз e7-question-bank, состояние «Качество»). */
+.tb-content-tree .ct-tree--quality .ct-thead,
+.tb-content-tree .ct-tree--quality .ct-row {
+  grid-template-columns: 1fr var(--wf-size-200, 200px) var(--wf-size-200, 200px) var(--wf-size-150, 150px) var(--wf-size-90, 88px) var(--wf-size-90, 88px);
+}
+/* Ячейка признака: метка и подпись под ней, по центру колонки. */
+.tb-content-tree .ct-tree--quality .ct-cell {
+  display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-1); padding-block: var(--ou-space-2);
+}
+.tb-content-tree .ct-cell-sub { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); text-align: center; }
+.tb-content-tree .ct-zero { color: var(--ou-fg-muted); }
+/* Метка «N на ревизии» у названия темы, папки и вопроса — не сжимается вместе с названием. */
+.tb-content-tree .ct-name .ou-tag { flex: none; }
 .tb-content-tree .ct-qmedia { color: var(--ou-fg-muted); width: var(--ou-space-4); height: var(--ou-space-4); display: inline-flex; flex: none; }
 
 /* Root label "Все темы (N)" */

@@ -4,7 +4,8 @@
  * Facet filter PANEL for the unified "Темы и вопросы" tree — the one filter form of
  * the product (PRD-70 FR-70 - FR-78, docs/wireframes/approved/filters-unified.html): a
  * ui-kit `FilterPanel` under the «Фильтр» button of the tree's `FilterBar`, with the
- * facets Тип вопроса / Сложность / Теги / Медиа / Владелец / Область and a «Сбросить» /
+ * facets Тип вопроса / Сложность / Теги / Медиа / Состояние (PRD-70 FR-23) / Владелец /
+ * Область and a «Сбросить» /
  * «Применить» footer. The panel edits a DRAFT filter; the tree re-filters only on
  * «Применить» (batching — keeps the tree responsive on large banks). Active-condition
  * chips are rendered by the bar. See docs/PLAN_content_axis_implementation.md.
@@ -13,6 +14,7 @@ import type { RefObject } from "react";
 import { Checkbox, FilterPanel, FilterPanelGroup, SegmentedControl, Select, Slider, Switch, TagInput } from "@skillum/ui-kit";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import { t } from "@/lib/i18n";
+import { STATE_OPTS, type ContentState } from "./bank-quality";
 
 export type { QuestionType } from "@shared/questions/question-type";
 import type { QuestionType } from "@shared/questions/question-type";
@@ -30,10 +32,12 @@ export interface ContentFilterValue {
   media: MediaBucket[];
   author: string; // user id, "" = any
   scope: ContentScope;
+  /** PRD-70 FR-23: состояние вопроса по тестам читателя — отмеченные через «или». */
+  states: ContentState[];
 }
 
 export const EMPTY_FILTER: ContentFilterValue = {
-  types: [], diffMin: 0, diffMax: 100, diffUnset: false, tags: [], media: [], author: "", scope: "all",
+  types: [], diffMin: 0, diffMax: 100, diffUnset: false, tags: [], media: [], author: "", scope: "all", states: [],
 };
 
 /** Whether the difficulty facet narrows results (interval or «Не задана»). */
@@ -43,7 +47,7 @@ export function diffActive(f: ContentFilterValue): boolean {
 
 /** Number of active conditions (drives the "Фильтры (N)" badge + chips). */
 export function filterCount(f: ContentFilterValue): number {
-  return f.types.length + (diffActive(f) ? 1 : 0) + f.tags.length + f.media.length + (f.author ? 1 : 0) + (f.scope !== "all" ? 1 : 0);
+  return f.types.length + (diffActive(f) ? 1 : 0) + f.tags.length + f.media.length + (f.author ? 1 : 0) + (f.scope !== "all" ? 1 : 0) + f.states.length;
 }
 
 export const TYPE_OPTS: { value: QuestionType; label: string }[] = [
@@ -86,10 +90,12 @@ interface ContentFiltersProps {
   onReset: () => void;
   tagOptions: string[];
   authorOptions: { value: string; label: string }[];
+  /** Показывать «Состояние»: оно из аналитики, и без права на неё судить не по чему. */
+  showStates?: boolean;
 }
 
 /** The facet panel — the one filter form of the product (PRD-70 FR-71). */
-export function ContentFilters({ open, onClose, anchorRef, value, onChange, onApply, onReset, tagOptions, authorOptions }: ContentFiltersProps) {
+export function ContentFilters({ open, onClose, anchorRef, value, onChange, onApply, onReset, tagOptions, authorOptions, showStates = false }: ContentFiltersProps) {
   return (
     <FilterPanel open={open} onClose={onClose} anchorRef={anchorRef} onApply={onApply} onReset={onReset}>
       <FilterPanelGroup title="Тип вопроса" inline>
@@ -133,6 +139,14 @@ export function ContentFilters({ open, onClose, anchorRef, value, onChange, onAp
           <Checkbox key={o.value} label={o.label} checked={value.media.includes(o.value)} onChange={(e) => onChange({ ...value, media: toggle(value.media, o.value, e.target.checked) })} />
         ))}
       </FilterPanelGroup>
+
+      {showStates && (
+        <FilterPanelGroup title="Состояние" inline>
+          {STATE_OPTS.map((o) => (
+            <Checkbox key={o.value} label={o.label} checked={value.states.includes(o.value)} onChange={(e) => onChange({ ...value, states: toggle(value.states, o.value, e.target.checked) })} />
+          ))}
+        </FilterPanelGroup>
+      )}
 
       <FilterPanelGroup title="Владелец">
         <Select value={value.author} onChange={(v) => onChange({ ...value, author: v })} options={[{ value: "", label: "Любой" }, ...authorOptions]} aria-label="Владелец" />
