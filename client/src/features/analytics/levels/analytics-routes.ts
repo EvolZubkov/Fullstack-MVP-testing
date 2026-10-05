@@ -7,6 +7,7 @@
  * /author/analytics                                   общая
  * /author/analytics/tests/:testId                     тест
  * /author/analytics/tests/:testId/questions/:qId      вопрос в тесте
+ * /author/analytics/questions/:qId                    вопрос банка (PRD-70)
  * ```
  *
  * Модуль чистый: сборка адресов, разбор старого адреса и правила переноса фильтра проверяются
@@ -20,6 +21,8 @@ export const ANALYTICS_ROUTE = "/author/analytics";
 export const ANALYTICS_TEST_ROUTE = "/author/analytics/tests/:testId";
 /** Уровень вопроса в тесте. */
 export const ANALYTICS_QUESTION_ROUTE = "/author/analytics/tests/:testId/questions/:questionId";
+/** PRD-70 FR-40: уровень «вопрос банка» — вопрос по всем тестам читателя. */
+export const ANALYTICS_BANK_QUESTION_ROUTE = "/author/analytics/questions/:questionId";
 /** Прежний адрес уровня теста — перенаправляется на новый, на него ведут закладки. */
 export const LEGACY_TEST_ANALYTICS_ROUTE = "/author/tests/:testId/analytics";
 
@@ -66,6 +69,15 @@ export function testHref(testId: string, filter: Partial<RegistryFilter> = {}, t
 export function questionHref(testId: string, questionId: string, filter: Partial<RegistryFilter> = {}): string {
   const conditions = { ...filter, testIds: [] };
   return `${ANALYTICS_ROUTE}/tests/${encodeURIComponent(testId)}/questions/${encodeURIComponent(questionId)}${filterToSearch(conditions)}`;
+}
+
+/**
+ * Адрес страницы вопроса банка (PRD-70 FR-40): условий отбора у неё нет — строки по тестам.
+ *
+ * @param questionId вопрос
+ */
+export function bankQuestionHref(questionId: string): string {
+  return `${ANALYTICS_ROUTE}/questions/${encodeURIComponent(questionId)}`;
 }
 
 /**

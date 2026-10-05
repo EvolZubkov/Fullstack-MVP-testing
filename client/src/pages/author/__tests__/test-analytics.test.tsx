@@ -413,8 +413,10 @@ describe("<TestAnalyticsPage />", () => {
     expect(await screen.findByText("Вопрос в этом тесте")).toBeInTheDocument();
     expect(screen.getByText("настроено в тесте")).toBeInTheDocument();
     expect(screen.getByText("выдаётся")).toBeInTheDocument();
-    expect(screen.getByText("Этот вопрос в других тестах")).toBeInTheDocument();
-    expect(screen.getByText("Антикоррупционный минимум")).toBeInTheDocument();
+    // PRD-70 FR-50: другие тесты и редакции — на странице вопроса банка; здесь — карточка с переходом.
+    expect(screen.getByText("Вопрос в банке")).toBeInTheDocument();
+    expect(screen.getByText(/Выдавался ещё в 1 тесте за 12 мес./)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Статистика вопроса банка" })).toBeInTheDocument();
     // Пришли по ссылке, порядка таблицы нет — а таблица «Качества» пуста: соседей нет.
     expect(screen.getByRole("button", { name: /Предыдущий/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Следующий/ })).toBeDisabled();
@@ -422,9 +424,9 @@ describe("<TestAnalyticsPage />", () => {
     expect((await screen.findAllByRole("menuitem")).map(item => item.textContent))
       .toEqual(["Открыть вопрос в теме", "Прохождения с ошибкой", "Исключить из выдачи…"]);
 
-    // Строка другого теста ведёт на уровень этого же вопроса в том тесте.
-    fireEvent.click(screen.getByText("Антикоррупционный минимум"));
-    await waitFor(() => expect(memory.history?.at(-1)).toBe("/author/analytics/tests/t2/questions/q1"));
+    // PRD-70 FR-50: «Статистика вопроса банка» ведёт на страницу вопроса по всем тестам.
+    fireEvent.click(screen.getByRole("button", { name: "Статистика вопроса банка" }));
+    await waitFor(() => expect(memory.history?.at(-1)).toBe("/author/analytics/questions/q1"));
   });
 
   it("«Предыдущий / Следующий» идут по порядку таблицы, из которой пришли; крошка — на её вкладку (Э3.3)", async () => {

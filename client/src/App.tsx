@@ -20,6 +20,7 @@ import TestsPage from "@/pages/author/tests";
 import AuthorTemplatesPage from "@/pages/author/templates";
 import AnalyticsPage from "@/pages/author/analytics";
 import TestAnalyticsPage from "@/pages/author/test-analytics";
+import BankQuestionAnalyticsPage from "@/pages/author/bank-question-analytics";
 import DebugPlayerPage from "@/features/tests/debug-player/debug-player-page";
 import ReviewPlayerPage from "@/pages/review/review-player-page";
 import UsersPage from "@/pages/author/users";
@@ -33,6 +34,7 @@ import HistoryPage from "@/pages/learner/history";
 import { LearnerLayout } from "@/pages/learner/layout";
 import LogsPage from "@/pages/author/logs";
 import {
+  ANALYTICS_BANK_QUESTION_ROUTE,
   ANALYTICS_QUESTION_ROUTE,
   ANALYTICS_ROUTE,
   ANALYTICS_TEST_ROUTE,
@@ -152,6 +154,15 @@ function Router() {
 
       {/* Э2: три уровня аналитики — общая, тест, вопрос в тесте. Вопрос — та же страница теста:
           разбор вопроса пока живёт в ней (отдельную страницу уровня делает Э3). */}
+      {/* PRD-70 FR-40: вопрос банка — по всем тестам читателя. */}
+      <Route path={ANALYTICS_BANK_QUESTION_ROUTE}>
+        <ProtectedRoute requiredPermission="analytics.read">
+          <AuthorLayout>
+            <BankQuestionAnalyticsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
       <Route path={ANALYTICS_QUESTION_ROUTE}>
         <ProtectedRoute requiredPermission="analytics.read">
           <AuthorLayout>

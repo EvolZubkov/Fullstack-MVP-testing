@@ -33,7 +33,10 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// Навигация без хука: дерево живёт и на подменённом `window.location` (выгрузка в Excel в тестах).
+import { navigate } from "wouter/use-browser-location";
 import {
+  BarChart3,
   Bookmark,
   Braces,
   CheckSquare,
@@ -101,6 +104,7 @@ import {
   type QualityTotals,
 } from "@/features/content/bank-quality";
 import { TermHint } from "@/features/analytics/test/term-hint";
+import { bankQuestionHref } from "@/features/analytics/levels/analytics-routes";
 import { FoldAllButtons, type SectionFold } from "@/features/tests/editor/sections/section-fold";
 
 /** PRD-70 FR-20: набор колонок дерева — «Содержание» (как было) или «Качество». */
@@ -717,7 +721,16 @@ export function ContentTree() {
           <span className="ct-qtype" title={TYPE_LABEL[type]}><Icon size={16} /></span>
           <TruncatedLabel className="ct-name__label" text={q.prompt} />
           {q.mediaType ? <span className="ct-qmedia" title="С медиа"><ImageIcon size={16} /></span> : null}
-          {!quality && canAnalytics && qualityById.get(q.id)?.review ? <Tag tone="warning" size="s">на ревизии</Tag> : null}
+          {/* FR-21: метка «на ревизии» ведёт на статистику вопроса банка. */}
+          {!quality && canAnalytics && qualityById.get(q.id)?.review ? (
+            <a
+              className="ou-link-reset"
+              href={bankQuestionHref(q.id)}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(bankQuestionHref(q.id)); }}
+            >
+              <Tag tone="warning" size="s">на ревизии</Tag>
+            </a>
+          ) : null}
         </div>
         {quality ? questionQualityCells(qualityById.get(q.id)) : (
           <>
@@ -731,6 +744,8 @@ export function ContentTree() {
         )}
         <RowActions open={menuOpen} label={t.content.actionsQuestion} onToggle={() => setMenu(menuOpen ? null : { kind: "question", id: q.id })}>
           <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setEditorTarget({ question: q }); }} testId={`ct-q-edit-${q.id}`}>{t.content.editQuestion}</MenuItem>
+          {/* PRD-70 FR-25: статистика вопроса по всем тестам читателя. */}
+          {canAnalytics && <MenuItem icon={<BarChart3 size={16} />} onClick={() => { setMenu(null); navigate(bankQuestionHref(q.id)); }} testId={`ct-q-stats-${q.id}`}>Статистика</MenuItem>}
           {can("questions.manage") && <MenuItem icon={<Copy size={16} />} onClick={() => { setMenu(null); duplicateQuestionMut.mutate(q.id); }}>{t.questions.duplicate}</MenuItem>}
           {can("questions.manage") && <MenuItem icon={<Move size={16} />} onClick={() => { setMenu(null); setMoveQ({ ids: [q.id], topicId: q.topicId }); }}>{t.content.moveQuestionToTopic}</MenuItem>}
           {can("questions.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); deleteQuestion(q); }}>{t.content.deleteSelected}</MenuItem>}

@@ -10,7 +10,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { OtherTestsCard, QuestionInTestCard, type QuestionCardView } from "../question-card";
+import { QuestionInTestCard, type QuestionCardView } from "../question-card";
 
 const CARD: QuestionCardView = {
   questionId: "q1", prompt: "Расставьте этапы закупки", questionType: "ranking",
@@ -49,32 +49,5 @@ describe("QuestionInTestCard", () => {
     render(<QuestionInTestCard card={CARD} currentSince={null} onOpenInTopic={onOpenInTopic} />);
     await userEvent.click(screen.getByRole("button", { name: "Открыть вопрос в теме" }));
     expect(onOpenInTopic).toHaveBeenCalled();
-  });
-});
-
-describe("OtherTestsCard", () => {
-  it("трудность или «мало данных»; строка ведёт в тот тест", async () => {
-    const onOpen = vi.fn();
-    render(
-      <OtherTestsCard
-        windowMonths={12}
-        onOpen={onOpen}
-        rows={[
-          { testId: "t2", title: "Антикоррупционный минимум", delivered: 412, observations: 412, difficulty: 0.58 },
-          { testId: "t3", title: "Вводный курс", delivered: 96, observations: 6, difficulty: null },
-        ]}
-      />,
-    );
-
-    expect(screen.getByText("Тесты, где вопрос выдавался за последние 12 мес.")).toBeTruthy();
-    expect(screen.getByText("0,58")).toBeTruthy();
-    expect(screen.getByText("мало данных")).toBeTruthy();
-    await userEvent.click(screen.getByText("Вводный курс"));
-    expect(onOpen).toHaveBeenCalledWith("t3");
-  });
-
-  it("пусто — говорит словами", () => {
-    render(<OtherTestsCard windowMonths={12} onOpen={vi.fn()} rows={[]} />);
-    expect(screen.getByText("В других тестах вопрос за это время не выдавался")).toBeTruthy();
   });
 });

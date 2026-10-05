@@ -9,13 +9,12 @@
  * «настроено в тесте». Варианты ответа отдельно не повторяются — их текст и пометка верного уже
  * есть в разборе; у типов без таблицы вариантов здесь стоит «Верный ответ» словами.
  *
- * «Этот вопрос в других тестах» — тесты, где вопрос выдавался за окно экспозиции, с объёмом и
- * трудностью; строка ведёт на уровень вопроса в том тесте.
+ * Строки «Этот вопрос в других тестах» по-прежнему приходят с карточкой: по их числу страница
+ * подписывает карточку «Вопрос в банке» (PRD-70 FR-50), а сами тесты — на странице вопроса банка.
  */
-import { ChevronRight } from "lucide-react";
 
 import {
-  Button, Card, CardBody, CardHeader, DataGrid, Grid, IconButton, Stack, Tag, Text,
+  Button, Card, CardBody, CardHeader, Grid, Stack, Tag, Text,
 } from "@skillum/ui-kit";
 import { renderBlanksText } from "@shared/questions/blanks-render";
 
@@ -151,75 +150,4 @@ export function QuestionInTestCard({ card, currentSince, onOpenInTopic, measurem
   );
 }
 
-/** Свойства блока «Этот вопрос в других тестах». */
-export interface OtherTestsCardProps {
-  rows: OtherTestView[];
-  /** Окно экспозиции инстанса в месяцах — для подзаголовка. */
-  windowMonths: number;
-  onOpen: (testId: string) => void;
-}
 
-/**
- * «Этот вопрос в других тестах».
- *
- * @param props - строки, окно экспозиции, переход на уровень вопроса в другом тесте
- * @returns карточка со списком тестов
- */
-export function OtherTestsCard({ rows, windowMonths, onOpen }: OtherTestsCardProps) {
-  const columns = [
-    {
-      key: "title",
-      header: "Тест",
-      render: (row: OtherTestView) => <span className="ou-grid__cell-strong tb-cell-wrap">{row.title}</span>,
-    },
-    {
-      key: "observations",
-      header: "Наблюдений",
-      align: "center" as const,
-      numeric: true,
-      render: (row: OtherTestView) => row.observations,
-    },
-    {
-      key: "difficulty",
-      header: "Трудность",
-      align: "center" as const,
-      numeric: true,
-      render: (row: OtherTestView) => (row.difficulty === null
-        ? <Text variant="body-s" tone="muted">мало данных</Text>
-        : num(row.difficulty)),
-    },
-    {
-      key: "open",
-      header: "",
-      width: "4%",
-      render: (row: OtherTestView) => (
-        <IconButton
-          variant="ghost"
-          size="s"
-          aria-label={`Вопрос в тесте «${row.title}»`}
-          title="Вопрос в этом тесте"
-          icon={<ChevronRight size={14} />}
-          onClick={event => { event.stopPropagation(); onOpen(row.testId); }}
-        />
-      ),
-    },
-  ];
-
-  return (
-    <Card>
-      <CardHeader
-        title="Этот вопрос в других тестах"
-        subtitle={`Тесты, где вопрос выдавался за последние ${windowMonths} мес.`}
-      />
-      <CardBody>
-        <DataGrid
-          columns={columns}
-          rows={rows}
-          rowKey={row => row.testId}
-          onRowClick={row => onOpen(row.testId)}
-          emptyMessage="В других тестах вопрос за это время не выдавался"
-        />
-      </CardBody>
-    </Card>
-  );
-}

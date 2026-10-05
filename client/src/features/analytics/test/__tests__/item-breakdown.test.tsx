@@ -5,7 +5,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { ItemBreakdownPanel, type ItemBreakdownView, type OptionRow } from "../item-breakdown";
+import { ItemBreakdownPanel, versionLabel, type ItemBreakdownView, type OptionRow } from "../item-breakdown";
 import { termOrText } from "./term-text";
 
 function option(over: Partial<OptionRow> & Pick<OptionRow, "index" | "label">): OptionRow {
@@ -263,138 +263,27 @@ describe("ItemBreakdownPanel", () => {
  * PRD-66 FR-49: разбор задания — три блока и ничего между ними: ряд плиток, таблица вариантов,
  * таблица версий содержания. Версии — последними: это разрез ВЫБОРКИ, а не свойство задания.
  */
-describe("ItemBreakdownPanel — порядок блоков (FR-49)", () => {
-  const versions = [
-    { psychoHash: "a1b2c3d4e5", observations: 120, difficulty: 0.4, firstAt: "2026-09-01T00:00:00Z", lastAt: "2026-09-10T00:00:00Z" },
-    { psychoHash: "f6e5d4c3b2", observations: 148, difficulty: 0.55, firstAt: "2026-09-11T00:00:00Z", lastAt: "2026-09-20T00:00:00Z" },
-  ];
-
-  it("варианты ответа идут раньше версий содержания", () => {
-    render(<ItemBreakdownPanel
-      view={view({ versions } as never)}
-      onBack={() => {}}
-      onSelectVersion={() => {}}
-    />);
-
-    const options = screen.getByText(termOrText("Варианты ответа"));
-    const versionsTitle = screen.getByText(termOrText(/Редакции содержания|Версии содержания/));
-    expect(options.compareDocumentPosition(versionsTitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it("заголовки таблицы версий — как в эскизе, с подсказками (FR-14b)", () => {
-    render(<ItemBreakdownPanel
-      view={view({ versions } as never)}
-      onBack={() => {}}
-      onSelectVersion={() => {}}
-    />);
-
-    expect(screen.getByText(termOrText("Версии содержания"))).toBeTruthy();
-    for (const term of ["Редакция", "n", "Статистика карточки"]) {
-      expect(screen.getByText(termOrText(term)).closest("[aria-describedby]"), term).not.toBeNull();
-    }
-    // «Трудность» есть и в плитке, и в заголовке версий — подсказка у обеих.
-    for (const label of screen.getAllByText(termOrText("Трудность"))) {
-      expect(label.closest("[aria-describedby]")).not.toBeNull();
-    }
-    expect(screen.queryByText(termOrText("Наблюдений"))).toBeNull();
-    expect(screen.getByText(termOrText("Дискриминативность")).closest("[aria-describedby]")).not.toBeNull();
-  });
-});
-
-/** Таблица версий содержания по эскизу: подписи строк, n, r и отметка выбранной редакции. */
-describe("ItemBreakdownPanel — таблица версий (FR-49a, FR-49b)", () => {
+/**
+ * PRD-70 FR-50, FR-51: версии содержания ушли со страницы вопроса в тесте на страницу вопроса банка,
+ * выбор редакции — в шапку страницы. В разборе карточки версий больше нет, а подписи редакций для
+ * выбора в шапке — та же `versionLabel`.
+ */
+describe("ItemBreakdownPanel — версии содержания (PRD-70 FR-50, FR-51)", () => {
   const VERSIONS = [
     { psychoHash: "cur", observations: 268, difficulty: 0.41, itemRest: 0.34, firstAt: "2026-09-04T12:00:00Z", lastAt: "2026-09-24T12:00:00Z" },
     { psychoHash: "old", observations: 141, difficulty: 0.52, itemRest: 0.19, firstAt: "2026-03-12T12:00:00Z", lastAt: "2026-09-03T12:00:00Z" },
     { psychoHash: null, observations: 96, difficulty: 0.47, itemRest: null, firstAt: "2026-01-10T12:00:00Z", lastAt: "2026-09-22T12:00:00Z" },
   ];
 
-  /** Ячейки строки таблицы версий по подписи первой колонки. */
-  function rowOf(title: string): HTMLElement {
-    return screen.getByText(termOrText(title)).closest("tr") as HTMLElement;
-  }
-
-  it("подписи строк: текущая, прежняя с диапазоном дат и «Версия неизвестна»", () => {
-    render(<ItemBreakdownPanel
-      view={view({ versions: VERSIONS, currentVersion: "cur", selectedVersion: "cur" })}
-      onBack={() => {}}
-      onSelectVersion={() => {}}
-    />);
-
-    expect(screen.getByText(termOrText("С 04.09.2026 — текущая"))).toBeTruthy();
-    expect(screen.getByText(termOrText("12.03.2026 — 03.09.2026"))).toBeTruthy();
-    expect(screen.getByText(termOrText("предыдущая редакция"))).toBeTruthy();
-    expect(screen.getByText(termOrText("Версия неизвестна"))).toBeTruthy();
-    // Граница серии без отпечатка — день, с которого в выборке есть редакции с ним.
-    expect(screen.getByText(termOrText("импорт выгрузок и прохождения до 12.03.2026"))).toBeTruthy();
+  it("карточки «Версии содержания» в разборе нет", () => {
+    render(<ItemBreakdownPanel view={view({ versions: VERSIONS, currentVersion: "cur", selectedVersion: "cur" })} onBack={() => {}} />);
+    expect(screen.queryByText("Версии содержания")).toBeNull();
   });
 
-  it("текущая редакция — первой, прежние от новых к старым, «Версия неизвестна» — последней", () => {
-    // Сервер отдаёт серии в любом порядке; эскиз ставит «стало» над «было» (приёмка 5.5).
-    const shuffled = [VERSIONS[2], VERSIONS[1], VERSIONS[0]];
-    render(<ItemBreakdownPanel
-      view={view({ versions: shuffled, currentVersion: "cur", selectedVersion: "cur" })}
-      onBack={() => {}}
-      onSelectVersion={() => {}}
-    />);
-
-    const labels = [
-      screen.getByText(termOrText("С 04.09.2026 — текущая")),
-      screen.getByText(termOrText("12.03.2026 — 03.09.2026")),
-      screen.getByText(termOrText("Версия неизвестна")),
-    ];
-    expect(labels[0].compareDocumentPosition(labels[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(labels[1].compareDocumentPosition(labels[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it("строка несёт n, трудность и дискриминативность; без r — прочерк", () => {
-    render(<ItemBreakdownPanel
-      view={view({ versions: VERSIONS, currentVersion: "cur", selectedVersion: "cur" })}
-      onBack={() => {}}
-      onSelectVersion={() => {}}
-    />);
-
-    const old = rowOf("12.03.2026 — 03.09.2026");
-    expect(old.textContent).toContain("141");
-    expect(old.textContent).toContain("0,52");
-    expect(old.textContent).toContain("0,19");
-    const unknown = rowOf("Версия неизвестна");
-    expect(unknown.textContent).toContain("96");
-    expect(unknown.textContent).toContain("—");
-  });
-
-  it("текущая редакция выбрана по умолчанию, остальные — кнопка «Показать»", () => {
-    render(<ItemBreakdownPanel
-      view={view({ versions: VERSIONS, currentVersion: "cur", selectedVersion: "cur" })}
-      onBack={() => {}}
-      onSelectVersion={() => {}}
-    />);
-
-    expect(rowOf("С 04.09.2026 — текущая").querySelector(".ou-tag--info")?.textContent).toBe("Выбрана");
-    expect(screen.getAllByText(termOrText("Выбрана"))).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Показать" })).toHaveLength(2);
-    expect(screen.queryByText(termOrText(/все редакции вместе/))).toBeNull();
-  });
-
-  it("«Показать» переносит выбор в нажатую строку", () => {
-    const picked: Array<string | null | undefined> = [];
-    const { rerender } = render(<ItemBreakdownPanel
-      view={view({ versions: VERSIONS, currentVersion: "cur", selectedVersion: "cur" })}
-      onBack={() => {}}
-      onSelectVersion={v => picked.push(v)}
-    />);
-
-    const button = rowOf("Версия неизвестна").querySelector("button") as HTMLButtonElement;
-    fireEvent.click(button);
-    expect(picked).toEqual([null]);
-
-    rerender(<ItemBreakdownPanel
-      view={view({ versions: VERSIONS, currentVersion: "cur", selectedVersion: null })}
-      version={null}
-      onBack={() => {}}
-      onSelectVersion={v => picked.push(v)}
-    />);
-    expect(rowOf("Версия неизвестна").textContent).toContain("Выбрана");
-    expect(rowOf("С 04.09.2026 — текущая").querySelector("button")?.textContent).toBe("Показать");
+  it("подписи редакций: текущая, прежняя с диапазоном дат и «Версия неизвестна»", () => {
+    expect(versionLabel(VERSIONS[0], "cur", null)).toEqual({ title: "С 04.09.2026 — текущая", sub: null });
+    expect(versionLabel(VERSIONS[1], "cur", null)).toEqual({ title: "12.03.2026 — 03.09.2026", sub: "предыдущая редакция" });
+    expect(versionLabel(VERSIONS[2], "cur", "2026-03-12T12:00:00Z"))
+      .toEqual({ title: "Версия неизвестна", sub: "импорт выгрузок и прохождения до 12.03.2026" });
   });
 });

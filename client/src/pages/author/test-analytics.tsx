@@ -35,6 +35,7 @@ import {
     BreakdownTitle,
     breakdownSubtitle,
     ItemBreakdownPanel,
+    versionLabel,
     type ItemBreakdownView,
 } from "@/features/analytics/test/item-breakdown";
 import { AnalyticsHeader } from "@/features/analytics/levels/analytics-header";
@@ -46,6 +47,7 @@ import { invalidateAnalytics } from "@/features/analytics/invalidate-analytics";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useParams, useSearch } from "wouter";
 import {
+    bankQuestionHref,
     filterOutOfTest,
     generalHref,
     questionHref,
@@ -65,6 +67,7 @@ import {
     IconButton,
     MenuItem,
     MenuTrigger,
+    Select,
     Stack,
     Tabs,
     Tag,
@@ -87,7 +90,6 @@ import {
 import { PassageRegistry, type RegistryRow } from "@/features/analytics/registry/passage-registry";
 import { TestSlicesTab } from "@/features/analytics/slices/test-slices-tab";
 import {
-    OtherTestsCard,
     QuestionInTestCard,
     type QuestionCardView,
 } from "@/features/analytics/test/question-card";
@@ -115,6 +117,7 @@ import { useRegistryDictionaries, useTestDictionary } from "@/features/analytics
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import {
     ArrowLeft,
+    BarChart3,
     ChevronLeft,
     ChevronRight,
     MoreHorizontal,
@@ -305,6 +308,27 @@ function formatDuration(seconds: number | null): string {
 
 
 /** Строка «подпись — значение» под текстом вопроса (Ответ / Эталон / Вклад). */
+
+/** Ключ редакции для выбора: «версия неизвестна» — пустая строка. */
+function versionKeyOf(hash: string | null | undefined): string {
+    return hash ?? "";
+}
+
+/**
+ * PRD-70 FR-50: подзаголовок карточки «Вопрос в банке» — где ещё выдавался и сколько редакций.
+ *
+ * @param otherTests в скольких других тестах вопрос выдавался за окно
+ * @param windowMonths окно счётчика выдач
+ * @param versions сколько редакций содержания в выборке
+ */
+function bankCardSubtitle(otherTests: number, windowMonths: number, versions: number): string {
+    const where = otherTests > 0
+        ? `Выдавался ещё в ${otherTests} ${pluralize(otherTests, "тесте", "тестах", "тестах")} за ${windowMonths} мес.`
+        : `В других тестах за ${windowMonths} мес. не выдавался`;
+    return versions > 1
+        ? `${where} · ${versions} ${pluralize(versions, "редакция", "редакции", "редакций")} содержания`
+        : where;
+}
 
 export default function TestAnalyticsPage() {
     // Э2: страница отвечает двум уровням — тесту и вопросу в тесте. Вопрос — сегмент адреса
@@ -982,6 +1006,12 @@ export default function TestAnalyticsPage() {
         // Э4б: вопросы живут на одной вкладке — крошка теста ведёт на неё.
         const sourceTab = "questions";
         const currentSince = breakdown?.versions?.find(row => row.psychoHash === breakdown.currentVersion)?.firstAt ?? null;
+        // PRD-70 FR-51: редакции для выбора в шапке — текущая первой, прежние от новых к старым,
+        // «версия неизвестна» последней (порядок прежней карточки «Версии содержания»).
+        const breakdownVersions = [...(breakdown?.versions ?? [])].sort((a, b) => {
+            const rank = (row: typeof a) => (row.psychoHash === null ? 2 : row.psychoHash === breakdown?.currentVersion ? 0 : 1);
+            return rank(a) - rank(b) || (b.lastAt < a.lastAt ? -1 : b.lastAt > a.lastAt ? 1 : 0);
+        });
         /**
          * Э4а: полный вид распределения ответов — по типу вопроса (эскиз approved/e4a). У выбора он
          * — таблица «Варианты ответа» разбора; здесь — остальные типы. Сжатые данные (разброс,
@@ -1039,6 +1069,20 @@ export default function TestAnalyticsPage() {
                     subtitle={notGraded ? answeredCaption : breakdown?.item ? breakdownSubtitle(breakdown) : answeredCaption}
                     actions={(
                         <>
+                            {/* PRD-70 FR-51: выбор редакции — в шапке; версии содержания целиком — на
+                                странице вопроса банка. */}
+                            {breakdownVersions.length > 1 ? (
+                                <Select
+                                    size="s"
+                                    aria-label="Редакция"
+                                    value={versionKeyOf(breakdownVersion !== undefined ? breakdownVersion : breakdown?.selectedVersion)}
+                                    onChange={key => setBreakdownVersion(key === "" ? null : key)}
+                                    options={breakdownVersions.map(row => ({
+                                        value: versionKeyOf(row.psychoHash),
+                                        label: `Редакция: ${versionLabel(row, breakdown?.currentVersion, null).title}`,
+                                    }))}
+                                />
+                            ) : null}
                             <Button
                                 variant="secondary"
                                 size="s"
@@ -1123,8 +1167,6 @@ export default function TestAnalyticsPage() {
                     ? (
                         <ItemBreakdownPanel
                             view={breakdown}
-                            version={breakdownVersion}
-                            onSelectVersion={setBreakdownVersion}
                             minObservations={analytics.minObservations}
                             distribution={distribution}
                         />
@@ -1134,12 +1176,24 @@ export default function TestAnalyticsPage() {
                         // известно, вместо вечного «Считаем психометрику».
                         ? <Stack gap={4}>{distribution}</Stack>
                         : <LoadingState message="Считаем психометрику..." />}
+                {/* PRD-70 FR-50: вопрос по другим тестам и его редакции — на странице вопроса банка. */}
                 {questionCard?.questionId ? (
-                    <OtherTestsCard
-                        rows={questionCard.otherTests ?? []}
-                        windowMonths={questionCard.windowMonths}
-                        onOpen={otherTestId => navigate(questionHref(otherTestId, routeQuestionId, {}))}
-                    />
+                    <Card variant="outlined">
+                        <CardHeader
+                            title="Вопрос в банке"
+                            subtitle={bankCardSubtitle(questionCard.otherTests?.length ?? 0, questionCard.windowMonths, breakdownVersions.length)}
+                            trail={(
+                                <Button
+                                    variant="secondary"
+                                    size="s"
+                                    leadingIcon={<BarChart3 size={14} aria-hidden="true" />}
+                                    onClick={() => navigate(bankQuestionHref(routeQuestionId))}
+                                >
+                                    Статистика вопроса банка
+                                </Button>
+                            )}
+                        />
+                    </Card>
                 ) : null}
                 <DeliveryExclusionDialog
                     target={excludeTarget}

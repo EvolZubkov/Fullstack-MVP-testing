@@ -130,4 +130,13 @@ describe("bankQuestionStats", () => {
     mocks.storage.getQuestionsByIds.mockResolvedValue([]);
     expect(await bankQuestionStats("nope", QUALITIES as never, () => true)).toBeNull();
   });
+
+  it("время — из разбора вопроса; телеметрия — когда разбор времени не знает", async () => {
+    mocks.computeItemBreakdown.mockReturnValue({
+      ...breakdown([CUR]),
+      item: { ...breakdown([CUR]).item, timing: { medianMs: 31_000 } },
+    });
+    const stats = await bankQuestionStats("q1", QUALITIES as never, id => id === "t1");
+    expect(stats!.rows[0].latencyMedianMs).toBe(31_000);
+  });
 });

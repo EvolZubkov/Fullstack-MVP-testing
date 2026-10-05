@@ -31,7 +31,9 @@ import {
 } from "./answer-rules/answer-rules-model";
 import type { AnswerRuleSet } from "@shared/answer-check";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Braces, Code, Plus, Sigma, Trash2, GripVertical } from "lucide-react";
+import { BarChart3, Braces, Code, Plus, Sigma, Trash2, GripVertical } from "lucide-react";
+import { useLocation } from "wouter";
+import { bankQuestionHref } from "@/features/analytics/levels/analytics-routes";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -158,6 +160,7 @@ export function QuestionEditorDrawer({
     enabled: open && canAnalytics,
   });
   const landmark = landmarkData?.landmark ?? null;
+  const [, navigate] = useLocation();
 
   const [selectedType, setSelectedType] = useState<QuestionType>("single");
   // PRD-57 §6.1: черновик набора правил держит ОБА вида ответа, поэтому он живёт
@@ -813,6 +816,18 @@ export function QuestionEditorDrawer({
               поэтому он окно по кнопке. Кнопка стоит слева от «Отмены» — тем же приёмом,
               что у предпросмотра страницы: действие над содержимым, а не над формой.
             */}
+            {/* PRD-70 FR-30: «Статистика» — у сохранённого вопроса; ведёт на страницу вопроса банка.
+                Слева от «Предпросмотр» — та же группа «действие над содержимым». */}
+            {canAnalytics && question && (
+              <Button
+                variant="ghost"
+                leadingIcon={<BarChart3 size={16} aria-hidden="true" />}
+                onClick={() => navigate(bankQuestionHref(question.id))}
+                data-testid="button-question-statistics"
+              >
+                Статистика
+              </Button>
+            )}
             <Button
               variant="ghost"
               onClick={() => setPreviewOpen(true)}

@@ -192,7 +192,9 @@ export async function bankQuestionStats(
       declared: scoring.difficultyOf(question),
       hardness: fewForDifficulty ? null : Math.round((1 - (psycho.difficulty as number)) * 100),
       skipShare: delivered > 0 ? (skipped / delivered) * 100 : null,
-      latencyMedianMs: latency.get(questionId)?.medianMs ?? null,
+      // Время — из разбора вопроса (ответы выборки, как плитка «Время, медиана» на странице вопроса
+      // в тесте); счётчик телеметрии — запасной источник, когда разбор времени не знает.
+      latencyMedianMs: psycho?.timing?.medianMs ?? latency.get(questionId)?.medianMs ?? null,
       flag: item.suspicious ? item.flag : null,
       deadOptions: (breakdown?.options ?? [])
         .filter(option => option.dead)
