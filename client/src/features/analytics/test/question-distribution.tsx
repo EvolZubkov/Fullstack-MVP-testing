@@ -12,7 +12,7 @@
  *   - развёрнутый ответ и пропуски — сами ответы прямо на странице, без окна (решение владельца
  *     2026-10-04): новые сверху, по 20, следующие подгружаются при прокрутке к концу списка.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 
@@ -27,6 +27,7 @@ import { colorize, type SpreadView, type UnitsView, type UnitView, type VolumeVi
 import { Tile, IntentTile } from "./item-breakdown";
 import { num } from "./psychometrics-format";
 import { TermHint } from "./term-hint";
+import { QuestionExportDialog } from "./question-export-dialog";
 
 /** Наблюдений: «302 наблюдения». */
 function observations(n: number): string {
@@ -180,23 +181,33 @@ export function UnitsCard({ units }: UnitsCardProps) {
   );
 }
 
-/** Ссылка на выгрузку ответов задания книгой. */
-function exportHref(testId: string, questionId: string): string {
-  return `/api/analytics/tests/${testId}/questions/${questionId}/answers/export/excel`;
-}
-
-/** Кнопка «Выгрузить ответы в Excel». */
-function ExportButton({ testId, questionId }: { testId: string; questionId: string }) {
+/**
+ * Кнопка «Выгрузить ответы в Excel»: открывает окно «Экспорт» уровня вопроса (Э5.2) — условия
+ * страницы и число ответов под них названы до выгрузки.
+ */
+function ExportButton({ testId, questionId, search = "", conditionLabels = [] }: {
+  testId: string;
+  questionId: string;
+  search?: string;
+  conditionLabels?: string[];
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <Button
-      variant="secondary"
-      size="s"
-      leadingIcon={<Download size={14} />}
-      // Ссылкой, а не запросом: файл отдаёт сервер, и браузер сохраняет его сам.
-      onClick={() => { window.location.href = exportHref(testId, questionId); }}
-    >
-      Выгрузить ответы в Excel
-    </Button>
+    <>
+      <Button variant="secondary" size="s" leadingIcon={<Download size={14} />} onClick={() => setOpen(true)}>
+        Выгрузить ответы в Excel
+      </Button>
+      {open && (
+        <QuestionExportDialog
+          open
+          onClose={() => setOpen(false)}
+          testId={testId}
+          questionId={questionId}
+          search={search}
+          conditionLabels={conditionLabels}
+        />
+      )}
+    </>
   );
 }
 
@@ -208,6 +219,10 @@ export interface SpreadCardProps {
   questionId: string;
   /** Тест измерительный: у опросника нет верного ответа. */
   measurement?: boolean;
+  /** Условия страницы (`?…` или пусто) — выгрузка ответов идёт по ним. */
+  search?: string;
+  /** Подписи этих условий — для окна «Экспорт». */
+  conditionLabels?: string[];
 }
 
 /**
@@ -216,7 +231,7 @@ export interface SpreadCardProps {
  * @param props - тип вопроса и разброс его ответов
  * @returns карточка с таблицей
  */
-export function SpreadCard({ questionType, spread, testId, questionId }: SpreadCardProps) {
+export function SpreadCard({ questionType, spread, testId, questionId, search, conditionLabels }: SpreadCardProps) {
   const rows = colorize(spread.options.map(option => ({ ...option })));
   const accepted = spread.options.some(option => option.correct !== undefined);
   const numeric = questionType === "short" && rows.some(row => /^от .* до /.test(row.label));
@@ -233,7 +248,7 @@ export function SpreadCard({ questionType, spread, testId, questionId }: SpreadC
       <CardHeader
         title={head.title}
         subtitle={head.subtitle}
-        trail={questionType === "short" ? <ExportButton testId={testId} questionId={questionId} /> : undefined}
+        trail={questionType === "short" ? <ExportButton testId={testId} questionId={questionId} search={search} conditionLabels={conditionLabels} /> : undefined}
       />
       <CardBody>
         <DataGrid
@@ -304,6 +319,13 @@ export interface QuestionAnswersCardProps {
   questionType: string;
   /** Сводка развёрнутого ответа — над списком. */
   volume?: VolumeView | null;
+  /**
+   * Условия страницы (`?…` или пусто): список и его книга говорят о той же выборке, что разбор
+   * вопроса над ними.
+   */
+  search?: string;
+  /** Подписи этих условий — для окна «Экспорт». */
+  conditionLabels?: string[];
 }
 
 /**
@@ -312,14 +334,19 @@ export interface QuestionAnswersCardProps {
  * @param props - тест, вопрос, тип и сводка объёма
  * @returns карточка «Ответы»
  */
-export function QuestionAnswersCard({ testId, questionId, questionType, volume }: QuestionAnswersCardProps) {
+export function QuestionAnswersCard({
+  testId, questionId, questionType, volume, search = "", conditionLabels,
+}: QuestionAnswersCardProps) {
   const sentinel = useRef<HTMLDivElement | null>(null);
   const query = useInfiniteQuery<AnswersPage>({
-    queryKey: ["question-answers", testId, questionId],
+    queryKey: ["question-answers", testId, questionId, search],
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams(search.replace(/^\?/, ""));
+      params.set("offset", String(pageParam as number));
+      params.set("limit", String(PAGE));
       const response = await fetch(
-        `/api/analytics/tests/${testId}/questions/${questionId}/answers?offset=${pageParam as number}&limit=${PAGE}`,
+        `/api/analytics/tests/${testId}/questions/${questionId}/answers?${params.toString()}`,
         { credentials: "include" },
       );
       if (!response.ok) throw new Error(String(response.status));
@@ -350,7 +377,7 @@ export function QuestionAnswersCard({ testId, questionId, questionType, volume }
         subtitle={long
           ? "Новые сверху · у развёрнутого ответа нет автоматической оценки, поэтому частот и долей нет"
           : "Новые сверху · что вписал каждый участник"}
-        trail={<ExportButton testId={testId} questionId={questionId} />}
+        trail={<ExportButton testId={testId} questionId={questionId} search={search} conditionLabels={conditionLabels} />}
       />
       <CardBody>
         <Stack gap={6}>

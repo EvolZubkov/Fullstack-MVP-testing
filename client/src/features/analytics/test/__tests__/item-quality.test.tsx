@@ -297,14 +297,7 @@ describe("ItemQualityPanel", () => {
     expect(screen.queryByText(termOrText(/редакция неизвестна/))).toBeNull();
   });
 
-  it("кнопки выгрузок ведут на свои ручки", () => {
-    render(<ItemQualityPanel view={view()} exportHref="/api/x/export" matrixHref="/api/x/matrix" />);
-
-    expect(screen.getByText(termOrText("Психометрический отчёт")).closest("a")?.getAttribute("href")).toBe("/api/x/export");
-    expect(screen.getByText(termOrText("Матрица ответов")).closest("a")?.getAttribute("href")).toBe("/api/x/matrix");
-  });
-
-  it("без ссылок выгрузок кнопок нет — интерфейс не обещает того, чего не делает", () => {
+  it("Э5.2: выгрузок под таблицей нет — они в окне «Экспорт» шапки теста", () => {
     render(<ItemQualityPanel view={view()} />);
     expect(screen.queryByText(termOrText("Матрица ответов"))).toBeNull();
   });

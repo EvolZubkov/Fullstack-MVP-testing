@@ -3,7 +3,7 @@
  * @description Э4а: полный вид распределения ответов на странице вопроса.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -71,6 +71,37 @@ describe("QuestionAnswersCard", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/analytics/tests/t1/questions/q1/answers?offset=0&limit=20");
     expect(screen.getByText("Показано 1 из 34")).toBeTruthy();
     expect(screen.getByText("412 знаков")).toBeTruthy();
+  });
+
+  it("передаёт условия страницы и в список, и в ссылку выгрузки", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ total: 0, offset: 0, rows: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(withQuery(
+      <QuestionAnswersCard testId="t1" questionId="q1" questionType="long" search="?source=web&firstAttemptOnly=true" />,
+    ));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock.mock.calls[0][0])
+      .toBe("/api/analytics/tests/t1/questions/q1/answers?source=web&firstAttemptOnly=true&offset=0&limit=20");
+
+    // Э5.2: кнопка открывает окно «Экспорт», и оно выгружает по тем же условиям.
+    fetchMock.mockResolvedValue({
+      ok: true, json: async () => ({ total: 7, offset: 0, rows: [] }),
+      blob: async () => new Blob(["xlsx"]), headers: new Headers(),
+    });
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    fireEvent.click(screen.getByRole("button", { name: /Выгрузить ответы в Excel/ }));
+    expect(await screen.findByText("Под условия подходит 7 ответов")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Выгрузить" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/analytics/tests/t1/questions/q1/answers/export/excel?source=web&firstAttemptOnly=true",
+      expect.anything(),
+    ));
   });
 
   it("у пропусков — исход ответа тегом", async () => {

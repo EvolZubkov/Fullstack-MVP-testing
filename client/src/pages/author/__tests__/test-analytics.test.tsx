@@ -140,7 +140,11 @@ beforeEach(() => {
     mode: "standard", analyticsBody: standardAnalytics(), detailBody: standardDetail(),
     psychometricsBody: [],
   };
-  const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
+  const ok = (body: unknown) => ({
+    ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body),
+    // Э5.2: окно «Экспорт» скачивает ответ файлом.
+    blob: async () => new Blob(["xlsx"]), headers: new Headers(),
+  });
   fetchMock = vi.fn(async (input: string) => {
     const u = String(input);
     if (u === "/api/analytics/tests/t1") return ok(state.analyticsBody);
@@ -301,7 +305,9 @@ describe("<TestAnalyticsPage />", () => {
     expect(screen.queryByRole("columnheader", { name: /^Тест/ })).toBeNull();
     // Фильтр — один на уровень теста: второй панели внутри карточки нет, экспорт — в общей.
     expect(screen.getAllByRole("button", { name: /^Фильтр/ })).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Экспорт" })).toBeInTheDocument();
+    // Э5.2: окно экспорта на уровне одно — кнопка в шапке, своей у вкладки нет.
+    expect(screen.queryByRole("button", { name: "Экспорт" })).toBeNull();
+    expect(screen.getByRole("button", { name: /Экспорт Excel/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Иван Петров"));
     await waitFor(() => expect(fetchMock.mock.calls.some(call => String(call[0]).startsWith("/api/analytics/attempts/a1"))).toBe(true));
@@ -495,11 +501,17 @@ describe("<TestAnalyticsPage />", () => {
       await renderLoaded();
       await openPsychometrics();
 
-      // Файл, собранный по другим условиям, чем показанные, невоспроизводим (FR-54b).
-      const report = await screen.findByRole("link", { name: /Психометрический отчёт/ });
-      expect(report.getAttribute("href")).toBe("/api/analytics/psychometrics/t1/export?groupId=g1&source=import");
-      expect(screen.getByRole("link", { name: /Матрица ответов/ }).getAttribute("href"))
-        .toBe("/api/analytics/psychometrics/t1/matrix?groupId=g1&source=import");
+      // Файл, собранный по другим условиям, чем показанные, невоспроизводим (FR-54b). Э5.2: отчёт
+      // и матрица выгружаются из окна «Экспорт» шапки, по тому же адресу психометрики.
+      URL.createObjectURL = vi.fn(() => "blob:x");
+      URL.revokeObjectURL = vi.fn();
+      for (const [kind, path] of [[/Психометрический отчёт/, "export"], [/Матрица ответов/, "matrix"]] as const) {
+        fireEvent.click(screen.getByRole("button", { name: /Экспорт Excel/ }));
+        fireEvent.click(await screen.findByRole("radio", { name: kind }));
+        fireEvent.click(screen.getByRole("button", { name: "Выгрузить" }));
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+          `/api/analytics/psychometrics/t1/${path}?groupId=g1&source=import`, expect.anything()));
+      }
     });
   });
 
@@ -719,10 +731,18 @@ describe("<TestAnalyticsPage />", () => {
     });
   });
 
-  it("exports to Excel via the header action", async () => {
+  it("Э5.2: «Экспорт Excel» в шапке открывает окно, книга уходит общей выгрузкой с этим тестом", async () => {
     await renderLoaded();
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
     fireEvent.click(screen.getByRole("button", { name: /Экспорт Excel/ }));
-    expect(window.open).toHaveBeenCalledWith("/api/analytics/tests/t1/export/excel", "_blank");
+    expect(await screen.findByRole("dialog", { name: "Экспорт" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Выгрузить" }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => url === "/api/export/excel");
+      expect(call).toBeTruthy();
+      expect(JSON.parse(String((call![1] as RequestInit).body))).toMatchObject({ testIds: ["t1"] });
+    });
   });
 
   it("renders the adaptive dashboard: levels inside «Выдача» and per-level stats", async () => {

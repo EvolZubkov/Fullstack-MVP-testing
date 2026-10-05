@@ -68,7 +68,7 @@ router.use("/", attentionRouter);
 // PRD-56: срезы прохождений — GET /api/analytics/slices
 router.use("/", slicesRouter);
 
-// Экспорт: GET /api/analytics/tests/:testId/export/excel, GET/POST /api/export/*
+// Экспорт: POST /api/export/excel — книга выборки реестра и одного теста
 router.use("/", exportRouter);
 
 // PRD-54: загрузка выгрузок отчётов LMS: POST /api/analytics/lms-import, партии и откат

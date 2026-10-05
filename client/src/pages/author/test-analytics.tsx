@@ -12,6 +12,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PassTrend } from "@/features/analytics/test/pass-trend";
+import { TestExportDialog } from "@/features/analytics/test/test-export-dialog";
 import { ScoreDistribution } from "@/features/analytics/test/score-distribution";
 import { TopicBreakdown } from "@/features/analytics/test/topic-breakdown";
 import { VariantTable, type VariantSectionView } from "@/features/analytics/test/variant-table";
@@ -115,7 +116,6 @@ import {
 import { questionInTopicHref } from "@/features/content/question-link";
 import { ResultsByAxis } from "@/features/analytics/slices/results-by-axis";
 import { SaveSliceDialog } from "@/features/analytics/slices/save-slice-dialog";
-import { ExportDialog } from "@/features/analytics/registry/export-dialog";
 import {
     AttemptDetailsDialog,
     attemptOfRegistryRow,
@@ -381,7 +381,10 @@ export default function TestAnalyticsPage() {
     const filterButtonRef = useRef<HTMLButtonElement>(null);
     /** Э3.1: окно «Детали попытки» — то же, что на общем уровне. */
     const [openedAttempt, setOpenedAttempt] = useState<CombinedAttempt | null>(null);
-    /** Э3.1: выгрузка прохождений теста — по условиям фильтра уровня теста. */
+    /**
+     * Э5.2: окно «Экспорт» — книга результатов, психометрический отчёт и матрица ответов по
+     * условиям фильтра страницы. Одно на уровень: кнопка в шапке видна на любой вкладке.
+     */
     const [exportOpen, setExportOpen] = useState(false);
     const dictionaries = useRegistryDictionaries();
     // Вариант и версия — условия внутри теста, а он здесь задан страницей: справочник для
@@ -586,10 +589,6 @@ export default function TestAnalyticsPage() {
         enabled: !!testId && activeTab === "scales" && !!analytics?.hasScales,
     });
 
-    // Функция экспорта в Excel
-    const handleExportExcel = () => {
-        window.open(`/api/analytics/tests/${testId}/export/excel`, "_blank");
-    };
 
     if (analyticsLoading) {
         return <LoadingState message="Загрузка аналитики..." />;
@@ -767,8 +766,6 @@ export default function TestAnalyticsPage() {
             qualityLoading={qualityLoading}
             heuristics={reviewHeuristics}
             excluded={excludedFromDelivery}
-            exportHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/export`)}
-            matrixHref={psychometricsUrl(`/api/analytics/psychometrics/${testId}/matrix`)}
             onRestoreFirstAttempt={() => setFirstAttemptOnly(true)}
             // FR-22: измерительным тест считается по ФАКТУ — прохождения есть, а оценённых
             // среди них нет ни одного. Объявленный проходной балл признаком не годится:
@@ -946,12 +943,6 @@ export default function TestAnalyticsPage() {
                     >
                         Сохранить как срез
                     </Button>
-                    {activeTab === "passages" && (
-                        // Э3.1: выгрузка списка прохождений — там же, где список, по тем же условиям.
-                        <Button variant="secondary" size="s" onClick={() => setExportOpen(true)}>
-                            Экспорт
-                        </Button>
-                    )}
                 </>
             )}
             filterButtonRef={filterButtonRef}
@@ -1058,6 +1049,17 @@ export default function TestAnalyticsPage() {
         const answeredCaption = questionRow
             ? [questionRow.topicName, `${questionRow.totalAnswers} ${pluralize(questionRow.totalAnswers, "ответ", "ответа", "ответов")}`].join(" · ")
             : undefined;
+        /**
+         * Условия страницы для ответов задания — те же, что у разбора над ними (`psychometricsUrl`),
+         * с режимом попыток, названным явно: без него ручка ответов отдаёт все попытки.
+         */
+        const answersSearch = psychometricsUrl("", { firstAttemptOnly: String(firstAttemptOnly) });
+        // Э5.2: окно выгрузки ответов называет условия страницы теми же словами, что полоса фильтра.
+        const answersConditions = [
+            ...describeConditions({ ...filter, testIds: [] }, { ...dictionaries, ...testDictionary })
+                .map(condition => String(condition.label)),
+            ...(firstAttemptOnly ? ["Только первая попытка"] : []),
+        ];
         const distribution = (
             <>
                 {units ? <UnitsCard units={units} /> : null}
@@ -1068,6 +1070,8 @@ export default function TestAnalyticsPage() {
                         testId={testId!}
                         questionId={routeQuestionId}
                         measurement={measurementTest}
+                        search={answersSearch}
+                        conditionLabels={answersConditions}
                     />
                 ) : null}
                 {questionType === "long" || questionType === "blanks" ? (
@@ -1076,6 +1080,8 @@ export default function TestAnalyticsPage() {
                         questionId={routeQuestionId}
                         questionType={questionType}
                         volume={questionRow?.volume}
+                        search={answersSearch}
+                        conditionLabels={answersConditions}
                     />
                 ) : null}
             </>
@@ -1258,7 +1264,7 @@ export default function TestAnalyticsPage() {
                 subtitle={subtitle}
                 actions={(
                     <>
-                        <Button onClick={handleExportExcel} variant="secondary" size="s" leadingIcon={<FileSpreadsheet size={16} />}>
+                        <Button onClick={() => setExportOpen(true)} variant="secondary" size="s" leadingIcon={<FileSpreadsheet size={16} />}>
                             Экспорт Excel
                         </Button>
                         {/* Значком, а не текстом (решение владельца 2026-09-26, план 6.4): четыре текстовые
@@ -1352,6 +1358,17 @@ export default function TestAnalyticsPage() {
                 ]}
             />
 
+            <TestExportDialog
+                open={exportOpen}
+                onClose={() => setExportOpen(false)}
+                testId={testId!}
+                testTitle={analytics.testTitle}
+                filter={{ ...filter, testIds: [] }}
+                conditionLabels={describeConditions({ ...filter, testIds: [] }, { ...dictionaries, ...testDictionary })
+                    .map(condition => String(condition.label))}
+                psychometricsUrl={psychometricsUrl}
+            />
+
             <SaveSliceDialog
                 open={saveSliceOpen}
                 onClose={() => setSaveSliceOpen(false)}
@@ -1363,11 +1380,6 @@ export default function TestAnalyticsPage() {
                 onSaved={() => void queryClient.invalidateQueries({
                     predicate: query => String(query.queryKey[0] ?? "").startsWith("/api/analytics/slices"),
                 })}
-            />
-            <ExportDialog
-                open={exportOpen}
-                onClose={() => setExportOpen(false)}
-                filter={{ ...filter, testIds: [testId!] }}
             />
             <AttemptDetailsDialog
                 attempt={openedAttempt}

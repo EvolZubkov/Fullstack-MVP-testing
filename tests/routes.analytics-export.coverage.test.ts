@@ -12,6 +12,7 @@
  * supertest + `x-test-user`) mirrors the sibling test. `checkAnswer` is left
  * real so the effective-scoring resolution runs end to end.
  */
+import ExcelJS from "exceljs";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { observationsDouble } from "./helpers/observations-double";
@@ -32,6 +33,8 @@ const { storageMock } = vi.hoisted(() => ({
     getGroups: vi.fn(), getGroupUsers: vi.fn(),
     getScormPackages: vi.fn(), getAllScormAttempts: vi.fn(),
     getScormAnswersByAttempt: vi.fn(),
+    // PRD-56 FR-04: the registry book reads answers of every source and org spellings.
+    selectAnswersForTest: vi.fn(), selectOrgSpellings: vi.fn(),
     // PRD-5/PRD-2: the export now names the test's scales and indicators, so it reads
     // the measurement rows too. Empty by default — these fixtures are control tests.
     getScales: vi.fn().mockResolvedValue([]),
@@ -85,12 +88,10 @@ const dbUser = {
   mustChangePassword: false, gdprConsent: true, passwordHash: "x", emailHash: "x",
   createdAt: new Date(), lastLoginAt: null, createdBy: null,
 };
-const dbGroup = { id: "g1", name: "Group A", description: null, createdAt: new Date(), createdBy: null };
 const dbPkg = {
   id: "pkg1", testId: "test1", testTitle: "JS Basics", testMode: "standard",
   secretKey: "abc", isActive: true, exportedAt: new Date(), createdAt: new Date(),
 };
-const adaptivePkg = { ...dbPkg, id: "pkg-ad", testId: "test1", testTitle: "Adaptive", testMode: "adaptive" };
 
 const makeWebAttempt = (overrides: any = {}) => ({
   id: "atmp1", testId: "test1", userId: "u1",
@@ -140,13 +141,6 @@ const makeLmsAttempt = (overrides: any = {}) => ({
   ...overrides,
 });
 
-const dbAnswer = {
-  id: "ans1", questionId: "q1", questionPrompt: "Q?", questionType: "single",
-  topicId: "t1", topicName: "JavaScript", difficulty: 40,
-  userAnswerJson: 0, correctAnswerJson: { correctIndex: 0 }, isCorrect: true, points: 5, maxPoints: 5,
-  optionsJson: ["A", "B"], leftItemsJson: null, rightItemsJson: null, itemsJson: null,
-  levelIndex: null, levelName: null, answeredAt: new Date(),
-};
 
 // ─── Shared setup ─────────────────────────────────────────────────────────────
 let app: express.Express;
@@ -165,6 +159,8 @@ beforeEach(() => {
   storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.getTopicCourses.mockResolvedValue([]);
   storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
+  storageMock.selectAnswersForTest.mockResolvedValue([]);
+  storageMock.selectOrgSpellings.mockResolvedValue({ organization: [], unit: [], position: [] });
   // PRD-5/PRD-2 measurement sources — re-armed here because `resetAllMocks` above
   // drops the implementations declared at hoist time.
   storageMock.getScales.mockResolvedValue([]);
@@ -174,137 +170,6 @@ beforeEach(() => {
 });
 
 const XLSX = "spreadsheetml";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /tests/:testId/export/excel — per-test Excel
-// ─────────────────────────────────────────────────────────────────────────────
-describe("GET /tests/:testId/export/excel — branches", () => {
-  it("returns 403 when the actor lacks analytics.export", async () => {
-    storageMock.getUserRoles.mockResolvedValue(["learner"]);
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(403);
-  });
-
-  it("returns 403 when a non-admin author is out of the test scope", async () => {
-    // requireTestScope("analytics"): author, not owner, no grant -> canReadTestAnalytics false.
-    storageMock.getUserRoles.mockResolvedValue(["author"]);
-    storageMock.getTest.mockResolvedValue(dbTest); // ownerId !== author1
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(403);
-  });
-
-  it("returns 404 from the handler when the test disappears after the scope check", async () => {
-    // requireTestScope sees the test (admin bypass), handler re-reads it as gone.
-    storageMock.getTest.mockResolvedValueOnce(dbTest).mockResolvedValueOnce(undefined);
-    storageMock.getAllAttempts.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(404);
-  });
-
-  it("exports the full adaptive path (levels, topic variant, level names)", async () => {
-    storageMock.getTest.mockResolvedValue(adaptiveTest);
-    storageMock.getAllAttempts.mockResolvedValue([
-      makeAdaptiveWebAttempt({
-        // second topicResult without achievedLevelName -> "|| —" branch
-        answersJson: { q1: 0, qGhost: 1 },
-        resultJson: {
-          mode: "adaptive", overallPercent: 100, overallPassed: true,
-          totalEarnedPoints: 5, totalPossiblePoints: 5,
-          topicResults: [
-            { topicId: "t1", topicName: "JS", achievedLevelName: "Уровень 1", achievedLevelIndex: 1 },
-            { topicId: "t2", topicName: "TS" },
-          ],
-        },
-      }),
-    ]);
-    storageMock.getUser.mockResolvedValueOnce(authorUser).mockResolvedValueOnce(dbUser);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain(XLSX);
-    expect(res.headers["content-disposition"]).toContain(".xlsx");
-  });
-
-  it("handles an in-progress attempt (no result, no finish date) and unknown users", async () => {
-    const inProgress = makeWebAttempt({
-      id: "inprog", userId: "uGhost", resultJson: null, finishedAt: null, answersJson: {},
-    });
-    storageMock.getTest.mockResolvedValue(dbTest);
-    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt(), inProgress]);
-    storageMock.getUser.mockImplementation((id: string) => {
-      if (id === "author1") return Promise.resolve(authorUser);
-      if (id === "u1") return Promise.resolve({ ...dbUser, name: null, email: null }); // -> "Unknown"
-      return Promise.resolve(undefined); // uGhost -> not in map
-    });
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain(XLSX);
-  });
-
-  it("returns 500 when a storage read throws", async () => {
-    storageMock.getTest.mockResolvedValue(dbTest);
-    storageMock.getAllAttempts.mockRejectedValue(new Error("boom"));
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/Excel/);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /export/filters — branches
-// ─────────────────────────────────────────────────────────────────────────────
-describe("GET /export/filters — branches", () => {
-  it("scopes tests/packages to a non-admin author's readable set", async () => {
-    storageMock.getUserRoles.mockResolvedValue(["author"]);
-    storageMock.getTestIdsByOwner.mockResolvedValue(["test1"]); // owns test1 only
-    const otherTest = { ...dbTest, id: "test2", title: "Other" };
-    const otherPkg = { ...dbPkg, id: "pkg2", testId: "test2" };
-    storageMock.getTests.mockResolvedValue([dbTest, otherTest]);
-    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt(), makeWebAttempt({ id: "a2", testId: "test2" })]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg, otherPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([makeLmsAttempt(), makeLmsAttempt({ id: "s2", packageId: "pkg2" })]);
-    storageMock.getUser.mockResolvedValue(dbUser);
-    storageMock.getGroups.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/export/filters"));
-    expect(res.status).toBe(200);
-    expect(res.body.tests).toHaveLength(1);
-    expect(res.body.tests[0].id).toBe("test1");
-    expect(res.body.scormPackages).toHaveLength(1);
-  });
-
-  it("builds the LMS-user fallback name and skips unfinished / untitled packages", async () => {
-    const noNamePkg = { ...dbPkg, id: "pkg-x", testId: null }; // testId null -> not added to lmsTestIds
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt({ finishedAt: null })]); // no finished web
-    storageMock.getScormPackages.mockResolvedValue([dbPkg, noNamePkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([
-      // finished, no name/email -> "LMS User (...)" fallback
-      makeLmsAttempt({ id: "s-anon", lmsUserId: "lms-anon-1234567890", lmsUserName: null, lmsUserEmail: null }),
-      // unfinished -> skipped in the LMS user map
-      makeLmsAttempt({ id: "s-unf", finishedAt: null, lmsUserId: "lms-unf" }),
-    ]);
-    storageMock.getUser.mockResolvedValue(dbUser);
-    storageMock.getGroups.mockResolvedValue([dbGroup]);
-    storageMock.getGroupUsers.mockResolvedValue([dbUser]);
-    const res = await asAuthor(request(app).get("/api/export/filters"));
-    expect(res.status).toBe(200);
-    const lms = res.body.users.filter((u: any) => u.source === "lms");
-    expect(lms).toHaveLength(1);
-    expect(lms[0].username).toMatch(/LMS User/);
-    expect(res.body.tests[0].hasWebAttempts).toBe(false);
-    expect(res.body.groups[0].userCount).toBe(1);
-  });
-
-  it("returns 500 when getTests throws", async () => {
-    storageMock.getTests.mockRejectedValue(new Error("db down"));
-    const res = await asAuthor(request(app).get("/api/export/filters"));
-    expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/filters/);
-  });
-});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /export/excel — branches
@@ -475,150 +340,105 @@ describe("POST /export/excel — branches", () => {
 
   it("returns 500 when a storage read throws mid-build", async () => {
     storageMock.getTests.mockResolvedValue([dbTest]);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt()]);
+    storageMock.getUser.mockResolvedValue(dbUser);
     storageMock.getTopics.mockRejectedValue(new Error("db down"));
     const res = await asAuthor(request(app).post("/api/export/excel").send({ testIds: ["test1"] }));
     expect(res.status).toBe(500);
     expect(res.body.error).toMatch(/Excel/);
   });
-});
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /export/excel-lms — branches
-// ─────────────────────────────────────────────────────────────────────────────
-describe("POST /export/excel-lms — branches", () => {
-  it("returns 403 when the selected testIds are outside the actor's scope", async () => {
-    storageMock.getUserRoles.mockResolvedValue(["author"]); // non-admin, owns nothing
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({ testIds: ["test1"] }));
+  it("takes a telemetry row whose test is known only through its package", async () => {
+    storageMock.getTests.mockResolvedValue([dbTest]);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getAllAttempts.mockResolvedValue([]);
+    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
+    storageMock.getAllScormAttempts.mockResolvedValue([makeLmsAttempt({ origin: "telemetry" })]);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    const res = await asAuthor(request(app).post("/api/export/excel").send({ testIds: ["test1"] }));
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain(XLSX);
+  });
+
+  // Migrated from the removed GET /tests/:testId/export/excel: the test page exports through
+  // this book now, so what that handler guaranteed for one test is pinned here.
+  it("returns 403 when the actor lacks analytics.export", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["learner"]);
+    const res = await asAuthor(request(app).post("/api/export/excel").send({ testIds: ["test1"] }));
     expect(res.status).toBe(403);
   });
 
-  it("honours includeSheets: only summary built", async () => {
-    storageMock.getTests.mockResolvedValue([dbTest]);
+  it("one adaptive test: achieved levels on the passages sheet and the level of each answer", async () => {
+    storageMock.getTests.mockResolvedValue([adaptiveTest]);
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
     storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([makeLmsAttempt()]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([dbAnswer]);
+    storageMock.getAllAttempts.mockResolvedValue([
+      makeAdaptiveWebAttempt({
+        resultJson: {
+          mode: "adaptive", overallPercent: 100, overallPassed: true,
+          totalEarnedPoints: 5, totalPossiblePoints: 5,
+          topicResults: [
+            { topicId: "t1", topicName: "JS", achievedLevelName: "Уровень 1", achievedLevelIndex: 1 },
+            { topicId: "t2", topicName: "TS" },
+          ],
+          questionOutcomes: [{ questionId: "q1", result: "correct", earned: 1, possible: 1 }],
+        },
+      }),
+    ]);
+    storageMock.getUser.mockResolvedValue(dbUser);
     storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({
-      testIds: ["test1"],
-      includeSheets: { summary: true, attempts: false, answers: false, questionStats: false, levelStats: false, recommendations: false },
-    }));
+    const res = await asAuthor(request(app).post("/api/export/excel").send({ testIds: ["test1"] }).buffer(true).parse(binary));
     expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain(XLSX);
+
+    const passages = await sheet(res.body, "Прохождения");
+    expect(passages[1][passages[0].indexOf("Достигнутые уровни")]).toBe("JS: Уровень 1; TS: —");
+    const answers = await sheet(res.body, "Ответы");
+    expect(answers[1][answers[0].indexOf("Уровень")]).toBe("Уровень 1");
   });
 
-  it("renders '—' fallbacks for LMS attempts with null identity fields", async () => {
-    const anon = makeLmsAttempt({
-      id: "anon", lmsUserName: null, lmsUserEmail: null, lmsUserOrg: null,
-      resultPercent: null, totalPoints: null, maxPoints: null, resultPassed: false,
-      startedAt: null,
+  it("an in-progress attempt is a passage «Не завершено» with no answers", async () => {
+    const inProgress = makeWebAttempt({
+      id: "inprog", userId: "uGhost", resultJson: null, finishedAt: null, answersJson: {},
     });
     storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([anon]);
-    // one rich answer (all ans fields) + one sparse (fall back to question)
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([
-      dbAnswer,
-      { id: "ans2", questionId: "q1", isCorrect: false, points: 0 },
-    ]);
-    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({ testIds: ["test1"] }));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain(XLSX);
-  });
-
-  it("answers sheet: question missing from the map falls back to answer fields", async () => {
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([makeLmsAttempt()]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([
-      { id: "a", questionId: "qX", questionPrompt: "Prompt X", questionType: "single",
-        topicName: "Topic X", difficulty: 30, correctAnswerJson: {}, userAnswerJson: 0,
-        isCorrect: true, points: 2, levelName: "Lx" },
-    ]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]); // qX absent
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({ testIds: ["test1"] }));
-    expect(res.status).toBe(200);
-  });
-
-  it("builds the adaptive LMS levelStats sheet and skips non-adaptive / empty levels", async () => {
-    const adaptiveDone = makeLmsAttempt({
-      id: "ad-done", packageId: "pkg-ad",
-      achievedLevelsJson: [
-        { topicName: "JS", levelName: "L1" },
-        { topicName: "TS" }, // no levelName -> "Не достигнут"
-      ],
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt(), inProgress]);
+    storageMock.getUser.mockImplementation((id: string) => {
+      if (id === "author1") return Promise.resolve(authorUser);
+      if (id === "u1") return Promise.resolve(dbUser);
+      return Promise.resolve(undefined);
     });
-    const adaptiveEmpty = makeLmsAttempt({ id: "ad-empty", packageId: "pkg-ad", achievedLevelsJson: [] });
-    storageMock.getTests.mockResolvedValue([{ id: "test1", title: "Adaptive", mode: "adaptive" }]);
     storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([adaptivePkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([adaptiveDone, adaptiveEmpty]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({ testIds: ["test1"] }));
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    const res = await asAuthor(request(app).post("/api/export/excel").send({ testIds: ["test1"] }).buffer(true).parse(binary));
     expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain(XLSX);
-  });
 
-  it("builds recommendations from failedTopicCoursesJson as array, JSON string and bad string", async () => {
-    const arr = makeLmsAttempt({ id: "r-arr", lmsUserId: "u-arr",
-      failedTopicCoursesJson: [{ title: "Курс массив" }] });
-    const str = makeLmsAttempt({ id: "r-str", lmsUserId: "u-str",
-      failedTopicCoursesJson: JSON.stringify([{ title: "Курс строка" }]) });
-    const bad = makeLmsAttempt({ id: "r-bad", lmsUserId: "u-bad",
-      failedTopicCoursesJson: "{ this is not json" });
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([arr, str, bad]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({ testIds: ["test1"] }));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain(XLSX);
-  });
-
-  it("filters LMS attempts by userIds", async () => {
-    const keep = makeLmsAttempt({ id: "keep", lmsUserId: "lms-u1" });
-    const drop = makeLmsAttempt({ id: "drop", lmsUserId: "lms-u2" });
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([keep, drop]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({
-      testIds: ["test1"], userIds: ["lms-u1"],
-    }));
-    expect(res.status).toBe(200);
-  });
-
-  it("bestAttemptOnly drops attempts whose package is gone and keeps the best per user", async () => {
-    const orphan = makeLmsAttempt({ id: "orphan", packageId: "pkg-gone" });
-    const lo = makeLmsAttempt({ id: "lo", resultPercent: 40, finishedAt: new Date(Date.now() - 5000) });
-    const hi = makeLmsAttempt({ id: "hi", resultPercent: 90, finishedAt: new Date(Date.now() - 4000) });
-    const tieOld = makeLmsAttempt({ id: "tie-old", resultPercent: 90, finishedAt: new Date(Date.now() - 3000) });
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]); // pkg-gone not present
-    storageMock.getAllScormAttempts.mockResolvedValue([orphan, lo, hi, tieOld]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({
-      testIds: ["test1"], bestAttemptOnly: true,
-    }));
-    expect(res.status).toBe(200);
-  });
-
-  it("returns 500 when a storage read throws", async () => {
-    storageMock.getScormPackages.mockRejectedValue(new Error("db down"));
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({ testIds: ["test1"] }));
-    expect(res.status).toBe(500);
-    expect(res.body.error).toMatch(/LMS Excel/);
+    const passages = await sheet(res.body, "Прохождения");
+    const row = passages.find(r => r[1] === "inprog")!;
+    expect(row[passages[0].indexOf("Статус")]).toBe("Не завершено");
+    const answers = await sheet(res.body, "Ответы");
+    expect(answers.some(r => r[1] === "inprog")).toBe(false);
   });
 });
+
+/** Read a binary supertest response into a Buffer. */
+function binary(response: NodeJS.ReadableStream, callback: (err: Error | null, body: Buffer) => void) {
+  const chunks: Buffer[] = [];
+  response.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+  response.on("end", () => callback(null, Buffer.concat(chunks)));
+}
+
+/** Sheet rows (header included) as strings. */
+async function sheet(body: Buffer, name: string): Promise<string[][]> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(body as never);
+  const ws = wb.getWorksheet(name);
+  if (!ws) throw new Error(`sheet "${name}" not found`);
+  const rows: string[][] = [];
+  ws.eachRow((r) => {
+    rows.push((r.values as unknown[]).slice(1).map(v => (v === null || v === undefined ? "" : String(v))));
+  });
+  return rows;
+}

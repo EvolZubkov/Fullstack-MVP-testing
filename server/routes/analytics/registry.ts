@@ -15,13 +15,10 @@ import { Router, type Request, type Response } from "express";
 import { logger } from "../../logger";
 import { requirePermission } from "../../middleware/auth";
 import { storage } from "../../storage";
-import {
-  loadObservations,
-  type ObservationOutcome,
-  type ObservationSource,
-} from "../../services/analytics/observations";
+import { loadObservations } from "../../services/analytics/observations";
 import type { ObservationSort } from "../../storage/analytics-repository";
 import { analyticsScope } from "./helpers";
+import { buildObservationFilter, conditionsFromQuery } from "./observation-query";
 
 const router = Router();
 
@@ -29,34 +26,10 @@ const router = Router();
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 200;
 
-const SOURCES: ObservationSource[] = ["web", "telemetry", "import"];
-const OUTCOMES: ObservationOutcome[] = ["passed", "failed", "completed", "incomplete"];
-
 /** Столбцы, по которым реестр сортируется. Те же, что видны на экране. */
 const SORTS: ObservationSort[] = [
   "participant", "test", "date", "attempt", "result", "outcome", "source", "group",
 ];
-
-/** Значения параметра, повторённого несколько раз или перечисленного через запятую. */
-function listOf(value: unknown): string[] {
-  const raw = Array.isArray(value) ? value : value === undefined ? [] : [value];
-  return raw
-    .flatMap(item => String(item).split(","))
-    .map(item => item.trim())
-    .filter(Boolean);
-}
-
-/**
- * Дата из параметра.
- *
- * Конец периода — конец ДНЯ: «по 30 сентября» в интерфейсе означает включительно, и без этого
- * прохождения последнего дня выборки молча пропадали бы.
- */
-function dateOf(value: unknown, edge: "start" | "end"): Date | undefined {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  const date = new Date(`${value}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}Z`);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
 
 /**
  * Группы прохождений одной порции — по правилу FR-09.
@@ -180,28 +153,9 @@ router.get("/registry", requirePermission("analytics.read"), async (req: Request
     const limit = Math.min(Number(req.query.limit) || DEFAULT_LIMIT, MAX_LIMIT);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
 
-    const sources = listOf(req.query.source).filter((s): s is ObservationSource =>
-      (SOURCES as string[]).includes(s));
-    const outcomes = listOf(req.query.outcome).filter((o): o is ObservationOutcome =>
-      (OUTCOMES as string[]).includes(o));
-    const testIds = listOf(req.query.testId);
-    const groupIds = listOf(req.query.groupId);
-    // Вариант и версия — условия ВНУТРИ одного теста: у разных тестов они свои, и отбор по
-    // ним поверх нескольких тестов ничего не значит. Экран их и предлагает только при одном
-    // выбранном тесте; ручка принимает как есть — чужая ссылка не повод падать.
-    const formIds = listOf(req.query.formId);
-    const snapshotIds = listOf(req.query.snapshotId);
-    // Оргструктура (FR-06b): значение в любом написании. Не через запятую — запятая бывает в
-    // названии организации («ООО «Альфа, Бета»»), поэтому только повтор параметра.
-    const repeated = (value: unknown): string[] =>
-      (Array.isArray(value) ? value : value === undefined ? [] : [value])
-        .map(item => String(item).trim())
-        .filter(Boolean);
-    const organizations = repeated(req.query.organization);
-    const units = repeated(req.query.unit);
-    const positions = repeated(req.query.position);
-    // FR-17: «ошиблись на вопросе» — переход из строки вопроса аналитики теста.
-    const wrongQuestionIds = listOf(req.query.wrongQuestionId);
+    // Условия отбора — общим разбором (`observation-query`): выгрузка книги читает их тем же
+    // правилом, и число строк в ней совпадает с «всего» реестра.
+    const filter = buildObservationFilter(conditionsFromQuery(req.query));
 
     // Столбец сортировки принимается только из перечня: незнакомое имя — это опечатка в
     // чужой ссылке, и отвечать на неё ошибкой незачем, реестр просто встаёт по умолчанию.
@@ -212,18 +166,7 @@ router.get("/registry", requirePermission("analytics.read"), async (req: Request
 
     const page = await loadObservations(
       {
-        ...(testIds.length ? { testIds } : {}),
-        ...(groupIds.length ? { groupIds } : {}),
-        ...(formIds.length ? { formIds } : {}),
-        ...(snapshotIds.length ? { snapshotIds } : {}),
-        ...(organizations.length ? { organizations } : {}),
-        ...(units.length ? { units } : {}),
-        ...(positions.length ? { positions } : {}),
-        ...(wrongQuestionIds.length ? { wrongQuestionIds } : {}),
-        ...(sources.length ? { sources } : {}),
-        ...(outcomes.length ? { outcomes } : {}),
-        ...(dateOf(req.query.from, "start") ? { from: dateOf(req.query.from, "start") } : {}),
-        ...(dateOf(req.query.to, "end") ? { to: dateOf(req.query.to, "end") } : {}),
+        ...filter,
         ...(sort ? { sort } : {}),
         ...(dir ? { dir } : {}),
         limit,

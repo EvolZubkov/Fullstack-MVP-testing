@@ -6,6 +6,9 @@
  * починили — файл остался бы со своими числами, и автор получил бы два разных ответа на один
  * вопрос: один в браузере, другой в книге, которую он отправит коллеге.
  *
+ * Книга уровня теста теперь — общая книга (`POST /api/export/excel` с `testIds: [testId]`);
+ * свойство проверяется на ней.
+ *
  * Проверяется содержимое книги, а не только её тип: заголовок `Content-Type` ничего не говорит
  * о числах внутри.
  */
@@ -29,6 +32,8 @@ const { storageMock } = vi.hoisted(() => ({
     getResultVariables: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
     selectObservations: vi.fn(),
+    selectAnswersForTest: vi.fn().mockResolvedValue([]),
+    selectOrgSpellings: vi.fn().mockResolvedValue({ organization: [], unit: [], position: [] }),
   },
 }));
 
@@ -72,6 +77,7 @@ beforeEach(() => {
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getUser.mockResolvedValue({ id: "u1", name: "Морозова Анна", email: "a@b.c" });
   storageMock.getTest.mockResolvedValue(TEST);
+  storageMock.getTests.mockResolvedValue([TEST]);
   storageMock.getTopics.mockResolvedValue([]);
   storageMock.getQuestionsByIds.mockResolvedValue([]);
   storageMock.getTopicCourses.mockResolvedValue([]);
@@ -80,7 +86,7 @@ beforeEach(() => {
   storageMock.getScormPackages.mockResolvedValue([]);
 });
 
-describe("GET /analytics/tests/:testId/export/excel — сводка книги", () => {
+describe("POST /api/export/excel — сводка книги одного теста", () => {
   it("считает прохождения всех источников, а не только веб-попытки", async () => {
     storageMock.getAllAttempts.mockResolvedValue([{
       id: "web-1", testId: "test1", userId: "u1",
@@ -96,8 +102,9 @@ describe("GET /analytics/tests/:testId/export/excel — сводка книги"
     }]);
 
     const res = await request(makeApp())
-      .get("/api/tests/test1/export/excel")
+      .post("/api/export/excel")
       .set("x-test-user", "author1")
+      .send({ testIds: ["test1"] })
       .buffer(true)
       .parse((response, callback) => {
         const chunks: Buffer[] = [];
@@ -106,8 +113,8 @@ describe("GET /analytics/tests/:testId/export/excel — сводка книги"
       });
 
     expect(res.status).toBe(200);
-    expect(await summaryValue(res.body, "Завершённых попыток")).toBe(2);
-    expect(await summaryValue(res.body, "Уникальных пользователей")).toBe(2);
+    expect(await summaryValue(res.body, "Завершённых")).toBe(2);
+    expect(await summaryValue(res.body, "Участников")).toBe(2);
     // Средний результат по обоим источникам: (80 + 60) / 2.
     expect(await summaryValue(res.body, "Средний результат")).toBe("70.0%");
     expect(await summaryValue(res.body, "Процент прохождения")).toBe("50.0%");

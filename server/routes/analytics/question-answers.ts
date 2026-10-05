@@ -9,6 +9,10 @@
  *
  * Данные берутся общим сбором ответов (`test-answer-facts`) и слоем наблюдений: свой запрос
  * к таблицам означал бы второе мнение о том, что такое ответ на задание.
+ *
+ * Список и книга понимают фильтр страницы теста — те же условия, что у психометрики, вместе с
+ * «только первой попыткой». Страница вопроса показывает разбор по отобранной выборке, и список
+ * ответов под ним не может говорить о других прохождениях.
  */
 import { Router, type Request, type Response } from "express";
 import ExcelJS from "exceljs";
@@ -18,13 +22,14 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
 import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
-import { loadObservations } from "../../services/analytics/observations";
+import { loadObservations, type ObservationFilter } from "../../services/analytics/observations";
 import { loadTestAnswerFacts } from "../../services/analytics/test-answer-facts";
 import {
   buildQuestionAnswerRows,
   type AnswerObservation,
   type QuestionAnswerRow,
 } from "../../services/analytics/question-answers";
+import { readTestFilterQuery } from "./observation-query";
 
 const router = Router();
 
@@ -43,11 +48,72 @@ const RESULT_TITLE: Record<string, string> = {
   neutral: "Без оценки",
 };
 
-/** Собрать список ответов задания; `null` — задания в этом тесте нет. */
-async function collect(testId: string, questionId: string): Promise<{
+/**
+ * Условия страницы, если они переданы в адресе.
+ *
+ * Без единого параметра отбора ответ — прежний: все прохождения теста, все попытки. Так старые
+ * ссылки и прежние читатели получают то же, что получали. С параметрами — разбор тот же, что у
+ * психометрики (`readTestFilterQuery`), но «только первая попытка» действует, лишь когда её
+ * назвали явно: молчаливое умолчание сузило бы прежний ответ.
+ *
+ * @param req запрос
+ * @param testId тест маршрута
+ * @returns отбор и режим попыток; `null` — условий нет
+ */
+function readSelection(req: Request, testId: string): { filter: ObservationFilter; onlyFirst: boolean } | null {
+  const paging = new Set(["offset", "limit"]);
+  const named = Object.keys(req.query).some(name => !paging.has(name));
+  return named ? readTestFilterQuery(req, testId, false) : null;
+}
+
+/**
+ * Только первая попытка каждого участника — среди тех, где на тест вообще отвечали.
+ *
+ * Правило психометрики (FR-51): первая — по дате начала, участник без опознания (ни учётной
+ * записи, ни псевдонима, ни идентификатора LMS) в выборку не входит, потому что «первой» у него
+ * не бывает. Отсчёт идёт по прохождениям С ОТВЕТАМИ, как в матрице откликов: начатая и брошенная
+ * попытка без ответов не должна заслонять следующую.
+ *
+ * @param observations прохождения выборки
+ * @param answered идентификаторы прохождений, в которых есть хотя бы один ответ
+ * @returns идентификаторы оставленных прохождений
+ */
+function firstAnsweredOnly(
+  observations: ReadonlyArray<{ id: string; participantId: string | null; startedAt: Date }>,
+  answered: ReadonlySet<string>,
+): Set<string> {
+  const first = new Map<string, { id: string; at: number }>();
+  for (const observation of observations) {
+    if (!observation.participantId || !answered.has(observation.id)) continue;
+    const at = observation.startedAt.getTime();
+    const seen = first.get(observation.participantId);
+    if (!seen || at < seen.at) first.set(observation.participantId, { id: observation.id, at });
+  }
+  return new Set([...first.values()].map(item => item.id));
+}
+
+/**
+ * Собрать список ответов задания; `null` — задания в этом тесте нет.
+ *
+ * @param testId тест
+ * @param questionId задание
+ * @param selection условия страницы; `null` — все прохождения теста
+ */
+async function collect(
+  testId: string,
+  questionId: string,
+  selection: { filter: ObservationFilter; onlyFirst: boolean } | null,
+): Promise<{
   question: { id: string; type: string; prompt: string };
   rows: QuestionAnswerRow[];
 } | null> {
+  // Область видимости уже проверена гейтом маршрута, поэтому здесь она открыта — ровно как
+  // на странице теста.
+  const observations = await loadObservations(
+    selection?.filter ?? { testIds: [testId] },
+    { all: true, ids: new Set([testId]) },
+  );
+
   // PRD-70 FR-01: the test by query, not the whole table filtered in memory.
   const attempts = (await storage.getAttemptsByTests([testId]))
     .filter((attempt) => attempt.resultJson !== null);
@@ -56,12 +122,17 @@ async function collect(testId: string, questionId: string): Promise<{
   const question = questionById.get(questionId);
   if (!question) return null;
 
-  // Область видимости уже проверена гейтом маршрута, поэтому здесь она открыта — ровно как
-  // на странице теста.
-  const observations = await loadObservations(
-    { testIds: [testId] },
-    { all: true, ids: new Set([testId]) },
-  );
+  // С условиями страницы ответы ограничены отобранными прохождениями — веб, телеметрия и импорт
+  // одинаково. Без условий — прежнее поведение: все ответы теста.
+  let selected = facts;
+  if (selection) {
+    let ids = new Set(observations.rows.map((row) => row.id));
+    if (selection.onlyFirst) {
+      ids = firstAnsweredOnly(observations.rows, new Set(facts.map((fact) => fact.attemptId)));
+    }
+    selected = facts.filter((fact) => ids.has(fact.attemptId));
+  }
+
   const byAttempt = new Map<string, AnswerObservation>(
     observations.rows.map((row) => [row.id, {
       participant: row.participant,
@@ -73,7 +144,7 @@ async function collect(testId: string, questionId: string): Promise<{
 
   return {
     question: { id: question.id, type: question.type, prompt: question.prompt },
-    rows: buildQuestionAnswerRows({ questionId, question, facts, observations: byAttempt }),
+    rows: buildQuestionAnswerRows({ questionId, question, facts: selected, observations: byAttempt }),
   };
 }
 
@@ -85,7 +156,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { testId, questionId } = req.params;
-      const found = await collect(testId, questionId);
+      const found = await collect(testId, questionId, readSelection(req, testId));
       if (!found) return res.status(404).json({ error: "Задание не входит в этот тест" });
       // Э4а: страница вопроса читает ответы порциями при прокрутке. Без `limit` — все разом,
       // как раньше: так ответ остаётся совместимым с прежними читателями.
@@ -106,7 +177,7 @@ router.get(
   },
 );
 
-// GET .../answers/export/excel — та же выборка книгой
+// GET .../answers/export/excel — та же выборка книгой, по тем же условиям страницы
 router.get(
   "/tests/:testId/questions/:questionId/answers/export/excel",
   requirePermission("analytics.export"),
@@ -114,7 +185,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const { testId, questionId } = req.params;
-      const found = await collect(testId, questionId);
+      const found = await collect(testId, questionId, readSelection(req, testId));
       if (!found) return res.status(404).json({ error: "Задание не входит в этот тест" });
 
       const data: unknown[][] = [

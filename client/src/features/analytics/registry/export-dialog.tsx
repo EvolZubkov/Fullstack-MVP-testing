@@ -110,6 +110,8 @@ export function ExportDialog({ open, onClose, filter }: ExportDialogProps) {
           organizations: filter.organizations,
           units: filter.units,
           positions: filter.positions,
+          // «Ошиблись на вопросе» — тоже условие отбора: без него книга шире названного числа.
+          wrongQuestionIds: filter.wrongQuestionIds ?? [],
           dateFrom: filter.from ?? "",
           dateTo: filter.to ?? "",
           includeSheets: sheets,

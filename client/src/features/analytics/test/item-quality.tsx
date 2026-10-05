@@ -19,10 +19,10 @@
 import { useState } from "react";
 
 import {
-  Banner, Button, Card, CardBody, CardFooter, CardHeader, DataGrid, Grid, ModalDialog,
+  Banner, Button, Card, CardBody, CardHeader, DataGrid, Grid, ModalDialog,
   SegmentedControl, Stack, Tag, Text, type SortDir,
 } from "@skillum/ui-kit";
-import { Download, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { useLocation } from "wouter";
 
 import { questionInTopicHref } from "@/features/content/question-link";
@@ -180,9 +180,6 @@ export interface ItemQualityPanelProps {
   view: ItemQualityView;
   /** Э3.4: вид, с которым вкладка открывается, — блок «Требует внимания» ведёт в нужный. */
   initialTab?: QualityView;
-  /** Ссылки выгрузок: отчёт и матрица. Без них кнопки не рисуются. */
-  exportHref?: string;
-  matrixHref?: string;
   /**
    * Открыть разбор вопроса — пункт «Разбор вопроса» меню строки (строка здесь не кликабельна,
    * PRD-66). `order` — вопросы в порядке таблицы: по нему ходят «Предыдущий / Следующий» (Э3.3).
@@ -404,7 +401,7 @@ function compareRows(
 
 /** Вкладка «Качество вопросов». */
 export function ItemQualityPanel({
-  view, exportHref, matrixHref, onOpenItem, onRestoreFirstAttempt, heuristics = {},
+  view, onOpenItem, onRestoreFirstAttempt, heuristics = {},
   onDeliveryChange, testId, excluded = {}, initialTab = "all", section = "all", only,
 }: ItemQualityPanelProps) {
   const [tab, setTab] = useState<View>(initialTab);
@@ -655,22 +652,6 @@ export function ItemQualityPanel({
             : "Наблюдений пока нет"}
       />
   );
-  const exportLinks = exportHref || matrixHref ? (
-    <Stack direction="row" gap={1} align="center">
-      {exportHref ? (
-        <a className="ou-btn ou-btn--secondary ou-btn--s" href={exportHref} download>
-          <span className="ou-btn__ico"><Download size={14} /></span>
-          <span>Психометрический отчёт</span>
-        </a>
-      ) : null}
-      {matrixHref ? (
-        <a className="ou-btn ou-btn--ghost ou-btn--s" href={matrixHref} download>
-          <span className="ou-btn__ico"><Download size={14} /></span>
-          <span>Матрица ответов</span>
-        </a>
-      ) : null}
-    </Stack>
-  ) : null;
 
   return (
     <Stack gap={4}>
@@ -846,9 +827,9 @@ export function ItemQualityPanel({
       </>)}
 
       {section === "table" ? (
+        // Э5.2: психометрический отчёт и матрица ответов — в окне «Экспорт» шапки теста.
         <Stack gap={4}>
           {grid}
-          {exportLinks}
         </Stack>
       ) : null}
 
@@ -879,11 +860,6 @@ export function ItemQualityPanel({
         <CardBody>
           {grid}
         </CardBody>
-        {exportHref || matrixHref ? (
-          <CardFooter>
-            {exportLinks}
-          </CardFooter>
-        ) : null}
       </Card>
       ) : null}
 

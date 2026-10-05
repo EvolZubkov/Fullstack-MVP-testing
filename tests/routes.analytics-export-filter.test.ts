@@ -34,6 +34,10 @@ const { storageMock } = vi.hoisted(() => ({
     selectObservations: vi.fn(),
     // План оргструктуры: хранящиеся написания оргполей.
     selectOrgSpellings: vi.fn(),
+    // Ответы LMS теста — общий сбор ответов (`loadTestAnswerFacts`).
+    selectAnswersForTest: vi.fn(),
+    // Реестр в том же приложении: справочники порции (сбой — в лог, строки остаются).
+    getGroup: vi.fn(), getUserGroups: vi.fn(), selectAttemptOrder: vi.fn(),
   },
 }));
 
@@ -41,6 +45,8 @@ vi.mock("../server/storage", () => ({ storage: storageMock }));
 
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
 import exportRouter from "../server/routes/analytics/export";
+// eslint-disable-next-line import/first -- must import AFTER vi.mock
+import registryRouter from "../server/routes/analytics/registry";
 
 const TEST = {
   id: "test1", title: "Сертификация", mode: "standard",
@@ -56,6 +62,8 @@ function makeApp() {
     next();
   });
   app.use("/api", exportRouter);
+  // Реестр — тот, чьё «всего» окно выгрузки обещает: число строк книги сверяется с ним.
+  app.use("/api/analytics", registryRouter);
   return app;
 }
 
@@ -85,9 +93,62 @@ function exportWith(body: Record<string, unknown>) {
     });
 }
 
+/**
+ * Двойник выборки, понимающий оргусловие по организации.
+ *
+ * Общий двойник оргусловий не разбирает (их сравнение живёт в настоящем запросе). Здесь хватает
+ * правила OQ-04 в одну строку: у строки LMS — своё значение, у веб-попытки — профиль участника.
+ */
+function orgAwareDouble(profiles: Record<string, string>) {
+  const base = observationsDouble(storageMock as never);
+  return async (query: Parameters<typeof base>[0] = {}) => {
+    const wanted = query.orgValues?.organization;
+    if (!wanted) return base(query);
+    const all = await base({ ...query, orgValues: undefined, limit: undefined, offset: undefined });
+    const keep = new Set([
+      ...(all.web as Array<{ id: string; userId: string }>)
+        .filter(row => wanted.includes(profiles[row.userId] ?? "")).map(row => row.id),
+      ...(all.lms as Array<{ id: string; lmsUserOrg?: string }>)
+        .filter(row => wanted.includes(row.lmsUserOrg ?? "")).map(row => row.id),
+    ]);
+    const order = all.order.filter(k => keep.has(k.id));
+    const page = query.limit === undefined
+      ? order.slice(query.offset ?? 0)
+      : order.slice(query.offset ?? 0, (query.offset ?? 0) + query.limit);
+    const ids = new Set(page.map(k => k.id));
+    return {
+      web: (all.web as Array<{ id: string }>).filter(row => ids.has(row.id)) as never,
+      lms: (all.lms as Array<{ id: string }>).filter(row => ids.has(row.id)) as never,
+      order: page,
+      total: order.length,
+    };
+  };
+}
+
+/** Живая телеметрия того же теста: незнакомец из LMS, сдал. */
+const TELEMETRY = {
+  id: "tel-1", testId: "test1", packageId: null, origin: "telemetry",
+  userId: null, participantKey: null, lmsUserId: "lms-42", groupId: null, lmsUserName: "Петров Пётр",
+  lmsUserOrg: "АО «Ромашка»",
+  startedAt: new Date("2026-09-12T08:00:00Z"), finishedAt: new Date("2026-09-12T08:25:00Z"),
+  resultPercent: 90, resultPassed: true, maxPoints: 20, totalPoints: 18,
+};
+
+/** Импортированное прохождение из выгрузки LMS: псевдоним, не сдал. */
+const IMPORTED = {
+  id: "lms-1", testId: "test1", packageId: null, origin: "import",
+  userId: null, participantKey: "7f3a9c21", groupId: null, lmsUserName: null,
+  startedAt: new Date("2026-09-10T09:00:00Z"), finishedAt: new Date("2026-09-10T09:30:00Z"),
+  resultPercent: 64, resultPassed: false, maxPoints: 20, totalPoints: 13,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   storageMock.selectObservations.mockImplementation(observationsDouble(storageMock as never));
+  storageMock.selectAnswersForTest.mockResolvedValue([]);
+  storageMock.getGroup.mockResolvedValue(undefined);
+  storageMock.getUserGroups.mockResolvedValue([]);
+  storageMock.selectAttemptOrder.mockResolvedValue([]);
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getUser.mockResolvedValue({ id: "u1", name: "Морозова Анна", email: "a@b.c" });
   storageMock.getTest.mockResolvedValue(TEST);
@@ -104,12 +165,7 @@ beforeEach(() => {
     variantJson: {}, answersJson: {},
     resultJson: { overallPercent: 78, overallPassed: true, totalPossiblePoints: 20, totalEarnedPoints: 16 },
   }]);
-  storageMock.getAllScormAttempts.mockResolvedValue([{
-    id: "lms-1", testId: "test1", packageId: null, origin: "import",
-    userId: null, participantKey: "7f3a9c21", groupId: null, lmsUserName: null,
-    startedAt: new Date("2026-09-10T09:00:00Z"), finishedAt: new Date("2026-09-10T09:30:00Z"),
-    resultPercent: 64, resultPassed: false, maxPoints: 20, totalPoints: 13,
-  }]);
+  storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED]);
 });
 
 describe("POST /api/export/excel — состав строк задаёт фильтр", () => {
@@ -117,7 +173,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
     const res = await exportWith({ testIds: ["test1"] });
 
     expect(res.status).toBe(200);
-    const rows = await sheetRows(res.body, "Попытки");
+    const rows = await sheetRows(res.body, "Прохождения");
     expect(rows).toHaveLength(2);
     expect(rows.map(r => r[2])).toEqual(
       expect.arrayContaining(["Морозова Анна", "Участник 7f3a9c"]),
@@ -127,7 +183,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
   it("оставляет в книге только тот источник, который отобран", async () => {
     const res = await exportWith({ testIds: ["test1"], sources: ["import"] });
 
-    const rows = await sheetRows(res.body, "Попытки");
+    const rows = await sheetRows(res.body, "Прохождения");
     expect(rows).toHaveLength(1);
     expect(rows[0][2]).toBe("Участник 7f3a9c");
   });
@@ -135,7 +191,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
   it("оставляет в книге только тот исход, который отобран", async () => {
     const res = await exportWith({ testIds: ["test1"], outcomes: ["failed"] });
 
-    const rows = await sheetRows(res.body, "Попытки");
+    const rows = await sheetRows(res.body, "Прохождения");
     expect(rows).toHaveLength(1);
     expect(rows[0][2]).toBe("Участник 7f3a9c");
   });
@@ -158,10 +214,11 @@ describe("POST /api/export/excel — состав строк задаёт фил
 
     const res = await exportWith({ testIds: ["test1"], snapshotIds: ["snap-3"] });
 
-    const attemptsRows = await sheetRows(res.body, "Попытки");
+    const attemptsRows = await sheetRows(res.body, "Прохождения");
     expect(attemptsRows.map(r => r[1])).toEqual(["web-1"]);
     const summary = await sheetRows(res.body, "Сводка");
-    expect(summary).toContainEqual(["Попыток (завершённых)", 1]);
+    expect(summary).toContainEqual(["Прохождений", 1]);
+    expect(summary).toContainEqual(["Завершённых", 1]);
   });
 
   it("печатает оргполя за участником по правилу OQ-04: своё у импорта, профиль у веба", async () => {
@@ -178,7 +235,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
 
     const res = await exportWith({ testIds: ["test1"] });
 
-    const rows = await sheetRows(res.body, "Попытки");
+    const rows = await sheetRows(res.body, "Прохождения");
     const byId = Object.fromEntries(rows.map(r => [r[1], r.slice(3, 6)]));
     // Нет значения — пустая клетка, а не прочерк: колонку фильтруют в Excel, и «—» встал бы
     // там отдельным значением.
@@ -200,7 +257,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
   it("подписывает источник каждой строки: импорт и веб читаются по-разному", async () => {
     const res = await exportWith({ testIds: ["test1"] });
 
-    const rows = await sheetRows(res.body, "Попытки");
+    const rows = await sheetRows(res.body, "Прохождения");
     const sources = rows.map(r => r[r.length - 1]);
     expect(sources).toEqual(expect.arrayContaining(["Веб", "Импорт"]));
   });
@@ -214,6 +271,155 @@ describe("POST /api/export/excel — состав строк задаёт фил
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(res.body as never);
     expect(workbook.getWorksheet("Сводка")).toBeTruthy();
-    expect(workbook.getWorksheet("Попытки")).toBeUndefined();
+    expect(workbook.getWorksheet("Прохождения")).toBeUndefined();
+  });
+
+  it("телеметрия LMS попадает в лист прохождений со своим источником", async () => {
+    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, TELEMETRY]);
+
+    const res = await exportWith({ testIds: ["test1"] });
+
+    const rows = await sheetRows(res.body, "Прохождения");
+    const telemetry = rows.find(r => r[1] === "tel-1");
+    expect(telemetry).toBeDefined();
+    expect(telemetry![2]).toBe("Петров Пётр");
+    expect(telemetry![12]).toBe("Сдан");
+    expect(telemetry![13]).toBe("Телеметрия LMS");
+    expect(rows).toHaveLength(3);
+  });
+
+  it("условие «источник: веб» убирает телеметрию и импорт", async () => {
+    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, TELEMETRY]);
+
+    const res = await exportWith({ testIds: ["test1"], sources: ["web"] });
+
+    const rows = await sheetRows(res.body, "Прохождения");
+    expect(rows.map(r => r[1])).toEqual(["web-1"]);
+    expect(rows[0][13]).toBe("Веб");
+  });
+
+  it("условие по организации сужает строки: своё значение у LMS, профиль у веба", async () => {
+    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, TELEMETRY]);
+    storageMock.selectObservations.mockImplementation(orgAwareDouble({ u1: "ООО «Лютик»" }));
+    storageMock.selectOrgSpellings.mockResolvedValue({
+      organization: ["АО «Ромашка»", "ООО «Лютик»"], unit: [], position: [],
+    });
+
+    const res = await exportWith({ testIds: ["test1"], organizations: ["ао «ромашка»"] });
+
+    const rows = await sheetRows(res.body, "Прохождения");
+    expect(rows.map(r => r[1])).toEqual(["tel-1"]);
+  });
+
+  it("число строк книги равно «всего» реестра при тех же условиях", async () => {
+    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, TELEMETRY]);
+    storageMock.selectObservations.mockImplementation(orgAwareDouble({ u1: "АО «Ромашка»" }));
+    storageMock.selectOrgSpellings.mockResolvedValue({
+      organization: ["АО «Ромашка»"], unit: [], position: [],
+    });
+
+    const cases: Array<{ body: Record<string, unknown>; query: string }> = [
+      { body: {}, query: "" },
+      { body: { sources: ["telemetry", "import"] }, query: "source=telemetry,import" },
+      { body: { outcomes: ["passed"] }, query: "outcome=passed" },
+      { body: { organizations: ["АО «Ромашка»"] }, query: `organization=${encodeURIComponent("АО «Ромашка»")}` },
+      { body: { dateFrom: "2026-09-11", dateTo: "2026-09-12" }, query: "from=2026-09-11&to=2026-09-12" },
+    ];
+
+    for (const { body, query } of cases) {
+      const registry = await request(makeApp())
+        .get(`/api/analytics/registry?testId=test1&limit=1${query ? `&${query}` : ""}`)
+        .set("x-test-user", "a1");
+      expect(registry.status).toBe(200);
+
+      const book = await exportWith({ testIds: ["test1"], ...body });
+      const rows = await sheetRows(book.body, "Прохождения");
+      expect(rows.length, JSON.stringify(body)).toBe(registry.body.total);
+    }
+  });
+
+  it("период передаётся в отбор тем же правилом, что у реестра: по дате начала, конец дня включительно", async () => {
+    await exportWith({ testIds: ["test1"], dateFrom: "2026-09-11", dateTo: "2026-09-12" });
+
+    const query = storageMock.selectObservations.mock.calls.at(-1)![0];
+    expect(query.from).toEqual(new Date("2026-09-11T00:00:00.000Z"));
+    expect(query.to).toEqual(new Date("2026-09-12T23:59:59.999Z"));
+  });
+
+  it("ответы и статистика вопросов собраны по всем источникам и только по отобранным прохождениям", async () => {
+    const question = {
+      id: "q1", topicId: "t1", type: "single", prompt: "Столица Франции?",
+      dataJson: { options: ["Париж", "Лион"] }, correctJson: { correctIndex: 0 }, difficulty: 30,
+    };
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "География" }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([question]);
+    storageMock.getAllAttempts.mockResolvedValue([{
+      id: "web-1", testId: "test1", userId: "u1",
+      startedAt: new Date("2026-09-11T14:00:00Z"), finishedAt: new Date("2026-09-11T14:20:00Z"),
+      variantJson: { sections: [{ topicId: "t1", questionIds: ["q1"] }] },
+      answersJson: { q1: 0 },
+      resultJson: {
+        overallPercent: 100, overallPassed: true, totalPossiblePoints: 1, totalEarnedPoints: 1,
+        questionOutcomes: [{ questionId: "q1", result: "correct", earned: 1, possible: 1 }],
+      },
+    }]);
+    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, TELEMETRY]);
+    // Ответ чужого прохождения (не попавшего в выборку) обязан остаться за бортом.
+    storageMock.selectAnswersForTest.mockResolvedValue([
+      { questionId: "q1", attemptId: "lms-1", result: "incorrect", latencyMs: null, points: 0, maxPoints: 1, userAnswer: 1, origin: "import" },
+      { questionId: "q1", attemptId: "tel-1", result: "correct", latencyMs: 12000, points: 1, maxPoints: 1, userAnswer: 0, origin: "telemetry" },
+      { questionId: "q1", attemptId: "elsewhere", result: "incorrect", latencyMs: null, points: 0, maxPoints: 1, userAnswer: 1, origin: "import" },
+    ]);
+
+    // «Сдал» отбирает веб-попытку и телеметрию; несдавший импорт в выборку не входит.
+    const res = await exportWith({ testIds: ["test1"], outcomes: ["passed"] });
+
+    const answers = await sheetRows(res.body, "Ответы");
+    expect(answers.map(r => [r[1], r[3], r[11], r[12]])).toEqual(expect.arrayContaining([
+      ["web-1", "Веб", "1) Париж", "Верно"],
+      ["tel-1", "Телеметрия LMS", "1) Париж", "Верно"],
+    ]));
+    expect(answers).toHaveLength(2);
+    expect(answers.find(r => r[1] === "tel-1")![14]).toBe(12);
+
+    const stats = await sheetRows(res.body, "Статистика вопросов");
+    expect(stats).toEqual([[
+      "Сертификация", "Столица Франции?", "География", "Один ответ", 30,
+      "1) Париж\n2) Лион", "1) Париж", 2, 2, "100.0%",
+    ]]);
+
+    // Без условия исхода в статистику входит и неверный ответ импорта.
+    const all = await exportWith({ testIds: ["test1"] });
+    const allStats = await sheetRows(all.body, "Статистика вопросов");
+    expect(allStats[0].slice(7)).toEqual([3, 2, "66.7%"]);
+  });
+
+  it("листы уровней и рекомендаций предупреждают, что прохождения LMS в них не входят", async () => {
+    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, TELEMETRY]);
+
+    const res = await exportWith({
+      testIds: ["test1"],
+      includeSheets: { levelStats: true, recommendations: true },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(res.body as never);
+    for (const name of ["Статистика уровней", "Рекомендации"]) {
+      const sheet = workbook.getWorksheet(name);
+      expect(sheet, name).toBeTruthy();
+      expect(String(sheet!.getRow(1).getCell(1).value)).toContain("(в выборке таких 2)");
+    }
+  });
+
+  it("лучшая попытка выбирается по участнику любого источника", async () => {
+    storageMock.getAllScormAttempts.mockResolvedValue([
+      IMPORTED,
+      { ...IMPORTED, id: "lms-2", startedAt: new Date("2026-09-13T09:00:00Z"), finishedAt: new Date("2026-09-13T09:30:00Z"), resultPercent: 81, resultPassed: true },
+    ]);
+
+    const res = await exportWith({ testIds: ["test1"], bestAttemptOnly: true });
+
+    const rows = await sheetRows(res.body, "Прохождения");
+    expect(rows.map(r => r[1]).sort()).toEqual(["lms-2", "web-1"]);
   });
 });

@@ -23,6 +23,9 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getTest: vi.fn(),
+    // The test-level book is the general one: it reads the tests directory and org spellings.
+    getTests: vi.fn().mockResolvedValue([]),
+    selectOrgSpellings: vi.fn().mockResolvedValue({ organization: [], unit: [], position: [] }),
     getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); },
     // PRD-56 FR-33: страница теста читает прохождения через выборку DAL.
     selectObservations: vi.fn(),
@@ -328,7 +331,7 @@ describe("GET /tests/:testId — the summary stops averaging what was never grad
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-describe("GET /tests/:testId/export/excel — the workbook carries the measurements", () => {
+describe("POST /export/excel for one test — the workbook carries the measurements", () => {
   const ALLOCATION_QUESTION = {
     id: "q1",
     topicId: "t1",
@@ -345,6 +348,7 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
 
   beforeEach(() => {
     storageMock.getTest.mockResolvedValue(MEASUREMENT_TEST);
+    storageMock.getTests.mockResolvedValue([MEASUREMENT_TEST]);
     storageMock.getScales.mockResolvedValue(SCALE_ROWS);
     storageMock.getResultVariables.mockResolvedValue(RV_ROWS);
     storageMock.getAllAttempts.mockResolvedValue([MEASUREMENT_ATTEMPT]);
@@ -356,9 +360,9 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
   });
 
   it("grows a column per scale and per indicator, filled from the stored run", async () => {
-    const res = await asWorkbook(request(app).get("/api/analytics/tests/test1/export/excel"));
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
     expect(res.status).toBe(200);
-    const rows = await sheetRows(res.body, "Попытки");
+    const rows = await sheetRows(res.body, "Прохождения");
 
     expect(rows[0]).toEqual(expect.arrayContaining(["Целевой", "Командный", "pro", "Ведущий стиль"]));
     const iCel = rows[0].indexOf("Целевой");
@@ -368,7 +372,7 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
   });
 
   it("stops calling an unchecked answer «Неверно» and shows what it DID measure", async () => {
-    const res = await asWorkbook(request(app).get("/api/analytics/tests/test1/export/excel"));
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
     const rows = await sheetRows(res.body, "Ответы");
     const head = rows[0];
     const row = rows[1];
@@ -384,7 +388,7 @@ describe("GET /tests/:testId/export/excel — the workbook carries the measureme
   });
 
   it("reports «неприменимо» instead of 0% in the summary and the item stats", async () => {
-    const res = await asWorkbook(request(app).get("/api/analytics/tests/test1/export/excel"));
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
     const summary = await sheetRows(res.body, "Сводка");
     const flat = summary.map((r) => r.join("|"));
     expect(flat).toContain("Средний результат|—");

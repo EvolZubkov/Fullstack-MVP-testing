@@ -22,6 +22,9 @@ const { storageMock } = vi.hoisted(() => ({
     getGroups: vi.fn(), getGroupUsers: vi.fn(),
     getScormPackages: vi.fn(), getAllScormAttempts: vi.fn(),
     getScormAnswersByAttempt: vi.fn(),
+    // PRD-56 FR-04: the registry book reads answers of every source and org spellings.
+    selectAnswersForTest: vi.fn().mockResolvedValue([]),
+    selectOrgSpellings: vi.fn().mockResolvedValue({ organization: [], unit: [], position: [] }),
     // PRD-5/PRD-2: the export now names the test's scales and indicators, so it reads
     // the measurement rows too. Empty by default — these fixtures are control tests.
     getScales: vi.fn().mockResolvedValue([]),
@@ -71,11 +74,6 @@ const dbUser = {
   mustChangePassword: false, gdprConsent: true, passwordHash: "x", emailHash: "x",
   createdAt: new Date(), lastLoginAt: null, createdBy: null,
 };
-const dbGroup = { id: "g1", name: "Group A", description: null, createdAt: new Date(), createdBy: null };
-const dbPkg = {
-  id: "pkg1", testId: "test1", testTitle: "JS Basics", testMode: "standard",
-  secretKey: "abc", isActive: true, exportedAt: new Date(), createdAt: new Date(),
-};
 
 const makeWebAttempt = (overrides: any = {}) => ({
   id: "atmp1", testId: "test1", userId: "u1",
@@ -93,140 +91,6 @@ const makeWebAttempt = (overrides: any = {}) => ({
   ...overrides,
 });
 
-const makeLmsAttempt = (overrides: any = {}) => ({
-  id: "satmp1", packageId: "pkg1", sessionId: "sess1", attemptNumber: 1,
-  lmsUserId: "lms-u1", lmsUserName: "LMS Alice", lmsUserEmail: "lms@test.com", lmsUserOrg: null,
-  startedAt: new Date(Date.now() - 120000), finishedAt: new Date(),
-  resultPercent: 85, resultPassed: true, totalPoints: 8, maxPoints: 10,
-  totalQuestions: 2, correctAnswers: 1, achievedLevelsJson: null, failedTopicCoursesJson: null,
-  ...overrides,
-});
-
-const dbAnswer = {
-  id: "ans1", questionId: "q1", questionPrompt: "Q?", questionType: "single",
-  topicId: "t1", topicName: "JavaScript", difficulty: 50,
-  userAnswerJson: 0, correctAnswerJson: 0, isCorrect: true, points: 5, maxPoints: 5,
-  optionsJson: ["A", "B"], leftItemsJson: null, rightItemsJson: null, itemsJson: null,
-  levelIndex: null, levelName: null, answeredAt: new Date(),
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PER-TEST EXPORT
-// ─────────────────────────────────────────────────────────────────────────────
-describe("GET /analytics/tests/:testId/export/excel", () => {
-  let app: express.Express;
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storageMock.selectObservations.mockImplementation(observationsDouble(storageMock as never));
-    storageMock.getUser.mockResolvedValue(authorUser);
-    app = makeApp();
-  });
-
-  it("returns 401 when not authenticated", async () => {
-    const res = await request(app).get("/api/tests/test1/export/excel");
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 404 when test not found", async () => {
-    storageMock.getTest.mockResolvedValue(undefined);
-    storageMock.getAllAttempts.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/tests/x/export/excel"));
-    expect(res.status).toBe(404);
-  });
-
-  it("returns xlsx file for test with attempts", async () => {
-    storageMock.getTest.mockResolvedValue(dbTest);
-    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt()]);
-    storageMock.getUser
-      .mockResolvedValueOnce(authorUser)
-      .mockResolvedValueOnce(dbUser);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
-    storageMock.getTopicCourses.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("spreadsheetml");
-    expect(res.headers["content-disposition"]).toContain(".xlsx");
-  });
-
-  it("returns xlsx even with no completed attempts", async () => {
-    storageMock.getTest.mockResolvedValue(dbTest);
-    storageMock.getAllAttempts.mockResolvedValue([]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    storageMock.getTopicCourses.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/tests/test1/export/excel"));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("spreadsheetml");
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// EXPORT FILTERS
-// ─────────────────────────────────────────────────────────────────────────────
-describe("GET /analytics/export/filters", () => {
-  let app: express.Express;
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storageMock.selectObservations.mockImplementation(observationsDouble(storageMock as never));
-    storageMock.getUser.mockResolvedValue(authorUser);
-    app = makeApp();
-  });
-
-  it("returns 401 when not authenticated", async () => {
-    const res = await request(app).get("/api/export/filters");
-    expect(res.status).toBe(401);
-  });
-
-  it("returns tests, users, groups, scormPackages", async () => {
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt()]);
-    storageMock.getAllScormAttempts.mockResolvedValue([makeLmsAttempt()]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getUser
-      .mockResolvedValueOnce(authorUser)  // middleware
-      .mockResolvedValueOnce(dbUser);     // user lookup
-    storageMock.getGroups.mockResolvedValue([dbGroup]);
-    storageMock.getGroupUsers.mockResolvedValue([dbUser]);
-    const res = await asAuthor(request(app).get("/api/export/filters"));
-    expect(res.status).toBe(200);
-    expect(res.body.tests).toHaveLength(1);
-    expect(res.body.tests[0].title).toBe("JS Basics");
-    expect(res.body.users.length).toBeGreaterThan(0);
-    expect(res.body.groups).toHaveLength(1);
-    expect(res.body.groups[0].userCount).toBe(1);
-    expect(res.body.scormPackages).toHaveLength(1);
-  });
-
-  it("marks tests with web/lms attempts correctly", async () => {
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getAllAttempts.mockResolvedValue([makeWebAttempt()]);
-    storageMock.getAllScormAttempts.mockResolvedValue([makeLmsAttempt()]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getUser
-      .mockResolvedValueOnce(authorUser)
-      .mockResolvedValueOnce(dbUser);
-    storageMock.getGroups.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/export/filters"));
-    expect(res.status).toBe(200);
-    const testOpt = res.body.tests[0];
-    expect(testOpt.hasWebAttempts).toBe(true);
-    expect(testOpt.hasLmsAttempts).toBe(true);
-  });
-
-  it("returns empty arrays when no data", async () => {
-    storageMock.getTests.mockResolvedValue([]);
-    storageMock.getAllAttempts.mockResolvedValue([]);
-    storageMock.getAllScormAttempts.mockResolvedValue([]);
-    storageMock.getScormPackages.mockResolvedValue([]);
-    storageMock.getGroups.mockResolvedValue([]);
-    const res = await asAuthor(request(app).get("/api/export/filters"));
-    expect(res.status).toBe(200);
-    expect(res.body.tests).toHaveLength(0);
-    expect(res.body.users).toHaveLength(0);
-  });
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /export/excel — Web attempts export
 // ─────────────────────────────────────────────────────────────────────────────
@@ -242,6 +106,10 @@ describe("POST /analytics/export/excel", () => {
     storageMock.getScales.mockResolvedValue([]);
     storageMock.getResultVariables.mockResolvedValue([]);
     storageMock.getQuestionMeasurements.mockResolvedValue([]);
+    storageMock.selectAnswersForTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getTestQuestionScoring.mockResolvedValue([]);
+    storageMock.selectOrgSpellings.mockResolvedValue({ organization: [], unit: [], position: [] });
     app = makeApp();
   });
 
@@ -344,88 +212,5 @@ describe("POST /analytics/export/excel", () => {
     // Excel is returned — content checks via sheet parsing are out of scope;
     // the important check is that it doesn't crash and returns a file
     expect(res.headers["content-type"]).toContain("spreadsheetml");
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /export/excel-lms — LMS attempts export
-// ─────────────────────────────────────────────────────────────────────────────
-describe("POST /analytics/export/excel-lms", () => {
-  let app: express.Express;
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storageMock.selectObservations.mockImplementation(observationsDouble(storageMock as never));
-    storageMock.getUser.mockResolvedValue(authorUser);
-    app = makeApp();
-  });
-
-  it("returns 401 when not authenticated", async () => {
-    const res = await request(app).post("/api/export/excel-lms").send({ testIds: ["test1"] });
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 400 when testIds missing", async () => {
-    const res = await asAuthor(request(app).post("/api/export/excel-lms").send({}));
-    expect(res.status).toBe(400);
-  });
-
-  it("returns xlsx for LMS attempts", async () => {
-    storageMock.getUser.mockResolvedValue(authorUser);
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([makeLmsAttempt()]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([dbAnswer]);
-    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms")
-      .send({ testIds: ["test1"] }));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("spreadsheetml");
-  });
-
-  it("returns xlsx even when no matching LMS attempts", async () => {
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([]);
-    storageMock.getAllScormAttempts.mockResolvedValue([]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms")
-      .send({ testIds: ["test1"] }));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("spreadsheetml");
-  });
-
-  it("bestAttemptOnly keeps only the best LMS attempt per user+test", async () => {
-    const attempt1 = makeLmsAttempt({ id: "s1", resultPercent: 60 });
-    const attempt2 = makeLmsAttempt({ id: "s2", resultPercent: 95 });
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([attempt1, attempt2]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms")
-      .send({ testIds: ["test1"], bestAttemptOnly: true }));
-    expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toContain("spreadsheetml");
-  });
-
-  it("filters LMS attempts by date range", async () => {
-    const oldAttempt = makeLmsAttempt({
-      id: "s_old",
-      startedAt: new Date("2023-01-01"),
-      finishedAt: new Date("2023-01-01"),
-    });
-    const newAttempt = makeLmsAttempt({ id: "s_new" });
-    storageMock.getTests.mockResolvedValue([dbTest]);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getScormPackages.mockResolvedValue([dbPkg]);
-    storageMock.getAllScormAttempts.mockResolvedValue([oldAttempt, newAttempt]);
-    storageMock.getScormAnswersByAttempt.mockResolvedValue([]);
-    storageMock.getQuestionsByIds.mockResolvedValue([]);
-    const res = await asAuthor(request(app).post("/api/export/excel-lms")
-      .send({ testIds: ["test1"], dateFrom: "2024-01-01" }));
-    expect(res.status).toBe(200);
-    // just checking it runs successfully with date filter
   });
 });

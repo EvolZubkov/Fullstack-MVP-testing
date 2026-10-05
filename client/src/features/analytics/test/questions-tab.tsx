@@ -65,8 +65,6 @@ export interface QuestionsTabProps {
   onOpenRegistry?: (questionId: string) => void;
   onDeliveryChange?: (questionId: string, excluded: boolean) => void;
   onRestoreFirstAttempt?: () => void;
-  exportHref?: string;
-  matrixHref?: string;
 }
 
 /** Строка таблицы для вопроса пула, которого ещё никто не видел: чисел нет, только подписи. */
@@ -99,7 +97,7 @@ export function QuestionsTab(props: QuestionsTabProps) {
   const {
     questions, measurement, minObservations, testId, passages, quality, qualityLoading, heuristics,
     excluded, initialView = "all", initialSet, onOpenQuestion, onOpenRegistry, onDeliveryChange,
-    onRestoreFirstAttempt, exportHref, matrixHref,
+    onRestoreFirstAttempt,
   } = props;
   const sets: readonly ColumnSet[] = measurement ? ["main", "delivery"] : COLUMN_SETS;
   const [set, setSet] = useAnalyticsTab(sets, "main", "cols");
@@ -179,8 +177,6 @@ export function QuestionsTab(props: QuestionsTabProps) {
           view={quality}
           only={only ?? undefined}
           heuristics={heuristics}
-          exportHref={exportHref}
-          matrixHref={matrixHref}
           onOpenItem={onOpenQuestion}
           testId={testId}
           onDeliveryChange={onDeliveryChange}

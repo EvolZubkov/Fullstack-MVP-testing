@@ -1061,7 +1061,7 @@ tests                              # owner_id + status + snapshots
 | GET | `/api/analytics` | Общая аналитика |
 | GET | `/api/analytics/combined` | Сводная аналитика |
 | GET | `/api/analytics/tests/:testId/attempts` | Попытки по тесту |
-| GET | `/api/analytics/tests/:testId/export/excel` | Экспорт аналитики теста в Excel |
+| POST | `/api/export/excel` | Книга Excel по выборке реестра или одного теста (`testIds: [testId]`) |
 
 ### Домашняя страница и отчёт
 

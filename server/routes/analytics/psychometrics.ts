@@ -43,6 +43,7 @@ import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
 import { hasOwnExternalIdFormat } from "../../utils/crypto";
 import type { ObservationFilter, ObservationSource } from "../../services/analytics/observations";
 import { analyticsScope } from "./helpers";
+import { listOf, readTestFilterQuery } from "./observation-query";
 import {
   buildGrader,
   cached,
@@ -61,66 +62,17 @@ import { NO_GROUP_ID } from "@shared/analytics/no-group";
 
 const router = Router();
 
-const SOURCES: ObservationSource[] = ["web", "telemetry", "import"];
-
-/** Значения параметра, повторённого несколько раз или перечисленного через запятую. */
-function listOf(value: unknown): string[] {
-  const raw = Array.isArray(value) ? value : value === undefined ? [] : [value];
-  return raw.flatMap(item => String(item).split(",")).map(item => item.trim()).filter(Boolean);
-}
-
-/** Дата из параметра; конец периода — конец ДНЯ, как и в реестре. */
-function dateOf(value: unknown, edge: "start" | "end"): Date | undefined {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  const date = new Date(`${value}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}Z`);
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
-
 /**
- * Условия выборки из адреса — ОДИН разбор на все ручки психометрики.
+ * Условия выборки из адреса — ОДИН разбор на все ручки психометрики и на ответы задания.
  *
  * Экран, отчёт и матрица обязаны отбирать одинаково (FR-54b): выгрузка, собранная по другим
- * условиям, чем показанные на экране, невоспроизводима и неоспорима.
+ * условиям, чем показанные на экране, невоспроизводима и неоспорима. Умолчание — «только первая
+ * попытка» (FR-51): повторные попытки одного человека не независимы, и выключает это читатель
+ * осознанно, с предупреждением на экране.
  */
 function readQuery(req: Request, testId: string): { filter: ObservationFilter; onlyFirst: boolean } {
-  const sources = listOf(req.query.source).filter((s): s is ObservationSource =>
-    (SOURCES as string[]).includes(s));
-  const groupIds = listOf(req.query.groupId);
-  const formIds = listOf(req.query.formId);
-  const snapshotIds = listOf(req.query.snapshotId);
-  const from = dateOf(req.query.from, "start");
-  const to = dateOf(req.query.to, "end");
-  // Умолчание — «только первая попытка» (FR-51): повторные попытки одного человека не
-  // независимы, и выключает это читатель осознанно, с предупреждением на экране.
-  const onlyFirst = String(req.query.firstAttemptOnly ?? "true").toLowerCase() !== "false";
-  // Оргструктура (FR-06b) — тот же разбор, что у реестра: только повтор параметра, без запятых,
-  // потому что запятая бывает в названии организации.
-  const repeated = (value: unknown): string[] =>
-    (Array.isArray(value) ? value : value === undefined ? [] : [value])
-      .map(item => String(item).trim())
-      .filter(Boolean);
-  const organizations = repeated(req.query.organization);
-  const units = repeated(req.query.unit);
-  const positions = repeated(req.query.position);
-
-  return {
-    onlyFirst,
-    filter: {
-      testIds: [testId],
-      ...(groupIds.length ? { groupIds } : {}),
-      ...(formIds.length ? { formIds } : {}),
-      ...(snapshotIds.length ? { snapshotIds } : {}),
-      ...(organizations.length ? { organizations } : {}),
-      ...(units.length ? { units } : {}),
-      ...(positions.length ? { positions } : {}),
-      ...(sources.length ? { sources } : {}),
-      ...(from ? { from } : {}),
-      ...(to ? { to } : {}),
-    },
-  };
+  return readTestFilterQuery(req, testId, true);
 }
-
 
 /**
  * Смешаны ли в выборке `external_id`, построенные РАЗНЫМИ алгоритмами (PRD-66 FR-43).
