@@ -419,10 +419,11 @@ PRD-50 разрезы результата) и две работы, PRD не з�
    [Руководства по импорту](./guides/import-workbook-guide.md) и [шаблонов
    импорта](./guides/import-template-guide.md) — подписи раздела «Импорт»; [руководство
    разработчика шаблонов](./guides/template-development.md) — ZIP шаблона через «Импорт» и давняя
-   неточность: реестр шаблонов доступен разработчику и администратору, а не автору. ОСТАЁТСЯ: семь
-   снимков показывают прежний интерфейс — `03-content-tree`, `09-tests-list`, `08-import`,
-   `25-analytics`, `30-analytics-registry`, `23-publish-menu`, `06-question-drawer`
-   (`docs/guides/images/test-authoring/`).
+   неточность: реестр шаблонов доступен разработчику и администратору, а не автору. Семь
+   снимков, показывавших прежний интерфейс, пересняты тем же днём на демо-фикстуре (версия
+   2.37.0): `03-content-tree`, `09-tests-list`, `08-import`, `25-analytics`, `30-analytics-registry`,
+   `23-publish-menu`, `06-question-drawer` (`docs/guides/images/test-authoring/`); PDF руководств
+   пересобраны.
 3. **Контракт платформы шаблонов.** Сверен, правок не потребовал: версия 3.14.0 (2026-09-30) уже
    описывает `course.passCondition` и поля `sectionIntro.*` (§10.12, коммит `0c4ac430`), а таблица
    политик там же — то, что `course.passPercent` не приходит, когда общий результат вердикт не решает
