@@ -109,6 +109,29 @@ export class ScormRepository {
     return attempt || undefined;
   }
 
+  /**
+   * Достигнутые уровни и курсы проваленных тем для набора прохождений LMS — то, что пакет
+   * сообщает телеметрией при завершении (`finish`). Слой наблюдений этих полей не несёт, а книге
+   * выгрузки они нужны для листов «Статистика уровней» и «Рекомендации». Один запрос по id.
+   *
+   * @param ids идентификаторы прохождений (`scorm_attempts.id`)
+   */
+  async getScormAttemptOutcomes(ids: string[]): Promise<Array<{
+    id: string;
+    achievedLevelsJson: unknown;
+    failedTopicCoursesJson: unknown;
+  }>> {
+    if (ids.length === 0) return [];
+    return db
+      .select({
+        id: scormAttempts.id,
+        achievedLevelsJson: scormAttempts.achievedLevelsJson,
+        failedTopicCoursesJson: scormAttempts.failedTopicCoursesJson,
+      })
+      .from(scormAttempts)
+      .where(inArray(scormAttempts.id, ids));
+  }
+
   async getScormAttemptBySession(
     packageId: string,
     sessionId: string,

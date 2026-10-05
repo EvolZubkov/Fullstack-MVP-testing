@@ -32,6 +32,12 @@ const { storageMock } = vi.hoisted(() => ({
     getTestSections: vi.fn(), getTestQuestionScoring: vi.fn(),
     getGroups: vi.fn(), getGroupUsers: vi.fn(),
     getScormPackages: vi.fn(), getAllScormAttempts: vi.fn(),
+    // Уровни и курсы прохождений LMS — для листов уровней и рекомендаций книги.
+    getScormAttemptOutcomes: vi.fn(async (ids: string[]) => ((await storageMock.getAllScormAttempts()) ?? [])
+      .filter((row: { id: string }) => ids.includes(row.id))
+      .map((row: { id: string; achievedLevelsJson?: unknown; failedTopicCoursesJson?: unknown }) => ({
+        id: row.id, achievedLevelsJson: row.achievedLevelsJson ?? null, failedTopicCoursesJson: row.failedTopicCoursesJson ?? null,
+      }))),
     getScormAnswersByAttempt: vi.fn(),
     // PRD-56 FR-04: the registry book reads answers of every source and org spellings.
     selectAnswersForTest: vi.fn(), selectOrgSpellings: vi.fn(),

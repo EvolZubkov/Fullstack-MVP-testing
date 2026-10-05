@@ -192,11 +192,33 @@ function answerResultTitle(fact: AnswerFact): string {
   return (fact.earnedPoints ?? 0) > 0 ? "Частично" : "Неверно";
 }
 
-/** The first line of a sheet that only web attempts can fill. */
-function webOnlyNote(otherSources: number): unknown[] {
+/**
+ * The first line of a sheet that imported passages cannot fill: an LMS report export carries no
+ * achieved levels and no recommended courses, so the sheet speaks of web and telemetry only.
+ */
+function importNote(imported: number): unknown[] {
   return [
-    `Лист собран по веб-попыткам выборки: прохождения из телеметрии LMS и импортированных выгрузок в него не входят (в выборке таких ${otherSources}).`,
+    `Импортированные выгрузки LMS не несут уровней и рекомендаций: такие прохождения в лист не входят (в выборке таких ${imported}).`,
   ];
+}
+
+/** A level the package reports with `finish`: `{ topicName, levelName }` per topic. */
+interface ReportedLevel { topicName?: string | null; levelName?: string | null }
+/** A course the package recommends for a failed topic: `{ title, url }`. */
+interface ReportedCourse { title?: string | null }
+
+/** A JSON column that may arrive as a string (older rows) or as an array. */
+function jsonArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 // POST /api/export/excel - книга по выборке реестра
@@ -266,7 +288,13 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       .filter(o => o.source === "web" && o.outcome !== "incomplete")
       .map(o => webById.get(o.id))
       .filter((a): a is WebAttemptRaw => !!a && a.resultJson !== null && a.resultJson !== undefined);
-    const nonWebCount = observed.filter(o => o.source !== "web").length;
+    const importedCount = observed.filter(o => o.source === "import").length;
+    // Уровни и курсы проваленных тем прохождений LMS — пакет сообщает их телеметрией при
+    // завершении, а слой наблюдений их не несёт: дочитываются одним запросом по выборке.
+    const completedTelemetry = observed.filter(o => o.source === "telemetry" && o.outcome !== "incomplete");
+    const telemetryOutcomes = (includeSheets.levelStats || includeSheets.recommendations) && completedTelemetry.length
+      ? new Map((await storage.getScormAttemptOutcomes(completedTelemetry.map(o => o.id))).map(row => [row.id, row]))
+      : new Map<string, { achievedLevelsJson: unknown; failedTopicCoursesJson: unknown }>();
 
     // Тесты выборки — в порядке справочника. Удалённый тест (строки LMS без теста) остаётся
     // в листах строк, но в разрезе по тестам ему нечего сказать о вопросах.
@@ -552,7 +580,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       addAoaSheet(wb, "Статистика вопросов", rows, [24, 50, 20, 15, 10, 50, 30, 12, 12, 12]);
     }
 
-    // Sheet: Level stats — кто какой уровень достиг. Уровни лежат в итоге веб-попытки.
+    // Sheet: Level stats — кто какой уровень достиг: веб — из итога попытки, LMS — из телеметрии.
     if (includeSheets.levelStats) {
       const rows: unknown[][] = [["Участник", "Тест", "Тема", "Достигнутый уровень", "Дата"]];
 
@@ -573,12 +601,21 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         }
       }
 
-      if (rows.length > 1 || nonWebCount > 0) {
-        addAoaSheet(wb, "Статистика уровней", nonWebCount > 0 ? [webOnlyNote(nonWebCount), ...rows] : rows, [30, 30, 25, 20, 15]);
+      for (const o of completedTelemetry) {
+        const levels = jsonArray<ReportedLevel>(telemetryOutcomes.get(o.id)?.achievedLevelsJson);
+        if (levels.length === 0) continue;
+        const date = o.finishedAt ? new Date(o.finishedAt).toLocaleDateString("ru-RU") : "—";
+        for (const level of levels) {
+          rows.push([o.participant ?? "—", o.testId ? titleOf(o.testId) : "—", level.topicName || "—", level.levelName || "Не достигнут", date]);
+        }
+      }
+
+      if (rows.length > 1 || importedCount > 0) {
+        addAoaSheet(wb, "Статистика уровней", importedCount > 0 ? [importNote(importedCount), ...rows] : rows, [30, 30, 25, 20, 15]);
       }
     }
 
-    // Sheet: Recommendations — из итога веб-попытки, и адаптивной, и стандартной.
+    // Sheet: Recommendations — веб из итога попытки (адаптивной и стандартной), LMS из телеметрии.
     if (includeSheets.recommendations) {
       const userCourses = new Map<string, Set<string>>();
       const add = (participant: string, title: string) => {
@@ -600,12 +637,19 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         }
       }
 
+      // Телеметрия: пакет уже собрал курсы только проваленных тем и без повторов.
+      for (const o of completedTelemetry) {
+        for (const course of jsonArray<ReportedCourse>(telemetryOutcomes.get(o.id)?.failedTopicCoursesJson)) {
+          if (course?.title) add(o.participant ?? "—", course.title);
+        }
+      }
+
       const rows: unknown[][] = [["Участник", "Рекомендуемый курс"]];
       for (const [participant, courses] of userCourses.entries()) {
         for (const course of courses) rows.push([participant, course]);
       }
-      if (rows.length > 1 || nonWebCount > 0) {
-        addAoaSheet(wb, "Рекомендации", nonWebCount > 0 ? [webOnlyNote(nonWebCount), ...rows] : rows, [30, 50]);
+      if (rows.length > 1 || importedCount > 0) {
+        addAoaSheet(wb, "Рекомендации", importedCount > 0 ? [importNote(importedCount), ...rows] : rows, [30, 50]);
       }
     }
 

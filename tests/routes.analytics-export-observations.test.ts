@@ -32,6 +32,12 @@ const { storageMock } = vi.hoisted(() => ({
     getResultVariables: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
     selectObservations: vi.fn(),
+    // Уровни и курсы прохождений LMS — для листов уровней и рекомендаций книги.
+    getScormAttemptOutcomes: vi.fn(async (ids: string[]) => ((await storageMock.getAllScormAttempts()) ?? [])
+      .filter((row: { id: string }) => ids.includes(row.id))
+      .map((row: { id: string; achievedLevelsJson?: unknown; failedTopicCoursesJson?: unknown }) => ({
+        id: row.id, achievedLevelsJson: row.achievedLevelsJson ?? null, failedTopicCoursesJson: row.failedTopicCoursesJson ?? null,
+      }))),
     selectAnswersForTest: vi.fn().mockResolvedValue([]),
     selectOrgSpellings: vi.fn().mockResolvedValue({ organization: [], unit: [], position: [] }),
   },

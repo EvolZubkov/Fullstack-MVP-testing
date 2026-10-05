@@ -26,6 +26,12 @@ const { storageMock } = vi.hoisted(() => ({
     getTestSections: vi.fn(), getTestQuestionScoring: vi.fn(),
     getGroups: vi.fn(), getGroupUsers: vi.fn(),
     getScormAnswersByAttempt: vi.fn(),
+    // Уровни и курсы прохождений LMS — из тех же строк, что отдаёт getAllScormAttempts.
+    async getScormAttemptOutcomes(ids: string[]) {
+      const rows = ((await this.getAllScormAttempts()) ?? []) as Array<{ id: string; achievedLevelsJson?: unknown; failedTopicCoursesJson?: unknown }>;
+      return rows.filter(row => ids.includes(row.id))
+        .map(row => ({ id: row.id, achievedLevelsJson: row.achievedLevelsJson ?? null, failedTopicCoursesJson: row.failedTopicCoursesJson ?? null }));
+    },
     getScales: vi.fn().mockResolvedValue([]),
     getResultVariables: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
@@ -394,8 +400,12 @@ describe("POST /api/export/excel — состав строк задаёт фил
     expect(allStats[0].slice(7)).toEqual([3, 2, "66.7%"]);
   });
 
-  it("листы уровней и рекомендаций предупреждают, что прохождения LMS в них не входят", async () => {
-    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, TELEMETRY]);
+  it("уровни и рекомендации телеметрии входят в листы; пояснение — только про импорт", async () => {
+    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, {
+      ...TELEMETRY,
+      achievedLevelsJson: [{ topicName: "География", levelName: "Продвинутый" }],
+      failedTopicCoursesJson: JSON.stringify([{ title: "Курс по картам", url: "https://x" }]),
+    }]);
 
     const res = await exportWith({
       testIds: ["test1"],
@@ -407,8 +417,14 @@ describe("POST /api/export/excel — состав строк задаёт фил
     for (const name of ["Статистика уровней", "Рекомендации"]) {
       const sheet = workbook.getWorksheet(name);
       expect(sheet, name).toBeTruthy();
-      expect(String(sheet!.getRow(1).getCell(1).value)).toContain("(в выборке таких 2)");
+      // Выгрузка отчёта LMS уровней и рекомендаций не несёт — пояснение о ней одной.
+      expect(String(sheet!.getRow(1).getCell(1).value)).toContain("Импортированные выгрузки LMS");
+      expect(String(sheet!.getRow(1).getCell(1).value)).toContain("(в выборке таких 1)");
     }
+    const levels = await sheetRows(res.body, "Статистика уровней");
+    expect(levels.some(row => row.includes("География") && row.includes("Продвинутый"))).toBe(true);
+    const courses = await sheetRows(res.body, "Рекомендации");
+    expect(courses.some(row => row.includes("Курс по картам"))).toBe(true);
   });
 
   it("лучшая попытка выбирается по участнику любого источника", async () => {
