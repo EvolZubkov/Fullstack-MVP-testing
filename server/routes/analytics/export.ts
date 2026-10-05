@@ -60,8 +60,8 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
       return res.status(404).json({ error: "Test not found" });
     }
 
-    const allAttempts = await storage.getAllAttempts();
-    const testAttempts = allAttempts.filter(a => a.testId === testId);
+    // PRD-70 FR-01: the test by query, not the whole table filtered in memory.
+    const testAttempts = await storage.getAttemptsByTests([testId]);
     const completedAttempts = testAttempts.filter(a => a.resultJson !== null);
 
     const userIds = Array.from(new Set(testAttempts.map(a => a.userId)));
@@ -378,7 +378,9 @@ router.get("/export/filters", requirePermission("analytics.export"), async (req:
     // and the attempts/packages belonging to them.
     const scope = await analyticsScope(req);
     const tests = (await storage.getTests()).filter((t) => scope.has(t.id));
-    const allAttempts = (await storage.getAllAttempts()).filter((a) => scope.has(a.testId));
+    // PRD-70 FR-01: a scoped reader reads only their tests; the whole table — only an unscoped one.
+    const allAttempts = (scope.all ? await storage.getAllAttempts() : await storage.getAttemptsByTests([...scope.ids]))
+      .filter((a) => scope.has(a.testId));
     const scormPackages = (await storage.getScormPackages()).filter((p) =>
       scope.has(p.testId ?? null),
     );
@@ -511,11 +513,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map(t => [t.id, t.name]));
 
-    const allAttempts = await storage.getAllAttempts();
-
-    // Filter attempts (selectedTests is already scope-filtered, FR-08).
+    // Filter attempts (selectedTests is already scope-filtered, FR-08); PRD-70 FR-01: by query.
     const selectedTestIds = new Set(selectedTests.map((t) => t.id));
-    let attempts = allAttempts.filter(a => selectedTestIds.has(a.testId));
+    let attempts = await storage.getAttemptsByTests([...selectedTestIds]);
 
     // Filter by groups
     let effectiveUserIds = [...userIds];

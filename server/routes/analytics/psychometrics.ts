@@ -283,6 +283,78 @@ function cutRatioOf(rule: unknown): number | null {
   return parsed.value / 100;
 }
 
+/** Тест, как его читает расчёт, — запись хранилища. */
+type TestRow = NonNullable<Awaited<ReturnType<typeof storage.getTest>>>;
+
+/** Результат ядра расчёта: метрики, наблюдения выборки, разделы и партии импорта теста. */
+interface TestPsychometrics {
+  psychometrics: ReturnType<typeof computePsychometrics>;
+  observations: Awaited<ReturnType<typeof loadResponseMatrix>>["observations"];
+  sections: Awaited<ReturnType<typeof storage.getTestSections>>;
+  batches: Awaited<ReturnType<typeof storage.getLmsImportBatches>>;
+}
+
+/**
+ * Ключ кэша расчёта по тесту — тест первым полем, чтобы сброс по тесту шёл по префиксу.
+ *
+ * @param test тест
+ * @param batches партии импорта теста: загрузка и откат меняют выборку, не трогая ни теста, ни
+ *   его содержания
+ * @param filter отбор наблюдений
+ * @param onlyFirst только первая попытка участника
+ */
+function coreKey(
+  test: TestRow,
+  batches: TestPsychometrics["batches"],
+  filter: ObservationFilter,
+  onlyFirst: boolean,
+): string {
+  return JSON.stringify({
+    testId: test.id,
+    version: test.version ?? 1,
+    batchIds: batches.map(b => b.id).sort().join(","),
+    filter: { ...filter, from: filter.from?.toISOString(), to: filter.to?.toISOString() },
+    onlyFirst,
+  });
+}
+
+/**
+ * PRD-70 FR-02: психометрика теста при данном отборе — ОДИН кэшируемый расчёт для всех
+ * потребителей: экрана «Качество вопросов», фонового пересчёта «под подозрением» и статистики
+ * вопроса банка. Раньше фоновый пересчёт считал тест заново мимо кэша экрана.
+ *
+ * Область видимости открыта: отбор всегда сужен до одного теста (`filter.testIds`), а пускать ли
+ * читателя к этому тесту, решает гейт маршрута (`requireTestScope`) до вызова. Поэтому один ключ
+ * годится всем читателям теста.
+ *
+ * @param test тест
+ * @param filter отбор наблюдений; `testIds` — ровно `[test.id]`
+ * @param onlyFirst только первая попытка участника (FR-51)
+ */
+export async function testPsychometrics(
+  test: TestRow,
+  filter: ObservationFilter,
+  onlyFirst: boolean,
+): Promise<TestPsychometrics> {
+  const batches = await storage.getLmsImportBatches(test.id);
+  return cached(coreKey(test, batches, filter, onlyFirst), async () => {
+    const { grade, questionById } = await buildGrader(test.id);
+    const matrix = await loadResponseMatrix(filter, { all: true, ids: new Set<string>() }, grade);
+    const sections = await storage.getTestSections(test.id);
+    const psychometrics = computePsychometrics(onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses, {
+      questionById,
+      minObservations: config.analytics.minObservations,
+      cutRatio: cutRatioOf(test.overallPassRuleJson),
+      // FR-20: при неоднородной выдаче надёжность — оценка по связям заданий.
+      unevenDelivery: deliveryIsUneven(test.mode, sections),
+      // Решение владельца 2026-09-26: вопросы теста — пул выдачи, а не «на что отвечали».
+      // Определение пула — то же, что у профиля экспозиции и проверки публикации.
+      poolQuestionIds: (await loadDeliveryPool(test.id)).questionIds,
+    });
+    return { psychometrics, observations: matrix.observations, sections, batches };
+  });
+}
+
 // GET /api/analytics/psychometrics/:testId — качество заданий и надёжность теста
 router.get(
   "/psychometrics/:testId",
@@ -297,35 +369,11 @@ router.get(
       const { filter, onlyFirst } = readQuery(req, testId);
 
       // Состав партий — часть ключа: загрузка и откат меняют выборку, не трогая ни теста, ни его
-      // содержания.
+      // содержания. Ключ экрана — ключ ядра с пометкой: подписи заданий кэшируются поверх общего
+      // расчёта, и сброс по тесту снимает оба.
       const batches = await storage.getLmsImportBatches(testId);
-      const batchIds = batches.map(b => b.id).sort().join(",");
-      const key = JSON.stringify({
-        testId,
-        version: test.version ?? 1,
-        batchIds,
-        filter: { ...filter, from: filter.from?.toISOString(), to: filter.to?.toISOString() },
-        onlyFirst,
-      });
-
-      const result = await cached(key, async () => {
-        const scope = await analyticsScope(req);
-        const { grade, questionById } = await buildGrader(testId);
-        const matrix = await loadResponseMatrix(filter, scope, grade);
-        const responses = onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses;
-
-        const sections = await storage.getTestSections(testId);
-        const ctx: PsychometricsContext = {
-          questionById,
-          minObservations: config.analytics.minObservations,
-          cutRatio: cutRatioOf(test.overallPassRuleJson),
-          // FR-20: при неоднородной выдаче надёжность — оценка по связям заданий.
-          unevenDelivery: deliveryIsUneven(test.mode, sections),
-          // Решение владельца 2026-09-26: вопросы теста — пул выдачи, а не «на что отвечали».
-          // Определение пула — то же, что у профиля экспозиции и проверки публикации.
-          poolQuestionIds: (await loadDeliveryPool(testId)).questionIds,
-        };
-        const psychometrics = computePsychometrics(responses, ctx);
+      const result = await cached(coreKey(test, batches, filter, onlyFirst) + "#screen", async () => {
+        const { psychometrics, observations, sections } = await testPsychometrics(test, filter, onlyFirst);
         const importShare = psychometrics.sample.responses === 0
           ? 0
           : (psychometrics.sample.bySource.import ?? 0) / psychometrics.sample.responses;
@@ -342,7 +390,7 @@ router.get(
         return {
           ...psychometrics,
           items: psychometrics.items.map(item => ({ ...item, ...labels.get(item.questionId) })),
-          observations: matrix.observations.length,
+          observations: observations.length,
           // FR-11: видимая потеря выборки — рядом с n, а не только в протоколе загрузки.
           unmatched: unmatchedOf(batches, filter),
           // FR-46: с какого числа наблюдений показывается трудность — порог инстанса (FR-38a).
@@ -364,7 +412,7 @@ router.get(
             // FR-43: в выборке соседствуют `external_id` нашего вида и заведомо чужого — один
             // человек мог получить два ключа и завысить число респондентов. Имя поля осталось
             // прежним, чтобы не трогать контракт ответа ради одного названия.
-            mixedAnonymity: mixesKeyAlgorithms(matrix.observations),
+            mixedAnonymity: mixesKeyAlgorithms(observations),
           },
         };
       });
@@ -743,8 +791,8 @@ export function suspiciousByPsychometrics(item: FlagSource): boolean {
  * вопросами под подозрением» и колонки вкладки «Тесты».
  *
  * Выборка — та, что у «Качества вопросов» по умолчанию: весь тест, только первая попытка
- * каждого участника (FR-51). Область видимости открыта: число хранится на тест, а кто его увидит,
- * решает ручка, отдающая готовое.
+ * каждого участника (FR-51) — тот же ключ кэша, что у экрана без условий. Область видимости
+ * открыта: число хранится на тест, а кто его увидит, решает ручка, отдающая готовое.
  *
  * @param testId тест
  * @returns вопросы под подозрением и всего вопросов в расчёте; `null` — теста нет
@@ -752,16 +800,8 @@ export function suspiciousByPsychometrics(item: FlagSource): boolean {
 export async function countSuspiciousItems(testId: string): Promise<{ suspicious: number; items: number } | null> {
   const test = await storage.getTest(testId);
   if (!test) return null;
-  const { grade, questionById } = await buildGrader(testId);
-  const matrix = await loadResponseMatrix({ testIds: [testId] }, { all: true, ids: new Set<string>() }, grade);
-  const sections = await storage.getTestSections(testId);
-  const psychometrics = computePsychometrics(firstAttemptOnly(matrix.responses), {
-    questionById,
-    minObservations: config.analytics.minObservations,
-    cutRatio: cutRatioOf(test.overallPassRuleJson),
-    unevenDelivery: deliveryIsUneven(test.mode, sections),
-    poolQuestionIds: (await loadDeliveryPool(testId)).questionIds,
-  });
+  // PRD-70 FR-02: тот же кэш, что у экрана с отбором по умолчанию, — второй раз тест не считается.
+  const { psychometrics } = await testPsychometrics(test, { testIds: [testId] }, true);
   return {
     suspicious: psychometrics.items.filter(suspiciousByPsychometrics).length,
     items: psychometrics.items.length,

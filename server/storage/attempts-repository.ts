@@ -124,4 +124,13 @@ export class AttemptsRepository {
   async getAllAttempts(): Promise<Attempt[]> {
     return db.select().from(attempts);
   }
+
+  /**
+   * Attempts of the given tests — analytics reads one test (or a reader's scope), not the whole
+   * table filtered in memory (PRD-70 FR-01). Served by `attempts_test_id_idx`.
+   */
+  async getAttemptsByTests(testIds: string[]): Promise<Attempt[]> {
+    if (testIds.length === 0) return [];
+    return db.select().from(attempts).where(inArray(attempts.testId, testIds));
+  }
 }

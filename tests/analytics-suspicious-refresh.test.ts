@@ -11,7 +11,7 @@ import { observationsDouble } from "./helpers/observations-double";
 
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
-    getAllAttempts: vi.fn(), getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
+    getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); }, getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
     getUser: vi.fn(), getTest: vi.fn().mockResolvedValue(undefined), selectObservations: vi.fn(),
   },
 }));

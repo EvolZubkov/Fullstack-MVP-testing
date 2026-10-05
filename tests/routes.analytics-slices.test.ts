@@ -17,7 +17,7 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getTests: vi.fn(), getTest: vi.fn(),
-    getAllAttempts: vi.fn(), getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
+    getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); }, getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     // Э3: область теста у ручек срезов — тот же расчёт, что у requireTestScope.

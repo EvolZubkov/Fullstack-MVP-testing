@@ -49,7 +49,10 @@ vi.mock("../server/services/analytics/psychometrics", async (importOriginal) => 
 });
 
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
-import psychometricsRouter, { resetPsychometricsCache } from "../server/routes/analytics/psychometrics";
+import psychometricsRouter, {
+  countSuspiciousItems,
+  resetPsychometricsCache,
+} from "../server/routes/analytics/psychometrics";
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
 import { computePsychometrics } from "../server/services/analytics/psychometrics";
 
@@ -458,6 +461,24 @@ describe("GET /analytics/psychometrics/:testId", () => {
     await ask();
 
     expect(storageMock.selectObservations.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it("фоновый подсчёт «под подозрением» берёт расчёт экрана из общего кэша (PRD-70 FR-02)", async () => {
+    await ask();
+    const callsAfterScreen = storageMock.selectObservations.mock.calls.length;
+    const counted = await countSuspiciousItems("test1");
+
+    expect(counted).toEqual({ suspicious: expect.any(Number), items: 1 });
+    expect(storageMock.selectObservations.mock.calls.length).toBe(callsAfterScreen);
+  });
+
+  it("экран после фонового подсчёта тест заново не считает (PRD-70 FR-02)", async () => {
+    await countSuspiciousItems("test1");
+    const callsAfterCount = storageMock.selectObservations.mock.calls.length;
+    const res = await ask();
+
+    expect(res.status).toBe(200);
+    expect(storageMock.selectObservations.mock.calls.length).toBe(callsAfterCount);
   });
 
   it("смена условий отбора кэш не переиспользует", async () => {

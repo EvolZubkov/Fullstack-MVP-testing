@@ -13,7 +13,7 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getTest: vi.fn(), getTests: vi.fn(), getTopics: vi.fn(),
-    getAllAttempts: vi.fn(),
+    getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); },
     // PRD-56 FR-33: сводка книги читает прохождения через выборку DAL.
     selectObservations: vi.fn(), getAttemptsByUser: vi.fn(),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),

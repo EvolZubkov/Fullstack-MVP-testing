@@ -48,8 +48,9 @@ async function collect(testId: string, questionId: string): Promise<{
   question: { id: string; type: string; prompt: string };
   rows: QuestionAnswerRow[];
 } | null> {
-  const attempts = (await storage.getAllAttempts())
-    .filter((attempt) => attempt.testId === testId && attempt.resultJson !== null);
+  // PRD-70 FR-01: the test by query, not the whole table filtered in memory.
+  const attempts = (await storage.getAttemptsByTests([testId]))
+    .filter((attempt) => attempt.resultJson !== null);
 
   const { facts, questionById } = await loadTestAnswerFacts(testId, attempts);
   const question = questionById.get(questionId);

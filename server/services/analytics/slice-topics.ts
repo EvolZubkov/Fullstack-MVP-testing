@@ -67,7 +67,9 @@ export async function readSliceTopics(
 ): Promise<SliceTopicsReader> {
   const webIds = new Set(observations.filter(o => o.source === "web").map(o => o.id));
   const attempts = webIds.size
-    ? (await storage.getAllAttempts()).filter(attempt => webIds.has(attempt.id))
+    // PRD-70 FR-01: the frame test by query; ids filter in memory (a list of thousands of ids
+    // would hit the bind-parameter limit).
+    ? (await storage.getAttemptsByTests([testId])).filter(attempt => webIds.has(attempt.id))
     : [];
 
   const { facts, questionById, topicNameById, topicRules } =

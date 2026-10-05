@@ -22,7 +22,7 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getTest: vi.fn(), getTests: vi.fn(), getTopics: vi.fn(),
-    getAllAttempts: vi.fn(), getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
+    getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); }, getAllScormAttempts: vi.fn(), getScormPackages: vi.fn(),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),
     getTestSections: vi.fn(), getTestQuestionScoring: vi.fn(),
     getScales: vi.fn().mockResolvedValue([]),

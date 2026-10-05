@@ -314,6 +314,8 @@ export interface IStorage {
    */
   annulInProgressAttempts(testId: string, userId?: string): Promise<number>;
   getAllAttempts(): Promise<Attempt[]>;
+  /** PRD-70 FR-01: attempts of the given tests, read by query (an empty list reads nothing). */
+  getAttemptsByTests(testIds: string[]): Promise<Attempt[]>;
 
   // Adaptive testing
   getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined>;
@@ -1117,6 +1119,10 @@ export class DatabaseStorage implements IStorage {
 
   getAllAttempts(): Promise<Attempt[]> {
     return this.attemptsRepo.getAllAttempts();
+  }
+
+  getAttemptsByTests(testIds: string[]): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByTests(testIds);
   }
 
   // ============================================

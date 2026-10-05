@@ -149,7 +149,7 @@ describe("formatUserAnswerText", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
-    getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]), getTest: vi.fn(), getAllAttempts: vi.fn(),
+    getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]), getTest: vi.fn(), getAllAttempts: vi.fn(), async getAttemptsByTests(ids: string[]) { return ((await this.getAllAttempts()) ?? []).filter((a: { testId: string }) => ids.includes(a.testId)); },
     // PRD-56 FR-33: страница теста читает прохождения через выборку DAL.
     selectObservations: vi.fn(),
     // PRD-56 FR-25: ответы прохождений из LMS — часть выборки страницы теста.

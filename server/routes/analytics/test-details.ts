@@ -66,8 +66,8 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
       ...(dateOf(req.query.to, "end") ? { to: dateOf(req.query.to, "end") } : {}),
     };
 
-    const allAttempts = await storage.getAllAttempts();
-    const testAttempts = allAttempts.filter(a => a.testId === testId);
+    // PRD-70 FR-01: the test by query, not the whole table filtered in memory.
+    const testAttempts = await storage.getAttemptsByTests([testId]);
     const completedAttempts = testAttempts.filter(a => a.resultJson !== null);
 
     // PRD-29 §6.7: does this test grade at all? Averaged over runs that graded
