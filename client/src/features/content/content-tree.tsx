@@ -89,6 +89,7 @@ import {
   filterCount,
   MEDIA_OPTS,
   readContentFilter,
+  contentFilterOf,
   writeContentFilter,
   SCOPE_OPTS,
   TYPE_OPTS,
@@ -109,6 +110,7 @@ import { TermHint } from "@/features/analytics/test/term-hint";
 import { bankQuestionHref } from "@/features/analytics/levels/analytics-routes";
 import { currentHref, stateForDive, trailOf } from "@/features/analytics/levels/trail";
 import { FoldAllButtons, type SectionFold } from "@/features/tests/editor/sections/section-fold";
+import { stableKey, useListFilters } from "@/features/saved-filters/use-list-filters";
 
 /** PRD-70 FR-20: набор колонок дерева — «Содержание» (как было) или «Качество». */
 type ColumnSet = "content" | "quality";
@@ -681,6 +683,9 @@ export function ContentTree() {
   /** «Сбросить фильтры» of the bar: clears what is applied. */
   function resetFilters() { setDraft(EMPTY_FILTER); setFilter(EMPTY_FILTER); }
   function commitFilter(next: ContentFilterValue) { setFilter(next); setDraft(next); }
+  // Сохранённые фильтры банка (решение владельца 2026-10-05): сохранить в ряду условий,
+  // применить и удалить — из «Сохранённых».
+  const savedFilters = useListFilters({ scope: "content", current: filter, apply: commitFilter, normalize: contentFilterOf, keyOf: stableKey });
 
   // PRD-70 FR-21, FR-22: суммы качества темы и папки — количества вопросов, у «Тестов» — разные тесты.
   const topicQuality = (topicId: string): QualityTotals =>
@@ -913,6 +918,7 @@ export function ContentTree() {
         onOpenFilter={toggleFilters}
         onRemove={(id) => chips.find((c) => c.key === id)?.remove()}
         onReset={resetFilters}
+        {...savedFilters}
         actions={(
           <>
             {canAnalytics && (

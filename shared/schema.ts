@@ -2281,6 +2281,41 @@ export type AnalyticsSlice = typeof analyticsSlices.$inferSelect;
 export type InsertAnalyticsSlice = typeof analyticsSlices.$inferInsert;
 
 /**
+ * Экраны со своими сохранёнными фильтрами (решение владельца 2026-10-05: сохранение — везде,
+ * где есть фильтр). Аналитика сюда не входит: её фильтры живут в `analytics_slices` рядом со
+ * срезами, у них общий словарь условий.
+ */
+export const SAVED_FILTER_SCOPES = ["content", "tests", "users"] as const;
+export type SavedFilterScope = (typeof SAVED_FILTER_SCOPES)[number];
+
+/**
+ * Сохранённые фильтры списков — «Темы и вопросы», «Тесты», «Пользователи».
+ *
+ * Набор личный: его видит и применяет только тот, кто сохранил. Условия хранятся как есть,
+ * в словаре своего экрана: жёсткой схемы у колонки нет, экран сам приводит прочитанное к
+ * своему фильтру и отбрасывает незнакомое — новое условие не требует миграции.
+ */
+export const savedListFilters = pgTable("saved_list_filters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Экран, которому принадлежит набор: `content`, `tests`, `users`. */
+  scope: text("scope").notNull(),
+  name: text("name").notNull(),
+  conditionsJson: jsonb("conditions_json").$type<Record<string, unknown>>().notNull().default({}),
+  createdBy: varchar("created_by", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  // Список экрана у владельца — единственный способ чтения.
+  ownerScopeIdx: index("saved_list_filters_owner_scope_idx").on(table.createdBy, table.scope),
+  // Два одноимённых набора одного экрана в меню неразличимы.
+  ownerScopeNameUq: uniqueIndex("saved_list_filters_owner_scope_name_uq").on(table.createdBy, table.scope, table.name),
+  scopeKnown: check("saved_list_filters_scope_known", sql`${table.scope} IN ('content', 'tests', 'users')`),
+}));
+
+export type SavedListFilter = typeof savedListFilters.$inferSelect;
+export type InsertSavedListFilter = typeof savedListFilters.$inferInsert;
+
+/**
  * PRD-55 (FR-05, FR-06): материализованный счётчик выдач задания.
  *
  * Корзина — КАЛЕНДАРНЫЙ МЕСЯЦ: скользящее окно тогда считается суммой последних N корзин, а

@@ -13,6 +13,7 @@
  * Note: the list excludes archived tests upstream, so the «Статус» facet offers
  * Черновик / Опубликован only (the archive is a separate, deferred view).
  */
+import { mergeShape } from "@/features/saved-filters/use-list-filters";
 import type { RefObject } from "react";
 import { Checkbox, FilterPanel, FilterPanelGroup, SegmentedControl, Select } from "@skillum/ui-kit";
 import type { TestListEntry, TestListMode, TestListStatus, TestListFlowMode } from "./tests-list.types";
@@ -30,6 +31,25 @@ export interface TestFilterValue {
 export const EMPTY_TEST_FILTER: TestFilterValue = {
   statuses: [], modes: [], scenarios: [], author: "", scope: "all",
 };
+
+/**
+ * Условия сохранённого набора «Тестов» → фильтр экрана: только известные поля и значения.
+ * Набор, сохранённый до появления нового значения или с исчезнувшим, применяется без него.
+ *
+ * @param conditions условия набора
+ */
+export function testFilterOf(conditions: unknown): TestFilterValue {
+  const raw = mergeShape(EMPTY_TEST_FILTER, conditions);
+  const known = <V extends string>(values: string[], opts: { value: V }[]) =>
+    values.filter((v): v is V => opts.some((o) => o.value === v));
+  return {
+    statuses: known(raw.statuses, STATUS_OPTS),
+    modes: known(raw.modes, MODE_OPTS),
+    scenarios: known(raw.scenarios, SCENARIO_OPTS),
+    author: raw.author,
+    scope: TEST_SCOPE_OPTS.some((o) => o.value === raw.scope) ? raw.scope : "all",
+  };
+}
 
 /** Number of active conditions (drives the counter of the «Фильтр» button + chips). */
 export function testFilterCount(f: TestFilterValue): number {

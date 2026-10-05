@@ -15,6 +15,7 @@ import { Checkbox, FilterPanel, FilterPanelGroup, SegmentedControl, Select, Slid
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import { t } from "@/lib/i18n";
 import { STATE_OPTS, type ContentState } from "./bank-quality";
+import { mergeShape } from "@/features/saved-filters/use-list-filters";
 
 export type { QuestionType } from "@shared/questions/question-type";
 import type { QuestionType } from "@shared/questions/question-type";
@@ -176,6 +177,18 @@ export function writeContentFilter(f: ContentFilterValue, params: URLSearchParam
   if (f.author) params.set("owner", f.author);
   if (f.scope !== "all") params.set("scope", f.scope);
   for (const st of f.states) params.append("state", st);
+}
+
+/**
+ * Условия сохранённого набора банка → фильтр экрана. Идут тем же путём, что условия из адреса:
+ * всё незнакомое отбрасывается, интервал сложности приводится к 0–100.
+ *
+ * @param conditions условия набора
+ */
+export function contentFilterOf(conditions: unknown): ContentFilterValue {
+  const params = new URLSearchParams();
+  writeContentFilter(mergeShape(EMPTY_FILTER, conditions), params);
+  return readContentFilter(params.toString());
 }
 
 /**

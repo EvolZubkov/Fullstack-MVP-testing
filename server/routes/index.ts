@@ -9,6 +9,7 @@ import testsRouter from "./tests";
 import attemptsRouter from "./attempts";
 import assignmentsRouter from "./assignments";
 import analyticsRouter from "./analytics/index";
+import savedFiltersRouter from "./saved-filters";
 import scormTelemetryRouter from "./scorm-telemetry";
 import logsRouter from "./logs";
 import accessRouter from "./access";
@@ -54,6 +55,7 @@ export {
   homeRouter,
   reportRouter,
   mediaRouter,
+  savedFiltersRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -84,6 +86,8 @@ export const routerConfig = [
   // Скачивание руководств («Материалы» на главной); право проверяется на каждый
   // документ отдельно. Префиксно — до общих "/api".
   { path: "/api/docs", router: docsRouter },
+  // Сохранённые фильтры списков (банк, «Тесты», «Пользователи»). Префиксно — до общих "/api".
+  { path: "/api/saved-filters", router: savedFiltersRouter },
   { path: "/api/users", router: usersRouter },
   { path: "/api/groups", router: groupsRouter },
   { path: "/api/questions", router: questionsRouter },

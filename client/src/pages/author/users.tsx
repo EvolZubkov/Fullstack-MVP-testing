@@ -62,6 +62,7 @@ import { OrgFieldControl } from "@/features/users/org-field-control";
 import { importableCount, useUsersBulkImport } from "@/features/users/bulk-import/use-users-bulk-import";
 import { UsersBulkPreview, UsersBulkResult } from "@/features/users/bulk-import/users-bulk-preview";
 import { plural } from "@/features/import/file-meta";
+import { mergeShape, stableKey, useListFilters } from "@/features/saved-filters/use-list-filters";
 
 interface User {
   id: string;
@@ -644,6 +645,16 @@ export default function UsersPage() {
     setKindFilter(next.kind);
     setOrgFilters({ organization: next.organization, unit: next.unit, position: next.position });
   };
+  // Сохранённые фильтры «Пользователей» (решение владельца 2026-10-05): сохранить в ряду условий,
+  // применить и удалить — из «Сохранённых». Значения полей — строки; незнакомое значение просто
+  // ничего не отберёт, а чип назовёт его как есть.
+  const savedFilters = useListFilters({
+    scope: "users",
+    current: appliedFilter,
+    apply: applyUsersFilter,
+    normalize: (conditions) => mergeShape(EMPTY_USERS_FILTER, conditions),
+    keyOf: stableKey,
+  });
   /** Chips of what is applied: «Поле: значение», one per field narrowed from «all». */
   const filterChips = usersFilterFields
     .filter((field) => appliedFilter[field.key] !== "all")
@@ -920,6 +931,7 @@ export default function UsersPage() {
         }}
         onRemove={(id) => applyUsersFilter({ ...appliedFilter, [id]: "all" })}
         onReset={() => applyUsersFilter(EMPTY_USERS_FILTER)}
+        {...savedFilters}
       />
       <FilterPanel
         open={filterOpen}

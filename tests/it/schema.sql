@@ -230,6 +230,17 @@ CREATE TABLE "result_variables" (
 	CONSTRAINT "result_variables_name_check" CHECK ("result_variables"."name" ~ '^[a-z][a-z0-9_]{0,63}$')
 );
 
+CREATE TABLE "saved_list_filters" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"scope" text NOT NULL,
+	"name" text NOT NULL,
+	"conditions_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"created_by" varchar(36) NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "saved_list_filters_scope_known" CHECK ("saved_list_filters"."scope" IN ('content', 'tests', 'users'))
+);
+
 CREATE TABLE "scales" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"test_id" varchar(36) NOT NULL,
@@ -551,6 +562,7 @@ ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_questi
 ALTER TABLE "question_measurements" ADD CONSTRAINT "question_measurements_scale_id_scales_id_fk" FOREIGN KEY ("scale_id") REFERENCES "public"."scales"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "report_blocks" ADD CONSTRAINT "report_blocks_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "result_variables" ADD CONSTRAINT "result_variables_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "saved_list_filters" ADD CONSTRAINT "saved_list_filters_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "scales" ADD CONSTRAINT "scales_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_question_scoring" ADD CONSTRAINT "test_question_scoring_test_id_tests_id_fk" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_question_scoring" ADD CONSTRAINT "test_question_scoring_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
@@ -578,6 +590,8 @@ CREATE INDEX "questions_topic_id_idx" ON "questions" USING btree ("topic_id");
 CREATE INDEX "report_blocks_test_mode_sort_idx" ON "report_blocks" USING btree ("test_id","mode","sort_order");
 CREATE INDEX "result_variables_test_id_idx" ON "result_variables" USING btree ("test_id");
 CREATE UNIQUE INDEX "result_variables_test_id_name_uq" ON "result_variables" USING btree ("test_id","name");
+CREATE INDEX "saved_list_filters_owner_scope_idx" ON "saved_list_filters" USING btree ("created_by","scope");
+CREATE UNIQUE INDEX "saved_list_filters_owner_scope_name_uq" ON "saved_list_filters" USING btree ("created_by","scope","name");
 CREATE INDEX "scales_test_id_idx" ON "scales" USING btree ("test_id");
 CREATE UNIQUE INDEX "scales_test_id_key_uq" ON "scales" USING btree ("test_id","key");
 CREATE INDEX "scorm_answers_attempt_id_idx" ON "scorm_answers" USING btree ("attempt_id");

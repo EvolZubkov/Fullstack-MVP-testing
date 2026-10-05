@@ -29,6 +29,7 @@ import {
   type ScaleValuesRow,
 } from "./storage/analytics-repository";
 import { SlicesRepository } from "./storage/slices-repository";
+import { SavedFiltersRepository } from "./storage/saved-filters-repository";
 import { AttemptsRepository } from "./storage/attempts-repository";
 import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
 import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
@@ -80,6 +81,7 @@ import type {
   ScormAnswer, InsertScormAnswer,
   LmsImportBatch, InsertLmsImportBatch,
   AnalyticsSlice, InsertAnalyticsSlice,
+  SavedListFilter, InsertSavedListFilter, SavedFilterScope,
   Group, InsertGroup,
   UserGroup,
   TestAccessGrant, InsertTestAccessGrant,
@@ -385,6 +387,16 @@ export interface IStorage {
   ): Promise<AnalyticsSlice | undefined>;
   deleteSlice(id: string, ownerId: string): Promise<boolean>;
 
+  /** Сохранённые фильтры списков: банк, «Тесты», «Пользователи» — личные наборы владельца. */
+  getSavedFilters(ownerId: string, scope: SavedFilterScope): Promise<SavedListFilter[]>;
+  createSavedFilter(input: InsertSavedListFilter): Promise<SavedListFilter>;
+  updateSavedFilter(
+    id: string,
+    ownerId: string,
+    patch: Partial<Pick<SavedListFilter, "name" | "conditionsJson">>,
+  ): Promise<SavedListFilter | undefined>;
+  deleteSavedFilter(id: string, ownerId: string): Promise<boolean>;
+
   createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt>;
   getScormAttempt(id: string): Promise<ScormAttempt | undefined>;
   getScormAttemptBySession(packageId: string, sessionId: string, attemptNumber?: number): Promise<ScormAttempt | undefined>;
@@ -517,6 +529,7 @@ export class DatabaseStorage implements IStorage {
   private readonly exposureRepo = new ExposureRepository();
   private readonly analyticsRepo = new AnalyticsRepository();
   private readonly slicesRepo = new SlicesRepository();
+  private readonly savedFiltersRepo = new SavedFiltersRepository();
   private readonly attemptsRepo = new AttemptsRepository();
   private readonly scalesVariablesRepo = new ScalesVariablesRepository();
   private readonly testsRepo = new TestsRepository();
@@ -1283,6 +1296,26 @@ export class DatabaseStorage implements IStorage {
 
   deleteSlice(id: string, ownerId: string): Promise<boolean> {
     return this.slicesRepo.deleteSlice(id, ownerId);
+  }
+
+  getSavedFilters(ownerId: string, scope: SavedFilterScope): Promise<SavedListFilter[]> {
+    return this.savedFiltersRepo.getSavedFilters(ownerId, scope);
+  }
+
+  createSavedFilter(input: InsertSavedListFilter): Promise<SavedListFilter> {
+    return this.savedFiltersRepo.createSavedFilter(input);
+  }
+
+  updateSavedFilter(
+    id: string,
+    ownerId: string,
+    patch: Partial<Pick<SavedListFilter, "name" | "conditionsJson">>,
+  ): Promise<SavedListFilter | undefined> {
+    return this.savedFiltersRepo.updateSavedFilter(id, ownerId, patch);
+  }
+
+  deleteSavedFilter(id: string, ownerId: string): Promise<boolean> {
+    return this.savedFiltersRepo.deleteSavedFilter(id, ownerId);
   }
 
   getLatencyStats(questionIds: string[], testId: string, since: Date): Promise<Map<string, { medianMs: number; sampleSize: number }>> {

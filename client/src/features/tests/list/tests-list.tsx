@@ -87,8 +87,10 @@ import {
   TestFilters,
   testFacetMatch,
   testFilterCount,
+  testFilterOf,
   type TestFilterValue,
 } from "./tests-filters";
+import { stableKey, useListFilters } from "@/features/saved-filters/use-list-filters";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import type {
   BreakdownWarning,
@@ -262,6 +264,9 @@ export function TestsListPage(): React.JSX.Element {
   /** «Сбросить фильтры» of the bar: clears what is applied. */
   const resetFilters = () => { setTestDraft(EMPTY_TEST_FILTER); setTestFilter(EMPTY_TEST_FILTER); };
   const commitFilter = (next: TestFilterValue) => { setTestFilter(next); setTestDraft(next); };
+  // Сохранённые фильтры «Тестов» (решение владельца 2026-10-05): сохранить в ряду условий,
+  // применить и удалить — из «Сохранённых».
+  const savedFilters = useListFilters({ scope: "tests", current: testFilter, apply: commitFilter, normalize: testFilterOf, keyOf: stableKey });
 
   const expandAll = () => setExpandedFolderIds(new Set(folders.map((f) => f.id)));
   const collapseAll = () => setExpandedFolderIds(new Set());
@@ -569,6 +574,7 @@ export function TestsListPage(): React.JSX.Element {
         onOpenFilter={toggleFilters}
         onRemove={(id) => filterChips.find((c) => c.key === id)?.remove()}
         onReset={resetFilters}
+        {...savedFilters}
         data-testid="tests-list-filterbar"
         actions={(
           <>
