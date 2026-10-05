@@ -17,6 +17,7 @@ import {
   Box, Button, Card, CardBody, CardHeader, IconButton, SegmentedControl, Separator, Stack, Tag, Text,
 } from "@skillum/ui-kit";
 
+import type { BankReviewRow } from "./bank-review";
 import type { SuspiciousTestRow } from "./suspicious-tests";
 import { pluralize } from "@/lib/i18n";
 import {
@@ -83,6 +84,8 @@ export interface AttentionData {
   counts: Record<AttentionKind, number>;
   /** Э3.4: тесты с вопросами под подозрением — из фонового пересчёта. */
   suspiciousTests?: SuspiciousTestRow[];
+  /** PRD-70 FR-60: вопросы банка на ревизию в темах, которыми читатель управляет. */
+  bankReview?: BankReviewRow[];
 }
 
 /** Сколько дел корзины видно сразу. Остальные — в реестре: экран не список, а рабочее место. */

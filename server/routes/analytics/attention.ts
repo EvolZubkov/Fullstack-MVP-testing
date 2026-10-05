@@ -18,7 +18,10 @@ import {
   type AttentionItem,
 } from "../../services/analytics/attention";
 import { loadObservations } from "../../services/analytics/observations";
-import { suspiciousEntry } from "./suspicious-refresh";
+import { suspiciousEntry, testPools, testQualities } from "./suspicious-refresh";
+import { bankQuality } from "../../services/analytics/question-bank-quality";
+import { manageableTopicScope } from "../../services/topic-access";
+import { plainPromptOf } from "@shared/questions/prompt-format";
 import { analyticsScope } from "./helpers";
 
 const router = Router();
@@ -106,10 +109,42 @@ router.get("/attention", requirePermission("analytics.read"), async (req: Reques
       }))
       .sort((a, b) => b.count - a.count);
 
+    // PRD-70 FR-60: вопросы банка на ревизию — признак хотя бы в одном тесте читателя, и только
+    // вопросы тем, которыми он управляет: дело — тому, кто может исправить вопрос в его теме.
+    // Один вопрос может стоять и здесь, и в карточке тестов выше: действия разные (FR-61).
+    const flagged = [...bankQuality(testQualities(), testPools(), testId => scope.has(testId)).values()]
+      .filter(entry => entry.review !== null);
+    // Права на темы читаются, только когда есть что показать.
+    const topicScope = flagged.length > 0
+      ? await manageableTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "")
+      : { all: false, ids: new Set<string>() };
+    const flaggedQuestions = flagged.length > 0
+      ? await storage.getQuestionsByIds(flagged.map(entry => entry.questionId))
+      : [];
+    const topicNames = flaggedQuestions.length > 0
+      ? new Map((await storage.getTopics()).map(topic => [topic.id, topic.name]))
+      : new Map<string, string>();
+    const questionById = new Map(flaggedQuestions.map(question => [question.id, question]));
+    const toneRank = { error: 0, warning: 1, info: 2 } as const;
+    const bankReview = flagged
+      .flatMap(entry => {
+        const question = questionById.get(entry.questionId);
+        if (!question || !(topicScope.all || topicScope.ids.has(question.topicId))) return [];
+        return [{
+          questionId: question.id,
+          prompt: plainPromptOf(question),
+          topicName: topicNames.get(question.topicId) ?? "",
+          review: entry.review!,
+        }];
+      })
+      // Сначала прямые дефекты, затем — где признак сработал в большем числе тестов.
+      .sort((a, b) => toneRank[a.review.tone] - toneRank[b.review.tone] || b.review.tests - a.review.tests);
+
     res.json({
       period,
       counts: countAttention(items),
       suspiciousTests,
+      bankReview,
       items: items.map((item: AttentionItem) => ({
         ...item,
         // Тест мог быть удалён: дело от этого не перестаёт существовать.

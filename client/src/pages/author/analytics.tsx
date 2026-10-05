@@ -35,6 +35,9 @@ import { percent } from "@/features/analytics/format";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
 import { AttentionQueue, type AttentionData, type AttentionRow } from "@/features/analytics/attention/attention-queue";
 import { SuspiciousTests } from "@/features/analytics/attention/suspicious-tests";
+import { BankReviewCard } from "@/features/analytics/attention/bank-review";
+import { bankQuestionHref } from "@/features/analytics/levels/analytics-routes";
+import { currentHref, stateForDive } from "@/features/analytics/levels/trail";
 import { DEFAULT_ATTENTION_PERIOD, type AttentionPeriod } from "@shared/analytics/attention-period";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Stack, Tabs } from "@skillum/ui-kit";
@@ -242,6 +245,16 @@ export default function AnalyticsPage() {
               <SuspiciousTests
                 rows={attentionData?.suspiciousTests ?? []}
                 onOpen={(id) => openTestLevel(id, EMPTY_FILTER, "questions", { questionsView: "suspicious", questionsSet: "psychometrics" })}
+              />
+              {/* PRD-70 FR-60: ось банка — вопросы тем читателя; переход несёт путь для крошки возврата. */}
+              <BankReviewCard
+                rows={attentionData?.bankReview ?? []}
+                onOpen={(questionId) => {
+                  const target = bankQuestionHref(questionId);
+                  navigate(target, {
+                    state: stateForDive(null, { label: "Аналитика", href: currentHref(), state: window.history.state }, target),
+                  });
+                }}
               />
               <AttentionQueue
                 data={attentionData}

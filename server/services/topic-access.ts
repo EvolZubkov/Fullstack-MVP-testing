@@ -117,6 +117,24 @@ export async function visibleTopicScope(
   return { all: false, ids };
 }
 
+/**
+ * PRD-70 §3.5: the set of topic ids a user MANAGES — the set form of
+ * {@link canManageTopicContent}: owner, active `manage` grant, admin/super (`all`).
+ * Feeds the «Вопросы банка на ревизию» card of the attention queue: a question is
+ * a task only for whoever can fix it in its topic.
+ */
+export async function manageableTopicScope(
+  roles: readonly Role[],
+  userId: string,
+): Promise<{ all: boolean; ids: Set<string> }> {
+  if (isAdminOrSuper(roles)) return { all: true, ids: new Set() };
+  const ids = new Set<string>(await storage.getTopicIdsByOwner(userId));
+  for (const g of await storage.getActiveTopicGrantsForGrantees(userId)) {
+    if (g.accessLevel === "manage") ids.add(g.topicId);
+  }
+  return { all: false, ids };
+}
+
 /** A grantee's test that references the topic — one line of the FR-26 report. */
 export interface RevokeDependent {
   testId: string;

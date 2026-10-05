@@ -22,6 +22,10 @@ const { storageMock } = vi.hoisted(() => ({
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     selectObservations: vi.fn(),
+    getQuestionsByIds: vi.fn().mockResolvedValue([]),
+    getTopics: vi.fn().mockResolvedValue([]),
+    getTopicIdsByOwner: vi.fn().mockResolvedValue([]),
+    getActiveTopicGrantsForGrantees: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -214,5 +218,74 @@ describe("GET /api/analytics/attention — период", () => {
     storageMock.getAllAssignments.mockResolvedValue(assignments);
     const res = await request(makeApp()).get("/api/analytics/attention?period=year").set("x-test-user", "a1");
     expect(res.body.period).toBe("month");
+  });
+});
+
+// PRD-70 FR-60: «Вопросы банка на ревизию» — признак хотя бы в одном тесте читателя, только
+// вопросы тем, которыми читатель управляет.
+describe("GET /api/analytics/attention — вопросы банка на ревизию (PRD-70 FR-60)", () => {
+  const KEY = { tone: "error", title: "Сильные ошибаются чаще", detail: "" };
+  const EASY = { tone: "warning", title: "Слишком лёгкий", detail: "" };
+  /** Вопрос в тесте из фонового пересчёта. */
+  const item = (questionId: string, flag: unknown) => ({
+    questionId, flag, suspicious: flag !== null, rank: flag === KEY ? 1 : 7, enoughData: true, observations: 100,
+    hardness: 40, delivered: 100, drawMode: "quota", sharePercent: 50, expectedPercent: 40, overexposure: null,
+  });
+
+  beforeEach(async () => {
+    storageMock.getAllAttempts.mockResolvedValue(["test1", "test2"].map(testId => ({
+      id: `web-${testId}`, testId, userId: "u1",
+      startedAt: daysAgo(5), finishedAt: daysAgo(5), variantJson: {}, answersJson: {},
+      resultJson: { overallPercent: 80, overallPassed: true, totalPossiblePoints: 20, totalEarnedPoints: 16 },
+    })));
+    await refreshSuspicious(
+      async testId => ({
+        testId,
+        items: testId === "test1" ? [item("q1", EASY), item("q2", KEY)] : [item("q1", null)],
+        pool: ["q1", "q2"],
+        suspicious: testId === "test1" ? 2 : 0,
+        itemCount: 2,
+      }),
+      async () => [],
+    );
+    storageMock.getQuestionsByIds.mockResolvedValue([
+      { id: "q1", prompt: "Что считается подарком?", topicId: "tp-own", promptFormat: "plain" },
+      { id: "q2", prompt: "Какой срок хранения журнала?", topicId: "tp-other", promptFormat: "plain" },
+    ]);
+    storageMock.getTopics.mockResolvedValue([{ id: "tp-own", name: "Право и комплаенс" }, { id: "tp-other", name: "Охрана труда" }]);
+  });
+
+  it("администратору — все вопросы на ревизии; прямые дефекты — выше", async () => {
+    const res = await ask();
+    expect(res.body.bankReview.map((r: { questionId: string }) => r.questionId)).toEqual(["q2", "q1"]);
+    expect(res.body.bankReview[1]).toMatchObject({
+      prompt: "Что считается подарком?",
+      topicName: "Право и комплаенс",
+      review: { title: "Слишком лёгкий", tests: 1, of: 2 },
+    });
+  });
+
+  it("автору — только вопросы тем, которыми он управляет", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTestIdsByOwner.mockResolvedValue(["test1", "test2"]);
+    storageMock.getTopicIdsByOwner.mockResolvedValue(["tp-own"]);
+
+    const res = await ask();
+
+    expect(res.body.bankReview.map((r: { questionId: string }) => r.questionId)).toEqual(["q1"]);
+  });
+
+  it("грант «использовать» темой не управляет, «управлять» — управляет", async () => {
+    storageMock.getUserRoles.mockResolvedValue(["author"]);
+    storageMock.getTestIdsByOwner.mockResolvedValue(["test1", "test2"]);
+    storageMock.getTopicIdsByOwner.mockResolvedValue([]);
+    storageMock.getActiveTopicGrantsForGrantees.mockResolvedValue([
+      { topicId: "tp-own", accessLevel: "use" },
+      { topicId: "tp-other", accessLevel: "manage" },
+    ]);
+
+    const res = await ask();
+
+    expect(res.body.bankReview.map((r: { questionId: string }) => r.questionId)).toEqual(["q2"]);
   });
 });
