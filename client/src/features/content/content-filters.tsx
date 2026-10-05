@@ -1,16 +1,16 @@
 /**
  * @module features/content/content-filters
  *
- * Facet filter PANEL for the unified "Темы и вопросы" tree — a faithful port of
- * the approved wireframe docs/wireframes/approved/content-bank-explorer.html
- * (state s-filters): a floating `cb-filterpop` card anchored under the toolbar
- * with a single vertical stack of facets (Тип вопроса / Сложность / Теги /
- * Медиа / Владелец / Область) and a «Сбросить всё» / «Применить» footer. The panel
- * edits a DRAFT filter; the tree re-filters only on «Применить» (batching —
- * keeps the tree responsive on large banks). Active-condition chips are rendered
- * by the tree itself. See docs/PLAN_content_axis_implementation.md.
+ * Facet filter PANEL for the unified "Темы и вопросы" tree — the one filter form of
+ * the product (PRD-70 FR-70 - FR-78, docs/wireframes/approved/filters-unified.html): a
+ * ui-kit `FilterPanel` under the «Фильтр» button of the tree's `FilterBar`, with the
+ * facets Тип вопроса / Сложность / Теги / Медиа / Владелец / Область and a «Сбросить» /
+ * «Применить» footer. The panel edits a DRAFT filter; the tree re-filters only on
+ * «Применить» (batching — keeps the tree responsive on large banks). Active-condition
+ * chips are rendered by the bar. See docs/PLAN_content_axis_implementation.md.
  */
-import { Button, Checkbox, SegmentedControl, Select, Slider, Switch, TagInput } from "@skillum/ui-kit";
+import type { RefObject } from "react";
+import { Checkbox, FilterPanel, FilterPanelGroup, SegmentedControl, Select, Slider, Switch, TagInput } from "@skillum/ui-kit";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
 import { t } from "@/lib/i18n";
 
@@ -72,86 +72,75 @@ function toggle<T>(arr: T[], item: T, on: boolean): T[] {
 }
 
 interface ContentFiltersProps {
+  /** The panel is open. */
+  open: boolean;
+  /** Closes without applying — the draft is dropped. */
+  onClose: () => void;
+  /** The «Фильтр» button of the bar the panel opens under. */
+  anchorRef: RefObject<HTMLElement | null>;
   /** Draft value being edited in the panel. */
   value: ContentFilterValue;
   onChange: (next: ContentFilterValue) => void;
   onApply: () => void;
+  /** Clears the draft (not what is applied). */
   onReset: () => void;
   tagOptions: string[];
   authorOptions: { value: string; label: string }[];
 }
 
-/** The facet popover (caller renders it only when open). */
-export function ContentFilters({ value, onChange, onApply, onReset, tagOptions, authorOptions }: ContentFiltersProps) {
+/** The facet panel — the one filter form of the product (PRD-70 FR-71). */
+export function ContentFilters({ open, onClose, anchorRef, value, onChange, onApply, onReset, tagOptions, authorOptions }: ContentFiltersProps) {
   return (
-    <div className="ct-filterpop" role="dialog" aria-label="Фильтры">
-      <div className="ct-filterpop__body">
-        <div className="ct-facet">
-          <span className="ct-facet__lbl">Тип вопроса</span>
-          <div className="ct-facet__row">
-            {TYPE_OPTS.map((o) => (
-              <Checkbox key={o.value} label={o.label} checked={value.types.includes(o.value)} onChange={(e) => onChange({ ...value, types: toggle(value.types, o.value, e.target.checked) })} />
-            ))}
-          </div>
-        </div>
+    <FilterPanel open={open} onClose={onClose} anchorRef={anchorRef} onApply={onApply} onReset={onReset}>
+      <FilterPanelGroup title="Тип вопроса" inline>
+        {TYPE_OPTS.map((o) => (
+          <Checkbox key={o.value} label={o.label} checked={value.types.includes(o.value)} onChange={(e) => onChange({ ...value, types: toggle(value.types, o.value, e.target.checked) })} />
+        ))}
+      </FilterPanelGroup>
 
-        <div className="ct-facet">
-          <span className="ct-facet__lbl">Сложность</span>
-          <Switch label="Не задана" checked={value.diffUnset} onChange={(e) => onChange({ ...value, diffUnset: e.target.checked })} />
-          {!value.diffUnset && (
-            <Slider
-              range
-              min={0}
-              max={100}
-              step={1}
-              value={[value.diffMin, value.diffMax]}
-              onChange={(v) => { const [a, b] = v as [number, number]; onChange({ ...value, diffMin: a, diffMax: b }); }}
-              label="Интервал"
-              ariaLabel="Интервал сложности"
-            />
-          )}
-        </div>
-
-        <div className="ct-facet">
-          <span className="ct-facet__lbl">Теги (подтемы)</span>
-          <TagInput
-            value={value.tags}
-            onChange={(tags) => onChange({ ...value, tags })}
-            suggestions={tagOptions}
-            placeholder="Добавить тег…"
-            maxLength={TAG_MAX_LENGTH}
-            normalize={normalizeTag}
-            dedupeKey={tagKey}
-            createLabel={(v) => `Тег «${v}»`}
-            removeLabel={(tg) => `Удалить тег ${tg}`}
+      <FilterPanelGroup title="Сложность">
+        <Switch label="Не задана" checked={value.diffUnset} onChange={(e) => onChange({ ...value, diffUnset: e.target.checked })} />
+        {!value.diffUnset && (
+          <Slider
+            range
+            min={0}
+            max={100}
+            step={1}
+            value={[value.diffMin, value.diffMax]}
+            onChange={(v) => { const [a, b] = v as [number, number]; onChange({ ...value, diffMin: a, diffMax: b }); }}
+            label="Интервал"
+            ariaLabel="Интервал сложности"
           />
-        </div>
+        )}
+      </FilterPanelGroup>
 
-        <div className="ct-facet">
-          <span className="ct-facet__lbl">Медиа</span>
-          <div className="ct-facet__row">
-            {MEDIA_OPTS.map((o) => (
-              <Checkbox key={o.value} label={o.label} checked={value.media.includes(o.value)} onChange={(e) => onChange({ ...value, media: toggle(value.media, o.value, e.target.checked) })} />
-            ))}
-          </div>
-        </div>
+      <FilterPanelGroup title="Теги (подтемы)">
+        <TagInput
+          value={value.tags}
+          onChange={(tags) => onChange({ ...value, tags })}
+          suggestions={tagOptions}
+          placeholder="Добавить тег…"
+          maxLength={TAG_MAX_LENGTH}
+          normalize={normalizeTag}
+          dedupeKey={tagKey}
+          createLabel={(v) => `Тег «${v}»`}
+          removeLabel={(tg) => `Удалить тег ${tg}`}
+        />
+      </FilterPanelGroup>
 
-        <div className="ct-facet">
-          <span className="ct-facet__lbl">Владелец</span>
-          <Select value={value.author} onChange={(v) => onChange({ ...value, author: v })} options={[{ value: "", label: "Любой" }, ...authorOptions]} aria-label="Владелец" />
-        </div>
+      <FilterPanelGroup title="Медиа" inline>
+        {MEDIA_OPTS.map((o) => (
+          <Checkbox key={o.value} label={o.label} checked={value.media.includes(o.value)} onChange={(e) => onChange({ ...value, media: toggle(value.media, o.value, e.target.checked) })} />
+        ))}
+      </FilterPanelGroup>
 
-        <div className="ct-facet">
-          <span className="ct-facet__lbl">Область</span>
-          <SegmentedControl<ContentScope> value={value.scope} onChange={(v) => onChange({ ...value, scope: v })} items={SCOPE_OPTS} />
-        </div>
-      </div>
+      <FilterPanelGroup title="Владелец">
+        <Select value={value.author} onChange={(v) => onChange({ ...value, author: v })} options={[{ value: "", label: "Любой" }, ...authorOptions]} aria-label="Владелец" />
+      </FilterPanelGroup>
 
-      <div className="ct-filterpop__foot">
-        <Button variant="ghost" onClick={onReset}>Сбросить всё</Button>
-        <span className="ct-spacer" />
-        <Button variant="primary" onClick={onApply}>Применить</Button>
-      </div>
-    </div>
+      <FilterPanelGroup title="Область">
+        <SegmentedControl<ContentScope> value={value.scope} onChange={(v) => onChange({ ...value, scope: v })} items={SCOPE_OPTS} />
+      </FilterPanelGroup>
+    </FilterPanel>
   );
 }

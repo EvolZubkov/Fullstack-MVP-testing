@@ -106,17 +106,17 @@ function renderTree(data: TreeData = { folders, topics, questions, users }) {
 
 /** Open the facet panel from the toolbar. */
 function openFilters() {
-  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
 }
 /** Click «Применить» inside the facet panel. */
 function applyFilters() {
-  const panel = screen.getByRole("dialog", { name: "Фильтры" });
+  const panel = screen.getByRole("dialog", { name: "Фильтр" });
   fireEvent.click(within(panel).getByText("Применить"));
 }
 /** Remove the active-condition chip carrying the given label. */
 function removeChip(label: string) {
-  const chip = screen.getByText(label).closest(".ou-chip") as HTMLElement;
-  fireEvent.click(within(chip).getByLabelText("Удалить"));
+  // FilterBar names the condition in the remove label: «Снять условие: …».
+  fireEvent.click(screen.getByLabelText(`Снять условие: ${label}`));
 }
 
 beforeEach(() => { guardSpy.mockClear(); toastSpy.mockClear(); });
@@ -202,7 +202,7 @@ describe("<ContentTree /> — scope facet (topicInScope)", () => {
   /** Open filters, pick a scope segment, apply. */
   function applyScope(segment: string) {
     openFilters();
-    const panel = screen.getByRole("dialog", { name: "Фильтры" });
+    const panel = screen.getByRole("dialog", { name: "Фильтр" });
     fireEvent.click(within(panel).getByText(segment));
     applyFilters();
   }

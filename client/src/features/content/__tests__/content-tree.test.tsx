@@ -180,7 +180,7 @@ describe("<ContentTree /> — expand / collapse", () => {
   it("«Развернуть всё» opens every topic; questions across topics become visible", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Развернуть всё" }));
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть все" }));
     expect(screen.getByText("Сколько будет 2+2?")).toBeInTheDocument();
     expect(screen.getByText("Что такое акция?")).toBeInTheDocument();
   });
@@ -188,7 +188,7 @@ describe("<ContentTree /> — expand / collapse", () => {
   it("«Свернуть всё» collapses folders, hiding the subtree", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Свернуть всё" }));
+    fireEvent.click(screen.getByRole("button", { name: "Свернуть все" }));
     expect(screen.queryByText("Бюджетирование")).not.toBeInTheDocument();
   });
 
@@ -385,19 +385,19 @@ describe("<ContentTree /> — filters & search", () => {
   it("opens the facet filter panel from the toolbar", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     expect(screen.getByText("Тип вопроса")).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Фильтры" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Фильтр" })).toBeInTheDocument();
   });
 
   it("applies a facet condition and shows a removable chip", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Финансы")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Не задана")); // difficulty «unset» facet
     fireEvent.click(screen.getByText("Применить"));
     expect(screen.getByText("Сложность: не задана")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Очистить всё"));
+    fireEvent.click(screen.getByText("Сбросить фильтры"));
     expect(screen.queryByText("Сложность: не задана")).not.toBeInTheDocument();
   });
 

@@ -44,7 +44,6 @@ import {
   CircleDot,
   Copy,
   Download,
-  Filter,
   Folder as FolderIcon,
   FolderPlus,
   Image as ImageIcon,
@@ -63,7 +62,7 @@ import {
   type LucideIcon,
   Pilcrow,
 } from "lucide-react";
-import { Button, Checkbox, Chip, Cluster, Input, Label, ModalDialog, Select, Stack, Text, useToast } from "@skillum/ui-kit";
+import { Button, Checkbox, FilterBar, Input, Label, ModalDialog, Select, Stack, Text, useToast } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { FolderTreeSelect } from "@/components/folder-tree-select";
 import { TruncatedLabel } from "@/components/truncated-label";
@@ -245,6 +244,7 @@ export function ContentTree() {
   const [filter, setFilter] = useState<ContentFilterValue>(EMPTY_FILTER); // applied
   const [draft, setDraft] = useState<ContentFilterValue>(EMPTY_FILTER); // edited in the panel
   const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set());
   // PRD-16: inline read-only preview of a question (expand a question row).
@@ -555,8 +555,13 @@ export function ContentTree() {
   function expandAll() { setCollapsedFolders(new Set()); setExpandedTopics(new Set(topics.map((tp) => tp.id))); }
   function collapseAll() { setCollapsedFolders(new Set(folders.map((f) => f.id))); setExpandedTopics(new Set()); }
 
-  function openFilters() { setDraft(filter); setFilterOpen(true); }
+  // The panel edits a draft of what is applied; closing it without «Применить» drops the draft
+  // (PRD-70 FR-74), so every opening starts from the applied filter.
+  function toggleFilters() { if (!filterOpen) setDraft(filter); setFilterOpen(!filterOpen); }
   function applyFilters() { setFilter(draft); setFilterOpen(false); }
+  /** «Сбросить» of the panel: clears the draft only. */
+  function resetDraft() { setDraft(EMPTY_FILTER); }
+  /** «Сбросить фильтры» of the bar: clears what is applied. */
   function resetFilters() { setDraft(EMPTY_FILTER); setFilter(EMPTY_FILTER); }
   function commitFilter(next: ContentFilterValue) { setFilter(next); setDraft(next); }
 
@@ -699,27 +704,33 @@ export function ContentTree() {
 
   return (
     <div className="tb-content-tree">
-      <div className="ct-toolbar">
-        <div className="ct-search">
-          <Input iconLeft={<Search size={16} />} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.content.searchPlaceholder} aria-label={t.content.searchPlaceholder} fullWidth />
-        </div>
-        <Button variant={filterOpen || activeCount > 0 ? "secondary" : "ghost"} leadingIcon={<Filter size={16} />} onClick={() => (filterOpen ? setFilterOpen(false) : openFilters())}>
-          {t.content.filters}{activeCount > 0 ? ` (${activeCount})` : ""}
-        </Button>
-        <span className="ct-spacer" />
-        <Button variant="ghost" leadingIcon={<ChevronsUpDown size={16} />} onClick={expandAll}>{t.content.expandAll}</Button>
-        <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
-        {filterOpen && <ContentFilters value={draft} onChange={setDraft} onApply={applyFilters} onReset={resetFilters} tagOptions={tagOptions} authorOptions={authorOptions} />}
-      </div>
-
-      {chips.length > 0 && (
-        <div className="ct-chips">
-          <Cluster gap={2} wrap>
-            {chips.map((c) => <Chip key={c.key} size="s" onRemove={c.remove}>{c.label}</Chip>)}
-            <Button variant="ghost" size="s" onClick={resetFilters}>Очистить всё</Button>
-          </Cluster>
-        </div>
-      )}
+      <FilterBar
+        search={<Input size="s" iconLeft={<Search size={16} />} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.content.searchPlaceholder} aria-label={t.content.searchPlaceholder} fullWidth />}
+        count={activeCount}
+        applied={chips.map((c) => ({ id: c.key, label: c.label }))}
+        filterButtonRef={filterButtonRef}
+        filterOpen={filterOpen}
+        onOpenFilter={toggleFilters}
+        onRemove={(id) => chips.find((c) => c.key === id)?.remove()}
+        onReset={resetFilters}
+        actions={(
+          <>
+            <Button variant="ghost" size="s" leadingIcon={<ChevronsUpDown width={14} height={14} aria-hidden="true" />} onClick={expandAll}>{t.content.expandAll}</Button>
+            <Button variant="ghost" size="s" leadingIcon={<ChevronsDownUp width={14} height={14} aria-hidden="true" />} onClick={collapseAll}>{t.content.collapseAll}</Button>
+          </>
+        )}
+      />
+      <ContentFilters
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        anchorRef={filterButtonRef}
+        value={draft}
+        onChange={setDraft}
+        onApply={applyFilters}
+        onReset={resetDraft}
+        tagOptions={tagOptions}
+        authorOptions={authorOptions}
+      />
 
       {contentActive && !isLoading && (
         <div className="ct-filternote">Показано {foundQ} {plural(foundQ, "совпадение", "совпадения", "совпадений")} в {foundTopics} {plural(foundTopics, "теме", "темах", "темах")} · дерево автоматически раскрыто</div>

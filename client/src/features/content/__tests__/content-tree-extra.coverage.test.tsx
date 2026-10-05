@@ -112,7 +112,7 @@ function renderTree(data: TreeData = { folders, topics, questions, users }, onWr
 
 /** Apply a facet scope from the filter panel. */
 function applyScope(label: string) {
-  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
   fireEvent.click(screen.getByText(label));
   fireEvent.click(screen.getByText("Применить"));
 }
@@ -146,7 +146,7 @@ describe("<ContentTree /> — scope facet", () => {
     expect(screen.queryByText("Налоги")).not.toBeInTheDocument();
     expect(screen.getByText("Область: Мои")).toBeInTheDocument();
     // Removing the chip (commitFilter) restores every topic.
-    fireEvent.click(screen.getByLabelText("Удалить"));
+    fireEvent.click(screen.getByLabelText("Снять условие: Область: Мои"));
     expect(screen.getByText("Инвестиции")).toBeInTheDocument();
   });
 
@@ -173,7 +173,7 @@ describe("<ContentTree /> — facet chips & media", () => {
   it("Тип + Медиа facets produce their chips", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
     fireEvent.click(screen.getByLabelText("Один ответ")); // type: single
     fireEvent.click(screen.getByLabelText("С изображением")); // media: image
     fireEvent.click(screen.getByText("Применить"));
@@ -221,9 +221,9 @@ describe("<ContentTree /> — toolbar", () => {
   it("toggles the filter panel closed on a second click of «Фильтры»", async () => {
     renderTree();
     await waitFor(() => expect(screen.getByText("Бюджетирование")).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
-    expect(screen.getByRole("dialog", { name: "Фильтры" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
-    expect(screen.queryByRole("dialog", { name: "Фильтры" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    expect(screen.getByRole("dialog", { name: "Фильтр" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+    expect(screen.queryByRole("dialog", { name: "Фильтр" })).not.toBeInTheDocument();
   });
 });
