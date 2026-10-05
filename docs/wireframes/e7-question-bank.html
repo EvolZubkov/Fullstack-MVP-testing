@@ -269,9 +269,9 @@
          Поля над и под шкалой равны: снизу — подписи делений, сверху — маркеры «по ответам». */
       .qd-diffrow { gap: var(--ou-space-6); }
       .qd-diffrow .ou-slider { padding-block: var(--ou-space-5); }
-      /* Маркер наблюдаемой сложности — треугольник вершиной вниз над шкалой, по одному на тест (К1). */
+      /* Ориентир «по ответам» — один треугольник вершиной вниз над шкалой: сводно по тестам. */
       .qd-obs { position: absolute; bottom: calc(100% + var(--ou-space-2)); transform: translateX(-50%); display: flex; cursor: help; }
-      .qd-obs__mark { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 7px solid var(--ou-fg-muted); }
+      .qd-obs__mark { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--ou-fg-muted); }
       .qd-obs:hover .qd-obs__mark, .qd-obs:focus-visible .qd-obs__mark { border-top-color: var(--ou-fg-default); }
       .qd-obs .ou-tip__bubble { width: var(--wf-size-260, 260px); }
     </style>
@@ -1034,7 +1034,7 @@
               <div class="ou-slider ou-slider--h" aria-label="Сложность">
                 <div class="ou-slider__rail">
                   <div class="ou-slider__fill" style="left:0%;right:70%"></div>
-                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div><span class="ou-tip qd-obs" data-placement="top" tabindex="0" style="left:42%" aria-label="По ответам в тесте «Сертификация руководителей»: 42"><span class="qd-obs__mark" aria-hidden="true"></span><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip"><span class="ou-tip__title">По ответам: 42</span>Тест «Сертификация руководителей», 214 прохождений. Сложность, какой она оказалась у участников, в той же шкале 0–100; задана — 30.</span></span><span class="ou-tip qd-obs" data-placement="top" tabindex="0" style="left:39%" aria-label="По ответам в тесте «Антикоррупционный минимум»: 39"><span class="qd-obs__mark" aria-hidden="true"></span><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip"><span class="ou-tip__title">По ответам: 39</span>Тест «Антикоррупционный минимум», 412 прохождений. Сложность, какой она оказалась у участников, в той же шкале 0–100; задана — 30.</span></span>
+                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div><span class="ou-tip qd-obs" data-placement="top" tabindex="0" style="left:40%" aria-label="Сложность по ответам: 40"><span class="qd-obs__mark" aria-hidden="true"></span><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip"><span class="ou-tip__title">По ответам: 40</span>Какой сложность оказалась у участников — сводно по 2 тестам, 626 прохождений. Ориентир для заданной сложности; по каждому тесту — в «Статистике».</span></span>
                   <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:30%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="30" aria-label="Сложность"></div>
                 </div>
               </div>

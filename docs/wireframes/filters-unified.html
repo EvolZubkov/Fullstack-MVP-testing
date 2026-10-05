@@ -268,9 +268,9 @@
          Поля над и под шкалой равны: снизу — подписи делений, сверху — маркеры «по ответам». */
       .qd-diffrow { gap: var(--ou-space-6); }
       .qd-diffrow .ou-slider { padding-block: var(--ou-space-5); }
-      /* Маркер наблюдаемой сложности — треугольник вершиной вниз над шкалой, по одному на тест (К1). */
+      /* Ориентир «по ответам» — один треугольник вершиной вниз над шкалой: сводно по тестам. */
       .qd-obs { position: absolute; bottom: calc(100% + var(--ou-space-2)); transform: translateX(-50%); display: flex; cursor: help; }
-      .qd-obs__mark { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 7px solid var(--ou-fg-muted); }
+      .qd-obs__mark { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--ou-fg-muted); }
       .qd-obs:hover .qd-obs__mark, .qd-obs:focus-visible .qd-obs__mark { border-top-color: var(--ou-fg-default); }
       .qd-obs .ou-tip__bubble { width: var(--wf-size-260, 260px); }
       /* Единый фильтр: панель под кнопкой «Фильтр», тело прокручивается, подвал всегда виден. */
