@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 
-import { Banner, Button, Checkbox, ModalDialog, RadioGroup, Stack, Text } from "@skillum/ui-kit";
+import { Banner, Button, Checkbox, ChoiceCard, ChoiceCardGroup, ModalDialog, Stack, Text } from "@skillum/ui-kit";
 
 import { fileNameOf } from "@/features/tests/export/save-as-dialog";
 import { filterToSearch, type RegistryFilter } from "../registry/filter-state";
@@ -193,7 +193,11 @@ export function TestExportDialog({
             : "Условий не задано — выгрузятся все прохождения теста"}
         />
 
-        <RadioGroup<TestExportKind> legend="Что выгрузить" value={kind} onChange={setKind} options={KINDS} />
+        <ChoiceCardGroup legend="Что выгрузить" value={kind} onChange={(next) => setKind(next as TestExportKind)}>
+          {KINDS.map((option) => (
+            <ChoiceCard key={option.value} value={option.value} title={option.label} description={option.description} showRadio />
+          ))}
+        </ChoiceCardGroup>
 
         {kind === "book" && (
           // Листы книги — их содержание; родственные пункты — 1x сетки.

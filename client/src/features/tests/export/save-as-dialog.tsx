@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Download } from "lucide-react";
 
-import { Banner, Button, ModalDialog, RadioGroup, Select, Stack, Text } from "@skillum/ui-kit";
+import { Banner, Button, ChoiceCard, ChoiceCardGroup, ModalDialog, Select, Stack, Text } from "@skillum/ui-kit";
 
 /** Формат выгрузки. */
 export type SaveAsFormat = "scorm" | "xlsx" | "tbtest";
@@ -218,12 +218,12 @@ export function SaveAsDialog({ open, onClose, test, canExportScorm, onOpenSettin
       )}
     >
       <Stack gap={4}>
-        <RadioGroup<SaveAsFormat>
-          legend="Формат"
-          value={format}
-          onChange={setFormat}
-          options={formats}
-        />
+        {/* Формат — карточками выбора: у каждого задача и путь обратно читаются сразу. */}
+        <ChoiceCardGroup legend="Формат" value={format} onChange={(next) => setFormat(next as SaveAsFormat)}>
+          {formats.map((option) => (
+            <ChoiceCard key={option.value} value={option.value} title={option.label} description={option.description} showRadio />
+          ))}
+        </ChoiceCardGroup>
 
         <div className="tb-saveas-facts">
           {format === "xlsx" ? (
