@@ -134,6 +134,11 @@ export interface QuestionEditorDrawerProps {
   onClose: () => void;
   /** Called after a successful create/update (e.g. to invalidate + toast). */
   onSaved?: () => void;
+  /**
+   * PRD-70 FR-30: «Статистика» — переход на страницу вопроса банка. Задан — переходом владеет
+   * экран (дерево банка кладёт в него путь для крошки возврата); не задан — простой переход.
+   */
+  onOpenStatistics?: (questionId: string) => void;
 }
 
 /**
@@ -148,6 +153,7 @@ export function QuestionEditorDrawer({
   tagSuggestions = [],
   onClose,
   onSaved,
+  onOpenStatistics,
 }: QuestionEditorDrawerProps) {
   const { push: toast } = useToast();
   const contentGuard = useContentGuard();
@@ -822,7 +828,7 @@ export function QuestionEditorDrawer({
               <Button
                 variant="ghost"
                 leadingIcon={<BarChart3 size={16} aria-hidden="true" />}
-                onClick={() => navigate(bankQuestionHref(question.id))}
+                onClick={() => (onOpenStatistics ? onOpenStatistics(question.id) : navigate(bankQuestionHref(question.id)))}
                 data-testid="button-question-statistics"
               >
                 Статистика

@@ -117,6 +117,10 @@ function applyScope(label: string) {
   fireEvent.click(screen.getByText("Применить"));
 }
 
+// Дерево помнит фильтр в адресе и раскрытие в состоянии записи истории (возврат вглубь-назад);
+// jsdom делит их между тестами файла — каждый тест начинается с чистой записи.
+beforeEach(() => { window.history.replaceState(null, "", "/"); });
+
 beforeEach(() => {
   guardSpy.mockClear();
   toastSpy.mockClear();

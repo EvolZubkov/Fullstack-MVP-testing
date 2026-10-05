@@ -79,6 +79,7 @@ import { TEST_ANALYTICS_TABS } from "@/features/analytics/test/question-analytic
 import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
 import { pluralize } from "@/lib/i18n";
 import { RegistryFilterPanel } from "@/features/analytics/registry/filter-panel";
+import { currentHref, stateForDive, trailOf, type TrailCrumb } from "@/features/analytics/levels/trail";
 import {
     conditionsOf,
     errorText,
@@ -1078,19 +1079,29 @@ export default function TestAnalyticsPage() {
                 ) : null}
             </>
         );
+        const questionLabel = renderBlanksText(breakdown?.prompt ?? questionCard?.prompt ?? "Вопрос", { mode: "dash" });
+        const testCrumb: TrailCrumb = {
+            label: analytics.testTitle,
+            // Э3.3: крошка теста возвращает на вкладку, с которой пришли.
+            href: testHref(testId!, filter, sourceTab),
+            state: typeof window === "undefined" ? undefined : window.history.state,
+        };
+        // Возврат (замечание владельца 2026-10-05): пришли сюда вглубь из другого места — крошки
+        // ведут по пройденному пути (например, «Темы и вопросы → вопрос банка»), а не только вверх.
+        const arrivedBy = trailOf(typeof window === "undefined" ? null : window.history.state);
+        const pathCrumbs: TrailCrumb[] = arrivedBy ? [...arrivedBy, testCrumb] : [generalCrumb as TrailCrumb, testCrumb];
+        /** Перейти на страницу вопроса банка, унося путь: её крошки вернут сюда. */
+        const openBankQuestion = () => {
+            const target = bankQuestionHref(routeQuestionId);
+            navigate(target, {
+                // Шаг называется ролью, а не текстом: текст вопроса стоит последней крошкой страницы банка.
+                state: stateForDive(pathCrumbs, { label: "Вопрос в тесте", href: currentHref(), state: window.history.state }, target),
+            });
+        };
         return (
             <Stack gap={6}>
                 <AnalyticsHeader
-                    crumbs={[
-                        generalCrumb,
-                        {
-                            label: analytics.testTitle,
-                            // Э3.3: крошка теста возвращает на вкладку, с которой пришли.
-                            href: testHref(testId!, filter, sourceTab),
-                            state: typeof window === "undefined" ? undefined : window.history.state,
-                        },
-                        { label: renderBlanksText(breakdown?.prompt ?? questionCard?.prompt ?? "Вопрос", { mode: "dash" }) },
-                    ]}
+                    crumbs={[...pathCrumbs, { label: questionLabel }]}
                     title={breakdown?.item ? <BreakdownTitle view={breakdown} /> : renderBlanksText(questionCard?.prompt ?? "Вопрос", { mode: "dash" })}
                     subtitle={notGraded ? answeredCaption : breakdown?.item ? breakdownSubtitle(breakdown) : answeredCaption}
                     actions={(
@@ -1213,7 +1224,7 @@ export default function TestAnalyticsPage() {
                                     variant="secondary"
                                     size="s"
                                     leadingIcon={<BarChart3 size={14} aria-hidden="true" />}
-                                    onClick={() => navigate(bankQuestionHref(routeQuestionId))}
+                                    onClick={openBankQuestion}
                                 >
                                     Статистика вопроса банка
                                 </Button>

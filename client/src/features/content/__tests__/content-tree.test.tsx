@@ -109,6 +109,10 @@ function renderTree(data: TreeData = { folders, topics, questions }) {
   return { ...utils, fetchMock };
 }
 
+// Дерево помнит фильтр в адресе и раскрытие в состоянии записи истории (возврат вглубь-назад);
+// jsdom делит их между тестами файла — каждый тест начинается с чистой записи.
+beforeEach(() => { window.history.replaceState(null, "", "/"); });
+
 beforeEach(() => {
   guardSpy.mockClear();
   toastSpy.mockClear();
@@ -538,5 +542,24 @@ describe("<ContentTree /> — счётчики в подписях строк", 
     expect(row.textContent).toContain("1 тема");
     expect(row.textContent).toContain("1 вопрос");
     expect(row.textContent).not.toContain("1 вопроса");
+  });
+});
+
+describe("<ContentTree /> — возврат на дерево (замечание владельца 2026-10-05)", () => {
+  it("условия фильтра из адреса и раскрытие из состояния записи восстанавливаются", async () => {
+    window.history.replaceState({ ctTree: { expandedTopics: ["t1"] } }, "", "/author/content?type=multiple");
+    renderTree();
+
+    // Фильтр «Тип: Несколько ответов» применён, тема раскрыта — виден только подходящий вопрос.
+    expect(await screen.findByText("Выберите верные утверждения")).toBeInTheDocument();
+    expect(screen.queryByText("Сколько будет 2+2?")).toBeNull();
+    expect(screen.getByText(/^Тип:/)).toBeInTheDocument();
+  });
+
+  it("раскрытие темы пишется в состояние записи", async () => {
+    renderTree();
+    fireEvent.click(await screen.findByText("Бюджетирование"));
+
+    await waitFor(() => expect((window.history.state as { ctTree?: { expandedTopics?: string[] } }).ctTree?.expandedTopics).toEqual(["t1"]));
   });
 });

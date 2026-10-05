@@ -88,6 +88,8 @@ import {
   EMPTY_FILTER,
   filterCount,
   MEDIA_OPTS,
+  readContentFilter,
+  writeContentFilter,
   SCOPE_OPTS,
   TYPE_OPTS,
   type ContentFilterValue,
@@ -105,6 +107,7 @@ import {
 } from "@/features/content/bank-quality";
 import { TermHint } from "@/features/analytics/test/term-hint";
 import { bankQuestionHref } from "@/features/analytics/levels/analytics-routes";
+import { currentHref, stateForDive, trailOf } from "@/features/analytics/levels/trail";
 import { FoldAllButtons, type SectionFold } from "@/features/tests/editor/sections/section-fold";
 
 /** PRD-70 FR-20: набор колонок дерева — «Содержание» (как было) или «Качество». */
@@ -250,6 +253,29 @@ interface UserLite {
   email?: string | null;
 }
 
+/** Раскрытие и прокрутка дерева в состоянии записи истории. */
+interface TreeSnapshot {
+  collapsedFolders?: string[];
+  expandedTopics?: string[];
+  scrollTop?: number;
+}
+
+/** Ключ снимка дерева в состоянии записи. */
+const TREE_KEY = "ctTree";
+
+/** Снимок дерева текущей записи; нет — дерево открывается как обычно. */
+function savedTree(): TreeSnapshot | null {
+  if (typeof window === "undefined") return null;
+  const value = (window.history.state as Record<string, unknown> | null)?.[TREE_KEY];
+  return value && typeof value === "object" ? value as TreeSnapshot : null;
+}
+
+/** Дописать снимок дерева в состояние текущей записи, не трогая остального. */
+function rememberTree(patch: TreeSnapshot): void {
+  const state = (window.history.state ?? {}) as Record<string, unknown>;
+  window.history.replaceState({ ...state, [TREE_KEY]: { ...(savedTree() ?? {}), ...patch } }, "", window.location.href);
+}
+
 export function ContentTree() {
   const { user, can } = useAuth();
   const userId = user?.id ?? "";
@@ -284,12 +310,32 @@ export function ContentTree() {
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
-  const [filter, setFilter] = useState<ContentFilterValue>(EMPTY_FILTER); // applied
-  const [draft, setDraft] = useState<ContentFilterValue>(EMPTY_FILTER); // edited in the panel
+  // Возврат (замечание владельца 2026-10-05): условия фильтра живут в адресе, раскрытие дерева и
+  // прокрутка — в состоянии записи истории. Крошка «Темы и вопросы» и «Назад» браузера приводят на
+  // тот же отбор и то же место дерева, с которого ушли вглубь.
+  const [filter, setFilter] = useState<ContentFilterValue>(() =>
+    typeof window === "undefined" ? EMPTY_FILTER : readContentFilter(window.location.search)); // applied
+  const [draft, setDraft] = useState<ContentFilterValue>(filter); // edited in the panel
   const [filterOpen, setFilterOpen] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
-  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
-  const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set());
+  const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set(savedTree()?.collapsedFolders ?? []));
+  const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set(savedTree()?.expandedTopics ?? []));
+  const treeRef = useRef<HTMLDivElement>(null);
+
+  // Условия фильтра — в адрес, без новой записи истории: это та же страница.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    writeContentFilter(filter, params);
+    const search = params.toString();
+    const href = window.location.pathname + (search ? `?${search}` : "") + window.location.hash;
+    if (href !== window.location.pathname + window.location.search + window.location.hash) {
+      window.history.replaceState(window.history.state, "", href);
+    }
+  }, [filter]);
+  // Раскрытие — в состояние записи: с ним на неё и вернутся.
+  useEffect(() => {
+    rememberTree({ collapsedFolders: [...collapsedFolders], expandedTopics: [...expandedTopics] });
+  }, [collapsedFolders, expandedTopics]);
   // PRD-16: inline read-only preview of a question (expand a question row).
   const [expandedQuestions, setExpandedQuestions] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -442,6 +488,34 @@ export function ContentTree() {
     setScrollToQuestionId(q.id);
     setEditorTarget({ question: q });
   }, [linkedQuestionId, dataLoading, questions, topics, folders, toast]);
+
+  // Прокрутка дерева: вернуть, когда дерево отрисовано, и запоминать по ходу.
+  const scrollRestored = useRef(false);
+  useEffect(() => {
+    if (dataLoading || scrollRestored.current) return;
+    scrollRestored.current = true;
+    const top = savedTree()?.scrollTop;
+    if (top && treeRef.current) treeRef.current.scrollTop = top;
+  }, [dataLoading]);
+  useEffect(() => {
+    const el = treeRef.current;
+    if (!el) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => rememberTree({ scrollTop: el.scrollTop }), 150);
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => { clearTimeout(timer); el.removeEventListener("scroll", onScroll); };
+  }, [dataLoading]);
+
+  /** «Статистика» вопроса: переход вглубь с путём — крошка «Темы и вопросы» вернёт сюда. */
+  function openStatistics(questionId: string) {
+    const target = bankQuestionHref(questionId);
+    navigate(target, {
+      state: stateForDive(trailOf(window.history.state), { label: t.content.title, href: currentHref(), state: window.history.state }, target),
+    });
+  }
 
   // Scroll the linked question's row into view once it has rendered.
   useEffect(() => {
@@ -726,7 +800,7 @@ export function ContentTree() {
             <a
               className="ou-link-reset"
               href={bankQuestionHref(q.id)}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate(bankQuestionHref(q.id)); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); openStatistics(q.id); }}
             >
               <Tag tone="warning" size="s">на ревизии</Tag>
             </a>
@@ -745,7 +819,7 @@ export function ContentTree() {
         <RowActions open={menuOpen} label={t.content.actionsQuestion} onToggle={() => setMenu(menuOpen ? null : { kind: "question", id: q.id })}>
           <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setEditorTarget({ question: q }); }} testId={`ct-q-edit-${q.id}`}>{t.content.editQuestion}</MenuItem>
           {/* PRD-70 FR-25: статистика вопроса по всем тестам читателя. */}
-          {canAnalytics && <MenuItem icon={<BarChart3 size={16} />} onClick={() => { setMenu(null); navigate(bankQuestionHref(q.id)); }} testId={`ct-q-stats-${q.id}`}>Статистика</MenuItem>}
+          {canAnalytics && <MenuItem icon={<BarChart3 size={16} />} onClick={() => { setMenu(null); openStatistics(q.id); }} testId={`ct-q-stats-${q.id}`}>Статистика</MenuItem>}
           {can("questions.manage") && <MenuItem icon={<Copy size={16} />} onClick={() => { setMenu(null); duplicateQuestionMut.mutate(q.id); }}>{t.questions.duplicate}</MenuItem>}
           {can("questions.manage") && <MenuItem icon={<Move size={16} />} onClick={() => { setMenu(null); setMoveQ({ ids: [q.id], topicId: q.topicId }); }}>{t.content.moveQuestionToTopic}</MenuItem>}
           {can("questions.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); deleteQuestion(q); }}>{t.content.deleteSelected}</MenuItem>}
@@ -927,7 +1001,7 @@ export function ContentTree() {
       ) : topics.length === 0 ? (
         <div className="ct-empty"><Text tone="muted">{t.content.emptyTopics}</Text></div>
       ) : (
-        <div className={`ct-tree${quality ? " ct-tree--quality" : ""}`} aria-label={t.content.title}>
+        <div ref={treeRef} className={`ct-tree${quality ? " ct-tree--quality" : ""}`} aria-label={t.content.title}>
           {quality ? (
             <div className="ct-thead">
               <div>{t.content.colName}</div>
@@ -1006,6 +1080,7 @@ export function ContentTree() {
         tagSuggestions={tagOptions}
         onClose={() => setEditorTarget(null)}
         onSaved={invalidateAll}
+        onOpenStatistics={(questionId) => { setEditorTarget(null); openStatistics(questionId); }}
       />
 
       {/* Topic settings / access (create / edit) */}

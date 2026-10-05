@@ -158,3 +158,50 @@ export function ContentFilters({ open, onClose, anchorRef, value, onChange, onAp
     </FilterPanel>
   );
 }
+
+/**
+ * Условия фильтра в параметрах адреса (замечание владельца 2026-10-05 о возврате): дерево, на
+ * которое вернулись крошкой или «Назад», должно показать тот же отбор. Пустые условия не пишутся.
+ *
+ * @param f условия
+ * @param params параметры адреса, куда писать; прочие параметры не трогаются
+ */
+export function writeContentFilter(f: ContentFilterValue, params: URLSearchParams): void {
+  for (const key of ["type", "diff", "tag", "media", "owner", "scope", "state"]) params.delete(key);
+  for (const ty of f.types) params.append("type", ty);
+  if (f.diffUnset) params.set("diff", "unset");
+  else if (f.diffMin > 0 || f.diffMax < 100) params.set("diff", `${f.diffMin}-${f.diffMax}`);
+  for (const tg of f.tags) params.append("tag", tg);
+  for (const m of f.media) params.append("media", m);
+  if (f.author) params.set("owner", f.author);
+  if (f.scope !== "all") params.set("scope", f.scope);
+  for (const st of f.states) params.append("state", st);
+}
+
+/**
+ * Условия фильтра из адреса; всё, что не похоже на условие, отбрасывается молча.
+ *
+ * @param search строка запроса адреса
+ */
+export function readContentFilter(search: string): ContentFilterValue {
+  const params = new URLSearchParams(search);
+  const types = TYPE_OPTS.map((o) => o.value);
+  const media = MEDIA_OPTS.map((o) => o.value);
+  const scopes = SCOPE_OPTS.map((o) => o.value);
+  const states: string[] = ["review", "overexposed", "never"];
+  const diff = params.get("diff") ?? "";
+  const range = /^(\d{1,3})-(\d{1,3})$/.exec(diff);
+  const scope = params.get("scope") ?? "all";
+  return {
+    ...EMPTY_FILTER,
+    types: params.getAll("type").filter((v): v is QuestionType => (types as string[]).includes(v)),
+    diffUnset: diff === "unset",
+    diffMin: range ? Math.min(100, Number(range[1])) : 0,
+    diffMax: range ? Math.min(100, Number(range[2])) : 100,
+    tags: params.getAll("tag"),
+    media: params.getAll("media").filter((v): v is MediaBucket => (media as string[]).includes(v)),
+    author: params.get("owner") ?? "",
+    scope: (scopes as string[]).includes(scope) ? (scope as ContentScope) : "all",
+    states: params.getAll("state").filter((v): v is ContentState => states.includes(v)),
+  };
+}

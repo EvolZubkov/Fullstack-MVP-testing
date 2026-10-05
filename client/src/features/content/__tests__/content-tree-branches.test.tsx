@@ -119,6 +119,10 @@ function removeChip(label: string) {
   fireEvent.click(screen.getByLabelText(`Снять условие: ${label}`));
 }
 
+// Дерево помнит фильтр в адресе и раскрытие в состоянии записи истории (возврат вглубь-назад);
+// jsdom делит их между тестами файла — каждый тест начинается с чистой записи.
+beforeEach(() => { window.history.replaceState(null, "", "/"); });
+
 beforeEach(() => { guardSpy.mockClear(); toastSpy.mockClear(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 

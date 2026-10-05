@@ -25,6 +25,7 @@ import {
 import { LoadingState } from "@/components/loading-state";
 import { AnalyticsHeader } from "@/features/analytics/levels/analytics-header";
 import { ANALYTICS_ROUTE, questionHref } from "@/features/analytics/levels/analytics-routes";
+import { currentHref, stateForDive, trailOf } from "@/features/analytics/levels/trail";
 import { NoValue } from "@/features/analytics/test/no-value";
 import { COEFFICIENT_MIN, num } from "@/features/analytics/test/psychometrics-format";
 import { TermHint } from "@/features/analytics/test/term-hint";
@@ -152,6 +153,18 @@ export default function BankQuestionAnalyticsPage() {
 
   const { question, rows, versions, minObservations } = data;
   const prompt = renderBlanksText(question.prompt, { mode: "dash" });
+  // Возврат (замечание владельца 2026-10-05): пришли переходом вглубь — крошки ведут по пройденному
+  // пути («Темы и вопросы», «Аналитика → тест → вопрос в тесте»); по ссылке — на «Аналитику».
+  const arrivedBy = trailOf(typeof window === "undefined" ? null : window.history.state);
+  const pathCrumbs = arrivedBy ?? [{ label: "Аналитика", href: ANALYTICS_ROUTE }];
+  /** Перейти на вопрос в тесте, унося путь: его крошки вернут сюда. */
+  const openInTest = (testId: string) => {
+    const target = questionHref(testId, question.id);
+    navigate(target, {
+      // Шаг называется ролью, а не текстом: текст вопроса стоит последней крошкой вопроса в тесте.
+      state: stateForDive(arrivedBy, { label: "Вопрос банка", href: currentHref(), state: window.history.state }, target),
+    });
+  };
   const selectedKey = data.selectedVersion === undefined ? undefined : versionKey(data.selectedVersion);
   const subtitle = [
     "Вопрос банка",
@@ -288,7 +301,7 @@ export default function BankQuestionAnalyticsPage() {
   return (
     <Stack gap={6}>
       <AnalyticsHeader
-        crumbs={[{ label: "Аналитика", href: ANALYTICS_ROUTE }, { label: prompt }]}
+        crumbs={[...pathCrumbs, { label: prompt }]}
         title={(
           <>
             {question.type ? <QuestionTypeIcon type={question.type as QuestionType} size={20} /> : null}
@@ -327,7 +340,7 @@ export default function BankQuestionAnalyticsPage() {
               columns={columns}
               rows={rows}
               rowKey={(row) => row.testId}
-              onRowClick={(row) => navigate(questionHref(row.testId, question.id))}
+              onRowClick={(row) => openInTest(row.testId)}
               emptyMessage={`За ${WINDOW_MONTHS} месяцев вопрос не выдавался ни в одном доступном вам тесте`}
             />
             <Text variant="body-xs" tone="muted">
