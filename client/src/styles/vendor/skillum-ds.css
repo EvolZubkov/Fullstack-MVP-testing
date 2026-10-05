@@ -3604,8 +3604,13 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 .ou-filterbar__reset { margin-left: var(--ou-space-1); }
 
-/* Saved sets: the trigger says which set is applied and whether it was changed. */
+/* Saved sets: the trigger says which set is applied and whether it was changed.
+   A long name is cut with an ellipsis (the full one is in the hint); «изменён» stays. */
 .ou-filterbar__saved { max-width: 220px; }
+.ou-filterbar__update { max-width: 320px; }
+.ou-filterbar__saved > span, .ou-filterbar__update > span { display: flex; align-items: baseline; min-width: 0; }
+.ou-filterbar__setname { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ou-filterbar__dirty { flex-shrink: 0; }
 .ou-filterbar__dirty {
   margin-left: var(--ou-space-1);
   font: var(--ou-text-body-xs); color: var(--ou-fg-muted);

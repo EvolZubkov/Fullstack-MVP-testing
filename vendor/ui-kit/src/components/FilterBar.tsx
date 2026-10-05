@@ -187,8 +187,10 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
               size="sm"
               closeOnSelect={false}
               trigger={(
-                <Button variant="ghost" size="s" className="ou-filterbar__saved">
-                  {activeSet ? activeSet.name : savedLabel}
+                // A long set name is cut with an ellipsis and read in full from the hint: centred
+                // and unwrapped, it ran out of the button both ways and over the filter button.
+                <Button variant="ghost" size="s" className="ou-filterbar__saved" title={activeSet?.name}>
+                  <span className="ou-filterbar__setname">{activeSet ? activeSet.name : savedLabel}</span>
                   {activeSet && dirty && <span className="ou-filterbar__dirty">изменён</span>}
                 </Button>
               )}
@@ -254,8 +256,14 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
             {(offerUpdate || offerSave) && (
               <span className="ou-filterbar__saveactions">
                 {offerUpdate && activeSet && (
-                  <Button variant="ghost" size="s" onClick={() => onUpdateSet?.(activeSet.id)}>
-                    Обновить «{activeSet.name}»
+                  <Button
+                    variant="ghost"
+                    size="s"
+                    className="ou-filterbar__update"
+                    title={`Обновить «${activeSet.name}»`}
+                    onClick={() => onUpdateSet?.(activeSet.id)}
+                  >
+                    Обновить «<span className="ou-filterbar__setname">{activeSet.name}</span>»
                   </Button>
                 )}
                 {offerSave && (
