@@ -286,6 +286,11 @@
       .wf-fp-row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
       .wf-fp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-2); align-items: end; }
       .wf-page-head { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+      /* Сохранение: окно названия и меню набора — под своей кнопкой, в потоке страницы (эскиз). */
+      .wf-save-anchor { display: flex; }
+      .wf-save-anchor > .ou-popover, .wf-save-anchor > .ou-menu { position: static; }
+      .wf-save-menu { min-width: 260px; }
+      .wf-case-gap { height: var(--ou-space-6); }
       /* Поиск заполняет слот полосы (DS: flex 1 1 280px, до 420px) — кнопка «Фильтр» стоит сразу за ним. */
       .ou-filterbar__search .ou-field { width: 100%; }
     </style>
@@ -434,6 +439,7 @@
       <button type="button" onclick="showState(this, 'tests')">Тесты</button>
       <button type="button" onclick="showState(this, 'registry')">Аналитика</button>
       <button type="button" onclick="showState(this, 'users')">Пользователи</button>
+      <button type="button" onclick="showState(this, 'saving')">Сохранение фильтра</button>
       <span class="wf-nav-sep"></span>
       <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
       <span class="wf-nav-sep"></span>
@@ -876,9 +882,9 @@
               
               <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" aria-expanded="true"><span>Фильтр</span><span class="ou-chip__count">2</span></button>
               <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
-              <div class="ou-filterbar__spacer ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Сохранить фильтр</span></button></div>
+              
             </div>
-            <div class="ou-filterbar__applied"><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Источник: веб и телеметрия LMS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.01.2026 — 05.10.2026</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Период: 01.01.2026 — 05.10.2026"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button></div>
+            <div class="ou-filterbar__applied"><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Источник: веб и телеметрия LMS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.01.2026 — 05.10.2026</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Период: 01.01.2026 — 05.10.2026"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-filterbar__saveactions"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Сохранить фильтр</span></button></span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button></div>
           </div>
           <div class="wf-fp-anchor">
           <div class="ou-popover ou-popover--xl ou-popover--no-arrow wf-fp" role="dialog" aria-label="Фильтр">
@@ -1006,6 +1012,102 @@
       </div>
     </div>
 
+    <div id="wf-saving" class="wf-state">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="wf-page-head">
+            <h1 class="ou-text ou-text--heading-l">Аналитика</h1>
+            <p class="ou-text ou-text--body-m ou-text--tone-muted">Сохранение фильтра — четыре случая полосы реестра; на уровне теста то же самое</p>
+          </div>
+          <div class="wf-page-head">
+            <h2 class="ou-text ou-text--heading-s">1. Условия отобраны, набора нет</h2>
+            <p class="ou-text ou-text--body-s ou-text--tone-muted">«Сохранить фильтр» — в ряду условий, рядом с тем, что сохраняется; по нажатию — поле с названием из условий</p>
+          </div>
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" aria-expanded="true"><span>Фильтр</span><span class="ou-chip__count">2</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+              
+            </div>
+            <div class="ou-filterbar__applied"><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Источник: веб и телеметрия LMS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.01.2026 — 05.10.2026</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Период: 01.01.2026 — 05.10.2026"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-filterbar__saveactions"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s wf-save-from"><span>Сохранить фильтр</span></button></span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button></div>
+          </div>
+          <div class="wf-save-anchor">
+          <div class="ou-popover ou-popover--lg ou-popover--no-arrow wf-save-pop ou-filterbar__savepop" role="dialog" aria-label="Сохранить фильтр">
+          <div class="ou-popover__body">
+            <div class="ou-formfield"><span class="ou-formfield__lbl">Название</span><div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Источник: веб и телеметрия LMS · Период: 01.01.2026 — 05.10.2026" aria-label="Название"></div></div></div>
+          </div>
+          <div class="ou-popover__footer">
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--s"><span>Сохранить</span></button>
+          </div>
+          </div>
+          </div>
+          <div class="wf-page-head">
+            <h2 class="ou-text ou-text--heading-s">2. Применён набор, условия не менялись</h2>
+            <p class="ou-text ou-text--body-s ou-text--tone-muted">Сохранять нечего — в ряду только «Сбросить фильтры»; на кнопке — название набора</p>
+          </div>
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" aria-expanded="true"><span>Фильтр</span><span class="ou-chip__count">2</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Веб и LMS за год</span></button>
+              
+            </div>
+            <div class="ou-filterbar__applied"><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Источник: веб и телеметрия LMS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.01.2026 — 05.10.2026</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Период: 01.01.2026 — 05.10.2026"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button></div>
+          </div>
+          <div class="wf-page-head">
+            <h2 class="ou-text ou-text--heading-s">3. Применён набор, условия изменены</h2>
+            <p class="ou-text ou-text--body-s ou-text--tone-muted">«Обновить» записывает изменения в набор; «Сохранить как новый» — то же поле, что в случае 1</p>
+          </div>
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" aria-expanded="true"><span>Фильтр</span><span class="ou-chip__count">3</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Веб и LMS за год<span class="ou-filterbar__dirty">изменён</span></span></button>
+              
+            </div>
+            <div class="ou-filterbar__applied"><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Источник: веб и телеметрия LMS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.01.2026 — 05.10.2026</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Период: 01.01.2026 — 05.10.2026"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Исход: не сдал</button><button type="button" class="ou-chip__close" aria-label="Снять условие: Исход: не сдал"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-filterbar__saveactions"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Обновить «Веб и LMS за год»</span></button><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Сохранить как новый</span></button></span><button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button></div>
+          </div>
+          <div class="wf-page-head">
+            <h2 class="ou-text ou-text--heading-s">4. Меню «Сохранённые»</h2>
+            <p class="ou-text ou-text--body-s ou-text--tone-muted">Только выбрать и удалить; пустое меню подсказывает, где сохраняют</p>
+          </div>
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" aria-expanded="true"><span>Фильтр</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved wf-save-from"><span>Сохранённые</span></button>
+              
+            </div>
+            
+          </div>
+          <div class="wf-save-anchor">
+          <div class="ou-menu ou-menu--sm wf-save-menu" role="menu" aria-label="Сохранённые">
+            <div class="ou-menu__label">Наборы условий</div>
+            <button type="button" class="ou-menu__item is-selected" role="menuitem"><span class="ou-menu__item-text"><span class="ou-menu__item-title">Веб и LMS за год</span></span><span class="ou-menu__item-trail"><span class="ou-filterbar__setdrop">удалить</span></span></button>
+            <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-text"><span class="ou-menu__item-title">Не сдавшие, филиал «Север»</span></span><span class="ou-menu__item-trail"><span class="ou-filterbar__setdrop">удалить</span></span></button>
+          </div>
+          </div>
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog" aria-expanded="true"><span>Фильтр</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved wf-save-from"><span>Сохранённые</span></button>
+              
+            </div>
+            
+          </div>
+          <div class="wf-save-anchor">
+          <div class="ou-menu ou-menu--sm wf-save-menu" role="menu" aria-label="Сохранённые">
+            <div class="ou-filterbar__empty">Наборов пока нет: отберите условия и нажмите «Сохранить фильтр»</div>
+          </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
     <div id="wf-docs" class="wf-state">
       <div class="wf-doc">
         <div class="wf-notes">
@@ -1019,6 +1121,8 @@
               <tr><td>Подвал</td><td>«Сбросить» слева (снимает условия черновика), «Применить» справа. Без «Отмены»: закрыть панель — и есть отмена</td><td>Применяется только по «Применить» — как сегодня во всех трёх формах</td></tr>
               <tr><td>Экраны</td><td>Банк, «Тесты», аналитика (реестр, уровень теста, срезы), «Пользователи»</td><td>Журнал сервера остаётся рядом списков (решение владельца 2026-10-05)</td></tr>
               <tr><td>«Пользователи»</td><td>Шесть списков из ряда уходят в панель; появляются чипы и сброс. Роль, статус и вид учётной записи остаются одиночным выбором (<code>Select</code>)</td><td>Состав и вид полей — прежние; меняется только место</td></tr>
+              <tr><td>Сохранение фильтра</td><td>«Сохранить фильтр» стоит в ряду условий перед «Сбросить фильтры» и есть только когда сохранять есть что: условия отобраны и не совпадают с применённым набором. По нажатию — окно под кнопкой с полем «Название», подставлено из условий; «Сохранить» или Enter. Изменённый набор — «Обновить «имя»» и «Сохранить как новый»</td><td>Решение владельца 2026-10-05: сохранение было спрятано в меню «Сохранённые»</td></tr>
+              <tr><td>«Сохранённые»</td><td>Только выбрать и удалить набор. Поле названия из меню уходит. Пустое меню: «Наборов пока нет: отберите условия и нажмите «Сохранить фильтр»»</td><td>Где наборов нет вовсе (банк, «Тесты», «Пользователи») — кнопки нет</td></tr>
               <tr><td>Аналитика: срез</td><td>«Изменить условия» среза открывает ту же панель у кнопки</td><td>Поля — без «Теста», как сегодня</td></tr>
             </tbody>
           </table>
@@ -1029,7 +1133,7 @@
           <table>
             <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Токены</th><th>Примечания</th></tr></thead>
             <tbody>
-              <tr><td>Полоса</td><td><code>FilterBar</code></td><td>—</td><td>Без изменений ДС</td></tr>
+              <tr><td>Полоса</td><td><code>FilterBar</code></td><td><code>--ou-space-1</code> между действиями сохранения</td><td>В ui-kit: сохранение переезжает из меню в ряд условий (<code>ou-filterbar__saveactions</code>), окно названия — <code>Popover</code> md без стрелки; проп <code>suggestedName</code></td></tr>
               <tr><td>Панель</td><td>Новый <code>FilterPanel</code> в ui-kit поверх <code>Popover</code> (<code>size="xl"</code>, <code>arrow={false}</code>, подвал <code>--between</code>)</td><td><code>--ou-space-4</code> между группами</td><td>В ui-kit: тип <code>PopoverSize</code> дополнить <code>"xl"</code> (класс уже есть). Группа — <code>FilterPanel.Group</code> (заголовок + содержимое)</td></tr>
               <tr><td>Поля</td><td><code>Checkbox</code>, <code>Select</code>, <code>Combobox</code>, <code>SegmentedControl</code>, <code>Slider</code>, <code>Switch</code>, <code>TagInput</code>, <code>FormField</code>+<code>Input</code></td><td>—</td><td>Существующие поля экранов</td></tr>
             </tbody>
@@ -1105,7 +1209,15 @@
           });
         }
         var show = window.showState;
-        window.showState = function (b, id) { show(b, id); place(); };
+        window.showState = function (b, id) { show(b, id); place(); if (typeof placeSave === 'function') placeSave(); };
+          function placeSave() { document.querySelectorAll('.wf-save-anchor').forEach(function (anchor) {
+            var bar = anchor.previousElementSibling;
+            var btn = bar && bar.querySelector('.wf-save-from');
+            if (!btn || !btn.offsetParent) return;
+            anchor.style.paddingLeft = (btn.getBoundingClientRect().left - anchor.getBoundingClientRect().left) + 'px';
+            anchor.style.marginTop = 'calc(-1 * var(--ou-space-2))';
+          }); }
+        window.addEventListener('load', placeSave);
         window.addEventListener('load', place);
         window.addEventListener('resize', place);
       })();

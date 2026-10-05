@@ -337,9 +337,9 @@ describe("PassageRegistry — сохранение фильтра", () => {
   });
 
   // Э3.2 (решение владельца 2026-10-03): срез без теста существовать не может. Здесь — сохранённый
-  // ФИЛЬТР: критерии, которые сохраняются и применяются из меню «Сохранённые» (решение владельца
-  // 2026-10-05: фильтр и срез — отдельные сущности).
-  it("сохранить отбор срезом здесь нельзя — только фильтром из «Сохранённых» (Э3.2)", async () => {
+  // ФИЛЬТР (решение владельца 2026-10-05: фильтр и срез — отдельные сущности). Сохраняется он из
+  // ряда условий, применяется из меню «Сохранённые» (решение владельца 2026-10-05 о простом UX).
+  it("сохранить отбор срезом здесь нельзя — только фильтром из ряда условий (Э3.2)", async () => {
     render(
       <PassageRegistry
         filter={{ testIds: ["t1"], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
@@ -349,9 +349,22 @@ describe("PassageRegistry — сохранение фильтра", () => {
 
     await screen.findByText("Морозова Анна");
     expect(screen.queryByRole("button", { name: /Сохранить как срез/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Сохранить фильтр/ })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: /Сохранённые|Мои потоки/ }));
-    expect(await screen.findByPlaceholderText("Название набора")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить фильтр" }));
+    expect(await screen.findByRole("textbox", { name: "Название" })).toBeTruthy();
+  });
+
+  it("в меню «Сохранённые» поля названия нет — только выбрать и удалить", async () => {
+    render(
+      <PassageRegistry
+        filter={{ testIds: ["t1"], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    await screen.findByText("Морозова Анна");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранённые" }));
+    await screen.findByRole("menuitem", { name: /Мои потоки/ });
+    expect(screen.queryByRole("textbox", { name: "Название" })).toBeNull();
   });
 
   it("не предлагает сохранить фильтр, когда условий нет", async () => {
@@ -363,9 +376,7 @@ describe("PassageRegistry — сохранение фильтра", () => {
     );
 
     await screen.findByText("Морозова Анна");
-    await userEvent.click(screen.getByRole("button", { name: "Сохранённые" }));
-    await screen.findByRole("menuitem", { name: /Мои потоки/ });
-    expect(screen.queryByPlaceholderText("Название набора")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Сохранить фильтр" })).toBeNull();
   });
 
   it("сохраняет отбор фильтром со всеми тестами выборки", async () => {
@@ -377,8 +388,12 @@ describe("PassageRegistry — сохранение фильтра", () => {
     );
 
     await screen.findByText("Морозова Анна");
-    await userEvent.click(screen.getByRole("button", { name: "Сохранённые" }));
-    await userEvent.type(await screen.findByPlaceholderText("Название набора"), "Импорт по двум тестам");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить фильтр" }));
+    const field = await screen.findByRole("textbox", { name: "Название" });
+    // Название предложено из условий и выделено: набор текста его заменяет.
+    expect((field as HTMLInputElement).value).not.toBe("");
+    await userEvent.clear(field);
+    await userEvent.type(field, "Импорт по двум тестам");
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => {

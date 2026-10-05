@@ -1,10 +1,11 @@
-import React, { forwardRef, useState } from 'react';
+import React, { forwardRef, useEffect, useRef, useState } from 'react';
 import { cn } from '../utils';
 import { Button } from './Button';
 import { Chip } from './Chip';
 import { Input } from './Input';
 import { Cluster } from './Layout';
-import { MenuDivider, MenuItem, MenuLabel, MenuTrigger } from './Menu';
+import { MenuItem, MenuLabel, MenuTrigger } from './Menu';
+import { Popover } from './Popover';
 
 export interface FilterBarAppliedItem {
   /** Stable key of the applied condition. */
@@ -51,15 +52,40 @@ export interface FilterBarProps extends Omit<React.HTMLAttributes<HTMLDivElement
   /** Writes what is applied right now into the set it came from. */
   onUpdateSet?: (id: string) => void;
   onDeleteSet?: (id: string) => void;
+  /**
+   * The name offered when saving. By default — the labels of the applied chips
+   * joined with « · », so the person only confirms or shortens it.
+   */
+  suggestedName?: string;
   filterLabel?: string;
   resetLabel?: string;
   savedLabel?: string;
+  /** The save action in the row of applied conditions. */
+  saveLabel?: string;
+}
+
+/** Longest name offered by default: a set name is a label on a button, not a description. */
+const SUGGESTED_MAX = 80;
+
+/** Default name of a new set: the chip labels that are plain text, joined. */
+function suggestedFrom(applied: readonly FilterBarAppliedItem[]): string {
+  const text = applied
+    .map((item) => (typeof item.label === 'string' ? item.label : ''))
+    .filter(Boolean)
+    .join(' · ');
+  return text.length > SUGGESTED_MAX ? `${text.slice(0, SUGGESTED_MAX - 1).trimEnd()}…` : text;
 }
 
 /**
  * One filtering pattern for every list: search, a filter button with a counter,
  * saved sets, and a second row that appears only while something is applied,
- * with removable chips and the single reset.
+ * with removable chips, the save actions and the single reset.
+ *
+ * Saving lives in the row of applied conditions, next to what is being saved, and
+ * appears only when there is something to save: conditions are applied and they are
+ * not exactly a saved set. A changed set offers «update» and «save as new». The
+ * «Сохранённые» menu only applies and deletes sets: a name field hidden in a menu
+ * that reads as a list was not found by the people it was meant for.
  *
  * The component holds no conditions and no storage: it shows what it is given
  * and reports what the person did. Where the sets live and who sees them is the
@@ -83,24 +109,60 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
     onSaveSet,
     onUpdateSet,
     onDeleteSet,
+    suggestedName,
     filterLabel = 'Фильтр',
     resetLabel = 'Сбросить фильтры',
     savedLabel = 'Сохранённые',
+    saveLabel = 'Сохранить фильтр',
     className,
     ...rest
   }, ref) => {
     const [name, setName] = useState('');
+    const [saveOpen, setSaveOpen] = useState(false);
+    const saveButtonRef = useRef<HTMLButtonElement | null>(null);
+    const nameRef = useRef<HTMLInputElement | null>(null);
     const activeSet = savedSets.find((set) => set.id === activeSetId) ?? null;
-    const canSave = Boolean(onSaveSet) && applied.length > 0;
+    const hasApplied = applied.length > 0;
+    // Nothing to save while the applied conditions are exactly a saved set.
+    const offerSave = Boolean(onSaveSet) && hasApplied && (!activeSet || dirty);
+    const offerUpdate = Boolean(onUpdateSet) && hasApplied && Boolean(activeSet) && dirty;
     // The control keeps its place whether sets exist or not: a button that comes
     // and goes as conditions change makes the row jump under the hand.
     const showSaved = Boolean(onApplySet) || Boolean(onSaveSet) || savedSets.length > 0;
+
+    // The name field closes as soon as saving stops making sense (conditions reset,
+    // a set applied): an open field for an action that is gone would save the wrong thing.
+    useEffect(() => {
+      if (!offerSave) setSaveOpen(false);
+    }, [offerSave]);
+
+    // The field opens with the offered name selected: Enter keeps it, typing replaces it.
+    useEffect(() => {
+      if (!saveOpen) return;
+      nameRef.current?.focus();
+      nameRef.current?.select();
+    }, [saveOpen]);
+
+    const toggleSave = () => {
+      if (saveOpen) {
+        setSaveOpen(false);
+        return;
+      }
+      setName(suggestedName ?? suggestedFrom(applied));
+      setSaveOpen(true);
+    };
+
+    const closeSave = () => {
+      setSaveOpen(false);
+      saveButtonRef.current?.focus();
+    };
 
     const save = () => {
       const trimmed = name.trim();
       if (!trimmed) return;
       onSaveSet?.(trimmed);
       setName('');
+      closeSave();
     };
 
     return (
@@ -133,8 +195,12 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
             >
               {savedSets.length > 0 && <MenuLabel>Наборы условий</MenuLabel>}
               {savedSets.length === 0 && (
+                // The empty menu says where saving is — the only place a person who
+                // came here to save will look.
                 <div className="ou-filterbar__empty">
-                  {canSave ? 'Сохранённых наборов пока нет' : 'Сохранённых наборов пока нет: отберите условия и сохраните их'}
+                  {onSaveSet
+                    ? `Наборов пока нет: отберите условия и нажмите «${saveLabel}»`
+                    : 'Наборов пока нет'}
                 </div>
               )}
               {savedSets.map((set) => (
@@ -162,29 +228,6 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
                   {set.name}
                 </MenuItem>
               ))}
-
-              {savedSets.length > 0 && canSave && <MenuDivider />}
-
-              {canSave && (
-                <div className="ou-filterbar__save">
-                  <Input
-                    size="s"
-                    value={name}
-                    placeholder="Название набора"
-                    onChange={(event) => setName(event.target.value)}
-                    onKeyDown={(event) => { if (event.key === 'Enter') save(); }}
-                  />
-                  <Button variant="primary" size="s" onClick={save} disabled={!name.trim()}>
-                    Сохранить
-                  </Button>
-                </div>
-              )}
-
-              {activeSet && dirty && onUpdateSet && (
-                <MenuItem onClick={() => onUpdateSet(activeSet.id)}>
-                  Обновить «{activeSet.name}»
-                </MenuItem>
-              )}
             </MenuTrigger>
           )}
 
@@ -194,7 +237,7 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
           {actions && <Cluster gap={1} className="ou-filterbar__spacer">{actions}</Cluster>}
         </div>
 
-        {applied.length > 0 && (
+        {hasApplied && (
           <div className="ou-filterbar__applied">
             {applied.map((item) => (
               <Chip
@@ -208,11 +251,66 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
                 {item.label}
               </Chip>
             ))}
+            {(offerUpdate || offerSave) && (
+              <span className="ou-filterbar__saveactions">
+                {offerUpdate && activeSet && (
+                  <Button variant="ghost" size="s" onClick={() => onUpdateSet?.(activeSet.id)}>
+                    Обновить «{activeSet.name}»
+                  </Button>
+                )}
+                {offerSave && (
+                  <Button
+                    ref={saveButtonRef}
+                    variant="ghost"
+                    size="s"
+                    onClick={toggleSave}
+                    aria-haspopup="dialog"
+                    aria-expanded={saveOpen}
+                  >
+                    {activeSet ? 'Сохранить как новый' : saveLabel}
+                  </Button>
+                )}
+              </span>
+            )}
             <Button variant="ghost" size="s" className="ou-filterbar__reset" onClick={onReset}>
               {resetLabel}
             </Button>
           </div>
         )}
+
+        <Popover
+          open={saveOpen}
+          onClose={closeSave}
+          anchorRef={saveButtonRef}
+          placement="bottom"
+          align="start"
+          size="lg"
+          arrow={false}
+          offset={4}
+          aria-label={activeSet ? 'Сохранить как новый набор' : saveLabel}
+          className="ou-filterbar__savepop"
+          footer={(
+            <Button variant="primary" size="s" onClick={save} disabled={!name.trim()}>
+              Сохранить
+            </Button>
+          )}
+        >
+          <Input
+            ref={nameRef}
+            size="s"
+            fullWidth
+            label="Название"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') return;
+              // Focus returns to the save button inside save(): without this the same Enter
+              // would press that button and open the field again.
+              event.preventDefault();
+              save();
+            }}
+          />
+        </Popover>
       </div>
     );
   },
