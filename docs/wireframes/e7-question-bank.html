@@ -265,6 +265,15 @@
       /* Меню строки: якорь нулевой высоты под строкой, меню — у кнопки ⋯ этой строки. */
       .wf-menu-row { position: relative; height: 0; }
       .wf-menu-pop { position: absolute; right: var(--ou-space-2); top: calc(-1 * var(--ou-space-2)); z-index: 60; }
+      /* Сложность в ящике: переключатель и поле — по средней линии шкалы, от шкалы — 6x.
+         Поля над и под шкалой равны: снизу — подписи делений, сверху — маркеры «по ответам». */
+      .qd-diffrow { gap: var(--ou-space-6); }
+      .qd-diffrow .ou-slider { padding-block: var(--ou-space-5); }
+      /* Маркер наблюдаемой сложности — треугольник вершиной вниз над шкалой, по одному на тест (К1). */
+      .qd-obs { position: absolute; bottom: calc(100% + var(--ou-space-2)); transform: translateX(-50%); display: flex; cursor: help; }
+      .qd-obs__mark { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 7px solid var(--ou-fg-muted); }
+      .qd-obs:hover .qd-obs__mark, .qd-obs:focus-visible .qd-obs__mark { border-top-color: var(--ou-fg-default); }
+      .qd-obs .ou-tip__bubble { width: var(--wf-size-260, 260px); }
     </style>
 
     <style data-wf-template-overrides>
@@ -1024,8 +1033,8 @@
               <label class="ou-switch-field qd-diffrow__sw"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.ou-formfield').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задано</span></span></label>
               <div class="ou-slider ou-slider--h" aria-label="Сложность">
                 <div class="ou-slider__rail">
-                  <div class="ou-slider__fill" style="left:0%;right:82%"></div>
-                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div>
+                  <div class="ou-slider__fill" style="left:0%;right:70%"></div>
+                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div><span class="ou-tip qd-obs" data-placement="top" tabindex="0" style="left:42%" aria-label="По ответам в тесте «Сертификация руководителей»: 42"><span class="qd-obs__mark" aria-hidden="true"></span><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip"><span class="ou-tip__title">По ответам: 42</span>Тест «Сертификация руководителей», 214 прохождений. Сложность, какой она оказалась у участников, в той же шкале 0–100; задана — 30.</span></span><span class="ou-tip qd-obs" data-placement="top" tabindex="0" style="left:39%" aria-label="По ответам в тесте «Антикоррупционный минимум»: 39"><span class="qd-obs__mark" aria-hidden="true"></span><span class="ou-tip__bubble ou-tip__bubble--wrap" role="tooltip"><span class="ou-tip__title">По ответам: 39</span>Тест «Антикоррупционный минимум», 412 прохождений. Сложность, какой она оказалась у участников, в той же шкале 0–100; задана — 30.</span></span>
                   <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:30%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="30" aria-label="Сложность"></div>
                 </div>
               </div>
