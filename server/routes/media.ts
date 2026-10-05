@@ -20,6 +20,7 @@ import { canDeliverAsset } from "../services/media/asset-access";
 import { requirePermission } from "../middleware/auth";
 import { reindexAllUsages } from "../services/media/usage-index";
 import { isAdminOrSuper } from "../services/test-access";
+import { FOREIGN_KEY_VIOLATION, isUniqueViolation, pgErrorCode } from "../utils/pg-error";
 import type { MediaAsset } from "@shared/schema";
 
 const router = Router();
@@ -72,7 +73,7 @@ router.post("/upload", requireAuth, mediaUpload.single("file"), async (req: Requ
         // there first. The partial unique index (owner_id, checksum) turned that into a
         // conflict; re-read and use the row that won, which is exactly what dedup would
         // have returned anyway.
-        if ((error as { code?: string }).code !== "23505") throw error;
+        if (!isUniqueViolation(error)) throw error;
         asset = await storage.findMediaAssetByOwnerChecksum(ownerId, stored.checksum);
         if (!asset) throw error;
       }
@@ -145,7 +146,7 @@ router.delete("/:id", requirePermission("media.manage"), async (req: Request, re
       // may have written a `media_usages` row in between. The FK (deliberately without
       // cascade) then rejects the delete with `23503` — turn that into the same 409 the
       // up-front check would have given, instead of letting it surface as a 500.
-      if ((error as { code?: string }).code === "23503") {
+      if (pgErrorCode(error) === FOREIGN_KEY_VIOLATION) {
         const lateUsages = await storage.getMediaUsagesByAsset(asset.id);
         return res.status(409).json({
           error: "media_in_use",

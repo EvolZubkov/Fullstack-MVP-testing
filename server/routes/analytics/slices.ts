@@ -36,6 +36,7 @@ import { readAssigned } from "../../services/analytics/assigned-count";
 import { summariseSlice } from "../../services/analytics/slice-stats";
 import { readSliceTopics, weakestTopic } from "../../services/analytics/slice-topics";
 import { analyticsScope } from "./helpers";
+import { isUniqueViolation } from "../../utils/pg-error";
 import { canReadTestAnalytics } from "../../services/test-access";
 
 /**
@@ -565,7 +566,7 @@ router.post("/slices", requirePermission("analytics.read"), async (req: Request,
   } catch (error) {
     // Уникальность имени стережёт индекс: сюда его нарушение приходит ошибкой базы, и
     // читателю надо сказать по-человечески, а не «23505».
-    if ((error as { code?: string }).code === "23505") {
+    if (isUniqueViolation(error)) {
       return res.status(409).json({ error: "Запись с таким именем уже есть" });
     }
     logger.error("Save slice error: " + (error as Error).message);
@@ -625,7 +626,7 @@ router.put("/slices/:id", requirePermission("analytics.read"), async (req: Reque
 
     res.json({ slice });
   } catch (error) {
-    if ((error as { code?: string }).code === "23505") {
+    if (isUniqueViolation(error)) {
       return res.status(409).json({ error: "Срез с таким именем уже есть" });
     }
     logger.error("Update slice error: " + (error as Error).message);
