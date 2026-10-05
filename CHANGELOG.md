@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.38.1](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.38.0...v2.38.1)
+
+### Features
+
+- **feat**(export): уровни и рекомендации прохождений из телеметрии LMS в книге выгрузки (2026-10-06) [`f8f6d9d4bd3ccf236a5a5f21a4e7c77ac90acedf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f8f6d9d4bd3ccf236a5a5f21a4e7c77ac90acedf)
+  Листы «Статистика уровней» и «Рекомендации» общей книги брали только веб-попытки: слой
+  наблюдений не несёт уровней и курсов, хотя пакет сообщает их телеметрией при завершении
+  (scorm_attempts.achieved_levels_json / failed_topic_courses_json). Теперь они дочитываются
+  одним запросом по выборке (getScormAttemptOutcomes). Пояснение первой строкой листа — только
+  об импортированных выгрузках LMS: отчёт LMS уровней и рекомендаций не несёт.
+
+### Fixes
+
+- **fix**(ui-kit): стили ChoiceCard возвращены в ДС; окна «Сохранить как…» и «Экспорт» — карточками выбора (2026-10-06) [`5f67da8c06afa540ffc196049f7d04858c3d8a5f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5f67da8c06afa540ffc196049f7d04858c3d8a5f)
+  Компонент ChoiceCard был в ките, а его CSS (классы ou-choice-card) пропал из бандла при
+  переносе — правила уцелели только в снимке ДС эскизов. Блок возвращён из него в обе копии
+  бандла и в справочник; заголовок группы — body-m 600 вместо несуществующего токена
+  --ou-text-label-m (как у RadioGroup). Форматы «Сохранить как…» и виды выгрузки окна
+  «Экспорт» теста — ChoiceCard с видимой отметкой; эскиз approved/e5-export.html приведён.
+
 ## [2.38.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.37.0...v2.38.0)
 
 ### Features
