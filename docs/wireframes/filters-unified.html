@@ -248,6 +248,7 @@
   
       /* Э7: дерево банка в оболочке приложения — во всю ширину области, как в продукте. */
       .ou-shell__main .cb-wrap { max-width: none; margin: 0; padding: 0; }
+      .ou-filterbar__search .ou-field { width: 100%; }
       /* Колонки, как в продукте сегодня: Название | Владелец | Индекс | Сложность | Вопросов | ⋯ */
       .wf-cb-content .cb-thead, .wf-cb-content .cb-row { grid-template-columns: 1fr 160px 96px 110px 110px 48px; }
       /* Набор «Качество»: Название | На ревизии | Переэкспонированы | Не выдавались | Тестов | ⋯ */
@@ -269,7 +270,9 @@
       .wf-fp-anchor > .ou-popover { position: absolute; top: var(--ou-space-1); left: 0; }
       /* Подписи делений шкалы стоят под ней — место под них, чтобы не налезали на следующую группу. */
       .wf-fp-slider { padding-bottom: var(--ou-space-4); }
-      .wf-fp .ou-popover__body { max-height: 60vh; overflow: auto; display: flex; flex-direction: column; gap: var(--ou-space-4); }
+      /* Отступ от краёв панели — 6x по модульной сетке; подвал — с теми же полями по горизонтали. */
+      .wf-fp .ou-popover__body { max-height: 60vh; overflow: auto; display: flex; flex-direction: column; gap: var(--ou-space-4); padding: var(--ou-space-6); }
+      .wf-fp .ou-popover__footer { padding: var(--ou-space-3) var(--ou-space-6); }
       .wf-fp-group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
       .wf-fp-row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
       .wf-fp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-2); align-items: end; }
@@ -1086,7 +1089,10 @@
             var btn = bar && bar.querySelector('[aria-haspopup="dialog"]');
             var pop = anchor.querySelector('.ou-popover');
             if (!btn || !pop || !btn.offsetParent) return;
-            pop.style.left = (btn.getBoundingClientRect().left - anchor.getBoundingClientRect().left) + 'px';
+            var a = anchor.getBoundingClientRect(), b = btn.getBoundingClientRect();
+            pop.style.left = (b.left - a.left) + 'px';
+            // Right under the button, over the chips row — as Popover placement="bottom-start" with a 4px offset.
+            pop.style.top = (b.bottom - a.top + 4) + 'px';
           });
         }
         var show = window.showState;
