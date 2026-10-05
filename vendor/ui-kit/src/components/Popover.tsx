@@ -99,11 +99,15 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
       // Flip to the opposite side when the chosen one does not fit AND the
       // opposite one does — a popover pinned to a control near the bottom of the
       // window would otherwise open off-screen.
+      // The visible area WITHOUT scrollbars: `innerWidth` counts the vertical scrollbar, and a
+      // popover clamped to it slid under the bar and gave the page a horizontal scroll.
+      const viewW = document.documentElement.clientWidth || window.innerWidth;
+      const viewH = document.documentElement.clientHeight || window.innerHeight;
       const room = {
         top: a.top,
-        bottom: window.innerHeight - a.bottom,
+        bottom: viewH - a.bottom,
         left: a.left,
-        right: window.innerWidth - a.right,
+        right: viewW - a.right,
       };
       const opposite = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' } as const;
       const needed = (side: PopoverPlacement) =>
@@ -137,7 +141,7 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
       const margin = 8;
       if (side === 'top' || side === 'bottom') {
         const minLeft = window.scrollX + margin;
-        const maxLeft = window.scrollX + window.innerWidth - p.width - margin;
+        const maxLeft = window.scrollX + viewW - p.width - margin;
         const constrained = Math.min(Math.max(left, minLeft), maxLeft);
         if (constrained !== left || align !== 'center') {
           // arrow stays pointing at the anchor center — also when the popover is aligned to an edge
@@ -146,7 +150,7 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
         left = constrained;
       } else {
         const minTop = window.scrollY + margin;
-        const maxTop = window.scrollY + window.innerHeight - p.height - margin;
+        const maxTop = window.scrollY + viewH - p.height - margin;
         const constrained = Math.min(Math.max(top, minTop), maxTop);
         if (constrained !== top) {
           arrowY = (a.top + window.scrollY + a.height / 2) - constrained;

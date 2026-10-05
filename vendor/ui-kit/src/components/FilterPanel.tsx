@@ -6,7 +6,7 @@
  * Closing the panel — a click outside, `Esc` or the button again — IS the cancel: the draft is
  * dropped, so there is no «Отмена». «Сбросить» clears the draft, not what is applied.
  */
-import React, { useEffect, useId, useRef } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '../utils';
 import { Button } from './Button';
 import { Popover } from './Popover';
@@ -28,6 +28,13 @@ export interface FilterPanelProps extends Omit<React.HTMLAttributes<HTMLDivEleme
   label?: string;
 }
 
+/** Gap between the button and the panel, px. */
+const OFFSET = 4;
+/** Room kept free under the panel, px. */
+const MARGIN = 8;
+/** Below this the panel would be a slit; with less room it flips above the button. */
+const MIN_HEIGHT = 240;
+
 const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
@@ -44,11 +51,32 @@ export function FilterPanel({
   resetLabel = 'Сбросить',
   label = 'Фильтр',
   className,
+  style,
   children,
   ...rest
 }: FilterPanelProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const wasOpen = useRef(open);
+  const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
+
+  // The panel never runs past the bottom of the window: under a button low on the page its
+  // footer — the only way to apply — would be out of sight. The body scrolls instead.
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const fit = () => {
+      const anchor = anchorRef.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const viewH = document.documentElement.clientHeight || window.innerHeight;
+      setMaxHeight(Math.max(MIN_HEIGHT, Math.floor(viewH - anchor.bottom - OFFSET - MARGIN)));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    window.addEventListener('scroll', fit, true);
+    return () => {
+      window.removeEventListener('resize', fit);
+      window.removeEventListener('scroll', fit, true);
+    };
+  }, [open, anchorRef]);
 
   // Focus goes to the first field on open and back to the button on close: a keyboard user
   // must not be left on a panel that is gone.
@@ -70,7 +98,8 @@ export function FilterPanel({
       align="start"
       size="xl"
       arrow={false}
-      offset={4}
+      offset={OFFSET}
+      style={maxHeight === undefined ? style : { ...style, maxHeight }}
       aria-label={label}
       className={cn('ou-filterpanel', className)}
       footerAlign="between"
