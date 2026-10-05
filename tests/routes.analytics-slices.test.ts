@@ -550,3 +550,26 @@ describe("срезы на уровне теста (Э3)", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("DELETE /api/analytics/filters/:id — удалить сохранённый фильтр", () => {
+  const del = (id: string) => request(makeApp()).delete(`/api/analytics/filters/${id}`).set("x-test-user", "u-owner");
+
+  it("удаляет фильтр владельца", async () => {
+    storageMock.getSlice.mockResolvedValue({ id: "f1", kind: "filter", testId: null, createdBy: "u-owner" });
+    storageMock.deleteSlice.mockResolvedValue(true);
+
+    const res = await del("f1");
+
+    expect(res.status).toBe(204);
+    expect(storageMock.deleteSlice).toHaveBeenCalledWith("f1", "u-owner");
+  });
+
+  it("срез этой ручкой не удаляется, чужой и несуществующий — 404", async () => {
+    storageMock.getSlice.mockResolvedValue({ id: "s1", kind: "slice", testId: "t1", createdBy: "u-owner" });
+    expect((await del("s1")).status).toBe(404);
+
+    storageMock.getSlice.mockResolvedValue(undefined);
+    expect((await del("nope")).status).toBe(404);
+    expect(storageMock.deleteSlice).not.toHaveBeenCalled();
+  });
+});

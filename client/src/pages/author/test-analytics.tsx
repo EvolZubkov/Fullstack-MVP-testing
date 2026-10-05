@@ -72,12 +72,20 @@ import {
     Tabs,
     Tag,
     Text,
+    useToast,
 } from "@skillum/ui-kit";
 import { LoadingState } from "@/components/loading-state";
 import { TEST_ANALYTICS_TABS } from "@/features/analytics/test/question-analytics-link";
 import { useAnalyticsTab } from "@/features/analytics/levels/use-analytics-tab";
 import { pluralize } from "@/lib/i18n";
 import { RegistryFilterPanel } from "@/features/analytics/registry/filter-panel";
+import {
+    conditionsOf,
+    errorText,
+    savedSetState,
+    useSavedFilters,
+    withoutTests,
+} from "@/features/analytics/registry/use-saved-filters";
 import {
     countConditions,
     describeConditions,
@@ -549,13 +557,14 @@ export default function TestAnalyticsPage() {
     /** Э3.2: окно «Сохранить как срез» фильтра уровня теста. */
     const [saveSliceOpen, setSaveSliceOpen] = useState(false);
     /**
-     * Э3.2: сохранённые срезы теста — меню «Сохранённые» фильтра. Без расчёта: меню выбирает
-     * условия, а не сравнивает.
+     * Сохранённые фильтры (решение владельца 2026-10-05): меню «Сохранённые» — критерии отбора,
+     * а не срезы. Фильтр переносим между наборами данных, поэтому на уровне теста он сохраняется
+     * и сравнивается без теста: тест задан страницей. Срезы — кнопкой «Сохранить как срез» и на
+     * вкладке «Срезы».
      */
-    const { data: savedSlices, refetch: refetchSavedSlices } = useQuery<{ slices: Array<{ id: string; name: string; conditions: Record<string, unknown> }> }>({
-        queryKey: [`/api/analytics/slices/saved?testId=${testId}`],
-        enabled: !!testId,
-    });
+    const savedFilters = useSavedFilters();
+    const [appliedSetId, setAppliedSetId] = useState<string | null>(null);
+    const { push: toast } = useToast();
     const { data: breakdown, isFetched: breakdownFetched } = useQuery<ItemBreakdownView>({
         queryKey: [psychometricsUrl(
             `/api/analytics/psychometrics/${testId}/items/${breakdownId}`,
@@ -892,14 +901,31 @@ export default function TestAnalyticsPage() {
                 // FR-51: снимается крестиком; путь назад — кнопка в предупреждении вкладки.
                 ...(showsAttemptChip ? [{ id: FIRST_ATTEMPT_CHIP, label: "Только первая попытка" }] : []),
             ]}
+            savedSets={savedFilters.filters.map(item => ({ id: item.id, name: item.name }))}
+            {...savedSetState(savedFilters.filters.map(item => ({ ...item, conditions: withoutTests(conditionsOf(item)) })), appliedSetId, withoutTests(filter))}
+            onApplySet={(id: string) => {
+                const item = savedFilters.filters.find(f => f.id === id);
+                if (!item) return;
+                setAppliedSetId(id);
+                setFilter(withoutTests(conditionsOf(item)));
+            }}
+            onSaveSet={(name: string) => {
+                savedFilters.save(name, withoutTests(filter))
+                    .then(item => setAppliedSetId(item.id))
+                    .catch(error => toast({ tone: "error", title: "Фильтр не сохранён", description: errorText(error) }));
+            }}
+            onUpdateSet={(id: string) => {
+                savedFilters.update(id, withoutTests(filter))
+                    .catch(error => toast({ tone: "error", title: "Фильтр не обновлён", description: errorText(error) }));
+            }}
+            onDeleteSet={(id: string) => {
+                if (appliedSetId === id) setAppliedSetId(null);
+                savedFilters.remove(id)
+                    .catch(error => toast({ tone: "error", title: "Фильтр не удалён", description: errorText(error) }));
+            }}
             // Э3.2 (замечание владельца 2026-10-03): срез создаётся из фильтра теста. Отобранное
             // сравнивается со срезом без сохранения или сохраняется срезом этого теста; пока
             // условий нет, обе кнопки выключены, а не спрятаны — спрятанная не объясняет, почему.
-            savedSets={(savedSlices?.slices ?? []).map(slice => ({ id: slice.id, name: slice.name }))}
-            onApplySet={(id: string) => {
-                const slice = savedSlices?.slices.find(item => item.id === id);
-                if (slice) setFilter({ ...EMPTY_FILTER, ...conditionsToFilter(slice.conditions), testIds: [] });
-            }}
             actions={(
                 <>
                     <Button
@@ -1321,7 +1347,10 @@ export default function TestAnalyticsPage() {
                 conditions={filterConditions}
                 labels={describeConditions({ ...filter, testIds: [] }, { ...dictionaries, ...testDictionary })}
                 total={summary.completedAttempts}
-                onSaved={() => void refetchSavedSlices()}
+                // Новый срез — на вкладке «Срезы»: её списки перечитываются.
+                onSaved={() => void queryClient.invalidateQueries({
+                    predicate: query => String(query.queryKey[0] ?? "").startsWith("/api/analytics/slices"),
+                })}
             />
             <ExportDialog
                 open={exportOpen}

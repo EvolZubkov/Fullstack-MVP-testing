@@ -7,11 +7,27 @@
  * условия ничего не подошло. Разметку рисуют компоненты ui-kit — их поведение здесь не
  * переспрашивается.
  */
-import { render, screen, waitFor, within } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { render as rtlRender, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ToastProvider } from "@skillum/ui-kit";
+import { getQueryFn } from "@/lib/queryClient";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PassageRegistry } from "../passage-registry";
+
+/**
+ * Реестр читает сохранённые фильтры через React Query и сообщает об ошибках тостом — рисуется
+ * внутри обоих провайдеров, как в приложении.
+ */
+function render(ui: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { queryFn: getQueryFn({ on401: "throw" }), retry: false } } });
+  const Providers = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}><ToastProvider>{children}</ToastProvider></QueryClientProvider>
+  );
+  return rtlRender(ui, { wrapper: Providers });
+}
 
 /** Ответ ручки реестра: одна страница прохождений и общее число. */
 function page(rows: unknown[], total: number) {
@@ -29,11 +45,20 @@ const ROW = {
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  fetchMock = vi.fn(async (url: string) => (String(url).includes("/analytics/filters")
+  fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    // Сохранение фильтра отвечает созданной записью; удаление — пустым ответом.
+    if (u.endsWith("/api/analytics/slices") && init?.method === "POST") {
+      return { ok: true, status: 201, json: async () => ({ slice: { id: "f2", name: "новый", conditionsJson: {} } }) };
+    }
+    if (u.startsWith("/api/analytics/filters/") && init?.method === "DELETE") return { ok: true, status: 204 };
     // Сохранённые фильтры — своя ручка: она ничего не считает, а отдаёт условия (решение
     // владельца 2026-09-25 о разведении фильтра и среза).
-    ? { ok: true, json: async () => ({ filters: [{ id: "f1", name: "Мои потоки", conditions: { testIds: ["t1", "t2"], sources: ["web"] } }] }) }
-    : page([ROW], 1)));
+    if (u.includes("/analytics/filters")) {
+      return { ok: true, status: 200, json: async () => ({ filters: [{ id: "f1", name: "Мои потоки", conditions: { testIds: ["t1", "t2"], sources: ["web"] } }] }) };
+    }
+    return page([ROW], 1);
+  });
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("IntersectionObserver", class {
     observe() { /* догрузка проверяется отдельным тестом */ }
@@ -311,9 +336,10 @@ describe("PassageRegistry — сохранение фильтра", () => {
     expect(within(withoutNumber).getAllByText("—").length).toBeGreaterThan(0);
   });
 
-  // Э3.2 (решение владельца 2026-10-03): срез без теста существовать не может, и сохранение
-  // среза ушло в фильтр уровня теста. Здесь остаётся сохранённый ФИЛЬТР — набор условий реестра.
-  it("сохранить отбор срезом здесь нельзя — только фильтром (Э3.2)", async () => {
+  // Э3.2 (решение владельца 2026-10-03): срез без теста существовать не может. Здесь — сохранённый
+  // ФИЛЬТР: критерии, которые сохраняются и применяются из меню «Сохранённые» (решение владельца
+  // 2026-10-05: фильтр и срез — отдельные сущности).
+  it("сохранить отбор срезом здесь нельзя — только фильтром из «Сохранённых» (Э3.2)", async () => {
     render(
       <PassageRegistry
         filter={{ testIds: ["t1"], groupIds: ["g1"], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
@@ -323,7 +349,9 @@ describe("PassageRegistry — сохранение фильтра", () => {
 
     await screen.findByText("Морозова Анна");
     expect(screen.queryByRole("button", { name: /Сохранить как срез/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /Сохранить фильтр/ })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Сохранить фильтр/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Сохранённые|Мои потоки/ }));
+    expect(await screen.findByPlaceholderText("Название набора")).toBeTruthy();
   });
 
   it("не предлагает сохранить фильтр, когда условий нет", async () => {
@@ -335,7 +363,9 @@ describe("PassageRegistry — сохранение фильтра", () => {
     );
 
     await screen.findByText("Морозова Анна");
-    expect(screen.getByRole("button", { name: /Сохранить фильтр/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Сохранённые" }));
+    await screen.findByRole("menuitem", { name: /Мои потоки/ });
+    expect(screen.queryByPlaceholderText("Название набора")).toBeNull();
   });
 
   it("сохраняет отбор фильтром со всеми тестами выборки", async () => {
@@ -346,11 +376,9 @@ describe("PassageRegistry — сохранение фильтра", () => {
       />,
     );
 
-    await userEvent.click(await screen.findByRole("button", { name: /Сохранить фильтр/ }));
-    // Фильтр — условия, а не состав: сказано там, где нажимают «сохранить».
-    expect(screen.getByText(/Фильтр хранит УСЛОВИЯ отбора/)).toBeTruthy();
-
-    await userEvent.type(screen.getByLabelText(/Название фильтра/), "Импорт по двум тестам");
+    await screen.findByText("Морозова Анна");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранённые" }));
+    await userEvent.type(await screen.findByPlaceholderText("Название набора"), "Импорт по двум тестам");
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => {
@@ -362,6 +390,22 @@ describe("PassageRegistry — сохранение фильтра", () => {
         conditions: { testIds: ["t1", "t2"], sources: ["import"] },
       });
     });
+  });
+
+  it("сохранённый фильтр удаляется из меню", async () => {
+    render(
+      <PassageRegistry
+        filter={{ testIds: [], groupIds: [], formIds: [], snapshotIds: [], organizations: [], units: [], positions: [], sources: [], outcomes: [] }}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    await screen.findByText("Морозова Анна");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранённые" }));
+    const item = await screen.findByRole("menuitem", { name: /Мои потоки/ });
+    await userEvent.click(within(item).getByText("удалить"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/analytics/filters/f1", expect.objectContaining({ method: "DELETE" })));
   });
 
   it("сохранённый фильтр можно применить к реестру", async () => {

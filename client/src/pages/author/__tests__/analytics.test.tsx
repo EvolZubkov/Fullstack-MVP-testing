@@ -262,7 +262,7 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     }
   });
 
-  it("срезов на общем уровне нет — они живут в тесте; «Сохранить фильтр» остаётся (Э3.2)", async () => {
+  it("срезов на общем уровне нет — они живут в тесте; фильтры сохраняются в «Сохранённых» (Э3.2)", async () => {
     await renderLoaded();
     await openAttemptsTab();
 
@@ -270,7 +270,8 @@ describe("<AnalyticsPage /> — состав экрана", () => {
     expect(screen.queryByRole("tab", { name: "Срезы" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Сравнить со срезом" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Сохранить как срез" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Сохранить фильтр" })).toBeInTheDocument();
+    // Решение владельца 2026-10-05: критерии сохраняются и применяются из «Сохранённых».
+    expect(screen.getByRole("button", { name: "Сохранённые" })).toBeInTheDocument();
   });
 
   it("на вкладке очереди — число дел, как в эскизе", async () => {

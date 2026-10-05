@@ -237,6 +237,26 @@ router.get("/filters", requirePermission("analytics.read"), async (req: Request,
 });
 
 /**
+ * DELETE /api/analytics/filters/:id — удалить сохранённый фильтр владельца (меню «Сохранённые»).
+ *
+ * Только ФИЛЬТР: срезы живут на вкладке «Срезы» теста и этой ручкой не удаляются, хотя лежат в той
+ * же таблице. Чужой, несуществующий и срез отвечают одинаково — 404: знать о чужих записях читателю
+ * незачем (решение владельца 2026-10-05: фильтр и срез — отдельные сущности).
+ */
+router.delete("/filters/:id", requirePermission("analytics.read"), async (req: Request, res: Response) => {
+  try {
+    const ownerId = req.currentUser?.id ?? "";
+    const existing = await storage.getSlice(req.params.id, ownerId);
+    if (!existing || existing.kind !== "filter") return res.status(404).json({ error: "Фильтр не найден" });
+    await storage.deleteSlice(req.params.id, ownerId);
+    res.status(204).end();
+  } catch (error) {
+    logger.error("Delete filter error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to delete filter" });
+  }
+});
+
+/**
  * GET /api/analytics/slices/saved?testId= — сохранённые срезы теста БЕЗ расчёта (Э3.2).
  *
  * Меню «Сохранённые» фильтра уровня теста подставляет условия среза в фильтр — считать для этого

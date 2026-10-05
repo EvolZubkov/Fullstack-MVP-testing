@@ -17,14 +17,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3 } from "lucide-react";
 
 import {
-  Button, Card, CardBody, CardHeader, DataGrid, FilterBar, IconButton, Input, MenuItem, MenuTrigger,
-  ModalDialog, Stack, Tag, Text,
+  Card, CardBody, CardHeader, DataGrid, FilterBar, IconButton, Stack, Tag, Text, useToast,
   type SortDir,
 } from "@skillum/ui-kit";
 
 import { pluralize } from "@/lib/i18n";
 
 import { RegistryFilterPanel } from "./filter-panel";
+import { conditionsOf, errorText, savedSetState, useSavedFilters } from "./use-saved-filters";
 import { useRegistryDictionaries, useTestDictionary } from "./use-dictionaries";
 
 import {
@@ -76,11 +76,6 @@ export interface RegistryRow {
  * От среза отличается вопросом, на который отвечает: фильтр говорит «покажи эти прохождения»
  * и может охватывать разные тесты, срез — «вот выборка одного теста, считай по ней».
  */
-interface SavedFilter {
-  id: string;
-  name: string;
-  conditions: Partial<RegistryFilter>;
-}
 
 export interface PassageRegistryProps {
   filter: RegistryFilter;
@@ -149,13 +144,12 @@ export function PassageRegistry({
   const [filterOpen, setFilterOpen] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   /**
-   * Окно «Сохранить фильтр» открыто. Э3.2: «Сохранить как срез» с окном выбора теста ушло на
-   * уровень теста — срез без теста существовать не может, а здесь теста нет.
+   * Сохранённые фильтры (решение владельца 2026-10-05): меню «Сохранённые» полосы — сохранить
+   * текущие критерии, применить, обновить, удалить. Набор, который читатель применил последним.
    */
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
-  const [sliceName, setSliceName] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const saved = useSavedFilters(!testId);
+  const [appliedSetId, setAppliedSetId] = useState<string | null>(null);
+  const { push: toast } = useToast();
   const [rows, setRows] = useState<RegistryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -350,41 +344,6 @@ export function PassageRegistry({
   // Внутри теста сам тест условием отбора не считается: он задан страницей.
   const conditionCount = countConditions(testId ? { ...filter, testIds: [] } : filter);
 
-  /** Сохранить текущий отбор фильтром (решение владельца 2026-09-25). */
-  const saveFilter = async () => {
-    setSaveError(null);
-    try {
-      const response = await fetch("/api/analytics/slices", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: sliceName.trim(), kind: "filter", conditions: filter }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(data.error ?? "Не удалось сохранить");
-      }
-      setSaveOpen(false);
-      setSliceName("");
-      void loadFilters();
-    } catch (error) {
-      setSaveError((error as Error).message);
-    }
-  };
-
-  /** Сохранённые фильтры владельца — список для кнопки «Сохранённые». */
-  const loadFilters = useCallback(async () => {
-    try {
-      const response = await fetch("/api/analytics/filters", { credentials: "include" });
-      if (!response.ok) return;
-      const data = await response.json() as { filters?: SavedFilter[] };
-      setSavedFilters(data.filters ?? []);
-    } catch {
-      // Молчаливо: недоступный список сохранённых не повод ронять реестр, ради которого
-      // человек и пришёл.
-    }
-  }, []);
-
   return (
     <Card>
       <CardHeader
@@ -403,39 +362,30 @@ export function PassageRegistry({
             actions={
               <>
                 {actions}
-                {/*
-                  Сохранённые фильтры (решение владельца 2026-09-25): набор условий, который
-                  подставляется в реестр. Меню, а не отдельный экран: применение фильтра —
-                  это тот же отбор, только набранный заранее.
-                */}
-                <MenuTrigger
-                  size="sm"
-                  placement="bottom-end"
-                  trigger={<Button variant="ghost" size="s" onClick={() => void loadFilters()}>Сохранённые</Button>}
-                >
-                  {savedFilters.length === 0 ? (
-                    <MenuItem disabled>Сохранённых фильтров пока нет</MenuItem>
-                  ) : savedFilters.map(saved => (
-                    <MenuItem
-                      key={saved.id}
-                      onClick={() => onFilterChange({ ...EMPTY_FILTER, ...saved.conditions })}
-                    >
-                      {saved.name}
-                    </MenuItem>
-                  ))}
-                </MenuTrigger>
-                <Button
-                  variant="ghost"
-                  size="s"
-                  // FR-07c: сохранять нечего, пока не отобрано ничего. Кнопка выключена, а не
-                  // спрятана: спрятанная не объясняет, почему действия нет.
-                  disabled={conditionCount === 0}
-                  onClick={() => setSaveOpen(true)}
-                >
-                  Сохранить фильтр
-                </Button>
               </>
             }
+            savedSets={saved.filters.map(item => ({ id: item.id, name: item.name }))}
+            {...savedSetState(saved.filters, appliedSetId, filter)}
+            onApplySet={(id: string) => {
+              const item = saved.filters.find(f => f.id === id);
+              if (!item) return;
+              setAppliedSetId(id);
+              onFilterChange(conditionsOf(item));
+            }}
+            onSaveSet={(name: string) => {
+              saved.save(name, filter)
+                .then(item => setAppliedSetId(item.id))
+                .catch(error => toast({ tone: "error", title: "Фильтр не сохранён", description: errorText(error) }));
+            }}
+            onUpdateSet={(id: string) => {
+              saved.update(id, filter)
+                .catch(error => toast({ tone: "error", title: "Фильтр не обновлён", description: errorText(error) }));
+            }}
+            onDeleteSet={(id: string) => {
+              if (appliedSetId === id) setAppliedSetId(null);
+              saved.remove(id)
+                .catch(error => toast({ tone: "error", title: "Фильтр не удалён", description: errorText(error) }));
+            }}
             filterButtonRef={filterButtonRef}
             filterOpen={filterOpen}
             onOpenFilter={() => setFilterOpen(value => !value)}
@@ -443,49 +393,6 @@ export function PassageRegistry({
             onReset={() => onFilterChange(EMPTY_FILTER)}
             resetLabel="Сбросить фильтры"
           />
-
-          <ModalDialog
-            open={saveOpen}
-            onClose={() => setSaveOpen(false)}
-            size="s"
-            title="Сохранить фильтр"
-            // Фильтр хранит УСЛОВИЯ, а не состав участников, и подставляется в реестр.
-            description="Фильтр хранит УСЛОВИЯ отбора и подставляется в список прохождений. Тестов в нём может быть сколько угодно"
-            footer={
-              <>
-                <Button variant="ghost" size="m" onClick={() => setSaveOpen(false)}>Отмена</Button>
-                <Button
-                  variant="primary"
-                  size="m"
-                  disabled={!sliceName.trim()}
-                  onClick={() => void saveFilter()}
-                >
-                  Сохранить
-                </Button>
-              </>
-            }
-          >
-            {/* Модульная сетка 4 px: поле, выбор теста и пояснение — разные элементы, 4x;
-                подпись и её поле, выбор и его пояснение — родственные, 1x. */}
-            <Stack gap={4}>
-              <Stack gap={1}>
-                <label htmlFor="slice-name">
-                  <Text variant="body-s">Название фильтра</Text>
-                </label>
-                <Input
-                  id="slice-name"
-                  value={sliceName}
-                  onChange={event => setSliceName(event.target.value)}
-                  placeholder="Например: Розница, не сдали"
-                />
-              </Stack>
-              <Text variant="body-xs" tone="muted">
-                Условий в отборе: {conditionCount}. Под них сейчас подходит {total} прохождений —
-                завтра число может быть другим, потому что фильтр отбирает заново.
-              </Text>
-              {saveError && <Text tone="error">{saveError}</Text>}
-          </Stack>
-        </ModalDialog>
 
         <RegistryFilterPanel
           open={filterOpen}
