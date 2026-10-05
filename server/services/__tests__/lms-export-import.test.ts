@@ -94,8 +94,8 @@ describe("buildImportPlan", () => {
   });
 
   it("неопознанные колонки попадают в протокол", () => {
-    const withUnknown = { ...book, unknownColumns: ["topic_abc_level"] };
-    expect(buildImportPlan(withUnknown as never, ON).warnings.join()).toContain("topic_abc_level");
+    const withUnknown = { ...book, unknownColumns: ["foo_bar"] };
+    expect(buildImportPlan(withUnknown as never, ON).warnings.join()).toContain("foo_bar");
   });
 
   it("колонка «Код» в external_id не входит", () => {
@@ -533,5 +533,87 @@ describe("runImport — текстовые взаимодействия (PRD-57 
     });
     await runImport(textBook("Москва[,]1703", "correct") as never, ON, ctx, s as never);
     expect(s.answers[0][0]).toMatchObject({ userAnswerJson: { city: "Москва", year: "1703" } });
+  });
+});
+
+/**
+ * Уровни тем и рекомендованные курсы: импорт пишет их в те же колонки и той же формы, что
+ * живая телеметрия, — иначе листы «Статистика уровней» и «Рекомендации» не видели бы LMS-импорт.
+ */
+describe("runImport — уровни и рекомендованные курсы тем", () => {
+  /** Строка книги с блоками тем. */
+  const withTopics = (topicLevels: Record<string, string>, topicCourses: Record<string, string[]>) => ({
+    ...book,
+    rows: [{ ...book.rows[0], topicLevels, topicCourses }],
+  });
+
+  /**
+   * Заглушка со справочниками: тема `t1` (курс в `feedback_json`) и адаптивный уровень темы `t2`
+   * со ссылкой. Помнит, сколько раз читались справочники.
+   */
+  function topicStorage() {
+    const s = storageStub();
+    const lookups = { topics: 0 };
+    const topics: Record<string, { id: string; name: string }> = {
+      t1: { id: "t1", name: "Электробезопасность" },
+      t2: { id: "t2", name: "Охрана труда" },
+    };
+    return Object.assign(s, {
+      lookups,
+      getTopic: async (id: string) => { lookups.topics += 1; return topics[id]; },
+      getTopicCourses: async (topicId: string) => topicId === "t1"
+        ? [{ id: "c1", topicId, title: "Курс по электробезопасности", url: "https://wt/view_doc.html?mode=course&object_id=111&x=1" }]
+        : [],
+      getAdaptiveLevelsByTest: async () => [{ id: "lvl-1", topicId: "t2", levelIndex: 0, levelName: "Базовый" }],
+      getAdaptiveLevelLinks: async (levelId: string) => levelId === "lvl-1"
+        ? [{ id: "l1", levelId, title: "Курс по охране труда", url: "https://wt/view_doc.html?object_id=222" }]
+        : [],
+    });
+  }
+
+  it("уровень пишется с именем темы, «Уровень не достигнут» — как levelName: null", async () => {
+    const s = topicStorage();
+    await runImport(withTopics({ t1: "Продвинутый", t2: "Уровень не достигнут" }, {}) as never, ON, ctx, s as never);
+    expect(s.attempts[0]).toMatchObject({
+      achievedLevelsJson: [
+        { topicId: "t1", topicName: "Электробезопасность", levelName: "Продвинутый" },
+        { topicId: "t2", topicName: "Охрана труда", levelName: null },
+      ],
+      failedTopicCoursesJson: null,
+    });
+  });
+
+  it("object_id находит курс темы и ссылку уровня адаптивного теста", async () => {
+    const s = topicStorage();
+    await runImport(withTopics({}, { t1: ["111"], t2: ["222"] }) as never, ON, ctx, s as never);
+    expect(s.attempts[0]).toMatchObject({
+      achievedLevelsJson: null,
+      failedTopicCoursesJson: [
+        { title: "Курс по электробезопасности", url: "https://wt/view_doc.html?mode=course&object_id=111&x=1" },
+        { title: "Курс по охране труда", url: "https://wt/view_doc.html?object_id=222" },
+      ],
+    });
+  });
+
+  it("ненайденный object_id не теряется: условное название без адреса", async () => {
+    const s = topicStorage();
+    await runImport(withTopics({}, { t1: ["999"] }) as never, ON, ctx, s as never);
+    expect(s.attempts[0]).toMatchObject({
+      failedTopicCoursesJson: [{ title: "Курс WebTutor 999", url: "" }],
+    });
+  });
+
+  it("один курс у двух тем попадает в рекомендации один раз", async () => {
+    const s = topicStorage();
+    await runImport(withTopics({}, { t1: ["111"], t2: ["111", "222"] }) as never, ON, ctx, s as never);
+    const courses = (s.attempts[0] as { failedTopicCoursesJson: Array<{ title: string }> }).failedTopicCoursesJson;
+    expect(courses.map((c) => c.title)).toEqual(["Курс по электробезопасности", "Курс по охране труда"]);
+  });
+
+  it("без блоков тем справочники не читаются, а колонки пишутся пустыми", async () => {
+    const s = topicStorage();
+    await runImport(book as never, ON, ctx, s as never);
+    expect(s.lookups.topics).toBe(0);
+    expect(s.attempts[0]).toMatchObject({ achievedLevelsJson: null, failedTopicCoursesJson: null });
   });
 });

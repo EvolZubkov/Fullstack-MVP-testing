@@ -87,6 +87,17 @@ function extractExtraColumns(sheet: string[][]): {
 const SUBHEADERS = ["Тип", "Продолжительность (сек.)", "Результат", "Полученный ответ"];
 /** Префикс служебных блоков пакета: не вопрос, не шкала, не показатель. */
 const META_PREFIX = "meta_";
+/** Блок достигнутого уровня темы: `topic_<topicId>_level` (адаптивный тест). */
+const TOPIC_LEVEL_RE = /^topic_(.+)_level$/;
+/** Блок рекомендованного курса темы: `topic_<topicId>_course_<n>`, ответ — `object_id` курса. */
+const TOPIC_COURSE_RE = /^topic_(.+)_course_(\d+)$/;
+/**
+ * Что пакет пишет в блок уровня темы, когда уровень не достигнут.
+ *
+ * Пишется в ответ ДОСЛОВНО (`resultsPage.js`), поэтому разбор хранит строку как есть, а значение
+ * «не достигнут» из неё извлекает импорт.
+ */
+export const TOPIC_LEVEL_NOT_ACHIEVED = "Уровень не достигнут";
 
 export interface LmsExportRow {
   participantName: string;
@@ -155,13 +166,25 @@ export interface LmsExportRow {
   testVersion: number | null;
   /** Идентификаторы выданных вариантов (PRD-17); пустой список — вариантов не было. */
   formIds: string[];
+  /**
+   * Идентификатор темы -> достигнутый уровень, как его записал пакет (блок `topic_<id>_level`).
+   *
+   * Строка {@link TOPIC_LEVEL_NOT_ACHIEVED} значит «уровень не достигнут»; ключа нет — блок
+   * не пришёл (тест не адаптивный или тема не выдавалась).
+   */
+  topicLevels: Record<string, string>;
+  /**
+   * Идентификатор темы -> `object_id` рекомендованных курсов WebTutor (блоки
+   * `topic_<id>_course_<n>`) в порядке `n`; пустые ячейки отброшены, пустых списков нет.
+   */
+  topicCourses: Record<string, string[]>;
 }
 
 export interface LmsExportBook {
   questionIds: string[];
   scaleKeys: string[];
   variableNames: string[];
-  /** Идентификаторы блоков, которые импорт не разбирает (например, `topic_*`). */
+  /** Идентификаторы блоков, которые импорт не разбирает (неизвестные префиксы). */
   unknownColumns: string[];
   /** Есть ли в файле колонка `external_id` — то есть готовил ли его внешний обезличиватель. */
   hasExternalId: boolean;
@@ -222,6 +245,8 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
     // Служебные блоки пакета (`meta_*`) разбираются отдельно и неопознанными НЕ считаются:
     // иначе импорт предупреждал бы «пакет собран под другой версией теста» на каждой выгрузке.
     else if (b.id.startsWith(META_PREFIX)) continue;
+    // Уровни и рекомендованные курсы тем читаются построчно ниже; прочие `topic_*` неизвестны.
+    else if (TOPIC_LEVEL_RE.test(b.id) || TOPIC_COURSE_RE.test(b.id)) continue;
     else unknownColumns.push(b.id);
   }
 
@@ -252,7 +277,12 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
       responseFormat: null,
       testVersion: null,
       formIds: [],
+      topicLevels: {},
+      topicCourses: {},
     };
+    // Курсы собираются с номером блока: колонки могут стоять не по порядку, а номера — с дырами
+    // (пакет пропускает курс без `object_id`, не сдвигая нумерацию).
+    const courses: Record<string, Array<{ n: number; id: string }>> = {};
 
     for (const b of blocks) {
       const result = cell(raw, b.at + 2);
@@ -287,7 +317,15 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
         row.testVersion = parseTestVersion(value);
       } else if (b.id === VARIANT_INTERACTION_ID) {
         row.formIds = decodeVariantForms(value);
+      } else {
+        const level = TOPIC_LEVEL_RE.exec(b.id);
+        const course = level ? null : TOPIC_COURSE_RE.exec(b.id);
+        if (level && value !== "") row.topicLevels[level[1]] = value;
+        else if (course && value !== "") (courses[course[1]] ??= []).push({ n: Number(course[2]), id: value });
       }
+    }
+    for (const [topicId, list] of Object.entries(courses)) {
+      row.topicCourses[topicId] = list.sort((a, b) => a.n - b.n).map((c) => c.id);
     }
 
     rows.push(row);

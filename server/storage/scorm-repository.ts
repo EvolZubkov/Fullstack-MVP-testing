@@ -57,6 +57,13 @@ export interface ImportedAttemptInput {
   snapshotId: string | null;
   /** PRD-56 FR-18: выданные варианты картой «тема -> вариант»; `null` — вариантов не было. */
   formsJson: Record<string, string> | null;
+  /**
+   * Достигнутые уровни тем `[{ topicId, topicName, levelName }]` — та же колонка и форма, что у
+   * телеметрии; `levelName: null` — уровень не достигнут, `null` целиком — блоков уровней нет.
+   */
+  achievedLevelsJson: Array<{ topicId: string; topicName: string | null; levelName: string | null }> | null;
+  /** Рекомендованные курсы `[{ title, url }]`, как у телеметрии; `null` — рекомендаций нет. */
+  failedTopicCoursesJson: Array<{ title: string; url: string }> | null;
 }
 
 /** Счётчики и протокол, которыми партия дополняется после прогона. */
@@ -233,6 +240,9 @@ export class ScormRepository {
           totalQuestions: data.totalQuestions,
           scalesJson: data.scalesJson,
           variablesJson: data.variablesJson,
+          // Повторная загрузка переписывает уровни тем и рекомендации целиком, как и шкалы.
+          achievedLevelsJson: data.achievedLevelsJson,
+          failedTopicCoursesJson: data.failedTopicCoursesJson,
           // PRD-56: повторная загрузка того же файла обязана обновлять и версию с вариантом —
           // иначе строка, загруженная пакетом прошлой сборки, навсегда осталась бы без версии.
           snapshotId: data.snapshotId,

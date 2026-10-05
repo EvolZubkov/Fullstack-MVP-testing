@@ -2,7 +2,7 @@
  * @module shared/lms-export/__tests__/parse
  */
 import { describe, it, expect } from "vitest";
-import { looksLikeLmsExport, parseLmsExport } from "../parse";
+import { TOPIC_LEVEL_NOT_ACHIEVED, looksLikeLmsExport, parseLmsExport } from "../parse";
 
 /** Шапка и строка по образцу docs/references/7684237229762827328-1.xlsx, урезанные до двух блоков. */
 const SHEET: string[][] = [
@@ -246,10 +246,72 @@ describe("parseLmsExport", () => {
 
   it("складывает неопознанные блоки отдельно, не роняя разбор", () => {
     const sheet = SHEET.map((r) => [...r]);
-    sheet[0][9] = "topic_abc_level";
+    sheet[0][9] = "foo_bar";
     const book = parseLmsExport(sheet);
     expect(book.questionIds).toEqual([]);
-    expect(book.unknownColumns).toEqual(["topic_abc_level"]);
+    expect(book.unknownColumns).toEqual(["foo_bar"]);
+  });
+});
+
+describe("уровни и рекомендованные курсы тем", () => {
+  const T1 = "11111111-1111-4111-8111-111111111111";
+  const T2 = "22222222-2222-4222-8222-222222222222";
+
+  /** Та же выгрузка плюс блоки тем: `[id, ответ]`; `null` — блок пуст целиком (не выдан). */
+  function withTopics(blocks: Array<[string, string | null]>): string[][] {
+    const sheet = SHEET.map((r) => [...r]);
+    for (const [id, value] of blocks) {
+      sheet[0].push(id, "", "", "");
+      sheet[1].push("Тип", "Продолжительность (сек.)", "Результат", "Полученный ответ");
+      sheet[2].push(...(value === null ? ["", "", "", ""] : ["другое", "", "neutral", value]));
+    }
+    return sheet;
+  }
+
+  it("уровень темы читается как записан, включая «Уровень не достигнут»", () => {
+    const [row] = parseLmsExport(withTopics([
+      [`topic_${T1}_level`, "Продвинутый"],
+      [`topic_${T2}_level`, TOPIC_LEVEL_NOT_ACHIEVED],
+    ])).rows;
+    expect(row.topicLevels).toEqual({ [T1]: "Продвинутый", [T2]: "Уровень не достигнут" });
+  });
+
+  it("курсы собираются по теме в порядке номера блока, а не колонки", () => {
+    const [row] = parseLmsExport(withTopics([
+      [`topic_${T1}_course_2`, "6000000000000000003"],
+      [`topic_${T1}_course_0`, "6000000000000000001"],
+      [`topic_${T2}_course_0`, "7000000000000000001"],
+    ])).rows;
+    expect(row.topicCourses).toEqual({
+      [T1]: ["6000000000000000001", "6000000000000000003"],
+      [T2]: ["7000000000000000001"],
+    });
+  });
+
+  it("пустые блоки тем не выдумывают ни уровня, ни курсов", () => {
+    const [row] = parseLmsExport(withTopics([
+      [`topic_${T1}_level`, null],
+      [`topic_${T1}_course_0`, null],
+      [`topic_${T2}_course_0`, ""],
+    ])).rows;
+    expect(row.topicLevels).toEqual({});
+    expect(row.topicCourses).toEqual({});
+  });
+
+  it("блоки уровней и курсов не попадают в неопознанные, прочие `topic_*` — попадают", () => {
+    const book = parseLmsExport(withTopics([
+      [`topic_${T1}_level`, "Базовый"],
+      [`topic_${T1}_course_0`, "1"],
+      [`topic_${T1}_other`, "x"],
+    ]));
+    expect(book.unknownColumns).toEqual([`topic_${T1}_other`]);
+    expect(book.questionIds).toEqual(["80a5957f-cdc7-4490-b4c9-bcedcb973c26"]);
+  });
+
+  it("без блоков тем словари пусты", () => {
+    const [row] = parseLmsExport(SHEET).rows;
+    expect(row.topicLevels).toEqual({});
+    expect(row.topicCourses).toEqual({});
   });
 });
 

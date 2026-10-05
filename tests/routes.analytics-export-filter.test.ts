@@ -400,8 +400,13 @@ describe("POST /api/export/excel — состав строк задаёт фил
     expect(allStats[0].slice(7)).toEqual([3, 2, "66.7%"]);
   });
 
-  it("уровни и рекомендации телеметрии входят в листы; пояснение — только про импорт", async () => {
-    storageMock.getAllScormAttempts.mockResolvedValue([IMPORTED, {
+  it("уровни и рекомендации телеметрии и импорта входят в листы без пояснительной строки", async () => {
+    // Импорт читает блоки `topic_*` выгрузки и пишет их в те же колонки, что телеметрия.
+    storageMock.getAllScormAttempts.mockResolvedValue([{
+      ...IMPORTED,
+      achievedLevelsJson: [{ topicId: "t-hist", topicName: "История", levelName: null }],
+      failedTopicCoursesJson: [{ title: "Курс по истории", url: "" }],
+    }, {
       ...TELEMETRY,
       achievedLevelsJson: [{ topicName: "География", levelName: "Продвинутый" }],
       failedTopicCoursesJson: JSON.stringify([{ title: "Курс по картам", url: "https://x" }]),
@@ -414,17 +419,19 @@ describe("POST /api/export/excel — состав строк задаёт фил
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(res.body as never);
-    for (const name of ["Статистика уровней", "Рекомендации"]) {
+    const headers: Record<string, string> = { "Статистика уровней": "Участник", "Рекомендации": "Участник" };
+    for (const name of Object.keys(headers)) {
       const sheet = workbook.getWorksheet(name);
       expect(sheet, name).toBeTruthy();
-      // Выгрузка отчёта LMS уровней и рекомендаций не несёт — пояснение о ней одной.
-      expect(String(sheet!.getRow(1).getCell(1).value)).toContain("Импортированные выгрузки LMS");
-      expect(String(sheet!.getRow(1).getCell(1).value)).toContain("(в выборке таких 1)");
+      // Первая строка — шапка, пояснения про импорт больше нет.
+      expect(String(sheet!.getRow(1).getCell(1).value)).toBe(headers[name]);
     }
     const levels = await sheetRows(res.body, "Статистика уровней");
     expect(levels.some(row => row.includes("География") && row.includes("Продвинутый"))).toBe(true);
+    expect(levels.some(row => row.includes("История") && row.includes("Не достигнут"))).toBe(true);
     const courses = await sheetRows(res.body, "Рекомендации");
     expect(courses.some(row => row.includes("Курс по картам"))).toBe(true);
+    expect(courses.some(row => row.includes("Курс по истории"))).toBe(true);
   });
 
   it("лучшая попытка выбирается по участнику любого источника", async () => {

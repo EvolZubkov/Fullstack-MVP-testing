@@ -56,6 +56,8 @@ function importedRow(over: Partial<Parameters<ScormRepository["upsertImportedAtt
     totalQuestions: 14,
     scalesJson: { cel: 29 },
     variablesJson: { lead_margin: "6" },
+    achievedLevelsJson: null,
+    failedTopicCoursesJson: null,
     ...over,
   };
 }
@@ -99,6 +101,25 @@ describe("upsertImportedAttempt", () => {
     const all = await h.current!.db.select().from(scormAttempts);
     expect(all).toHaveLength(1);
     expect(all[0].scalesJson).toEqual({ cel: 31 });
+  });
+
+  it("уровни тем и рекомендованные курсы пишутся и переписываются повторной загрузкой", async () => {
+    // Те же колонки, что заполняет телеметрия: выгрузка книги читает оба источника одним кодом.
+    await repo.upsertImportedAttempt(importedRow({
+      achievedLevelsJson: [{ topicId: "t1", topicName: "Тема 1", levelName: "Базовый" }],
+      failedTopicCoursesJson: [{ title: "Курс 1", url: "https://lms/view?object_id=1" }],
+    }));
+    let [row] = await h.current!.db.select().from(scormAttempts);
+    expect(row.achievedLevelsJson).toEqual([{ topicId: "t1", topicName: "Тема 1", levelName: "Базовый" }]);
+    expect(row.failedTopicCoursesJson).toEqual([{ title: "Курс 1", url: "https://lms/view?object_id=1" }]);
+
+    await repo.upsertImportedAttempt(importedRow({
+      achievedLevelsJson: [{ topicId: "t1", topicName: "Тема 1", levelName: null }],
+      failedTopicCoursesJson: null,
+    }));
+    [row] = await h.current!.db.select().from(scormAttempts);
+    expect(row.achievedLevelsJson).toEqual([{ topicId: "t1", topicName: "Тема 1", levelName: null }]);
+    expect(row.failedTopicCoursesJson).toBeNull();
   });
 
   it("процент прохождения пишется и обновляется повторной загрузкой", async () => {

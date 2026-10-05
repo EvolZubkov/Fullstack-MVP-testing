@@ -13,7 +13,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { participantKey } from "../utils/crypto";
 import { decodeLearnerResponse } from "@shared/lms-export/response-codec";
 import { hasBlanks, isMeasurementOnly } from "@shared/questions/question-type";
-import type { LmsExportBook } from "@shared/lms-export/parse";
+import { TOPIC_LEVEL_NOT_ACHIEVED, type LmsExportBook } from "@shared/lms-export/parse";
 import type { IStorage } from "../storage";
 
 /**
@@ -106,6 +106,85 @@ export interface PlannedRow {
   testVersion: number | null;
   /** PRD-56 FR-18: идентификаторы выданных вариантов; тему им вернёт {@link runImport}. */
   formIds: string[];
+  /**
+   * Тема -> достигнутый уровень, как его записал пакет (блоки `topic_<id>_level`).
+   * Имя темы и «не достигнут» превращает {@link runImport}: для этого нужна база.
+   */
+  topicLevels: Record<string, string>;
+  /** Тема -> `object_id` рекомендованных курсов WebTutor; в курс их превращает {@link runImport}. */
+  topicCourses: Record<string, string[]>;
+}
+
+/** Достигнутый уровень темы в той же форме, что пишет живая телеметрия (`achieved_levels_json`). */
+export interface ImportedLevel {
+  topicId: string;
+  topicName: string | null;
+  /** `null` — уровень не достигнут. */
+  levelName: string | null;
+}
+
+/** Рекомендованный курс в той же форме, что пишет живая телеметрия (`failed_topic_courses_json`). */
+export interface ImportedCourse {
+  title: string;
+  url: string;
+}
+
+/**
+ * `object_id` курса WebTutor из его адреса; `null`, если в адресе его нет.
+ *
+ * То же правило, по которому пакет кладёт курс в отчёт (`resultsPage.js`): иначе курс,
+ * отправленный пакетом, не нашёлся бы при обратном разборе.
+ *
+ * @param url адрес курса
+ * @returns `object_id` или `null`
+ */
+export function courseObjectIdOf(url: string | null | undefined): string | null {
+  const match = /object_id=([^&]+)/.exec(String(url ?? ""));
+  return match ? match[1] : null;
+}
+
+/**
+ * Достигнутые уровни строки в форме телеметрии; `null`, если блоков уровней в строке нет.
+ *
+ * @param levels тема -> уровень как записан в выгрузке
+ * @param topicNames имена тем теста
+ * @returns список для `achieved_levels_json` или `null`
+ */
+export function importedLevelsOf(
+  levels: Record<string, string>,
+  topicNames: ReadonlyMap<string, string>,
+): ImportedLevel[] | null {
+  const list = Object.entries(levels).map(([topicId, value]) => ({
+    topicId,
+    topicName: topicNames.get(topicId) ?? null,
+    levelName: value === TOPIC_LEVEL_NOT_ACHIEVED ? null : value,
+  }));
+  return list.length > 0 ? list : null;
+}
+
+/**
+ * Рекомендованные курсы строки в форме телеметрии; `null`, если курсов нет.
+ *
+ * Курс, чей `object_id` в тесте не нашёлся (ссылку убрали после сборки пакета), не теряется:
+ * он идёт под условным названием без адреса — факт рекомендации важнее его оформления.
+ * Повторы по названию сворачиваются, как это делает пакет.
+ *
+ * @param courses тема -> `object_id` в порядке выгрузки
+ * @param courseByObjectId курсы теста по `object_id`
+ * @returns список для `failed_topic_courses_json` или `null`
+ */
+export function importedCoursesOf(
+  courses: Record<string, string[]>,
+  courseByObjectId: ReadonlyMap<string, ImportedCourse>,
+): ImportedCourse[] | null {
+  const byTitle = new Map<string, ImportedCourse>();
+  for (const ids of Object.values(courses)) {
+    for (const objectId of ids) {
+      const course = courseByObjectId.get(objectId) ?? { title: `Курс WebTutor ${objectId}`, url: "" };
+      if (!byTitle.has(course.title)) byTitle.set(course.title, course);
+    }
+  }
+  return byTitle.size > 0 ? [...byTitle.values()] : null;
 }
 
 export interface ImportPlan {
@@ -197,10 +276,57 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
       // поэтому план несёт их как есть, а превращает `runImport`.
       testVersion: r.testVersion ?? null,
       formIds: r.formIds ?? [],
+      topicLevels: r.topicLevels ?? {},
+      topicCourses: r.topicCourses ?? {},
     });
   }
 
   return { rows, warnings };
+}
+
+/**
+ * Справочники для уровней и курсов тем: имена тем и курсы теста по `object_id`.
+ *
+ * Выгрузка знает тему только по идентификатору, а курс — только по `object_id` из его адреса.
+ * Кандидаты в курсы — те же, из которых их выбирает пакет: курсы тем разделов теста и ссылки
+ * уровней адаптивного теста. Читается один раз на партию.
+ *
+ * @param testId тест загрузки
+ * @param rows строки плана: их темы тоже ищутся, даже если в разделах теста их уже нет
+ * @param storage слой доступа к данным
+ * @returns имена тем и курсы по `object_id`
+ */
+async function loadTopicOutcomeRefs(
+  testId: string,
+  rows: PlannedRow[],
+  storage: IStorage,
+): Promise<{ topicNames: Map<string, string>; courseByObjectId: Map<string, ImportedCourse> }> {
+  const sections = await storage.getTestSections(testId);
+  const levels = await storage.getAdaptiveLevelsByTest(testId);
+  const topicIds = new Set<string>([
+    ...sections.map((s) => s.topicId),
+    ...levels.map((l) => l.topicId),
+    ...rows.flatMap((r) => [...Object.keys(r.topicLevels), ...Object.keys(r.topicCourses)]),
+  ]);
+
+  const topicNames = new Map<string, string>();
+  const courseByObjectId = new Map<string, ImportedCourse>();
+  // Первый курс с данным `object_id` выигрывает: один курс WebTutor, привязанный к нескольким
+  // темам, остаётся одним курсом.
+  const addCourse = (title: string, url: string) => {
+    const objectId = courseObjectIdOf(url);
+    if (objectId && !courseByObjectId.has(objectId)) courseByObjectId.set(objectId, { title, url });
+  };
+  for (const topicId of Array.from(topicIds)) {
+    const topic = await storage.getTopic(topicId);
+    if (!topic) continue;
+    topicNames.set(topicId, topic.name);
+    for (const course of await storage.getTopicCourses(topicId)) addCourse(course.title, course.url);
+  }
+  for (const level of levels) {
+    for (const link of await storage.getAdaptiveLevelLinks(level.id)) addCourse(link.title, link.url);
+  }
+  return { topicNames, courseByObjectId };
 }
 
 /** Что известно о загрузке помимо самой книги. */
@@ -294,6 +420,15 @@ export async function runImport(
       }
     }
   }
+  // Справочники тем и курсов читаются только когда в файле есть блоки тем: у теста без уровней
+  // и рекомендаций лишних запросов не делается.
+  const hasTopicBlocks = plan.rows.some(
+    (r) => Object.keys(r.topicLevels).length > 0 || Object.keys(r.topicCourses).length > 0,
+  );
+  const { topicNames, courseByObjectId } = hasTopicBlocks
+    ? await loadTopicOutcomeRefs(ctx.testId, plan.rows, storage)
+    : { topicNames: new Map<string, string>(), courseByObjectId: new Map<string, ImportedCourse>() };
+
   const unknownForms = new Set<string>();
   // PRD-66 FR-10a: сколько взаимодействий пришло без исхода у ОЦЕНИВАЕМОГО задания. Не потеря
   // сопоставления (задание найдено), а пробел в самом файле — и считается отдельно.
@@ -381,6 +516,10 @@ export async function runImport(
       totalQuestions: row.answers.length,
       scalesJson: row.scalesJson,
       variablesJson: row.variablesJson,
+      // Уровни тем и рекомендованные курсы — в ТЕ ЖЕ колонки и той же формы, что у телеметрии:
+      // выгрузка книги и разбор прохождения читают оба источника одним кодом.
+      achievedLevelsJson: importedLevelsOf(row.topicLevels, topicNames),
+      failedTopicCoursesJson: importedCoursesOf(row.topicCourses, courseByObjectId),
     });
     if (created) rowsCreated += 1;
     else rowsUpdated += 1;

@@ -193,16 +193,9 @@ function answerResultTitle(fact: AnswerFact): string {
 }
 
 /**
- * The first line of a sheet that imported passages cannot fill: an LMS report export carries no
- * achieved levels and no recommended courses, so the sheet speaks of web and telemetry only.
+ * A level of an LMS passage: `{ topicName, levelName }` per topic. Telemetry gets it from the
+ * package's `finish`, an import from the `topic_<id>_level` blocks of the report export.
  */
-function importNote(imported: number): unknown[] {
-  return [
-    `Импортированные выгрузки LMS не несут уровней и рекомендаций: такие прохождения в лист не входят (в выборке таких ${imported}).`,
-  ];
-}
-
-/** A level the package reports with `finish`: `{ topicName, levelName }` per topic. */
 interface ReportedLevel { topicName?: string | null; levelName?: string | null }
 /** A course the package recommends for a failed topic: `{ title, url }`. */
 interface ReportedCourse { title?: string | null }
@@ -288,12 +281,12 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       .filter(o => o.source === "web" && o.outcome !== "incomplete")
       .map(o => webById.get(o.id))
       .filter((a): a is WebAttemptRaw => !!a && a.resultJson !== null && a.resultJson !== undefined);
-    const importedCount = observed.filter(o => o.source === "import").length;
-    // Уровни и курсы проваленных тем прохождений LMS — пакет сообщает их телеметрией при
-    // завершении, а слой наблюдений их не несёт: дочитываются одним запросом по выборке.
-    const completedTelemetry = observed.filter(o => o.source === "telemetry" && o.outcome !== "incomplete");
-    const telemetryOutcomes = (includeSheets.levelStats || includeSheets.recommendations) && completedTelemetry.length
-      ? new Map((await storage.getScormAttemptOutcomes(completedTelemetry.map(o => o.id))).map(row => [row.id, row]))
+    // Уровни и курсы проваленных тем прохождений LMS — телеметрия получает их от пакета при
+    // завершении, импорт — из блоков `topic_*` выгрузки отчёта; обе пишут их в одни колонки.
+    // Слой наблюдений их не несёт: дочитываются одним запросом по выборке.
+    const completedLms = observed.filter(o => (o.source === "telemetry" || o.source === "import") && o.outcome !== "incomplete");
+    const lmsOutcomes = (includeSheets.levelStats || includeSheets.recommendations) && completedLms.length
+      ? new Map((await storage.getScormAttemptOutcomes(completedLms.map(o => o.id))).map(row => [row.id, row]))
       : new Map<string, { achievedLevelsJson: unknown; failedTopicCoursesJson: unknown }>();
 
     // Тесты выборки — в порядке справочника. Удалённый тест (строки LMS без теста) остаётся
@@ -601,8 +594,8 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         }
       }
 
-      for (const o of completedTelemetry) {
-        const levels = jsonArray<ReportedLevel>(telemetryOutcomes.get(o.id)?.achievedLevelsJson);
+      for (const o of completedLms) {
+        const levels = jsonArray<ReportedLevel>(lmsOutcomes.get(o.id)?.achievedLevelsJson);
         if (levels.length === 0) continue;
         const date = o.finishedAt ? new Date(o.finishedAt).toLocaleDateString("ru-RU") : "—";
         for (const level of levels) {
@@ -610,8 +603,8 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         }
       }
 
-      if (rows.length > 1 || importedCount > 0) {
-        addAoaSheet(wb, "Статистика уровней", importedCount > 0 ? [importNote(importedCount), ...rows] : rows, [30, 30, 25, 20, 15]);
+      if (rows.length > 1) {
+        addAoaSheet(wb, "Статистика уровней", rows, [30, 30, 25, 20, 15]);
       }
     }
 
@@ -637,9 +630,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         }
       }
 
-      // Телеметрия: пакет уже собрал курсы только проваленных тем и без повторов.
-      for (const o of completedTelemetry) {
-        for (const course of jsonArray<ReportedCourse>(telemetryOutcomes.get(o.id)?.failedTopicCoursesJson)) {
+      // LMS (телеметрия и импорт): курсы только проваленных тем и без повторов уже собраны.
+      for (const o of completedLms) {
+        for (const course of jsonArray<ReportedCourse>(lmsOutcomes.get(o.id)?.failedTopicCoursesJson)) {
           if (course?.title) add(o.participant ?? "—", course.title);
         }
       }
@@ -648,8 +641,8 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       for (const [participant, courses] of userCourses.entries()) {
         for (const course of courses) rows.push([participant, course]);
       }
-      if (rows.length > 1 || importedCount > 0) {
-        addAoaSheet(wb, "Рекомендации", importedCount > 0 ? [importNote(importedCount), ...rows] : rows, [30, 50]);
+      if (rows.length > 1) {
+        addAoaSheet(wb, "Рекомендации", rows, [30, 50]);
       }
     }
 
