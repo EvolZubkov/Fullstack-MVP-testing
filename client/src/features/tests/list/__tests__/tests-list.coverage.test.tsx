@@ -294,12 +294,13 @@ describe("<TestsListPage /> — test more-menu actions", () => {
     openSpy.mockRestore();
   });
 
-  it("exposes SCORM + Excel export links", async () => {
+  it("Э5: один пункт «Сохранить как…» открывает окно выгрузки и закрывает меню", async () => {
     await openMenu();
-    expect(screen.getByTestId("menu-export-t-1").getAttribute("href")).toBe("/api/tests/t-1/export/scorm");
-    expect(screen.getByTestId("menu-export-excel-t-1").getAttribute("href")).toBe("/api/tests/t-1/workbook/export");
-    // Clicking closes the menu (onClick handler).
-    fireEvent.click(screen.getByTestId("menu-export-excel-t-1"));
+    expect(screen.queryByTestId("menu-export-t-1")).toBeNull();
+    expect(screen.queryByTestId("menu-export-excel-t-1")).toBeNull();
+    fireEvent.click(screen.getByTestId("menu-save-as-t-1"));
+    expect(await screen.findByRole("dialog", { name: /Сохранить как/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-save-as-t-1")).toBeNull();
   });
 
   it("значок «Аналитика» ведёт на уровень теста — туда же, куда строка вкладки «Тесты» (Э3.1)", async () => {

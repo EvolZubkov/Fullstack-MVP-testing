@@ -12,7 +12,12 @@ import { config } from "../config";
 import { logger } from "../logger";
 import { storage } from "../storage";
 import { drawnScaleKeys, isTestIpsative } from "../services/scale-composition";
-import { exportSourceForTest, liveDataSource } from "../services/test-snapshot";
+import {
+  exportSourceForTest,
+  ExportVersionUnavailableError,
+  liveDataSource,
+  type ExportVersion,
+} from "../services/test-snapshot";
 import { resolveTemplateDir } from "../services/template-dir";
 import { readResultsDeclarations } from "../services/template-render";
 import { resolveScreenLabels } from "../services/result-context";
@@ -33,6 +38,11 @@ export interface BuildScormExportDataOptions {
    * never a snapshot).
    */
   source: "export" | "debug";
+  /**
+   * Stage E5: the version an `export` bakes — published snapshot or working draft. Omitted —
+   * the snapshot-aware default. Ignored by `debug`, which is always live.
+   */
+  version?: ExportVersion;
 }
 
 /**
@@ -44,7 +54,7 @@ export interface BuildScormExportDataOptions {
 export class ScormBuildError extends Error {
   constructor(
     message: string,
-    readonly status: 404 | 422,
+    readonly status: 404 | 409 | 422,
     readonly field?: string,
   ) {
     super(message);
@@ -65,7 +75,11 @@ export async function buildScormExportData(
   // живое состояние, а не версия), поэтому её путь снимок и не спрашивает.
   const { src, snapshot } = opts.source === "debug"
     ? { src: liveDataSource(), snapshot: null }
-    : await exportSourceForTest(testId);
+    : await exportSourceForTest(testId, opts.version).catch((error: unknown) => {
+      // A published version asked for and absent is the caller's conflict, not a server fault.
+      if (error instanceof ExportVersionUnavailableError) throw new ScormBuildError(error.message, 409);
+      throw error;
+    });
   const test = await src.getTest(testId);
   if (!test) {
     throw new ScormBuildError("Test not found", 404);

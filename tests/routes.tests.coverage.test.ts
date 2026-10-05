@@ -650,6 +650,35 @@ describe("DELETE /api/tests/:id — error branch", () => {
   });
 });
 
+// ─── GET /:id/export/options (Э5) ─────────────────────────────────────────────
+describe("GET /api/tests/:id/export/options", () => {
+  let app: express.Express;
+  beforeEach(() => {
+    resetDefaults();
+    app = makeApp();
+  });
+
+  it("a draft: no published version, telemetry of the draft", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "draft", telemetryEnabled: true });
+    const res = await asAdmin(request(app).get("/api/tests/test1/export/options"));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ published: null, telemetry: { draft: true, published: null } });
+  });
+
+  it("a published test: the snapshot version and the telemetry of each version", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "published", telemetryEnabled: false });
+    storageMock.getLatestSnapshot.mockResolvedValue({
+      id: "snap", version: 4, publishedAt: "2026-09-28T10:00:00.000Z",
+      contentJson: { test: { telemetryEnabled: true } },
+    });
+    const res = await asAdmin(request(app).get("/api/tests/test1/export/options"));
+    expect(res.body).toEqual({
+      published: { version: 4, publishedAt: "2026-09-28T10:00:00.000Z" },
+      telemetry: { draft: false, published: true },
+    });
+  });
+});
+
 // ─── GET /:id/export/scorm ────────────────────────────────────────────────────
 describe("GET /api/tests/:id/export/scorm", () => {
   let app: express.Express;
@@ -659,6 +688,21 @@ describe("GET /api/tests/:id/export/scorm", () => {
     buildExportMock.mockResolvedValue({ test: { id: "test1", title: "My Test", mode: "standard" } });
     generateScormMock.mockResolvedValue(Buffer.from("PKzip-bytes"));
     app = makeApp();
+  });
+
+  it("Э5: ?source passes the chosen version to the build; a bad value is 400", async () => {
+    const draft = await asAdmin(request(app).get("/api/tests/test1/export/scorm?source=draft"));
+    expect(draft.status).toBe(200);
+    expect(buildExportMock).toHaveBeenLastCalledWith("test1", { source: "export", version: "draft" });
+
+    const bad = await asAdmin(request(app).get("/api/tests/test1/export/scorm?source=old"));
+    expect(bad.status).toBe(400);
+  });
+
+  it("Э5: 409 when the published version is asked for and there is none", async () => {
+    buildExportMock.mockRejectedValue(new ScormBuildError("Тест не опубликован", 409));
+    const res = await asAdmin(request(app).get("/api/tests/test1/export/scorm?source=published"));
+    expect(res.status).toBe(409);
   });
 
   it("404 when the build reports the test is missing", async () => {

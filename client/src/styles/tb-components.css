@@ -3414,3 +3414,8 @@
 .tb-qdiff-row > .ou-switch-field { flex: none; white-space: nowrap; }
 .tb-qdiff-row__slider.ou-slider--h { flex: 1; min-width: 0; max-width: none; padding-block: var(--ou-space-5); }
 .tb-qdiff-row__num { width: var(--wf-size-90, 88px); flex: none; }
+
+/* Э5 «Сохранить как…»: подробности выбранного формата — подпись слева, значение справа.
+   Между строками 2x, между колонками 4x (модульная сетка); список версий не шире 360px. */
+.tb-saveas-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--ou-space-2) var(--ou-space-4); align-items: baseline; }
+.tb-saveas-select { max-width: 360px; }

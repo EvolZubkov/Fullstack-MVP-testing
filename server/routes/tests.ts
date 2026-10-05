@@ -19,7 +19,13 @@ import { readableTestScope, canGrantAccess } from "../services/test-access";
 import { visibleTopic } from "../services/topic-access";
 import { assessTestPublish } from "../services/draw-feasibility";
 import { assessBreakdownPublish } from "../services/breakdown-warnings";
-import { createTestSnapshot, getPublicationState } from "../services/test-snapshot";
+import {
+  createTestSnapshot,
+  getPublicationState,
+  publishedSnapshotOf,
+  type ExportVersion,
+  type TestSnapshotContent,
+} from "../services/test-snapshot";
 import { countUnmappedPages } from "../services/page-variant-audit";
 import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
@@ -1540,12 +1546,48 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
 });
 
 // GET /api/tests/:id/export/scorm - Экспорт SCORM
+/**
+ * Version an export asks for (stage E5, owner decision Р7): `?source=published|draft`.
+ *
+ * @returns the version; `undefined` when absent (the snapshot-aware default); `null` when invalid
+ */
+function exportVersionOf(value: unknown): ExportVersion | undefined | null {
+  if (value === undefined || value === "") return undefined;
+  return value === "published" || value === "draft" ? value : null;
+}
+
+/**
+ * GET /api/tests/:id/export/options — what the «Сохранить как…» window shows (stage E5):
+ * whether a published version exists and which, and whether telemetry is on in each version.
+ * Telemetry is shown, never overridden (owner decision Р8): it is a setting of the test.
+ */
+router.get("/:id/export/options", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const snapshot = await publishedSnapshotOf(test.id);
+    const content = snapshot?.contentJson as TestSnapshotContent | undefined;
+    res.json({
+      published: snapshot ? { version: snapshot.version, publishedAt: snapshot.publishedAt } : null,
+      telemetry: {
+        draft: test.telemetryEnabled === true,
+        published: content ? content.test.telemetryEnabled === true : null,
+      },
+    });
+  } catch (error) {
+    logger.error("Export options error: " + (error as Error).message, "scorm-export");
+    res.status(500).json({ error: "Failed to read export options" });
+  }
+});
+
 router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), requireTestScope("edit"), async (req, res) => {
   try {
+    const version = exportVersionOf(req.query.source);
+    if (version === null) return res.status(400).json({ error: "source: published или draft" });
     // Assemble the deliverable via the shared builder (NFR-18: the debug player
     // builds the SAME data the same way). Export uses the snapshot-aware source
     // (published → active snapshot, draft → live).
-    const data = await buildScormExportData(req.params.id, { source: "export" });
+    const data = await buildScormExportData(req.params.id, { source: "export", version });
     const test = data.test;
 
     // Телеметрия включается НАСТРОЙКОЙ ТЕСТА («Интеграция» → «Отправлять телеметрию о

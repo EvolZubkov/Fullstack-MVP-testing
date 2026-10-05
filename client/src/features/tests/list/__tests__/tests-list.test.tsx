@@ -231,7 +231,7 @@ describe("<TestsListPage /> — test more-menu", () => {
     fireEvent.click(screen.getByTestId("test-more-t-1"));
 
     expect(screen.getByTestId("menu-edit-t-1")).toBeInTheDocument();
-    expect(screen.getByTestId("menu-export-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-save-as-t-1")).toBeInTheDocument();
     expect(screen.getByTestId("menu-toggle-publish-t-1")).toBeInTheDocument();
     expect(screen.getByTestId("menu-move-t-1")).toBeInTheDocument();
     expect(screen.getByTestId("menu-archive-t-1")).toBeInTheDocument();
@@ -307,7 +307,7 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     expect(screen.queryByTestId("menu-access-t-1")).toBeNull();
   });
 
-  it("an author gets «Выполнить отладку» but no «Экспорт SCORM»", async () => {
+  it("an author gets «Выполнить отладку» and «Сохранить как…» without the SCORM format", async () => {
     authMock.can = canForRoles([ROLES.AUTHOR]);
     authMock.roles = [ROLES.AUTHOR];
     mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
@@ -315,10 +315,13 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     await waitFor(() => screen.getByTestId("test-row-t-1"));
     fireEvent.click(screen.getByTestId("test-more-t-1"));
     expect(screen.getByTestId("menu-debug-t-1")).toBeInTheDocument();
-    expect(screen.queryByTestId("menu-export-t-1")).toBeNull();
+    fireEvent.click(screen.getByTestId("menu-save-as-t-1"));
+    await screen.findByRole("dialog", { name: /Сохранить как/ });
+    expect(screen.queryByRole("radio", { name: /SCORM/ })).toBeNull();
+    expect(screen.getByRole("radio", { name: /Книга для правки/ })).toBeInTheDocument();
   });
 
-  it("a developer gets both «Выполнить отладку» and «Экспорт SCORM»", async () => {
+  it("a developer gets «Выполнить отладку» and the SCORM format in «Сохранить как…»", async () => {
     authMock.can = canForRoles([ROLES.DEVELOPER]);
     authMock.roles = [ROLES.DEVELOPER];
     mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
@@ -326,7 +329,9 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     await waitFor(() => screen.getByTestId("test-row-t-1"));
     fireEvent.click(screen.getByTestId("test-more-t-1"));
     expect(screen.getByTestId("menu-debug-t-1")).toBeInTheDocument();
-    expect(screen.getByTestId("menu-export-t-1")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("menu-save-as-t-1"));
+    await screen.findByRole("dialog", { name: /Сохранить как/ });
+    expect(screen.getByRole("radio", { name: /SCORM/ })).toBeInTheDocument();
   });
 });
 

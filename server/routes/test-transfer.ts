@@ -23,6 +23,11 @@ import { logger } from "../logger";
 import { storage } from "../storage";
 import { buildTransferZip, TransferExportError } from "../services/test-transfer/export";
 import {
+  ExportVersionUnavailableError,
+  publishedSnapshotOf,
+  type TestSnapshotContent,
+} from "../services/test-snapshot";
+import {
   importTestPackage,
   InvalidPackageError,
   UnsupportedPackageError,
@@ -127,7 +132,20 @@ router.get(
       const test = await storage.getTest(testId);
       if (!test) return res.status(404).json({ error: "Test not found" });
 
-      const { buffer, pkg } = await buildTransferZip(testId);
+      // Stage E5 (owner decision Р7): the package of the PUBLISHED version is built from its
+      // snapshot — the same content the web delivers; the default stays the working draft.
+      const source = req.query.source;
+      if (source !== undefined && source !== "" && source !== "published" && source !== "draft") {
+        return res.status(400).json({ error: "source: published или draft" });
+      }
+      let loadContent: (() => Promise<TestSnapshotContent>) | undefined;
+      if (source === "published") {
+        const snapshot = await publishedSnapshotOf(testId);
+        if (!snapshot) return res.status(409).json({ error: new ExportVersionUnavailableError().message });
+        loadContent = async () => snapshot.contentJson as TestSnapshotContent;
+      }
+
+      const { buffer, pkg } = await buildTransferZip(testId, loadContent ? { loadContent } : {});
 
       // A picture that could not be read is reported in the manifest AND in the log: a
       // loss nobody hears about is how the workbook's losses stayed invisible.

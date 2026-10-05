@@ -430,19 +430,52 @@ export interface ExportSource {
 }
 
 /**
+ * Which version of a test an export is built from (stage E5, owner decision Р7 2026-10-05):
+ * the published one — the active snapshot — or the current working draft.
+ */
+export type ExportVersion = "published" | "draft";
+
+/** The published version was asked for, but the test has none. */
+export class ExportVersionUnavailableError extends Error {
+  constructor(message = "Тест не опубликован: выгрузить можно только текущий черновик") {
+    super(message);
+    this.name = "ExportVersionUnavailableError";
+  }
+}
+
+/**
+ * The published version of a test: its active snapshot, if the test is published and has one.
+ * Archived tests and drafts have no published version to export — even with an old snapshot.
+ *
+ * @param testId test
+ * @returns the snapshot, or `null`
+ */
+export async function publishedSnapshotOf(testId: string): Promise<TestSnapshot | null> {
+  const test = await storage.getTest(testId);
+  if (test?.status !== "published") return null;
+  return (await storage.getLatestSnapshot(testId)) ?? null;
+}
+
+/**
  * Resolves the data source for SCORM EXPORT (PRD-15 FR-16). A published test
  * exports from its active snapshot — the package then matches exactly what the
  * web delivers, even if the working draft has drifted. Drafts (no snapshot)
  * export from live storage (preview-style).
+ *
+ * Stage E5: the author may choose the version explicitly. `draft` always bakes live storage;
+ * `published` requires a published version and throws {@link ExportVersionUnavailableError}
+ * otherwise — silently falling back to the draft would hand out a package nobody asked for.
+ *
+ * @param testId test
+ * @param version explicit version; omitted — the snapshot-aware default above
  */
-export async function exportSourceForTest(testId: string): Promise<ExportSource> {
-  const test = await storage.getTest(testId);
-  if (test?.status === "published") {
-    const snap = await storage.getLatestSnapshot(testId);
-    if (snap) {
-      return { src: snapshotDataSource(snap.contentJson as TestSnapshotContent), snapshot: snap };
-    }
+export async function exportSourceForTest(testId: string, version?: ExportVersion): Promise<ExportSource> {
+  if (version === "draft") return { src: liveDataSource(), snapshot: null };
+  const snap = await publishedSnapshotOf(testId);
+  if (snap) {
+    return { src: snapshotDataSource(snap.contentJson as TestSnapshotContent), snapshot: snap };
   }
+  if (version === "published") throw new ExportVersionUnavailableError();
   return { src: liveDataSource(), snapshot: null };
 }
 

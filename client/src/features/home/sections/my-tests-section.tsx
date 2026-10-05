@@ -6,7 +6,7 @@
  * one state by two names. Action buttons mirror the rights the server resolved —
  * the row never offers an export to a user who may not export.
  */
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { useLocation } from "wouter";
 import { BugPlay, Download, FilePlus, Pencil } from "lucide-react";
 import {
@@ -25,6 +25,7 @@ import {
 } from "@skillum/ui-kit";
 import { formatQuestions, pluralize } from "@/lib/i18n";
 import type { HomeTestStatus, MyTestItem } from "@shared/home/contract";
+import { SaveAsDialog } from "@/features/tests/export/save-as-dialog";
 
 /** Status chips of a test, in the order the product list renders them. */
 function StatusTags({ status }: { status: HomeTestStatus }) {
@@ -51,6 +52,8 @@ function StatusTags({ status }: { status: HomeTestStatus }) {
 export function MyTestsSection({ items, total }: { items: MyTestItem[]; total: number }) {
   const [, navigate] = useLocation();
   const hasMore = total > items.length;
+  /** Э5: короткий путь открывает то же окно «Сохранить как…», что и меню теста. */
+  const [saveAs, setSaveAs] = useState<MyTestItem | null>(null);
 
   return (
     <Card variant="outlined" data-testid="home-my-tests">
@@ -127,12 +130,10 @@ export function MyTestsSection({ items, total }: { items: MyTestItem[]; total: n
                     {item.canExport && (
                       <IconButton
                         size="s"
-                        aria-label="Выгрузить SCORM"
-                        title="Выгрузить SCORM"
+                        aria-label="Сохранить как…"
+                        title="Сохранить как…"
                         icon={<Download size={15} />}
-                        // The route answers with `Content-Disposition: attachment`,
-                        // so this downloads the package without leaving the page.
-                        onClick={() => window.location.assign(`/api/tests/${item.testId}/export/scorm`)}
+                        onClick={() => setSaveAs(item)}
                         data-testid={`home-test-export-${item.testId}`}
                       />
                     )}
@@ -157,6 +158,14 @@ export function MyTestsSection({ items, total }: { items: MyTestItem[]; total: n
             </Button>
           </Cluster>
         </CardFooter>
+      )}
+      {saveAs && (
+        <SaveAsDialog
+          open
+          onClose={() => setSaveAs(null)}
+          test={{ id: saveAs.testId, title: saveAs.title }}
+          canExportScorm={saveAs.canExport}
+        />
       )}
     </Card>
   );

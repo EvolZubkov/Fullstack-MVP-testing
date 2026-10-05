@@ -37,7 +37,6 @@ import {
   ChevronsUpDown,
   ClipboardList,
   Download,
-  FileSpreadsheet,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -99,6 +98,7 @@ import type {
 } from "@/features/content-protection/types";
 import { describeBreakdownWarning } from "@/features/content-protection/issue-text";
 import { TestEditor } from "@/features/tests/editor/test-editor";
+import { SaveAsDialog } from "@/features/tests/export/save-as-dialog";
 import type { EditorTabKey } from "@/features/tests/editor/use-test-editor";
 import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
@@ -316,6 +316,8 @@ export function TestsListPage(): React.JSX.Element {
 
   // More-menu --------------------------------------------------------------
   const [testMenu, setTestMenu] = useState<{ id: string } | null>(null);
+  /** Э5: тест, открытый в окне «Сохранить как…». */
+  const [saveAsTest, setSaveAsTest] = useState<{ id: string; title: string } | null>(null);
   const [folderMenu, setFolderMenu] = useState<{ id: string } | null>(null);
 
   // Test delete confirm (FR-30) ---------------------------------------------
@@ -871,6 +873,19 @@ export function TestsListPage(): React.JSX.Element {
         />
       )}
 
+      {saveAsTest && (
+        <SaveAsDialog
+          open
+          onClose={() => setSaveAsTest(null)}
+          test={saveAsTest}
+          canExportScorm={canExportScorm}
+          onOpenSettings={() => {
+            setSaveAsTest(null);
+            setEditorTarget({ kind: "edit", testId: saveAsTest.id, tab: "main" });
+          }}
+        />
+      )}
+
       {/* TestEditor Drawer (edit + create modes) ---------------------------- */}
       <TestEditor
         testId={editorTarget?.kind === "edit" ? editorTarget.testId : undefined}
@@ -1051,40 +1066,21 @@ export function TestsListPage(): React.JSX.Element {
             Отправить на рецензирование
           </button>
         )}
-        {canExportScorm && (
-          <a
-            className="dropdown-item"
-            role="menuitem"
-            href={`/api/tests/${test.id}/export/scorm`}
-            onClick={() => setTestMenu(null)}
-            data-testid={`menu-export-${test.id}`}
-          >
-            <Download size={14} />
-            Экспорт SCORM
-          </a>
-        )}
-        <a
+        {/* Э5 (решение владельца Р6 2026-10-05): один пункт вместо трёх — окно называет задачу
+            каждого формата, путь обратно и версию; формат без права в окне не показывается. */}
+        <button
+          type="button"
           className="dropdown-item"
           role="menuitem"
-          href={`/api/tests/${test.id}/workbook/export`}
-          onClick={() => setTestMenu(null)}
-          data-testid={`menu-export-excel-${test.id}`}
+          onClick={() => {
+            setTestMenu(null);
+            setSaveAsTest({ id: test.id, title: test.title });
+          }}
+          data-testid={`menu-save-as-${test.id}`}
         >
-          <FileSpreadsheet size={14} />
-          Экспорт в Excel
-        </a>
-        {/* PRD-48: the package carries the test WHOLE — appearance and result texts
-            included — which the workbook, an authoring format, cannot. */}
-        <a
-          className="dropdown-item"
-          role="menuitem"
-          href={`/api/tests/${test.id}/transfer`}
-          onClick={() => setTestMenu(null)}
-          data-testid={`menu-export-package-${test.id}`}
-        >
-          <PackageOpen size={14} />
-          Экспорт пакета (.tbtest)
-        </a>
+          <Download size={14} />
+          Сохранить как…
+        </button>
         {/* Э6: своего окна у пункта нет — он ведёт в раздел «Импорт» с этим тестом в адресе,
             и раздел сразу показывает загрузки теста. Тест задаёт файл, а не пункт. */}
         {canImportLms && (
