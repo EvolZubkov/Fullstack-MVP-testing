@@ -231,7 +231,7 @@ export type {
   SkeletonProps, SkeletonShape, SkeletonLineSize, SkeletonAnim, SkeletonWidth,
   SkeletonStackProps, SkeletonCardProps, SkeletonListRowProps,
 } from './components/Skeleton';
-export type { SliderProps, SliderOrientation } from './components/Slider';
+export type { SliderProps, SliderOrientation, SliderLandmark } from './components/Slider';
 export type {
   SpinnerProps, SpinnerSize, SpinnerTone, SpinnerDotsProps, SpinnerOverlayProps,
 } from './components/Spinner';

@@ -3406,3 +3406,11 @@
 /* ─── Шапка уровней аналитики: кнопки — одной строкой справа, переносится заголовок ─── */
 .tb-analytics-head__title { min-width: 0; flex: 1 1 auto; }
 .tb-analytics-head__actions { flex-shrink: 0; }
+
+/* PRD-70 FR-32 (эскиз e7-question-bank): строка «Сложность» ящика вопроса — переключатель
+   «Не задано», шкала и поле числа по средней линии шкалы; от шкалы — 6x (модульная сетка).
+   Поля над и под шкалой равны: снизу — подписи делений, сверху — ориентир «По ответам». */
+.tb-qdiff-row { display: flex; align-items: center; gap: var(--ou-space-6); }
+.tb-qdiff-row > .ou-switch-field { flex: none; white-space: nowrap; }
+.tb-qdiff-row__slider.ou-slider--h { flex: 1; min-width: 0; max-width: none; padding-block: var(--ou-space-5); }
+.tb-qdiff-row__num { width: var(--wf-size-90, 88px); flex: none; }

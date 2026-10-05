@@ -6755,6 +6755,23 @@ span.ou-quiz__dot:hover { transform: none; }
 .ou-slider--h .ou-slider__mark-lbl { top: 14px; transform: translateX(-50%); }
 .ou-slider--v .ou-slider__mark-lbl { left: 14px; transform: translateY(-50%); }
 
+/* Landmarks — a value to check the chosen one against: a down-pointing triangle above the
+   horizontal rail with a tooltip. The slider makes room above the rail for them. */
+.ou-slider--h:has(.ou-slider__landmark) { padding-top: var(--ou-space-5); }
+.ou-slider--h .ou-slider__landmark {
+  position: absolute; bottom: calc(100% + var(--ou-space-2));
+  transform: translateX(-50%); display: flex; cursor: help;
+}
+.ou-slider__landmark-mark {
+  width: 0; height: 0;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 8px solid var(--ou-fg-muted);
+}
+.ou-slider__landmark:hover .ou-slider__landmark-mark,
+.ou-slider__landmark:focus-visible .ou-slider__landmark-mark { border-top-color: var(--ou-fg-default); }
+/* The anchor is a few pixels wide: the bubble takes its own width, wrapping past 260px. */
+.ou-slider__landmark .ou-tip__bubble { width: max-content; max-width: 260px; }
+
 /* Tooltip bubble */
 .ou-slider__bubble {
   position: absolute;

@@ -30,7 +30,7 @@ import {
   type AnswerRulesDraft,
 } from "./answer-rules/answer-rules-model";
 import type { AnswerRuleSet } from "@shared/answer-check";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Braces, Code, Plus, Sigma, Trash2, GripVertical } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -76,6 +76,24 @@ import { ContentImpactDialog } from "@/features/content-protection/content-impac
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Question, Topic } from "@shared/schema";
 import { TagsInput } from "@/pages/author/tags-input";
+import { useOptionalAuth } from "@/lib/auth";
+
+/** PRD-70 FR-13: ориентир сложности «По ответам» — свод наблюдаемой сложности по тестам. */
+interface DifficultyLandmark {
+  hardness: number;
+  tests: number;
+  observations: number;
+}
+
+/** Русская форма числительного: формы для 1, 2–4 и 5+. */
+function pluralForm(n: number, [one, few, many]: [string, string, string]): string {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
 
 const questionTypes = [
   { value: "single", label: t.questions.singleChoice },
@@ -131,6 +149,15 @@ export function QuestionEditorDrawer({
 }: QuestionEditorDrawerProps) {
   const { push: toast } = useToast();
   const contentGuard = useContentGuard();
+  // PRD-70 FR-31: ориентир «По ответам» над шкалой сложности — у сохранённого вопроса и только
+  // с правом на аналитику: он из неё.
+  const auth = useOptionalAuth();
+  const canAnalytics = Boolean(question?.id) && (auth?.can("analytics.read") ?? false);
+  const { data: landmarkData } = useQuery<{ landmark: DifficultyLandmark | null }>({
+    queryKey: [`/api/analytics/questions/${question?.id}/difficulty-landmark`],
+    enabled: open && canAnalytics,
+  });
+  const landmark = landmarkData?.landmark ?? null;
 
   const [selectedType, setSelectedType] = useState<QuestionType>("single");
   // PRD-57 §6.1: черновик набора правил держит ОБА вида ответа, поэтому он живёт
@@ -1191,37 +1218,49 @@ export function QuestionEditorDrawer({
 
           <Stack gap={2}>
             <Label>{t.questions.difficulty}</Label>
-            <Switch
-              label={t.questions.difficultyUnset}
-              checked={difficulty === null}
-              onChange={(e) => setDifficulty(e.target.checked ? null : 50)}
-              data-testid="switch-question-difficulty-unset"
-            />
-            {difficulty !== null && (
-              <>
-                <Cluster gap={4} wrap={false}>
-                  <Box grow>
-                    <Slider
-                      value={difficulty}
-                      onChange={(v) => setDifficulty(v as number)}
-                      min={0}
-                      max={100}
-                      step={1}
-                      ariaLabel={t.questions.difficulty}
-                      data-testid="slider-question-difficulty"
-                    />
-                  </Box>
+            {/* PRD-70 FR-32 (эскиз e7-question-bank): переключатель, шкала и поле — одной строкой по
+                средней линии шкалы, от шкалы — 6x; над шкалой — ориентир «По ответам» (FR-31). */}
+            <div className="tb-qdiff-row">
+              <Switch
+                label={t.questions.difficultyUnset}
+                checked={difficulty === null}
+                onChange={(e) => setDifficulty(e.target.checked ? null : 50)}
+                data-testid="switch-question-difficulty-unset"
+              />
+              {difficulty !== null && (
+                <>
+                  <Slider
+                    className="tb-qdiff-row__slider"
+                    value={difficulty}
+                    onChange={(v) => setDifficulty(v as number)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    marks={[0, 50, 100]}
+                    landmarks={landmark ? [{
+                      value: landmark.hardness,
+                      label: `Сложность по ответам: ${landmark.hardness}`,
+                      title: `По ответам: ${landmark.hardness}`,
+                      hint: `Какой сложность оказалась у участников — сводно по ${landmark.tests} ${pluralForm(landmark.tests, ["тесту", "тестам", "тестам"])}, ${landmark.observations} ${pluralForm(landmark.observations, ["прохождение", "прохождения", "прохождений"])}. Ориентир для заданной сложности; по каждому тесту — в «Статистике».`,
+                    }] : undefined}
+                    ariaLabel={t.questions.difficulty}
+                    data-testid="slider-question-difficulty"
+                  />
                   <Input
+                    className="tb-qdiff-row__num"
                     type="number"
                     min={0}
                     max={100}
                     value={difficulty}
+                    aria-label={`${t.questions.difficulty} (число)`}
                     onChange={(e) => setDifficulty(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
                     data-testid="input-question-difficulty"
                   />
-                </Cluster>
-                <Text as="p" variant="body-xs" tone="muted">{t.questions.difficultyHint}</Text>
-              </>
+                </>
+              )}
+            </div>
+            {difficulty !== null && (
+              <Text as="p" variant="body-xs" tone="muted">{t.questions.difficultyHint}</Text>
             )}
           </Stack>
 
