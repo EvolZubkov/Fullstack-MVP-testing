@@ -31,6 +31,9 @@ import {
   Cluster,
   Drawer,
   EmptyState,
+  FilterBar,
+  FilterPanel,
+  FilterPanelGroup,
   IconButton,
   Input,
   Label,
@@ -115,6 +118,13 @@ async function refusalOf(res: Response, fallback: string): Promise<Error> {
 /** Filter value meaning «the field is empty» (the «Не указано» option). */
 const ORG_NONE = "__none__";
 
+/** Conditions of the users list: `all` means the field does not narrow it. */
+type UsersFilter = { role: string; status: string; kind: string } & Record<OrgField, string>;
+
+const EMPTY_USERS_FILTER: UsersFilter = {
+  role: "all", status: "all", kind: "all", organization: "all", unit: "all", position: "all",
+};
+
 /** Does `value` pass an org filter (`all`, {@link ORG_NONE} or a comparison key)? */
 function matchesOrgFilter(filter: string, value: string | null | undefined): boolean {
   if (filter === "all") return true;
@@ -149,6 +159,13 @@ export default function UsersPage() {
   const [orgFilters, setOrgFilters] = useState<Record<OrgField, string>>({
     organization: "all", unit: "all", position: "all",
   });
+  /**
+   * PRD-70 FR-76: the six lists moved from the row into the filter panel. The panel edits a
+   * draft and applies it on «Применить», like every filter form of the product.
+   */
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const [filterDraft, setFilterDraft] = useState<UsersFilter>(EMPTY_USERS_FILTER);
   /** A linking key the server refused, shown at its field until it is edited. */
   const [keyConflict, setKeyConflict] = useState<LinkingKeyConflict | null>(null);
 
@@ -577,6 +594,64 @@ export default function UsersPage() {
     { value: ORG_NONE, label: noneLabel },
   ];
 
+  /** The fields of the filter panel, in the order of the former row (composition unchanged). */
+  const usersFilterFields: Array<{
+    key: keyof UsersFilter;
+    title: string;
+    options: Array<{ value: string; label: string; searchText?: string }>;
+    searchable?: boolean;
+  }> = [
+    {
+      key: "role",
+      title: t.users.filterByRole,
+      options: [
+        { value: "all", label: t.users.allRoles },
+        ...ROLE_PRIORITY.map((r) => ({ value: r, label: ROLE_LABELS[r] })),
+      ],
+    },
+    {
+      key: "status",
+      title: t.users.filterByStatus,
+      options: [
+        { value: "all", label: t.users.allStatuses },
+        { value: "active", label: t.users.active },
+        { value: "inactive", label: t.users.inactive },
+        { value: "pending", label: t.users.pending },
+      ],
+    },
+    // PRD-28: kind of account.
+    {
+      key: "kind",
+      title: "Вид учётной записи",
+      options: [
+        { value: "all", label: "Все виды" },
+        { value: "staff", label: "Штатные" },
+        { value: "external", label: "Внешние участники" },
+      ],
+    },
+    // Org-structure plan: searchable — a company may have hundreds of units.
+    { key: "organization", title: "Организация", options: orgFilterOptions("organization", "Все организации", "Не указана"), searchable: true },
+    { key: "unit", title: "Подразделение", options: orgFilterOptions("unit", "Все подразделения", "Не указано"), searchable: true },
+    { key: "position", title: "Должность", options: orgFilterOptions("position", "Все должности", "Не указана"), searchable: true },
+  ];
+
+  const appliedFilter: UsersFilter = {
+    role: roleFilter, status: statusFilter, kind: kindFilter, ...orgFilters,
+  };
+  const applyUsersFilter = (next: UsersFilter) => {
+    setRoleFilter(next.role);
+    setStatusFilter(next.status);
+    setKindFilter(next.kind);
+    setOrgFilters({ organization: next.organization, unit: next.unit, position: next.position });
+  };
+  /** Chips of what is applied: «Поле: значение», one per field narrowed from «all». */
+  const filterChips = usersFilterFields
+    .filter((field) => appliedFilter[field.key] !== "all")
+    .map((field) => ({
+      key: field.key,
+      label: `${field.title}: ${field.options.find((o) => o.value === appliedFilter[field.key])?.label ?? appliedFilter[field.key]}`,
+    }));
+
   const getStatusBadge = (status: string) => {
     const tone: Tone =
       status === "active" ? "success" : status === "inactive" ? "error" : "neutral";
@@ -822,72 +897,50 @@ export default function UsersPage() {
         </Cluster>
       </Cluster>
 
-      {/* Filters */}
-      <Cluster gap={4} align="end">
-        <Stack grow className="tb-users-search">
+      {/* Filters — DS FilterBar and its FilterPanel (PRD-70 FR-70, FR-76). */}
+      <FilterBar
+        search={(
           <Input
+            size="s"
             iconLeft={<Search size={16} />}
             placeholder={t.users.searchPlaceholder}
+            aria-label={t.users.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             fullWidth
           />
-        </Stack>
-        <Select
-          value={roleFilter}
-          onChange={setRoleFilter}
-          placeholder={t.users.filterByRole}
-          options={[
-            { value: "all", label: t.users.allRoles },
-            ...ROLE_PRIORITY.map((r) => ({ value: r, label: ROLE_LABELS[r] })),
-          ]}
-        />
-        <Select
-          value={statusFilter}
-          onChange={setStatusFilter}
-          placeholder={t.users.filterByStatus}
-          options={[
-            { value: "all", label: t.users.allStatuses },
-            { value: "active", label: t.users.active },
-            { value: "inactive", label: t.users.inactive },
-            { value: "pending", label: t.users.pending },
-          ]}
-        />
-        {/* PRD-28: вид учётной записи — четвёртый фильтр существующего ряда. */}
-        <Select
-          value={kindFilter}
-          onChange={setKindFilter}
-          aria-label="Вид учётной записи"
-          options={[
-            { value: "all", label: "Все виды" },
-            { value: "staff", label: "Штатные" },
-            { value: "external", label: "Внешние участники" },
-          ]}
-        />
-        {/* Org-structure plan: three filters in the same row; searchable — a
-            company may have hundreds of units. */}
-        <Select
-          value={orgFilters.organization}
-          onChange={(value) => setOrgFilters((f) => ({ ...f, organization: value }))}
-          aria-label="Организация"
-          searchable
-          options={orgFilterOptions("organization", "Все организации", "Не указана")}
-        />
-        <Select
-          value={orgFilters.unit}
-          onChange={(value) => setOrgFilters((f) => ({ ...f, unit: value }))}
-          aria-label="Подразделение"
-          searchable
-          options={orgFilterOptions("unit", "Все подразделения", "Не указано")}
-        />
-        <Select
-          value={orgFilters.position}
-          onChange={(value) => setOrgFilters((f) => ({ ...f, position: value }))}
-          aria-label="Должность"
-          searchable
-          options={orgFilterOptions("position", "Все должности", "Не указана")}
-        />
-      </Cluster>
+        )}
+        count={filterChips.length}
+        applied={filterChips.map((chip) => ({ id: chip.key, label: chip.label }))}
+        filterButtonRef={filterButtonRef}
+        filterOpen={filterOpen}
+        onOpenFilter={() => {
+          if (!filterOpen) setFilterDraft(appliedFilter);
+          setFilterOpen(!filterOpen);
+        }}
+        onRemove={(id) => applyUsersFilter({ ...appliedFilter, [id]: "all" })}
+        onReset={() => applyUsersFilter(EMPTY_USERS_FILTER)}
+      />
+      <FilterPanel
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        anchorRef={filterButtonRef}
+        onReset={() => setFilterDraft(EMPTY_USERS_FILTER)}
+        onApply={() => { applyUsersFilter(filterDraft); setFilterOpen(false); }}
+      >
+        {usersFilterFields.map((field) => (
+          <FilterPanelGroup key={field.key} title={field.title}>
+            <Select
+              value={filterDraft[field.key]}
+              onChange={(value) => setFilterDraft((draft) => ({ ...draft, [field.key]: value }))}
+              aria-label={field.title}
+              searchable={field.searchable}
+              options={field.options}
+              fullWidth
+            />
+          </FilterPanelGroup>
+        ))}
+      </FilterPanel>
 
       {/* Users Table */}
       {filteredUsers.length === 0 ? (

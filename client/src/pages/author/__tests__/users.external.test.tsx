@@ -19,6 +19,18 @@ vi.mock("@/lib/auth", () => ({
 import UsersPage from "../users";
 import { ToastProvider } from "@skillum/ui-kit";
 
+/**
+ * PRD-70 FR-76: the lists live in the filter panel — open it, pick in the field, apply.
+ * `current` is what the field shows now, `option` the value to pick.
+ */
+async function pickInFilter(current: string, option: string) {
+  fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+  const panel = await screen.findByRole("dialog", { name: "Фильтр" });
+  fireEvent.click(within(panel).getByText(current, { selector: ".ou-select__value, .ou-select__value *" }));
+  fireEvent.click(await screen.findByRole("option", { name: option }));
+  fireEvent.click(within(panel).getByRole("button", { name: "Применить" }));
+}
+
 const staffUser = {
   id: "u-staff", email: "i.petrov@company.ru", name: "Петров Иван",
   roles: ["learner"], status: "active", isExternal: false,
@@ -95,13 +107,12 @@ describe("<UsersPage /> — внешний участник в списке", ()
     renderPage();
     await screen.findByText("anna.frolova@partner.ru");
 
-    fireEvent.click(screen.getByText("Все виды"));
-    fireEvent.click(await screen.findByRole("option", { name: "Внешние участники" }));
+    await pickInFilter("Все виды", "Внешние участники");
+    expect(screen.getByText("Вид учётной записи: Внешние участники")).toBeInTheDocument();
     expect(screen.getByText("anna.frolova@partner.ru")).toBeInTheDocument();
     expect(screen.queryByText("i.petrov@company.ru")).toBeNull();
 
-    fireEvent.click(screen.getByText("Внешние участники"));
-    fireEvent.click(await screen.findByRole("option", { name: "Штатные" }));
+    await pickInFilter("Внешние участники", "Штатные");
     expect(screen.getByText("i.petrov@company.ru")).toBeInTheDocument();
     expect(screen.queryByText("anna.frolova@partner.ru")).toBeNull();
   });
