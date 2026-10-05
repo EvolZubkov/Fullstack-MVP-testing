@@ -161,7 +161,10 @@ describe("GET /api/analytics/attention — тесты с вопросами по
       startedAt: daysAgo(5), finishedAt: daysAgo(5), variantJson: {}, answersJson: {},
       resultJson: { overallPercent: 80, overallPassed: true, totalPossiblePoints: 20, totalEarnedPoints: 16 },
     })));
-    await refreshSuspicious(async testId => ({ suspicious: testId === "test1" ? 8 : 2, items: 42 }));
+    await refreshSuspicious(
+      async testId => ({ testId, items: [], pool: [], suspicious: testId === "test1" ? 8 : 2, itemCount: 42 }),
+      async () => [],
+    );
   });
 
   it("называет тесты с числом под подозрением, больше — выше", async () => {

@@ -13,7 +13,7 @@ import { loadTestAnswerFacts, variantQuestionIds } from "../../services/analytic
 import { scoreBuckets } from "../../services/analytics/score-buckets";
 import { loadObservations } from "../../services/analytics/observations";
 import { passTrendByMonth } from "../../services/analytics/pass-trend";
-import { reviewFlags } from "../../services/analytics/question-review";
+import { reviewOf } from "../../services/analytics/review-inputs";
 import { summariseTopics } from "../../services/analytics/topic-stats";
 import { summariseObservations } from "../../services/analytics/test-summary";
 import { declaresPassThreshold, thresholdPercentOfTest } from "./helpers";
@@ -373,18 +373,17 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
         .map(row => row.questionId),
     );
 
+    // PRD-70 FR-03: эвристики ревизии — той же функцией, что у фонового пересчёта признаков.
+    const delivery = { attemptsInWindow, exposureOwn, latency };
     const questionStats = Array.from(questionStatsMap.values()).map(qs => {
-      const exposureCount = exposureOwn.get(qs.questionId) ?? 0;
-      const lat = latency.get(qs.questionId);
+      const review = reviewOf(qs, delivery);
       const delivered = deliveredWeb.get(qs.questionId) ?? 0;
       const skipped = skippedWeb.get(qs.questionId) ?? 0;
-      const exposurePercent =
-        attemptsInWindow > 0 && exposureCount > 0 ? (exposureCount / attemptsInWindow) * 100 : null;
 
       return {
         ...qs,
-        exposureCount,
-        exposurePercent,
+        exposureCount: review.exposureCount,
+        exposurePercent: review.exposurePercent,
         globalExposureCount: exposureGlobal.get(qs.questionId) ?? 0,
         otherTestsCount: otherTests.get(qs.questionId) ?? 0,
         // Цена задания в этом тесте; `null` у измерительного — баллов оно не приносит.
@@ -393,22 +392,15 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
           return question ? pointsOf(question) : null;
         })(),
         // Своя выборка: веб времени не измеряет, пакеты старше 2026-09-12 его не сообщают.
-        latencyMedianMs: lat ? lat.medianMs : null,
-        latencySampleSize: lat ? lat.sampleSize : 0,
+        latencyMedianMs: review.latencyMedianMs,
+        latencySampleSize: review.latencySampleSize,
         excludedFromDelivery: excludedFromDelivery.has(qs.questionId),
         deliveredWeb: delivered,
         skippedWeb: skipped,
         skipShare: delivered > 0 ? (skipped / delivered) * 100 : null,
         // FR-16: признаки ревизии считает сервис — вид «требуют ревизии» это отбор по ним,
         // а не собственное правило экрана.
-        reviewFlags: reviewFlags({
-          questionId: qs.questionId,
-          gradedAnswers: qs.gradedAnswers,
-          correctPercent: qs.correctPercent,
-          exposurePercent,
-          latencyMedianMs: lat ? lat.medianMs : null,
-          latencySampleSize: lat ? lat.sampleSize : 0,
-        }, { minObservations: config.analytics.minObservations }),
+        reviewFlags: review.reviewFlags,
       };
       // Первыми — самые трудные; вопросы без оценивания (измерительные) уходят в конец:
       // сортировать их вместе с долей верных не по чему, доли у них нет.
