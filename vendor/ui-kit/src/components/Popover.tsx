@@ -5,7 +5,9 @@ import { createPortal } from 'react-dom';
 import { cn, cssStyleClass } from '../utils';
 
 export type PopoverPlacement = 'top' | 'bottom' | 'left' | 'right';
-export type PopoverSize = 'sm' | 'md' | 'lg';
+export type PopoverSize = 'sm' | 'md' | 'lg' | 'xl';
+/** Alignment along the anchor for `top` / `bottom`: centred, or flush with its start / end edge. */
+export type PopoverAlign = 'center' | 'start' | 'end';
 
 export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
   open: boolean;
@@ -14,8 +16,15 @@ export interface PopoverProps extends React.HTMLAttributes<HTMLDivElement> {
   anchorRef?: React.RefObject<HTMLElement | null>;
   /** Сторона относительно anchor. */
   placement?: PopoverPlacement;
-  /** Размер. По умолчанию `md`. */
+  /** Размер. По умолчанию `md`. `xl` — 480 px: панель фильтра. */
   size?: PopoverSize;
+  /**
+   * Выравнивание вдоль anchor при `top` / `bottom`: по центру (по умолчанию) или по его
+   * начальному / конечному краю. Панель под кнопкой встаёт от её левого края, а не по центру.
+   */
+  align?: PopoverAlign;
+  /** Раскладка подвала: кнопки справа (по умолчанию) или по краям. */
+  footerAlign?: 'end' | 'between';
   /** Показывать стрелку, направленную к anchor. */
   arrow?: boolean;
   /** Смещение от anchor (px). */
@@ -57,9 +66,16 @@ const ArrowSvgV = ({ flip }: { flip?: boolean }) => (
   </svg>
 );
 
+/** Left edge of a `top` / `bottom` popover for the given alignment along the anchor. */
+function alignedLeft(a: DOMRect, width: number, align: PopoverAlign): number {
+  if (align === 'start') return a.left + window.scrollX;
+  if (align === 'end') return a.right + window.scrollX - width;
+  return a.left + window.scrollX + a.width / 2 - width / 2;
+}
+
 export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
   ({
-    open, onClose, anchorRef, placement = 'bottom', size = 'md',
+    open, onClose, anchorRef, placement = 'bottom', size = 'md', align = 'center', footerAlign = 'end',
     arrow = true, offset = 6, usePortal = true,
     header, footer, children,
     closeOnOutside = true, closeOnEsc = true,
@@ -100,11 +116,11 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
       switch (side) {
         case 'top':
           top = a.top + window.scrollY - p.height - offset;
-          left = a.left + window.scrollX + a.width / 2 - p.width / 2;
+          left = alignedLeft(a, p.width, align);
           break;
         case 'bottom':
           top = a.bottom + window.scrollY + offset;
-          left = a.left + window.scrollX + a.width / 2 - p.width / 2;
+          left = alignedLeft(a, p.width, align);
           break;
         case 'left':
           left = a.left + window.scrollX - p.width - offset;
@@ -123,8 +139,8 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
         const minLeft = window.scrollX + margin;
         const maxLeft = window.scrollX + window.innerWidth - p.width - margin;
         const constrained = Math.min(Math.max(left, minLeft), maxLeft);
-        if (constrained !== left) {
-          // arrow stays pointing at the anchor center
+        if (constrained !== left || align !== 'center') {
+          // arrow stays pointing at the anchor center — also when the popover is aligned to an edge
           arrowX = (a.left + window.scrollX + a.width / 2) - constrained;
         }
         left = constrained;
@@ -139,7 +155,7 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
       }
 
       setPos({ top, left, arrowX, arrowY, side });
-    }, [anchorRef, placement, offset, flip]);
+    }, [anchorRef, placement, offset, flip, align]);
 
     useLayoutEffect(() => {
       if (!open) return;
@@ -225,7 +241,11 @@ export const Popover = forwardRef<HTMLDivElement, PopoverProps>(
           <>
             {header && <div className="ou-popover__header">{header}</div>}
             <div className="ou-popover__body">{children}</div>
-            {footer && <div className="ou-popover__footer">{footer}</div>}
+            {footer && (
+              <div className={cn('ou-popover__footer', footerAlign === 'between' && 'ou-popover__footer--between')}>
+                {footer}
+              </div>
+            )}
           </>
         ) : (
           children

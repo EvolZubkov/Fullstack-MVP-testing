@@ -28,6 +28,7 @@ import { EmptyState } from './components/EmptyState';
 import { Fab, FabGroup, FabMenu } from './components/FAB';
 import { FileItem, FileTile, FileUploader } from './components/FileUploader';
 import { FilterBar } from './components/FilterBar';
+import { FilterPanel, FilterPanelGroup } from './components/FilterPanel';
 import { FormActions, FormCard, FormField, FormGroup, FormSection } from './components/Form';
 import {
   GradientPicker, buildGradientCss, makeDefaultGradientState,
@@ -90,7 +91,7 @@ export {
   Collapsible, CollapsibleContent, CollapsibleTrigger, Label, DonutChart, ChartLegendList, ColorPicker,
   Combobox, CommandPalette, DataGrid, DataGridProgress, DatePicker, Drawer, EmptyState, Fab,
   FabGroup, FabMenu, Matching, QuizMap, QuizSummary, Ranking, FileItem, FileTile, FileUploader,
-  FilterBar, FormActions, FormCard, FormField, FormGroup, FormSection, GradientPicker,
+  FilterBar, FilterPanel, FilterPanelGroup, FormActions, FormCard, FormField, FormGroup, FormSection, GradientPicker,
   buildGradientCss, makeDefaultGradientState, IconButton, Input, Box, Cluster, Grid, Stack,
   Text, Kanban, KanbanAddCard, KanbanAddColumn, KanbanCard, KanbanCardFoot,
   KanbanCardFootStats, KanbanCardMeta, KanbanCardProgress, KanbanCardTags, KanbanCardTitle,
@@ -173,6 +174,9 @@ export type {
   FilterBarProps, FilterBarAppliedItem,
 } from './components/FilterBar';
 export type {
+  FilterPanelProps, FilterPanelGroupProps,
+} from './components/FilterPanel';
+export type {
   FormFieldProps, FormFieldTone, FormGroupProps, FormSectionProps, FormCardProps, FormActionsProps,
 } from './components/Form';
 export type {
@@ -207,7 +211,7 @@ export type {
   PaginationProps, PaginationBarProps, PaginationSize, PaginationVariant,
 } from './components/Pagination';
 export type {
-  PopoverProps, PopoverPlacement, PopoverSize,
+  PopoverProps, PopoverPlacement, PopoverSize, PopoverAlign,
 } from './components/Popover';
 export type {
   ProgressBarProps, ProgressSegmentedProps, ProgressStackedProps, ProgressStackedSegment,

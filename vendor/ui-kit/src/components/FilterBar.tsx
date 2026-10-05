@@ -36,6 +36,13 @@ export interface FilterBarProps extends Omit<React.HTMLAttributes<HTMLDivElement
   /** Anything that belongs to the right end of the first row. */
   actions?: React.ReactNode;
   onOpenFilter?: () => void;
+  /**
+   * The filter button, for the panel that opens under it (`FilterPanel` takes it as
+   * `anchorRef`): the bar draws the button, the panel needs its edges.
+   */
+  filterButtonRef?: React.Ref<HTMLButtonElement>;
+  /** The panel of this bar is open — the button says so to assistive technology. */
+  filterOpen?: boolean;
   onRemove?: (id: string) => void;
   onReset?: () => void;
   onApplySet?: (id: string) => void;
@@ -68,6 +75,8 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
     dirty = false,
     actions,
     onOpenFilter,
+    filterButtonRef,
+    filterOpen,
     onRemove,
     onReset,
     onApplySet,
@@ -99,7 +108,14 @@ export const FilterBar = forwardRef<HTMLDivElement, FilterBarProps>(
         <div className="ou-filterbar__row">
           {search && <div className="ou-filterbar__search">{search}</div>}
 
-          <Button variant="secondary" size="s" onClick={onOpenFilter} aria-haspopup="dialog">
+          <Button
+            ref={filterButtonRef}
+            variant="secondary"
+            size="s"
+            onClick={onOpenFilter}
+            aria-haspopup="dialog"
+            aria-expanded={filterOpen}
+          >
             {filterLabel}
             {count > 0 && <span className="ou-chip__count">{count}</span>}
           </Button>
