@@ -15,13 +15,19 @@ const { storageMock, refreshMock } = vi.hoisted(() => ({
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     getTests: vi.fn().mockResolvedValue([]),
+    getQuestionsByIds: vi.fn(),
+    getTopics: vi.fn(),
   },
   refreshMock: { testQualities: vi.fn(), testPools: vi.fn() },
 }));
+const statsMock = vi.hoisted(() => ({ bankQuestionStats: vi.fn() }));
+const topicAccessMock = vi.hoisted(() => ({ visibleTopic: vi.fn() }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 vi.mock("../server/db", () => ({ db: {} }));
 vi.mock("../server/routes/analytics/suspicious-refresh", () => refreshMock);
+vi.mock("../server/services/analytics/bank-question-stats", () => statsMock);
+vi.mock("../server/services/topic-access", () => topicAccessMock);
 
 // eslint-disable-next-line import/first -- must import AFTER vi.mock
 import questionBankRouter from "../server/routes/analytics/question-bank";
@@ -100,5 +106,35 @@ describe("GET /api/analytics/questions/:id/difficulty-landmark", () => {
       .set("x-test-user", "a1");
 
     expect(res.body).toEqual({ landmark: null });
+  });
+});
+
+describe("GET /api/analytics/questions/:id", () => {
+  beforeEach(() => {
+    storageMock.getQuestionsByIds.mockResolvedValue([{ id: "q1", topicId: "tp1" }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "tp1", ownerId: "a1", visibility: "private" }]);
+    topicAccessMock.visibleTopic.mockResolvedValue(true);
+    statsMock.bankQuestionStats.mockResolvedValue({ question: { id: "q1" }, rows: [], versions: [], minObservations: 10 });
+  });
+
+  it("отдаёт статистику вопроса и передаёт редакцию из адреса (FR-10, FR-11)", async () => {
+    const res = await request(makeApp()).get("/api/analytics/questions/q1?version=h-old").set("x-test-user", "a1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.question.id).toBe("q1");
+    expect(statsMock.bankQuestionStats).toHaveBeenCalledWith("q1", expect.any(Array), expect.any(Function), "h-old");
+  });
+
+  it("пустая редакция — серия «версия неизвестна»", async () => {
+    await request(makeApp()).get("/api/analytics/questions/q1?version=").set("x-test-user", "a1");
+    expect(statsMock.bankQuestionStats).toHaveBeenCalledWith("q1", expect.any(Array), expect.any(Function), null);
+  });
+
+  it("вопрос темы, которую читатель не видит, — 404 (FR-16)", async () => {
+    topicAccessMock.visibleTopic.mockResolvedValue(false);
+    const res = await request(makeApp()).get("/api/analytics/questions/q1").set("x-test-user", "a1");
+
+    expect(res.status).toBe(404);
+    expect(statsMock.bankQuestionStats).not.toHaveBeenCalled();
   });
 });

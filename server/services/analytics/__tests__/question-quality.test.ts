@@ -148,4 +148,16 @@ describe("evaluateTestQuality", () => {
     const adaptive = await evaluateTestQuality("test1");
     expect(adaptive!.items.find(i => i.questionId === "q1")!.overexposure).toBeNull();
   });
+
+  it("у каждого вопроса — способ выдачи, доля и ожидаемая доля, даже без признака", async () => {
+    const quality = await evaluateTestQuality("test1");
+    const byId = new Map(quality!.items.map(i => [i.questionId, i]));
+
+    expect(byId.get("q3")).toMatchObject({ drawMode: "quota", sharePercent: 45, expectedPercent: 40, overexposure: null });
+    expect(byId.get("q4")).toMatchObject({ drawMode: "quota", sharePercent: 0, expectedPercent: 40 });
+
+    mocks.loadDeliveryPool.mockResolvedValue({ questionIds: POOL, sections: [quotaSection(POOL, 2, { drawAll: true })] });
+    const all = await evaluateTestQuality("test1");
+    expect(all!.items.find(i => i.questionId === "q1")).toMatchObject({ drawMode: "all", sharePercent: 60, expectedPercent: null });
+  });
 });

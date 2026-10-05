@@ -19,6 +19,9 @@ function row(questionId: string, over: Partial<QuestionInTest> = {}): QuestionIn
     observations: 100,
     hardness: 40,
     delivered: 100,
+    drawMode: "quota",
+    sharePercent: 50,
+    expectedPercent: 40,
     overexposure: null,
     ...over,
   };

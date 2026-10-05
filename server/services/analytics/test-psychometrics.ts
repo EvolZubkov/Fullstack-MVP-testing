@@ -147,6 +147,10 @@ export interface TestPsychometrics {
   observations: Awaited<ReturnType<typeof loadResponseMatrix>>["observations"];
   sections: Awaited<ReturnType<typeof storage.getTestSections>>;
   batches: Awaited<ReturnType<typeof storage.getLmsImportBatches>>;
+  /** Ответы выборки (с учётом «только первой попытки») — из них строится разбор вопроса. */
+  responses: Awaited<ReturnType<typeof loadResponseMatrix>>["responses"];
+  /** Вопросы теста, как их видит расчёт. */
+  questionById: Map<string, QuestionInfo>;
 }
 
 /**
@@ -196,7 +200,8 @@ export async function testPsychometrics(
     const { grade, questionById } = await buildGrader(test.id);
     const matrix = await loadResponseMatrix(filter, { all: true, ids: new Set<string>() }, grade);
     const sections = await storage.getTestSections(test.id);
-    const psychometrics = computePsychometrics(onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses, {
+    const responses = onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses;
+    const psychometrics = computePsychometrics(responses, {
       questionById,
       minObservations: config.analytics.minObservations,
       cutRatio: cutRatioOf(test.overallPassRuleJson),
@@ -206,6 +211,16 @@ export async function testPsychometrics(
       // Определение пула — то же, что у профиля экспозиции и проверки публикации.
       poolQuestionIds: (await loadDeliveryPool(test.id)).questionIds,
     });
-    return { psychometrics, observations: matrix.observations, sections, batches };
+    return { psychometrics, observations: matrix.observations, sections, batches, responses, questionById };
   });
+}
+
+/** Индексы верных вариантов задания по его эталону. */
+export function correctIndexesOf(correctJson: unknown): number[] {
+  const key = correctJson as { correctIndex?: unknown; correctIndices?: unknown } | null;
+  if (typeof key?.correctIndex === "number") return [key.correctIndex];
+  if (Array.isArray(key?.correctIndices)) {
+    return key.correctIndices.filter((i): i is number => typeof i === "number");
+  }
+  return [];
 }

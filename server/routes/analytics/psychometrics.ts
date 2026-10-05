@@ -46,6 +46,7 @@ import { analyticsScope } from "./helpers";
 import {
   buildGrader,
   cached,
+  correctIndexesOf,
   coreKey,
   cutRatioOf,
   deliveryIsUneven,
@@ -404,16 +405,6 @@ router.get(
     }
   },
 );
-
-/** Индексы верных вариантов задания по его эталону. */
-function correctIndexesOf(correctJson: unknown): number[] {
-  const key = correctJson as { correctIndex?: unknown; correctIndices?: unknown } | null;
-  if (typeof key?.correctIndex === "number") return [key.correctIndex];
-  if (Array.isArray(key?.correctIndices)) {
-    return key.correctIndices.filter((i): i is number => typeof i === "number");
-  }
-  return [];
-}
 
 // GET /api/analytics/psychometrics/:testId/items/:questionId — разбор одного задания
 router.get(

@@ -27,6 +27,9 @@ import { loadObservations } from "./observations";
 import { exposureWindowStart, reviewHeuristicsOfTest } from "./review-inputs";
 import { testPsychometrics } from "./test-psychometrics";
 
+/** Способ выдачи раздела — как во вкладке «Выдача» (`ExposureDrawMode`). */
+export type DrawMode = "quota" | "all" | "forms" | "adaptive";
+
 /** Сколько прохождений за окно нужно, чтобы доля выдачи что-то утверждала (§3.2). */
 export const OVEREXPOSURE_MIN_ATTEMPTS = 10;
 
@@ -53,6 +56,12 @@ export interface QuestionInTest {
   hardness: number | null;
   /** Выдач в этом тесте за окно счётчика. */
   delivered: number;
+  /** Как раздел выдаёт вопрос; `null` — вопроса нет в пуле теста (выдавался раньше). */
+  drawMode: DrawMode | null;
+  /** Доля прохождений за окно, где вопрос выдан; `null` — прохождений за окно не было. */
+  sharePercent: number | null;
+  /** Ожидаемая доля (квота / пул); `null` — у раздела её нет: весь банк, варианты, адаптив. */
+  expectedPercent: number | null;
   /** Переэкспонирован ли (§3.2); `null` — нет или признак к разделу неприменим. */
   overexposure: Overexposure | null;
 }
@@ -74,31 +83,45 @@ function overexposureRatio(): number {
   return config.analytics.overexposureRatio ?? 1.5;
 }
 
+/** Как вопрос выдаётся в тесте и с какой долей. */
+interface ExposureOfQuestion {
+  drawMode: DrawMode;
+  sharePercent: number | null;
+  expectedPercent: number | null;
+  overexposure: Overexposure | null;
+}
+
 /**
- * Переэкспонированность вопросов разделов со случайной выборкой (§3.2).
+ * Экспозиция вопросов теста по разделам: способ выдачи, доля прохождений с вопросом, ожидаемая
+ * доля и переэкспонированность (§3.2).
  *
- * Раздел «весь банк», варианты и адаптив признака не дают: ожидаемой доли там нет (решение
- * владельца О1 — адаптиву он не нужен).
+ * Ожидаемая доля есть только у раздела со случайной выборкой (квота / размер пула); «весь банк»,
+ * варианты и адаптив признака не дают — ожидаемой доли там нет (решение владельца О1).
  */
-function overexposureOf(
+function exposureOf(
   mode: string | null | undefined,
   sections: Awaited<ReturnType<typeof loadDeliveryPool>>["sections"],
   delivered: ReadonlyMap<string, number>,
   attemptsInWindow: number,
-): Map<string, Overexposure> {
-  const result = new Map<string, Overexposure>();
-  if (mode === "adaptive" || attemptsInWindow < OVEREXPOSURE_MIN_ATTEMPTS) return result;
+): Map<string, ExposureOfQuestion> {
+  const result = new Map<string, ExposureOfQuestion>();
   for (const { section, pool } of sections) {
     const hasForms = (section.formSetJson?.forms?.length ?? 0) > 0;
-    if (hasForms || section.drawAll || !section.drawCount) continue;
-    const expected = expectedExposure({ drawCount: section.drawCount, poolSize: pool.length });
-    if (!expected) continue;
+    const drawMode: DrawMode = mode === "adaptive" ? "adaptive" : hasForms ? "forms" : section.drawAll ? "all" : "quota";
+    const expected = drawMode === "quota" && section.drawCount
+      ? expectedExposure({ drawCount: section.drawCount, poolSize: pool.length })
+      : null;
     for (const question of pool) {
       const count = delivered.get(question.id) ?? 0;
-      const sharePercent = (count / attemptsInWindow) * 100;
-      if (sharePercent >= overexposureRatio() * expected.percent) {
-        result.set(question.id, { sharePercent, expectedPercent: expected.percent });
-      }
+      const sharePercent = attemptsInWindow > 0 ? (count / attemptsInWindow) * 100 : null;
+      const over = expected !== null && sharePercent !== null && attemptsInWindow >= OVEREXPOSURE_MIN_ATTEMPTS
+        && sharePercent >= overexposureRatio() * expected.percent;
+      result.set(question.id, {
+        drawMode,
+        sharePercent,
+        expectedPercent: expected?.percent ?? null,
+        overexposure: over ? { sharePercent: sharePercent as number, expectedPercent: (expected as { percent: number }).percent } : null,
+      });
     }
   }
   return result;
@@ -132,7 +155,7 @@ export async function evaluateTestQuality(testId: string): Promise<TestQuality |
   if (questionIds.length > 0) {
     delivered = await storage.getDeliveryCountsForTest(questionIds, testId, windowStart);
   }
-  const overexposed = overexposureOf(test.mode, pool.sections, delivered, attemptsInWindow);
+  const exposure = exposureOf(test.mode, pool.sections, delivered, attemptsInWindow);
 
   const items: QuestionInTest[] = psychometrics.items.map(item => {
     const heuristic: ReviewHeuristic | undefined = heuristics.get(item.questionId);
@@ -147,7 +170,10 @@ export async function evaluateTestQuality(testId: string): Promise<TestQuality |
       // То же преобразование, что у колонки «Сложность: задана → по ответам».
       hardness: fewForDifficulty ? null : Math.round((1 - (item.difficulty as number)) * 100),
       delivered: delivered.get(item.questionId) ?? 0,
-      overexposure: overexposed.get(item.questionId) ?? null,
+      drawMode: exposure.get(item.questionId)?.drawMode ?? null,
+      sharePercent: exposure.get(item.questionId)?.sharePercent ?? null,
+      expectedPercent: exposure.get(item.questionId)?.expectedPercent ?? null,
+      overexposure: exposure.get(item.questionId)?.overexposure ?? null,
     };
   });
 
