@@ -266,6 +266,7 @@ export function RegistryFilterPanel({
               <Input
                 id="registry-from"
                 type="date"
+                fullWidth
                 aria-label="Период с"
                 value={draft.from ?? ""}
                 onChange={event => setDraft(d => ({ ...d, from: event.target.value || undefined }))}
@@ -277,6 +278,7 @@ export function RegistryFilterPanel({
               <Input
                 id="registry-to"
                 type="date"
+                fullWidth
                 aria-label="Период по"
                 value={draft.to ?? ""}
                 onChange={event => setDraft(d => ({ ...d, to: event.target.value || undefined }))}
