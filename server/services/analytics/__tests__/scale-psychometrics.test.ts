@@ -175,6 +175,62 @@ describe("computeScalePsychometrics", () => {
     expect(scale.ipsative).toBe(true);
   });
 
+  describe("распределение баллов (опросник ведущего стиля, 2026-10-06)", () => {
+    /** Два вопроса, в каждом три утверждения — по одному на шкалу «a», «b», «c». */
+    const ALLOC: ScaleContext = {
+      measurements: ["q1", "q2"].flatMap(questionId =>
+        ["a", "b", "c"].map((scaleKey, option) => ({
+          questionId,
+          scaleKey,
+          sourceType: "option_allocation" as const,
+          sourceKey: String(option),
+          value: 1,
+          weight: 1,
+        }))),
+      scaleLabels: new Map([["a", "A"], ["b", "B"], ["c", "C"]]),
+      itemById: new Map(["q1", "q2"].map(questionId => [questionId, {
+        questionId, prompt: questionId, type: "allocation", gradeLabels: [],
+      }])),
+    };
+    /** Запас 4 балла на вопрос; нули — законный ответ «не моё». */
+    const LAYOUTS: Array<[string, Record<string, number>, Record<string, number>]> = [
+      ["R1", { 0: 4, 1: 0, 2: 0 }, { 0: 3, 1: 1, 2: 0 }],
+      ["R2", { 0: 2, 1: 2, 2: 0 }, { 0: 2, 1: 0, 2: 2 }],
+      ["R3", { 0: 0, 1: 1, 2: 3 }, { 0: 1, 1: 1, 2: 2 }],
+      ["R4", { 0: 1, 1: 3, 2: 0 }, { 0: 0, 1: 4, 2: 0 }],
+    ];
+    const allocResponses = LAYOUTS.flatMap(([respondentId, q1, q2]) => [
+      fact({ respondentId, questionId: "q1", answer: q1 }),
+      fact({ respondentId, questionId: "q2", answer: q2 }),
+    ]);
+
+    it("ноль баллов — ответ, а не пропуск: в альфу идут все участники", () => {
+      const scales = computeScalePsychometrics(allocResponses, ALLOC);
+      for (const scale of scales) {
+        expect(scale.respondents).toBe(4);
+        expect(typeof scale.reliability === "string" ? scale.reliability : scale.reliability.respondents).toBe(4);
+        expect(scale.items.every(item => item.observations === 4)).toBe(true);
+      }
+    });
+
+    it("пропущенный вопрос нулём не дополняется", () => {
+      const withSkip = [
+        ...allocResponses,
+        fact({ respondentId: "R5", questionId: "q1", answer: { 0: 4, 1: 0, 2: 0 } }),
+        fact({ respondentId: "R5", questionId: "q2", answer: null, outcome: "missing" }),
+      ];
+      const a = computeScalePsychometrics(withSkip, ALLOC).find(scale => scale.scaleKey === "a")!;
+      expect(a.items.find(item => item.questionId === "q2")!.observations).toBe(4);
+      // R5 без ответа на q2 в полные строки альфы не попадает.
+      expect(typeof a.reliability === "string" ? null : a.reliability.respondents).toBe(4);
+    });
+
+    it("шкала из пунктов распределения баллов — ипсативная, хотя суммы внутри неё разные", () => {
+      const scales = computeScalePsychometrics(allocResponses, ALLOC);
+      expect(scales.every(scale => scale.ipsative)).toBe(true);
+    });
+  });
+
   it("задание, не вносящее вклада ни в одну шкалу, в расчёт не идёт", () => {
     const withGraded = [...RESPONSES, fact({ respondentId: "R1", questionId: "q-graded", answer: 0 })];
     const [scale] = computeScalePsychometrics(withGraded, CTX);

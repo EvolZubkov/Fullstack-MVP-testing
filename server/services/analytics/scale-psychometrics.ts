@@ -194,6 +194,48 @@ export function itemContribution(
 }
 
 /**
+ * Какие шкалы меряет каждый пункт — по единицам измерения теста.
+ *
+ * @param measurements единицы измерения теста
+ * @returns пункт -> ключи его шкал
+ */
+function scalesMeasuredBy(measurements: readonly MeasurementSpec[]): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const m of measurements) {
+    const set = out.get(m.questionId) ?? new Set<string>();
+    set.add(m.scaleKey);
+    out.set(m.questionId, set);
+  }
+  return out;
+}
+
+/**
+ * Дал ли участник ответ на пункт. Пропуск (`missing`) и пустой ответ — не ответ: дополнить
+ * их нулём значило бы приписать участнику мнение, которого он не высказывал.
+ *
+ * @param response наблюдение
+ */
+function answered(response: ResponseFact): boolean {
+  if (response.outcome === "missing") return false;
+  const answer = response.answer;
+  if (answer === null || answer === undefined || answer === "") return false;
+  if (Array.isArray(answer)) return answer.length > 0;
+  if (typeof answer === "object") return Object.keys(answer).length > 0;
+  return true;
+}
+
+/**
+ * Состоит ли шкала только из пунктов распределения баллов (PRD-44).
+ *
+ * @param measurements единицы измерения теста
+ * @param scaleKey шкала
+ */
+function allocationOnly(measurements: readonly MeasurementSpec[], scaleKey: string): boolean {
+  const units = measurements.filter(m => m.scaleKey === scaleKey);
+  return units.length > 0 && units.every(m => m.sourceType === "option_allocation");
+}
+
+/**
  * Психометрика шкал теста.
  *
  * @param responses наблюдения выборки — те же, на которых считается всё остальное
@@ -204,6 +246,7 @@ export function computeScalePsychometrics(
   ctx: ScaleContext,
 ): ScalePsychometrics[] {
   const identified = responses.filter(r => r.respondentId !== null);
+  const scalesByQuestion = scalesMeasuredBy(ctx.measurements);
 
   // Вклад ответа в каждую шкалу: одна единица измерения — одна запись, поэтому ответ с
   // несколькими выбранными вариантами законно двигает шкалу несколько раз.
@@ -216,12 +259,22 @@ export function computeScalePsychometrics(
       response.answer as Answer,
       info?.type as QuestionType | undefined,
     );
-    if (contributions.length === 0) continue;
-
     const summed = new Map<string, number>();
     for (const contribution of contributions) {
       summed.set(contribution.scaleKey, (summed.get(contribution.scaleKey) ?? 0) + contribution.delta);
     }
+    // Шкала, которую пункт меряет, но в которую ответ ничего не внёс, получает НОЛЬ, а не
+    // пропуск. Движок шкал не «зажигает» утверждение с нулём баллов (PRD-44 FR-12) — для
+    // результата участника это верно, а для психометрики ноль и есть ответ: «этот стиль не мой».
+    // Пропуском он выбрасывал участника из полных строк альфы, и на опроснике ведущего стиля
+    // из 21 прохождения в расчёт шкалы попадали 3–6 (2026-10-06).
+    if (answered(response)) {
+      for (const scaleKey of scalesByQuestion.get(response.questionId) ?? []) {
+        if (!summed.has(scaleKey)) summed.set(scaleKey, 0);
+      }
+    }
+    // Задание, не меряющее ни одной шкалы, в расчёт не идёт.
+    if (summed.size === 0) continue;
 
     for (const [scaleKey, value] of summed) {
       const list = byScale.get(scaleKey) ?? [];
@@ -289,7 +342,10 @@ export function computeScalePsychometrics(
       label: ctx.scaleLabels.get(scaleKey) ?? scaleKey,
       reliability,
       respondents: new Set(scaleResponses.map(r => r.respondentId)).size,
-      ipsative: looksIpsative(scaleResponses),
+      // Распределение баллов ипсативно по построению, но запас баллов делится МЕЖДУ шкалами:
+      // постоянна сумма по всем шкалам, а внутри одной шкалы суммы у людей законно разные.
+      // Сверка сумм в пределах шкалы его не видит, поэтому признак берётся и от типа пунктов.
+      ipsative: looksIpsative(scaleResponses) || allocationOnly(ctx.measurements, scaleKey),
       items: items.sort((a, b) => a.questionId.localeCompare(b.questionId)),
     });
   }
