@@ -202,7 +202,7 @@ function insertFeedback(q, isCorrect, scoreRatio) {
   if (!TB || !TB.feedbackBanner) return;
   // issue #34: ветку общего/условного режима выбирает ОБЩЕЕ правило — веб-хост
   // зовёт его же, поэтому четвёртой копии не появится.
-  var feedbackText = TB.feedbackTextFor(q, isCorrect);
+  var feedbackText = TB.feedbackTextFor(q, isCorrect, state.answers[q.id]);
   var html = TB.feedbackBanner(tone, statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 
   // Prefer the template's dedicated feedback slot (question.html); fall back to

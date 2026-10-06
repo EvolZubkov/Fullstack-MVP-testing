@@ -10,14 +10,20 @@
  *
  * Дерево свёрнуто до тем: у теста бывает десяток тем по десятку вопросов, и раскрытый
  * список сразу — это простыня, в которой ничего не найти.
+ *
+ * Текст варианта ответа, переопределяющий обратную связь вопроса (одиночный выбор), идёт
+ * ОТДЕЛЬНОЙ ПОДСТРОКОЙ под своим вопросом: в колонке «Вопрос» — текст варианта, в «Режиме» —
+ * «Вариант». Сплошной текст в одной ячейке не читался: тексты вопроса и вариантов сливались.
+ * Эскиз: docs/wireframes/approved/option-feedback.html.
  */
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import type * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Accordion, AccordionItem, Banner, Button, FormSection } from "@skillum/ui-kit";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CornerDownRight } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { Question } from "@shared/schema";
+import { optionFeedbackAt } from "@shared/questions/option-feedback";
 import type { TestEditorModel } from "../test-editor.types";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 
@@ -32,7 +38,15 @@ import { FoldAllButtons, useSectionFold } from "./section-fold";
  */
 type QuestionRow = Pick<
   Question,
-  "id" | "topicId" | "prompt" | "feedbackMode" | "feedback" | "feedbackCorrect" | "feedbackIncorrect"
+  | "id"
+  | "topicId"
+  | "prompt"
+  | "dataJson"
+  | "feedbackMode"
+  | "feedback"
+  | "feedbackCorrect"
+  | "feedbackIncorrect"
+  | "optionFeedbackJson"
 >;
 
 export type QuestionFeedbackRegistryProps = {
@@ -44,8 +58,27 @@ export type QuestionFeedbackRegistryProps = {
   onOpenQuestion?: (questionId: string) => void;
 };
 
-/** Есть ли у вопроса написанная обратная связь — в том режиме, который у него выбран. */
+/** Вариант ответа со своим текстом обратной связи: подпись варианта и сам текст. */
+type OptionOverride = { index: number; option: string; text: string };
+
+/** Варианты вопроса, у которых задан свой текст, — в порядке вариантов. */
+function optionOverrides(q: QuestionRow): OptionOverride[] {
+  const options = (q.dataJson as { options?: unknown } | null)?.options;
+  if (!Array.isArray(options)) return [];
+  const result: OptionOverride[] = [];
+  options.forEach((option, index) => {
+    const text = optionFeedbackAt(q.optionFeedbackJson, index);
+    if (text) result.push({ index, option: String(option), text });
+  });
+  return result;
+}
+
+/**
+ * Есть ли у вопроса написанная обратная связь — в том режиме, который у него выбран, или
+ * у отдельного варианта: такой вопрос ученику тоже что-то скажет.
+ */
 function hasFeedback(q: QuestionRow): boolean {
+  if (optionOverrides(q).length > 0) return true;
   if (q.feedbackMode === "conditional") {
     return Boolean((q.feedbackCorrect ?? "").trim() || (q.feedbackIncorrect ?? "").trim());
   }
@@ -138,45 +171,73 @@ export function QuestionFeedbackRegistry({
                     </tr>
                   </thead>
                   <tbody>
-                    {list.map((q) => (
-                      <tr key={q.id}>
-                        <td>{q.prompt || "Без формулировки"}</td>
-                        {/* Э5.8: режим называется ровно так же, как в карточке вопроса —
-                            из одного словаря, чтобы реестр не завёл своих синонимов. */}
-                        <td>
-                          {q.feedbackMode === "conditional"
-                            ? t.questions.feedbackModeConditional
-                            : t.questions.feedbackModeGeneral}
-                        </td>
-                        <td>
-                          {q.feedbackMode === "conditional" ? (
-                            <>
-                              <FeedbackLine label="Верно" text={q.feedbackCorrect} />
-                              <FeedbackLine label="Неверно" text={q.feedbackIncorrect} />
-                            </>
-                          ) : (
-                            // Подпись у общего текста не нужна: столбец уже называется
-                            // «Текст», и строка «Текст не задано» повторяла заголовок.
-                            // Подписи остаются только там, где различают ДВА текста, —
-                            // у условной обратной связи.
-                            <FeedbackLine text={q.feedback} />
-                          )}
-                        </td>
-                        <td>
-                          {onOpenQuestion && (
-                            <Button
-                              variant="ghost"
-                              size="s"
-                              trailingIcon={<ArrowRight width={14} height={14} aria-hidden="true" />}
-                              onClick={() => onOpenQuestion(q.id)}
-                              data-testid={`question-feedback-open-${q.id}`}
+                    {list.map((q) => {
+                      const overrides = optionOverrides(q);
+                      return (
+                        <Fragment key={q.id}>
+                          <tr className={overrides.length > 0 ? "tb-qfeedback-row--has-sub" : undefined}>
+                            <td>{q.prompt || "Без формулировки"}</td>
+                            {/* Э5.8: режим называется ровно так же, как в карточке вопроса —
+                                из одного словаря, чтобы реестр не завёл своих синонимов. */}
+                            <td>
+                              {q.feedbackMode === "conditional"
+                                ? t.questions.feedbackModeConditional
+                                : t.questions.feedbackModeGeneral}
+                            </td>
+                            <td>
+                              {q.feedbackMode === "conditional" ? (
+                                <>
+                                  <FeedbackLine label="Верно" text={q.feedbackCorrect} />
+                                  <FeedbackLine label="Неверно" text={q.feedbackIncorrect} />
+                                </>
+                              ) : (
+                                // Подпись у общего текста не нужна: столбец уже называется
+                                // «Текст», и строка «Текст не задано» повторяла заголовок.
+                                // Подписи остаются только там, где различают ДВА текста, —
+                                // у условной обратной связи.
+                                <FeedbackLine text={q.feedback} />
+                              )}
+                            </td>
+                            <td>
+                              {onOpenQuestion && (
+                                <Button
+                                  variant="ghost"
+                                  size="s"
+                                  trailingIcon={<ArrowRight width={14} height={14} aria-hidden="true" />}
+                                  onClick={() => onOpenQuestion(q.id)}
+                                  data-testid={`question-feedback-open-${q.id}`}
+                                >
+                                  К вопросу
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                          {overrides.map((o, n) => (
+                            <tr
+                              key={`${q.id}:${o.index}`}
+                              className={
+                                n === overrides.length - 1
+                                  ? "tb-qfeedback-row--sub is-last"
+                                  : "tb-qfeedback-row--sub"
+                              }
+                              data-testid={`question-feedback-option-${q.id}-${o.index}`}
                             >
-                              К вопросу
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                              <td>
+                                <span className="tb-qfeedback-sub">
+                                  <CornerDownRight width={14} height={14} aria-hidden="true" />
+                                  <span>{o.option}</span>
+                                </span>
+                              </td>
+                              <td>Вариант</td>
+                              <td>
+                                <FeedbackLine text={o.text} />
+                              </td>
+                              <td />
+                            </tr>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

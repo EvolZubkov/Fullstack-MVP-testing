@@ -15,6 +15,7 @@
  *
  * Pure/framework-free — no DOM, no Node — safe to bundle into the SCORM runtime.
  */
+import { optionFeedbackAt } from "../questions/option-feedback";
 
 /** DS banner tone for a verdict: a right answer, partial credit, or a miss. */
 export type FeedbackTone = "success" | "warning" | "error";
@@ -25,10 +26,18 @@ export interface FeedbackTextSource {
   feedback?: string | null;
   feedbackCorrect?: string | null;
   feedbackIncorrect?: string | null;
+  /** Per-option override texts (single choice), see `shared/questions/option-feedback`. */
+  optionFeedbackJson?: unknown;
 }
 
 /**
- * The feedback text ONE answer earns, chosen by the question's mode: `conditional`
+ * The feedback text ONE answer earns.
+ *
+ * An option-level text comes first: when the learner's answer is an option index and that
+ * option carries its own text (`optionFeedbackJson`, single choice only), it REPLACES the
+ * question's feedback below. Only the text changes — the caller keeps the verdict.
+ *
+ * Otherwise the text is chosen by the question's mode: `conditional`
  * takes the branch matching the verdict, anything else (including a legacy row with
  * no mode at all) takes the single general text. Returns `null` when the applicable
  * text is empty — the caller then renders the verdict banner without a body.
@@ -46,7 +55,15 @@ export interface FeedbackTextSource {
  * `isCorrect` is the FULL-correctness verdict (`ratio === 1`), so a partially scored
  * answer (PRD-10) takes the incorrect branch — the same split the package applies.
  */
-export function feedbackTextFor(q: FeedbackTextSource, isCorrect: boolean): string | null {
+export function feedbackTextFor(
+  q: FeedbackTextSource,
+  isCorrect: boolean,
+  answer?: unknown,
+): string | null {
+  // The single-choice answer IS the original option index (the scoring engine compares
+  // it with `correctIndex`), so a shuffled screen order does not matter here.
+  const optionText = optionFeedbackAt(q.optionFeedbackJson, typeof answer === "number" ? answer : null);
+  if (optionText) return optionText;
   const text =
     q.feedbackMode === "conditional"
       ? isCorrect

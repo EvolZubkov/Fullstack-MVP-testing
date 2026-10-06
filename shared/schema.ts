@@ -347,6 +347,15 @@ export const questions = pgTable("questions", {
   feedbackMode: text("feedback_mode", { enum: ["general", "conditional"] }).notNull().default("general"),
   feedbackCorrect: text("feedback_correct"),
   feedbackIncorrect: text("feedback_incorrect"),
+  /**
+   * Feedback texts of individual answer options (single choice only): an array aligned
+   * by position with `data_json.options`, `null` = no override for that option. The
+   * chosen option's text replaces the question's feedback above. NULL when no option
+   * has one. Kept OUT of `data_json` on purpose: `psycho_hash` is computed over it, and
+   * editing an explanation must not break an observation series.
+   * See `shared/questions/option-feedback`.
+   */
+  optionFeedbackJson: jsonb("option_feedback_json").$type<Array<string | null>>(),
   contentHash: text("content_hash"),
   /**
    * PRD-66 FR-09a: the fingerprint of the question's CONTENT, by which answers are
@@ -1091,6 +1100,7 @@ export const insertQuestionSchema = createInsertSchema(questions)
   // trim/collapse, dedup, length cap). Scoring left the question in T-40.
   .extend({
     tags: z.array(z.string()).transform(normalizeTags).optional(),
+    optionFeedbackJson: z.array(z.string().nullable()).nullish(),
   });
 export const insertTestSchema = createInsertSchema(tests)
   .omit({ id: true })

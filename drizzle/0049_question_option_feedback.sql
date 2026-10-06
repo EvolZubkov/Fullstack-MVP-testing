@@ -1,0 +1,1 @@
+ALTER TABLE "questions" ADD COLUMN "option_feedback_json" jsonb;

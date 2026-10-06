@@ -407,6 +407,17 @@
 .tb-qfeedback__line-text { overflow-wrap: break-word; min-width: 0; }
 .tb-qfeedback__line-text.is-empty { color: var(--ou-fg-disabled); }
 
+/* Registry «Обратная связь вопросов»: an option override is its own SUB-ROW under the
+   question. No rule between a question and its sub-rows, so the group reads as one; the
+   rule comes after the last sub-row. Approved wireframe: approved/option-feedback.html.
+   Scoped under `.tb-table`: the generic `.tb-table td` rule further down has the same
+   specificity and would otherwise win by order. */
+.tb-table .tb-qfeedback-row--has-sub > td { border-bottom: none; }
+.tb-table .tb-qfeedback-row--sub > td { padding-top: 0; vertical-align: top; }
+.tb-table .tb-qfeedback-row--sub:not(.is-last) > td { border-bottom: none; }
+.tb-qfeedback-sub { display: flex; align-items: flex-start; gap: var(--ou-space-2); padding-left: var(--ou-space-4); color: var(--ou-fg-muted); }
+.tb-qfeedback-sub > svg { flex: none; margin-top: var(--ou-space-1); }
+
 /* Meta-count — компактный indicator «иконка + число» (например, число
    назначений теста в шапке drawer-а). Не chip, не tag — просто tone-muted
    inline-метка. */
@@ -2708,6 +2719,18 @@
   color: var(--ou-fg-muted);
 }
 .tb-drag-handle:active { cursor: grabbing; }
+
+/* Per-option feedback (single choice): the switch «Переопределить обратную связь» and its
+   text field sit under the option row, aligned with the option's input — past the drag
+   handle (16px icon) and the correct-answer radio (20px ring) and the two row gaps.
+   Approved wireframe: docs/wireframes/approved/option-feedback.html. */
+.tb-option-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+  margin-top: var(--ou-space-2);
+  padding-left: calc(16px + 20px + var(--ou-space-2) * 2);
+}
 
 /* PRD-16: folder picker as a combobox that opens a DS Tree in a popover. */
 .tb-foldercombo { position: relative; }

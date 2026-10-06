@@ -1745,7 +1745,7 @@ export default function TakeTestPage() {
     // issue #34: текст пояснения выбирает ОБЩЕЕ правило по режиму вопроса, то же,
     // что и рантайм пакета. Читать один `feedback` было нельзя: у вопроса с условной
     // обратной связью редактор обнуляет это поле, и баннер выходил без пояснения.
-    const feedback = feedbackTextFor(currentQ.question, scoreRatio === 1);
+    const feedback = feedbackTextFor(currentQ.question, scoreRatio === 1, currentAnswer);
 
     setStandardAnswerResult({
       isCorrect: scoreRatio === 1,

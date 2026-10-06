@@ -267,6 +267,7 @@ export class TopicsRepository {
           feedbackMode: q.feedbackMode,
           feedbackCorrect: q.feedbackCorrect,
           feedbackIncorrect: q.feedbackIncorrect,
+          optionFeedbackJson: q.optionFeedbackJson,
           contentHash: q.contentHash,
           // PRD-66 FR-09a: nothing in the CONTENT changes here — unlike a single-question
           // copy, the prompt is not suffixed — so the copy keeps the original's stamp and

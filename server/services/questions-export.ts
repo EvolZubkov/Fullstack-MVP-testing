@@ -11,6 +11,12 @@
  * sheet (FR-36). The «Вопросы» sheet carries question content only.
  */
 
+import {
+  OPTION_FEEDBACK_TYPE,
+  hasOptionFeedback,
+  optionCountOf,
+  optionFeedbackAt,
+} from "@shared/questions/option-feedback";
 import type { Question } from "@shared/schema";
 import {
   hasOptionList,
@@ -69,6 +75,9 @@ export const QUESTION_HEADERS = [
   "Режим ОС",
   "ОС при верном",
   "ОС при неверном",
+  // Тексты обратной связи отдельных вариантов (только одиночный выбор): через `#`, в том
+  // же порядке, что «Тексты вариантов ответа»; пустой слот — у варианта своего текста нет.
+  "ОС по вариантам",
 ];
 
 /** Column widths matching {@link QUESTION_HEADERS}. */
@@ -76,7 +85,7 @@ export const QUESTION_HEADERS = [
 // ответов» — колонки бюджета распределения (PRD-44), следующие шесть — колонки
 // текстового ответа (PRD-57).
 export const QUESTION_WIDTHS = [
-  36, 25, 18, 50, 18, 12, 14, 60, 25, 20, 20, 20, 14, 14, 18, 14, 30, 16, 15, 40, 25, 12, 30, 30,
+  36, 25, 18, 50, 18, 12, 14, 60, 25, 20, 20, 20, 14, 14, 18, 14, 30, 16, 15, 40, 25, 12, 30, 30, 60,
 ];
 
 // ─── canonical cell values of the enumerated «Вопросы» columns ───────────────
@@ -164,5 +173,17 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
     "Режим ОС": q.feedbackMode === "conditional" ? "условная" : "общая",
     "ОС при верном": q.feedbackCorrect || "",
     "ОС при неверном": q.feedbackIncorrect || "",
+    "ОС по вариантам": printOptionFeedback(q),
   };
+}
+
+/**
+ * «ОС по вариантам»: one slot per option, joined by `#` like «Тексты вариантов ответа»,
+ * an empty slot for an option without its own text. Empty for every other type and for a
+ * single-choice question without any — that emptiness round-trips as «no texts».
+ */
+function printOptionFeedback(q: Question): string {
+  if (q.type !== OPTION_FEEDBACK_TYPE || !hasOptionFeedback(q.optionFeedbackJson)) return "";
+  const count = optionCountOf(q.dataJson);
+  return Array.from({ length: count }, (_, i) => optionFeedbackAt(q.optionFeedbackJson, i) ?? "").join("#");
 }

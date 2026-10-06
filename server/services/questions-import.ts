@@ -19,6 +19,7 @@ import { syncEntityUsages } from "./media/usage-index";
 import { normalizeTags } from "@shared/tags";
 import { hasOptionList, hasFixedOptionOrder, isMeasurementOnly, distributesBudget } from "@shared/questions/question-type";
 import { isAllocationFeasible } from "@shared/questions/allocation";
+import { normalizeOptionFeedback, optionCountOf, OPTION_FEEDBACK_TYPE } from "@shared/questions/option-feedback";
 import { normalizeIncomingText, normalizeQuestionData, normalizePromptByFormat } from "./question-text";
 import { blankIds } from "@shared/questions/blanks";
 import { parseRulesCell, parsePromptFormatCell } from "./workbook-answer-rules";
@@ -557,6 +558,27 @@ export async function importQuestionRows(
       // options would swallow the `#`/`|` between them.
       dataJson = normalizeQuestionData(dataJson, { convertHtml: true });
 
+      // «ОС по вариантам»: слоты через `#` в порядке вариантов, пустой слот — у варианта
+      // своего текста нет. Разбирается ПОСЛЕ канонизации вариантов: число слотов сверяется
+      // с числом вариантов, которые действительно будут сохранены.
+      const optionFeedbackRaw = String(row["ОС по вариантам"] ?? "");
+      const optionFeedbackSlots = optionFeedbackRaw.trim() === "" ? [] : optionFeedbackRaw.split("#");
+      const optionCount = optionCountOf(dataJson);
+      const optionFeedback = normalizeOptionFeedback(optionFeedbackSlots, type, optionCount, cellText);
+      if (optionFeedbackSlots.some((slot) => slot.trim() !== "")) {
+        if (type !== OPTION_FEEDBACK_TYPE) {
+          result.warnings.push(
+            `Строка ${rowNum}: «ОС по вариантам» применяется только к вопросу с одним ответом — ` +
+              `у этого типа значение не используется`,
+          );
+        } else if (optionFeedbackSlots.slice(optionCount).some((slot) => slot.trim() !== "")) {
+          result.warnings.push(
+            `Строка ${rowNum}: в «ОС по вариантам» текстов больше, чем вариантов ответа (${optionCount}) — ` +
+              `лишние не сохранены`,
+          );
+        }
+      }
+
       // The unit count (options / pairs / items) backs the «Измерения» alias.
       const unitCount = unitCountOf(type, dataJson);
 
@@ -643,6 +665,12 @@ export async function importQuestionRows(
             updatePayload.feedbackMode = "general";
           }
           if (hasCol("Теги")) updatePayload.tags = tags;
+          // Колонка есть — она задаёт тексты целиком (очищенная ячейка стирает). Колонки нет
+          // (книга до её появления) — сохранённые тексты остаются, но сверяются с новым типом
+          // и числом вариантов: текст не должен пережить свой вариант или одиночный выбор.
+          updatePayload.optionFeedbackJson = hasCol("ОС по вариантам")
+            ? optionFeedback
+            : normalizeOptionFeedback(existing.optionFeedbackJson, type, optionCount);
           if (!dryRun) {
             const updatedQuestion = await storage.updateQuestion(rowId, updatePayload as any);
             // Медиатека: индекс за импортом мимо не должен оставаться неактуальным.
@@ -705,6 +733,7 @@ export async function importQuestionRows(
           feedback: feedbackMode === "general" ? feedback : null,
           feedbackCorrect: feedbackMode === "conditional" ? feedbackCorrect : null,
           feedbackIncorrect: feedbackMode === "conditional" ? feedbackIncorrect : null,
+          optionFeedbackJson: optionFeedback,
           tags,
           orderIndex,
           contentHash,

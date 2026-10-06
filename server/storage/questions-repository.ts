@@ -123,6 +123,7 @@ export class QuestionsRepository {
         feedbackMode: question.feedbackMode || "general",
         feedbackCorrect: question.feedbackCorrect || null,
         feedbackIncorrect: question.feedbackIncorrect || null,
+        optionFeedbackJson: question.optionFeedbackJson ?? null,
         contentHash: question.contentHash || null,
         // PRD-66 FR-09a: the stamp is derived from the content being written, so a
         // value supplied by the caller is deliberately ignored.
@@ -163,6 +164,7 @@ export class QuestionsRepository {
         feedbackMode: original.feedbackMode,
         feedbackCorrect: original.feedbackCorrect,
         feedbackIncorrect: original.feedbackIncorrect,
+        optionFeedbackJson: original.optionFeedbackJson,
         mediaUrl: original.mediaUrl,
         mediaType: original.mediaType,
         shuffleAnswers: original.shuffleAnswers,

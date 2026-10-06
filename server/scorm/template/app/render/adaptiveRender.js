@@ -46,7 +46,7 @@ function buildAdaptiveFeedbackHtml(q) {
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (!TB || !TB.feedbackBanner) return '';
   // issue #34: общий/условный режим разбирает ОБЩЕЕ правило (см. feedback.js).
-  var feedbackText = TB.feedbackTextFor(q, isCorrect);
+  var feedbackText = TB.feedbackTextFor(q, isCorrect, state.answers[q.id]);
   return TB.feedbackBanner(isCorrect ? 'success' : 'error', statusText, feedbackText ? TB.feedbackDesc(feedbackText) : '');
 }
 

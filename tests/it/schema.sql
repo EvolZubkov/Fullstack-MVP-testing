@@ -193,6 +193,7 @@ CREATE TABLE "questions" (
 	"feedback_mode" text DEFAULT 'general' NOT NULL,
 	"feedback_correct" text,
 	"feedback_incorrect" text,
+	"option_feedback_json" jsonb,
 	"content_hash" text,
 	"psycho_hash" text,
 	"tags" jsonb DEFAULT '[]'::jsonb NOT NULL,

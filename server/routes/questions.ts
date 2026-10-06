@@ -17,6 +17,7 @@ import { normalizeTags } from "@shared/tags";
 import { normalizeAuthorText, renderInlineMarkdown } from "@shared/text";
 import { normalizeOptionalText, normalizeQuestionData, normalizePromptByFormat } from "../services/question-text";
 import { promptFormatOf } from "@shared/questions/prompt-format";
+import { normalizeOptionFeedback, optionCountOf } from "@shared/questions/option-feedback";
 import type { SanitizeRemoval } from "@shared/security/html-sanitize";
 import { formulasFor, promptHtmlOf } from "../services/prompt-html";
 import { importQuestionRows } from "../services/questions-import";
@@ -179,6 +180,11 @@ interface CreateQuestionBody {
   feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
+  /**
+   * Feedback texts of individual options (single choice only), aligned by position with
+   * `dataJson.options`; `null` = no override. Stored as NULL for every other type.
+   */
+  optionFeedbackJson?: Array<string | null> | null;
   /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
   tags?: string[];
   /**
@@ -284,6 +290,7 @@ router.post(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        optionFeedbackJson,
         tags,
         orderIndex,
       } = req.body;
@@ -336,6 +343,12 @@ router.post(
         feedbackMode: feedbackMode || "general",
         feedbackCorrect: normalizeAuthorText(feedbackCorrect) || null,
         feedbackIncorrect: normalizeAuthorText(feedbackIncorrect) || null,
+        optionFeedbackJson: normalizeOptionFeedback(
+          optionFeedbackJson,
+          type,
+          optionCountOf(dataJson),
+          normalizeAuthorText,
+        ),
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
         // PRD-30 FR-01: `??` and not `||` — 0 is a legitimate index; absent
         // means «не задано» and stores NULL.
@@ -389,6 +402,7 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        optionFeedbackJson,
         tags,
         orderIndex,
       } = req.body as UpdateQuestionBody;
@@ -482,6 +496,18 @@ router.put(
         feedbackMode,
         feedbackCorrect: normalizeOptionalText(feedbackCorrect),
         feedbackIncorrect: normalizeOptionalText(feedbackIncorrect),
+        // Option texts are re-derived whenever anything they depend on is sent — the
+        // texts, the type or the options: switching away from single choice or dropping
+        // options must not leave texts behind. Untouched otherwise (`undefined`).
+        optionFeedbackJson:
+          optionFeedbackJson !== undefined || type !== undefined || dataJson !== undefined
+            ? normalizeOptionFeedback(
+                optionFeedbackJson !== undefined ? optionFeedbackJson : existing.optionFeedbackJson,
+                type ?? existing.type,
+                optionCountOf(dataJson ?? existing.dataJson),
+                normalizeAuthorText,
+              )
+            : undefined,
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
         // PRD-30 FR-01: `null` CLEARS the index, `undefined` leaves it alone —
@@ -747,6 +773,7 @@ router.get(
         ["Режим ОС", "общая (по умолчанию) | условная"],
         ["ОС при верном", "Текст; только при режиме «условная»"],
         ["ОС при неверном", "Текст; только при режиме «условная»"],
+        ["ОС по вариантам", "Только multiple_choice: тексты через «#» в порядке вариантов; пустой слот — у варианта свой текст не задан и показывается обратная связь вопроса. Напр.: « # Почему не B # »"],
         ["", ""],
         ["Балл и «Цена ответа»", "Здесь их нет: сколько стоит вопрос — свойство ТЕСТА, а не вопроса (один вопрос может стоить по-разному в разных тестах). Задаются на листе «Оценка» книги теста: раздел «Импорт» → «Скачать шаблон»"],
         ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],

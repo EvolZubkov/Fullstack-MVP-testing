@@ -79,6 +79,15 @@ import { useContentGuard } from "@/features/content-protection/use-content-guard
 import type { Question, Topic } from "@shared/schema";
 import { TagsInput } from "@/pages/author/tags-input";
 import { useOptionalAuth } from "@/lib/auth";
+import {
+  draftAt,
+  draftsFromStored,
+  moveDraft,
+  removeDraft,
+  storedFromDrafts,
+  updateDraft,
+  type OptionFeedbackDraft,
+} from "./option-feedback-draft";
 
 /** PRD-70 FR-13: ориентир сложности «По ответам» — свод наблюдаемой сложности по тестам. */
 interface DifficultyLandmark {
@@ -249,6 +258,9 @@ export function QuestionEditorDrawer({
 
   const [singleOptions, setSingleOptions] = useState<string[]>(["", "", "", ""]);
   const [singleCorrect, setSingleCorrect] = useState<number>(0);
+  // Per-option feedback texts of a single-choice question, aligned with `singleOptions`
+  // (see option-feedback-draft). Saved for the single type only.
+  const [singleOptionFeedback, setSingleOptionFeedback] = useState<OptionFeedbackDraft[]>([]);
 
   // PRD-26: шкала переиспользует состояние одиночного выбора (dataJson у них
   // идентичен), поэтому смена типа single <-> scale сохраняет и подписи, и отметку.
@@ -351,6 +363,7 @@ export function QuestionEditorDrawer({
   const resetQuestionData = () => {
     setSingleOptions(["", "", "", ""]);
     setSingleCorrect(0);
+    setSingleOptionFeedback([]);
     setScaleHasCorrect(false);
     setMultipleOptions(["", "", "", ""]);
     setMultipleCorrect([]);
@@ -407,6 +420,7 @@ export function QuestionEditorDrawer({
 
       const data = question.dataJson as any;
       const correct = question.correctJson as any;
+      setSingleOptionFeedback(draftsFromStored(question.optionFeedbackJson));
 
       if (question.type === "single") {
         setSingleOptions(data.options || ["", "", "", ""]);
@@ -640,6 +654,10 @@ export function QuestionEditorDrawer({
       feedback: feedbackMode === "general" ? (feedback.trim() || null) : null,
       feedbackCorrect: feedbackMode === "conditional" ? (feedbackCorrect.trim() || null) : null,
       feedbackIncorrect: feedbackMode === "conditional" ? (feedbackIncorrect.trim() || null) : null,
+      // Texts of individual options exist for single choice only; filtered with the same
+      // mask as the options, so a blank option cannot shift a text onto its neighbour.
+      optionFeedbackJson:
+        selectedType === "single" ? storedFromDrafts(singleOptions, singleOptionFeedback) : null,
       tags,
     };
 
@@ -1111,6 +1129,8 @@ export function QuestionEditorDrawer({
               setOptions={setSingleOptions}
               correctIndex={singleCorrect}
               setCorrectIndex={setSingleCorrect}
+              optionFeedback={singleOptionFeedback}
+              setOptionFeedback={setSingleOptionFeedback}
             />
           )}
 
@@ -1507,6 +1527,11 @@ function remapIndexAfterMove(idx: number, from: number, to: number): number {
  * single choice and the PRD-26 scale. The scale reuses it rather than getting a copy,
  * so the two cannot drift apart in markup; it only overrides the wording and, in
  * measurement mode, hides the correct-answer radio column (`showCorrect={false}`).
+ *
+ * Single choice also passes `optionFeedback`: under every option a switch
+ * «Переопределить обратную связь» opens a text field whose text replaces the question's
+ * feedback for a learner who picked that option. The scale does not pass it, so it gets
+ * no switches. Moves and removals are mirrored into the texts so each stays with its option.
  */
 function SingleChoiceBuilder({
   options,
@@ -1516,6 +1541,8 @@ function SingleChoiceBuilder({
   label = t.questions.answerOptionsSingle,
   itemPlaceholder = t.questions.optionPlaceholder,
   showCorrect = true,
+  optionFeedback,
+  setOptionFeedback,
 }: {
   options: string[];
   setOptions: (opts: string[]) => void;
@@ -1524,6 +1551,8 @@ function SingleChoiceBuilder({
   label?: string;
   itemPlaceholder?: string;
   showCorrect?: boolean;
+  optionFeedback?: OptionFeedbackDraft[];
+  setOptionFeedback?: (drafts: OptionFeedbackDraft[]) => void;
 }) {
   const groupName = useId();
   const dragIndex = useRef<number | null>(null);
@@ -1533,6 +1562,7 @@ function SingleChoiceBuilder({
     if (from === null || from === to) return;
     setOptions(moveInArray(options, from, to));
     setCorrectIndex(remapIndexAfterMove(correctIndex, from, to));
+    if (optionFeedback && setOptionFeedback) setOptionFeedback(moveDraft(optionFeedback, options.length, from, to));
   };
   const updateOption = (idx: number, value: string) => {
     const newOpts = [...options];
@@ -1545,6 +1575,7 @@ function SingleChoiceBuilder({
     if (options.length <= 2) return;
     const newOpts = options.filter((_, i) => i !== idx);
     setOptions(newOpts);
+    if (optionFeedback && setOptionFeedback) setOptionFeedback(removeDraft(optionFeedback, idx));
     if (correctIndex >= newOpts.length) setCorrectIndex(newOpts.length - 1);
     else if (correctIndex > idx) setCorrectIndex(correctIndex - 1);
   };
@@ -1587,6 +1618,30 @@ function SingleChoiceBuilder({
                 />
               )}
             </Cluster>
+            {optionFeedback && setOptionFeedback && (
+              <div className="tb-option-feedback">
+                <Switch
+                  size="s"
+                  label={t.questions.optionFeedbackSwitch}
+                  aria-label={`${t.questions.optionFeedbackSwitch}: вариант ${i + 1}`}
+                  checked={draftAt(optionFeedback, i).on}
+                  onChange={(e) => setOptionFeedback(updateDraft(optionFeedback, i, { on: e.target.checked }))}
+                  data-testid={`switch-option-feedback-${i}`}
+                />
+                {draftAt(optionFeedback, i).on && (
+                  <Textarea
+                    size="s"
+                    label={t.questions.optionFeedbackLabel}
+                    value={draftAt(optionFeedback, i).text}
+                    onChange={(e) => setOptionFeedback(updateDraft(optionFeedback, i, { text: e.target.value }))}
+                    placeholder={t.questions.optionFeedbackPlaceholder}
+                    rows={2}
+                    fullWidth
+                    data-testid={`input-option-feedback-${i}`}
+                  />
+                )}
+              </div>
+            )}
           </div>
         ))}
       </Stack>

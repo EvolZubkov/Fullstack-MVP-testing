@@ -1589,7 +1589,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       // у стандартного режима и у рантайма пакета. Отдавать один `feedback` было
       // нельзя: у вопроса с условной обратной связью редактор обнуляет это поле, и
       // ученик на вебе получал вердикт без пояснения.
-      response.feedback = feedbackTextFor(question, isCorrect);
+      response.feedback = feedbackTextFor(question, isCorrect, answer);
     }
 
     res.json(response);

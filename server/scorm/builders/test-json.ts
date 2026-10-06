@@ -14,6 +14,7 @@ import { parseScaleInterpretation } from "@shared/scales/interpretation";
 import { hasGradedContent } from "@shared/questions/question-type";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
 // the topic's feedback text — the same helpers the web grader runs.
+import { hasOptionFeedback } from "@shared/questions/option-feedback";
 import { feedbackAssets, normalizeFeedback, topicFeedbackTexts } from "@shared/template/result-context";
 import type { ReportBake } from "@shared/report/report-variants";
 
@@ -509,6 +510,10 @@ export function buildTestJson(data: ExportData): string {
             feedbackMode: q.feedbackMode || "general",
             feedbackCorrect: q.feedbackCorrect || null,
             feedbackIncorrect: q.feedbackIncorrect || null,
+            // Per-option feedback texts (single choice): the chosen option's text replaces
+            // the question's feedback in `feedbackTextFor`. Included only when some option
+            // has one, so packages of questions without them stay byte-identical.
+            ...(hasOptionFeedback(q.optionFeedbackJson) ? { optionFeedbackJson: q.optionFeedbackJson } : {}),
             // PRD-10: graded answer scoring. Included only when authored so packages
             // for unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
             ...(baked.scoring ? { scoring: baked.scoring } : {}),
@@ -652,6 +657,8 @@ export function buildTestJson(data: ExportData): string {
             feedbackMode: q.feedbackMode || "general",
             feedbackCorrect: q.feedbackCorrect || null,
             feedbackIncorrect: q.feedbackIncorrect || null,
+            // Per-option feedback texts (see standard-section map above).
+            ...(hasOptionFeedback(q.optionFeedbackJson) ? { optionFeedbackJson: q.optionFeedbackJson } : {}),
             // PRD-10: graded answer scoring (see standard-section map above).
             ...(baked.scoring ? { scoring: baked.scoring } : {}),
             // PRD-16 FR-41 (see standard-section map above).

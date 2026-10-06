@@ -169,3 +169,56 @@ describe("<QuestionFeedbackRegistry />", () => {
     expect(screen.getByTestId("question-feedback-no-topics")).toBeInTheDocument();
   });
 });
+
+describe("<QuestionFeedbackRegistry /> — тексты вариантов", () => {
+  const WITH_OPTIONS = [
+    {
+      id: "q5",
+      topicId: "tax",
+      prompt: "Что такое НДФЛ?",
+      dataJson: { options: ["Налог на доходы", "Налог на добавленную стоимость", "Налог на имущество"] },
+      feedbackMode: "general",
+      feedback: "Общий текст",
+      optionFeedbackJson: [null, "НДС платит продавец", "Его платят организации"],
+    },
+    {
+      id: "q6",
+      topicId: "tax",
+      prompt: "Только вариант",
+      dataJson: { options: ["Да", "Нет"] },
+      feedbackMode: "general",
+      feedback: null,
+      optionFeedbackJson: [null, "Почему нет"],
+    },
+  ];
+
+  function renderWithOptions() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["/api/questions"], WITH_OPTIONS);
+    return rtlRender(
+      <QueryClientProvider client={client}>
+        <QuestionFeedbackRegistry model={baseModel([section("tax", "Налоги")])} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("каждый вариант со своим текстом — отдельная подстрока под вопросом", () => {
+    renderWithOptions();
+    fireEvent.click(triggerOf(screen.getByTestId("question-feedback-topic-tax")));
+    const first = screen.getByTestId("question-feedback-option-q5-1");
+    expect(first).toHaveTextContent("Налог на добавленную стоимость");
+    expect(first).toHaveTextContent("Вариант");
+    expect(first).toHaveTextContent("НДС платит продавец");
+    expect(first).not.toHaveClass("is-last");
+    expect(screen.getByTestId("question-feedback-option-q5-2")).toHaveClass("is-last");
+    // Вариант без своего текста подстроки не получает.
+    expect(screen.queryByTestId("question-feedback-option-q5-0")).toBeNull();
+  });
+
+  it("вопрос, у которого текст есть только у варианта, считается заполненным", () => {
+    renderWithOptions();
+    expect(screen.getByTestId("question-feedback-topic-tax")).toHaveTextContent(
+      "2 вопросов · у 2 задана обратная связь",
+    );
+  });
+});

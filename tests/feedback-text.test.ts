@@ -55,3 +55,34 @@ describe("feedbackTextFor", () => {
     expect(feedbackTextFor({ feedbackMode: "conditional" }, false)).toBeNull();
   });
 });
+
+describe("feedbackTextFor — текст выбранного варианта", () => {
+  const withOptions = {
+    feedbackMode: "conditional" as const,
+    feedback: null,
+    feedbackCorrect: "Верно.",
+    feedbackIncorrect: "Неверно.",
+    optionFeedbackJson: [null, "Почему не Б"],
+  };
+
+  it("текст выбранного варианта заменяет текст вопроса", () => {
+    expect(feedbackTextFor(withOptions, false, 1)).toBe("Почему не Б");
+  });
+
+  it("вариант без своего текста получает текст вопроса по его режиму", () => {
+    expect(feedbackTextFor(withOptions, true, 0)).toBe("Верно.");
+    expect(feedbackTextFor(withOptions, false, 2)).toBe("Неверно.");
+  });
+
+  it("ответ не индексом (несколько ответов, текст) не выбирает вариант", () => {
+    expect(feedbackTextFor(withOptions, false, [1])).toBe("Неверно.");
+    expect(feedbackTextFor(withOptions, false, "1")).toBe("Неверно.");
+    expect(feedbackTextFor(withOptions, false)).toBe("Неверно.");
+  });
+
+  it("работает и в общем режиме", () => {
+    expect(
+      feedbackTextFor({ feedbackMode: "general", feedback: "Общий.", optionFeedbackJson: ["Почему А"] }, true, 0),
+    ).toBe("Почему А");
+  });
+});
