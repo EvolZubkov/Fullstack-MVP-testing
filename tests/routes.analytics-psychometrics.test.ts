@@ -579,6 +579,25 @@ describe("GET /analytics/psychometrics/:testId", () => {
     expect(res.body.slices[1].conditions).toEqual({ groupIds: ["g1"] });
   });
 
+  it("срез считается в рамке периода и со всеми своими условиями, как у «Результата и тем»", async () => {
+    // Своя копия разбора условий теряла исход и период среза, а период рамки вкладки не
+    // доезжал вовсе: срез «июль, сдавшие» на «Качестве вопросов» считался как весь тест.
+    storageMock.getSlices.mockResolvedValue([
+      { id: "s1", name: "Июль, сдавшие", conditionsJson: { outcomes: ["passed"], from: "2026-07-01", to: "2026-07-31" } },
+    ]);
+
+    const res = await request(makeApp())
+      .get("/api/analytics/psychometrics/test1/slices?sliceId=s1&from=2026-07-15")
+      .set("x-test-user", "a1");
+
+    expect(res.status).toBe(200);
+    const filter = storageMock.selectObservations.mock.calls.at(-1)?.[0];
+    expect(filter.outcomes).toEqual(["passed"]);
+    // Периоды пересекаются: «июль» в рамке «с 15 июля» — вторая половина июля.
+    expect(filter.from.toISOString()).toBe("2026-07-15T00:00:00.000Z");
+    expect(filter.to.toISOString()).toBe("2026-07-31T23:59:59.999Z");
+  });
+
   it("сравнение берёт только срезы этого теста (Э3)", async () => {
     await request(makeApp())
       .get("/api/analytics/psychometrics/test1/slices?withWhole=1")

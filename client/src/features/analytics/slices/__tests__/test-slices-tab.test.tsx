@@ -98,6 +98,19 @@ describe("TestSlicesTab", () => {
     await waitFor(() => expect(asked("/api/analytics/psychometrics/t1/slices").length).toBeGreaterThan(0));
   });
 
+  it("«Качество вопросов» считается в той же рамке периода", async () => {
+    render(<TestSlicesTab testId="t1" adhoc={{ sources: ["web"] }} onOpenPassages={vi.fn()} />);
+    expect(await screen.findByText("Сравнение срезов")).toBeTruthy();
+
+    await userEvent.click(screen.getByLabelText("Период с"));
+    await userEvent.click(await screen.findByRole("button", { name: "15" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Качество вопросов" }));
+
+    await waitFor(() => expect(asked("/api/analytics/psychometrics/t1/slices").length).toBeGreaterThan(0));
+    const url = asked("/api/analytics/psychometrics/t1/slices").at(-1) ?? "";
+    expect(new URLSearchParams(url.split("?")[1]).get("from")).toMatch(/^\d{4}-\d{2}-15$/);
+  });
+
   it("отбор из фильтра теста не теряется при переключении на «Качество вопросов»", async () => {
     render(<TestSlicesTab testId="t1" adhoc={{ sources: ["web"] }} onOpenPassages={vi.fn()} />);
     expect(await screen.findByText("Сравнение срезов")).toBeTruthy();

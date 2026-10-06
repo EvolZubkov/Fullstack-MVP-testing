@@ -23,7 +23,7 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
 import { loadResponseMatrix } from "../../services/analytics/response-matrix";
-import { conditionsParam } from "./slices";
+import { conditionsOf, conditionsParam, dateOf, withinFrame } from "./slices";
 import {
   computeItemBreakdown,
   computePsychometrics,
@@ -42,7 +42,7 @@ import { toMeasurementSpecs } from "../../services/scale-domain";
 import { loadDeliveryPool } from "../../services/delivery-pool";
 import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
 import { hasOwnExternalIdFormat } from "../../utils/crypto";
-import type { ObservationFilter, ObservationSource } from "../../services/analytics/observations";
+import type { ObservationFilter } from "../../services/analytics/observations";
 import { analyticsScope } from "./helpers";
 import { listOf, readTestFilterQuery } from "./observation-query";
 import {
@@ -195,24 +195,6 @@ router.get(
   },
 );
 
-/** Условия среза, приведённые к отбору наблюдений — ТОТ ЖЕ разбор, что у среза PRD-56. */
-function conditionsOf(raw: unknown): ObservationFilter {
-  const source = (raw ?? {}) as Record<string, unknown>;
-  const list = (value: unknown): string[] =>
-    Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-
-  return {
-    ...(list(source.groupIds).length ? { groupIds: list(source.groupIds) } : {}),
-    ...(list(source.sources).length ? { sources: list(source.sources) as ObservationSource[] } : {}),
-    ...(list(source.formIds).length ? { formIds: list(source.formIds) } : {}),
-    ...(list(source.snapshotIds).length ? { snapshotIds: list(source.snapshotIds) } : {}),
-    ...(list(source.organizations).length ? { organizations: list(source.organizations) } : {}),
-    ...(list(source.units).length ? { units: list(source.units) } : {}),
-    ...(list(source.positions).length ? { positions: list(source.positions) } : {}),
-    ...(list(source.wrongQuestionIds).length ? { wrongQuestionIds: list(source.wrongQuestionIds) } : {}),
-  };
-}
-
 /**
  * Временный срез из параметров `conditions` и `conditionsName` — тот же разбор, что у ручки
  * срезов PRD-56, чтобы один отбор считался в обеих метриках сравнения.
@@ -263,6 +245,9 @@ router.get(
       ];
 
       const { onlyFirst } = readQuery(req, testId);
+      // Рамка вкладки «Срезы» — период; пустой означает «за всё время» (PRD-56 FR-07j).
+      const from = dateOf(req.query.from, "start");
+      const to = dateOf(req.query.to, "end");
       const scope = await analyticsScope(req);
       const { grade, questionById } = await buildGrader(testId);
       const ctx: PsychometricsContext = {
@@ -276,8 +261,10 @@ router.get(
       const slices = [];
       for (const slice of sources) {
         // Тест рамки перебивает тест среза (PRD-56 FR-07e): он общий для всех сравниваемых.
+        // Период рамки ПЕРЕСЕКАЕТСЯ с периодом среза — тем же `withinFrame`, что у «Результата и
+        // тем»: две метрики одного сравнения обязаны считаться по одним прохождениям.
         const matrix = await loadResponseMatrix(
-          { ...conditionsOf(slice.conditionsJson), testIds: [testId] },
+          withinFrame(conditionsOf(slice.conditionsJson), testId, from, to),
           scope,
           grade,
         );

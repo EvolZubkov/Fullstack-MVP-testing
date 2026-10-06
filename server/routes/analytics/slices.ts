@@ -109,7 +109,7 @@ async function axisContext(testId: string): Promise<AxisContext> {
 }
 
 /** Дата из параметра; конец периода — конец дня, «по 30 сентября» включает этот день. */
-function dateOf(value: unknown, edge: "start" | "end"): Date | undefined {
+export function dateOf(value: unknown, edge: "start" | "end"): Date | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const date = new Date(`${value}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}Z`);
   return Number.isNaN(date.getTime()) ? undefined : date;
@@ -121,7 +121,7 @@ function dateOf(value: unknown, edge: "start" | "end"): Date | undefined {
  * Все условия, которые умеет реестр: срез по варианту, версии или месяцу, у которого они
  * выпадали, молча считался как тест целиком — и сравнение показывало две одинаковые колонки.
  */
-function conditionsOf(raw: unknown): ObservationFilter {
+export function conditionsOf(raw: unknown): ObservationFilter {
   const source = (raw ?? {}) as Record<string, unknown>;
   const list = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
@@ -149,7 +149,7 @@ function conditionsOf(raw: unknown): ObservationFilter {
  * Тест рамки перебивает тест среза (FR-07e). Период же ПЕРЕСЕКАЕТСЯ: срез «июль», открытый в
  * рамке «с 15 июля», — это вторая половина июля, а не весь июль и не всё с 15-го.
  */
-function withinFrame(
+export function withinFrame(
   conditions: ObservationFilter,
   testId: string,
   from: Date | undefined,

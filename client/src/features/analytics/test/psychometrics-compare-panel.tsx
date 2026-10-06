@@ -29,6 +29,10 @@ import { PsychometricsCompare, passagesLabel, type PsychometricsSlice } from "./
 
 export interface PsychometricsCompareBodyProps {
   testId: string;
+  /** Начало периода рамки (`ГГГГ-ММ-ДД`); пусто — без ограничения. */
+  from?: string;
+  /** Конец периода рамки (`ГГГГ-ММ-ДД`), включительно; пусто — без ограничения. */
+  to?: string;
   /** Режим попыток: он меняет числа сильнее любого фильтра и едет в запрос как есть. */
   firstAttemptOnly?: boolean;
   /**
@@ -48,11 +52,12 @@ export interface PsychometricsCompareBodyProps {
 /**
  * Слоты и таблицы сравнения по качеству вопросов.
  *
- * @param props - тест, режим попыток, выбранные срезы и то, что встаёт между слотами и таблицами
+ * @param props - тест, период рамки, режим попыток, временный отбор, выбранные срезы и то, что
+ *   встаёт между слотами и таблицами
  * @returns слоты, переключатель метрик вкладки и таблицы сравнения
  */
 export function PsychometricsCompareBody({
-  testId, firstAttemptOnly = true, adhoc = null, adhocName = null, slots, onSlotsChange, between,
+  testId, from, to, firstAttemptOnly = true, adhoc = null, adhocName = null, slots, onSlotsChange, between,
 }: PsychometricsCompareBodyProps) {
   const [available, setAvailable] = useState<PsychometricsSlice[]>([]);
   const [failed, setFailed] = useState(false);
@@ -65,6 +70,10 @@ export function PsychometricsCompareBody({
     let alive = true;
     const query = new URLSearchParams({ withWhole: "1" });
     if (!firstAttemptOnly) query.set("firstAttemptOnly", "false");
+    // Период рамки — тот же, что у «Результата и тем»: иначе две метрики одного сравнения
+    // считались бы по разным прохождениям.
+    if (from) query.set("from", from);
+    if (to) query.set("to", to);
     // Набранный отбор считается сервером тем же разбором, что и у «Результата и тем».
     if (adhoc && Object.keys(adhoc).length > 0) {
       query.set("conditions", JSON.stringify(adhoc));
@@ -86,7 +95,7 @@ export function PsychometricsCompareBody({
     })();
 
     return () => { alive = false; };
-  }, [testId, firstAttemptOnly, adhoc, adhocName, reloads]);
+  }, [testId, from, to, firstAttemptOnly, adhoc, adhocName, reloads]);
 
   const selected = useMemo(
     () => slots

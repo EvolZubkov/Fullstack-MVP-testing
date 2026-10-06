@@ -167,6 +167,8 @@ export function TestSlicesTab({
           ) : (
             <PsychometricsCompareBody
               testId={testId}
+              from={fromIso}
+              to={toIso}
               firstAttemptOnly={firstAttemptOnly}
               adhoc={compareSlice?.conditions ?? adhoc}
               adhocName={compareSlice?.name ?? adhocName}
