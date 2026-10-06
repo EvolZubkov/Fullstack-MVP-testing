@@ -97,10 +97,13 @@ router.get("/:id", requirePermission("groups.manage"), async (req, res) => {
     }
 
     const users = await storage.getGroupUsers(group.id);
-    res.json({
-      ...group,
-      users: users.map((u) => ({ id: u.id, email: u.email, name: u.name, isExternal: u.isExternal })),
-    });
+    // The members dialog shows a role per member (approved wireframe
+    // prd54-lms-external-participants.html); without it the column stayed an empty pill.
+    const withRoles = await Promise.all(users.map(async (u) => ({
+      id: u.id, email: u.email, name: u.name, isExternal: u.isExternal,
+      roles: await storage.getUserRoles(u.id),
+    })));
+    res.json({ ...group, users: withRoles });
   } catch (error) {
     logger.error("Get group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get group" });
