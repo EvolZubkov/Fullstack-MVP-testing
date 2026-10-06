@@ -222,7 +222,7 @@
                             <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
                           </span>
                         </td>
-                        <td>Участник a3f9c2</td>
+                        <td>Участник a3f9c2d1</td>
                         <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
                         <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить участника"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true" style="color: var(--ou-error-600)"><use href="#i-user-minus" /></svg></span></button></td>
                       </tr>
@@ -376,7 +376,7 @@
                         <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
                       </span>
                     </td>
-                    <td><span class="ou-text ou-text--body-s">Участник a3f9c2</span></td>
+                    <td><span class="ou-text ou-text--body-s">Участник a3f9c2d1</span></td>
                     <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
                     <td><span class="ou-tag ou-tag--success">Активен</span></td>
                     <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
@@ -442,7 +442,7 @@
             <tr><td>«N чел.»</td><td><code>GET /api/groups</code> → <code>userCount</code></td><td>Счёт не меняется: внешние записи — обычные члены группы, импорт сам добавляет их в выбранную при загрузке группу</td></tr>
             <tr><td>«из них N внешних»</td><td><code>GET /api/groups</code> → <code>externalCount</code>; метка есть только при <code>&gt; 0</code></td><td>Сколько членов группы — внешние записи (<code>is_external</code>), включая внешних участников PRD-28, а не только пришедших из выгрузки. Щелчок открывает то же окно участников</td></tr>
             <tr><td>Внешняя запись в окне участников</td><td><code>email = NULL</code>, <code>is_external</code></td><td>Общая таблица, без отдельного блока. «—» вместо почты и отметка «Внешний», как на экране «Пользователи». Убрать из группы можно как любого участника</td></tr>
-            <tr><td>Имя внешней записи</td><td><code>users.name</code></td><td>ФИО из файла, если обезличивание выключено, иначе «Участник» и первые шесть знаков псевдонима. Так же участник называется в аналитике</td></tr>
+            <tr><td>Имя внешней записи</td><td><code>users.name</code></td><td>ФИО из файла, если обезличивание выключено, иначе «Участник» и первые восемь знаков псевдонима; при совпадении с подписью другой внешней записи подпись новой удлиняется (п. 3.1 плана). Так же участник называется в аналитике</td></tr>
             <tr><td>Предупреждение при удалении группы</td><td>прохождения из LMS с меткой группы <code>&gt; 0</code></td><td>Числа этого объекта: прохождения и загрузки. Удаление снимает метку с прохождений и партий — в аналитике они переходят в «Без группы». Членство внешних записей удаляется вместе с группой, как у всех</td></tr>
             <tr><td>Строка без почты в «Пользователях»</td><td><code>email = NULL</code></td><td>«—» вместо адреса, «Последний вход» пуст: войти такая запись не может. Статус «Активен» — п. 6.1 плана</td></tr>
             <tr><td>Меню записи без почты</td><td><code>email = NULL</code></td><td>«Сбросить пароль» погашен как у любого внешнего. «Сделать штатным» погашен: переход отправляет приглашение на почту. «Отправить приглашение» не показан, как у внешних PRD-28. Почту можно задать через «Редактировать» — тогда запись становится обычным внешним участником</td></tr>
