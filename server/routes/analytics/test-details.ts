@@ -6,9 +6,9 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { renderBlanksText } from "@shared/questions/blanks-render";
 import { stripMarkdown } from "@shared/text";
-import { isTextEntry, isOpenText, hasBlanks } from "@shared/questions/question-type";
+import { isOpenText, hasBlanks } from "@shared/questions/question-type";
 import { summariseAnswers } from "../../services/analytics/answers";
-import { answerSpread, textVolume, type AnswerSpread, type TextVolume } from "../../services/analytics/answer-spread";
+import { questionSpread, textVolume, type AnswerSpread, type TextVolume } from "../../services/analytics/answer-spread";
 import { loadTestAnswerFacts, variantQuestionIds } from "../../services/analytics/test-answer-facts";
 import { scoreBuckets } from "../../services/analytics/score-buckets";
 import { loadObservations } from "../../services/analytics/observations";
@@ -19,7 +19,6 @@ import { summariseObservations } from "../../services/analytics/test-summary";
 import { declaresPassThreshold, thresholdPercentOfTest } from "./helpers";
 import { plainPromptOf } from "@shared/questions/prompt-format";
 import { analyseUnits, type UnitAnalysis } from "@shared/psychometrics/units";
-import type { AnswerRuleSet } from "@shared/answer-check";
 
 const router = Router();
 
@@ -201,29 +200,9 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
        * какие из них правило не ловит.
        */
       // У выбора разброс — доли выбранных вариантов с пометкой верного: «куда уходят
-      // ошибившиеся» видно из колонки, не открывая разбор задания.
-      const spreadType =
-        question.type === "scale" || question.type === "allocation" || isTextEntry(question.type)
-          || question.type === "single" || question.type === "multiple"
-          ? (question.type as "scale" | "allocation" | "short" | "single" | "multiple")
-          : null;
-      const key = (question.correctJson ?? {}) as { correctIndex?: unknown; correctIndices?: unknown };
-      const spread = spreadType
-        ? answerSpread({
-          type: spreadType,
-          options: ((question.dataJson ?? {}) as { options?: string[] }).options ?? [],
-          answers: answersOfQuestion.get(stats.questionId) ?? [],
-          // PRD-57 FR-28ag: у числового задания вместо частотной таблицы написаний —
-          // гистограмма значений. Вид ответа лежит в наборе правил, отдельного признака
-          // у задания нет и заводить его незачем.
-          answerKind: ((question.correctJson ?? {}) as { answerKind?: "text" | "number" }).answerKind,
-          correctIndices: typeof key.correctIndex === "number"
-            ? [key.correctIndex]
-            : Array.isArray(key.correctIndices) ? key.correctIndices.filter((i): i is number => typeof i === "number") : [],
-          // Э4а: у короткого ответа строка разброса помечается «засчитано» его же правилами.
-          rules: isTextEntry(question.type) ? (question.correctJson as AnswerRuleSet) : null,
-        })
-        : null;
+      // ошибившиеся» видно из колонки, не открывая разбор задания. Правило одно со сравнением
+      // срезов (FR-07m) — `questionSpread`.
+      const spread = questionSpread(question, answersOfQuestion.get(stats.questionId) ?? []);
 
       // Э4а: у сопоставления, ранжирования и пропусков вариантов нет — ответ складывается из
       // единиц (пар, мест, пропусков), и разброс по ним говорит, какая единица не даётся.

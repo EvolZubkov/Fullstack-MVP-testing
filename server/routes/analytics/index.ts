@@ -8,6 +8,7 @@ import questionCardRouter from "./question-card";
 import questionAnswersRouter from "./question-answers";
 import deliveryRouter from "./delivery";
 import scalesRouter from "./scales";
+import answerSlicesRouter from "./answer-slices";
 import registryRouter from "./registry";
 import attentionRouter from "./attention";
 import slicesRouter from "./slices";
@@ -52,6 +53,9 @@ router.use("/", deliveryRouter);
 
 // PRD-56 FR-21: вкладка «Шкалы» — GET /api/analytics/tests/:testId/scales
 router.use("/", scalesRouter);
+
+// PRD-56 FR-07k - FR-07n: сравнение срезов «Ответы и шкалы» — GET /api/analytics/tests/:testId/answer-slices
+router.use("/", answerSlicesRouter);
 
 // PRD-66 FR-56: психометрика теста — GET /api/analytics/psychometrics/:testId
 router.use("/", psychometricsRouter);

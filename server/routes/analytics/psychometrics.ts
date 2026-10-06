@@ -23,7 +23,7 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
 import { loadResponseMatrix } from "../../services/analytics/response-matrix";
-import { conditionsOf, conditionsParam, dateOf, withinFrame } from "./slices";
+import { adhocSource, conditionsOf, dateOf, withinFrame } from "./slices";
 import {
   computeItemBreakdown,
   computePsychometrics,
@@ -195,23 +195,6 @@ router.get(
   },
 );
 
-/**
- * Временный срез из параметров `conditions` и `conditionsName` — тот же разбор, что у ручки
- * срезов PRD-56, чтобы один отбор считался в обеих метриках сравнения.
- *
- * @param conditions - условия отбора (JSON на языке реестра)
- * @param name - имя отбора; пустое читается как «Текущий отбор»
- * @returns ноль или один источник среза с id `adhoc`
- */
-function adhocSource(
-  conditions: unknown,
-  name: unknown,
-): Array<{ id: string; name: string; conditionsJson: Record<string, unknown> }> {
-  const adhoc = conditionsParam(conditions);
-  if (!adhoc) return [];
-  const adhocName = typeof name === "string" ? name.trim().slice(0, 200) : "";
-  return [{ id: "adhoc", name: adhocName || "Текущий отбор", conditionsJson: adhoc }];
-}
 
 // GET /api/analytics/psychometrics/:testId/slices — психометрика по сравниваемым срезам (FR-04b)
 //

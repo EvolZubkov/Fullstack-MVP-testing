@@ -16,10 +16,7 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
 import { summariseScales } from "../../services/analytics/scale-profile";
-import { rampFromParams } from "@shared/template/level-ramp";
-import { withParamDefaults } from "@shared/template/params-css";
-import { resolveTemplateDir } from "../../services/template-dir";
-import { readManifestParams } from "../../services/template-render";
+import { scaleRampOf } from "../../services/analytics/scale-ramp";
 
 const router = Router();
 
@@ -38,12 +35,8 @@ router.get(
         storage.selectScaleValuesForTest(testId),
       ]);
 
-      // Рампа уровней теста — из параметров оформления, той же функцией, какой её собирает
-      // экран итогов участника, и с теми же умолчаниями манифеста АКТИВНОГО шаблона: схему
-      // уровней нетронутого теста выбирает шаблон, и аналитика обязана её повторить.
-      const design = (test.designSettingsJson ?? {}) as { params?: Record<string, unknown>; templateId?: string };
-      const templateDir = await resolveTemplateDir(design.templateId || "default", { activeOnly: true });
-      const ramp = rampFromParams(withParamDefaults(design.params ?? {}, readManifestParams(templateDir)));
+      // Рампа уровней — одна функция со сравнением срезов (FR-07l): цвет уровня не расходится.
+      const ramp = await scaleRampOf(test);
 
       res.json({
         testId,

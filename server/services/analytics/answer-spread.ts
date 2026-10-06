@@ -23,6 +23,7 @@
  * эталона, относительно которого это оценивать, у опросника не существует.
  */
 import { checkRuleSet, normalizeForCompare, parseNumericAnswer, type AnswerRuleSet } from "@shared/answer-check";
+import { isTextEntry } from "@shared/questions/question-type";
 
 /** Доля одного варианта в разбросе. */
 export interface SpreadOption {
@@ -381,4 +382,48 @@ export function answerSpread(input: AnswerSpreadInput): AnswerSpread | null {
     })),
     answered: counted,
   };
+}
+
+/** Задание в том виде, в каком его читает {@link questionSpread}. */
+export interface SpreadQuestion {
+  type: string;
+  dataJson?: unknown;
+  correctJson?: unknown;
+}
+
+/**
+ * Разброс ответов задания теста — одно правило на вкладку «Вопросы» и сравнение срезов
+ * (PRD-56 FR-22, FR-07m).
+ *
+ * Тип, варианты, вид ответа и эталон выводятся из самого задания здесь, а не у каждого
+ * вызывающего: второй экземпляр этой развилки разошёлся бы с первым молча — разными долями
+ * одного вопроса на двух экранах.
+ *
+ * @param question задание теста
+ * @param answers сырые ответы выборки на него
+ * @returns разброс либо `null`, когда у типа задания разброса нет или считать не из чего
+ */
+export function questionSpread(question: SpreadQuestion, answers: readonly unknown[]): AnswerSpread | null {
+  const type = question.type;
+  // У шкалы и распределения — вместо доли верных, у короткого ответа (PRD-57 FR-28x) — в
+  // дополнение к ней, у выбора — доли выбранных вариантов с пометкой верного.
+  const spreadType =
+    type === "scale" || type === "allocation" || isTextEntry(type) || type === "single" || type === "multiple"
+      ? (type as AnswerSpreadInput["type"])
+      : null;
+  if (!spreadType) return null;
+  const key = (question.correctJson ?? {}) as { correctIndex?: unknown; correctIndices?: unknown; answerKind?: "text" | "number" };
+  return answerSpread({
+    type: spreadType,
+    options: ((question.dataJson ?? {}) as { options?: string[] }).options ?? [],
+    answers,
+    // PRD-57 FR-28ag: у числового задания вместо частотной таблицы написаний — гистограмма
+    // значений. Вид ответа лежит в наборе правил, отдельного признака у задания нет.
+    answerKind: key.answerKind,
+    correctIndices: typeof key.correctIndex === "number"
+      ? [key.correctIndex]
+      : Array.isArray(key.correctIndices) ? key.correctIndices.filter((i): i is number => typeof i === "number") : [],
+    // Э4а: у короткого ответа строка разброса помечается «засчитано» его же правилами.
+    rules: isTextEntry(type) ? (question.correctJson as AnswerRuleSet) : null,
+  });
 }

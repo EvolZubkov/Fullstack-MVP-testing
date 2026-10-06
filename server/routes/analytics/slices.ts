@@ -188,6 +188,24 @@ export function conditionsParam(value: unknown): Record<string, unknown> | null 
 }
 
 /**
+ * Временный срез из параметров `conditions` и `conditionsName` — тот же разбор, что у ручки
+ * срезов PRD-56, чтобы один отбор считался в обеих метриках сравнения.
+ *
+ * @param conditions - условия отбора (JSON на языке реестра)
+ * @param name - имя отбора; пустое читается как «Текущий отбор»
+ * @returns ноль или один источник среза с id `adhoc`
+ */
+export function adhocSource(
+  conditions: unknown,
+  name: unknown,
+): Array<{ id: string; name: string; conditionsJson: Record<string, unknown> }> {
+  const adhoc = conditionsParam(conditions);
+  if (!adhoc) return [];
+  const adhocName = typeof name === "string" ? name.trim().slice(0, 200) : "";
+  return [{ id: "adhoc", name: adhocName || "Текущий отбор", conditionsJson: adhoc }];
+}
+
+/**
  * Группы, которыми описан срез, — основание считать ему «назначено» (FR-06).
  *
  * Пустой список значит «срез без условий», то есть тест целиком: назначено там всем, кому тест
