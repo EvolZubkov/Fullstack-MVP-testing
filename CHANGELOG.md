@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.38.2](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.38.1...v2.38.2)
+
+### Features
+
+- **feat**(lms-import): уровни тем и рекомендованные курсы из выгрузки отчёта LMS (2026-10-06) [`97a931595cdd2bab360ae3ea78b1cd4003dfa038`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/97a931595cdd2bab360ae3ea78b1cd4003dfa038)
+  Пакет пишет в LMS псевдо-взаимодействия topic_&lt;id&gt;_level (достигнутый уровень) и
+  topic_&lt;id&gt;_course_&lt;n&gt; (object_id курса WebTutor) — так же, как scale_* и var_*. Разбор
+  выгрузки их не знал и складывал в «Не разобраны колонки». Теперь импорт пишет их в те же
+  поля, что телеметрия (achieved_levels_json, failed_topic_courses_json): имя темы — из теста,
+  курс по object_id — среди курсов тем разделов и ссылок уровней адаптива, ненайденный —
+  «Курс WebTutor &lt;id&gt;». Книга выгрузки берёт уровни и рекомендации из импорта наравне с
+  телеметрией, строка-пояснение о пропуске импорта снята. Прежние загрузки получат данные
+  при повторной загрузке файла.
+
 ## [2.38.1](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.38.0...v2.38.1)
 
 ### Features
