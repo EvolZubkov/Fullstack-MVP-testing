@@ -39,8 +39,23 @@ describe("compareAnswerSpreads", () => {
     expect(row.spread).toBe(6);
   });
 
-  it("меньше двух годных срезов — расхождения нет", () => {
-    const [row] = compareAnswerSpreads([slice(q(26, [["A", 35]])), slice(q(4, [["A", 80]]))], ["q1"], 10);
+  it("доли округляются до целых до разности — расхождение сходится с видимыми числами", () => {
+    const [row] = compareAnswerSpreads([slice(q(30, [["A", 13.33]])), slice(q(30, [["A", 6.67]]))], ["q1"], 10);
+    expect(row.options[0].shares).toEqual([13, 7]);
+    expect(row.spread).toBe(6);
+  });
+
+  it("меньше двух годных срезов — расхождения нет, но вариант строке назван", () => {
+    const [row] = compareAnswerSpreads(
+      [slice(q(26, [["A", 35], ["B", 65]])), slice(q(4, [["A", 80], ["B", 20]]))],
+      ["q1"], 10,
+    );
+    expect(row.spread).toBeNull();
+    expect(row.topIndex).toBe(0);
+  });
+
+  it("ответы только в одном срезе — ни расхождения, ни варианта", () => {
+    const [row] = compareAnswerSpreads([slice(q(26, [["A", 35]])), slice()], ["q1"], 10);
     expect(row.spread).toBeNull();
     expect(row.topIndex).toBeNull();
   });

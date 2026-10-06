@@ -180,7 +180,8 @@ export function AnswersCompare({ slices, questions, minObservations }: AnswersCo
           const a = scaleOf(slices[0], row.key)?.average ?? null;
           const b = scaleOf(slices[1], row.key)?.average ?? null;
           if (a === null || b === null) return <Text variant="body-s" tone="muted">—</Text>;
-          const delta = Math.round((a - b) * 10) / 10;
+          // По видимым значениям (одна цифра после запятой): иначе разница не сходится с ними.
+          const delta = Math.round((Math.round(a * 10) - Math.round(b * 10))) / 10;
           const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
           return <Text variant="body-s">{`${sign}${Math.abs(delta).toString().replace(".", ",")}`}</Text>;
         },
@@ -211,7 +212,8 @@ export function AnswersCompare({ slices, questions, minObservations }: AnswersCo
           render: (band: (typeof bands)[number]) => {
             const a = shareOf(slices[0], band.level);
             const b = shareOf(slices[1], band.level);
-            return <Delta value={a === null || b === null ? null : a - b} />;
+            // По видимым целым процентам — как у вариантов ответа (shared/analytics/answer-compare).
+            return <Delta value={a === null || b === null ? null : Math.round(a) - Math.round(b)} />;
           },
         }]
         : []),
