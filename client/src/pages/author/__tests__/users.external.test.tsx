@@ -205,3 +205,48 @@ describe("<UsersPage /> — признак в форме создания", () =
     expect(screen.getByLabelText(/Отправить приглашение/)).toBeChecked();
   });
 });
+
+// ─── Внешний участник из выгрузки LMS: почты нет (PRD-54 BR-54-42) ──────────
+
+describe("<UsersPage /> — внешняя запись без почты", () => {
+  const importedUser = {
+    id: "u-lms", email: null, name: "Участник a3f9c2d1",
+    roles: ["learner"], status: "active", isExternal: true,
+    mustChangePassword: false, gdprConsent: false,
+    lastLoginAt: null, expiresAt: null, createdAt: "2026-10-06T19:30:00Z",
+  };
+
+  beforeEach(() => {
+    fetchMock.mockImplementation(async (url: string, options?: RequestInit) => {
+      const u = String(url);
+      if ((options?.method ?? "GET").toUpperCase() === "GET") {
+        if (u === "/api/users") return jsonResponse([staffUser, importedUser]);
+        return jsonResponse([]);
+      }
+      return jsonResponse({ success: true, sent: true });
+    });
+  });
+
+  it("вместо адреса «—» с отметкой «Внешний», а поиск по списку не падает", async () => {
+    renderPage();
+    const row = (await screen.findByText("Участник a3f9c2d1")).closest("tr")!;
+    // Ячейка адреса — первая; второе «—» в строке стоит в пустом «Последнем входе».
+    const emailCell = row.querySelector("td")!;
+    expect(within(emailCell).getByText("—")).toBeInTheDocument();
+    expect(within(emailCell).getByText("Внешний")).toBeInTheDocument();
+
+    // Поиск читает адрес у каждой строки: у этой его нет вовсе.
+    fireEvent.change(screen.getByPlaceholderText(/Поиск/), { target: { value: "a3f9" } });
+    expect(screen.getByText("Участник a3f9c2d1")).toBeInTheDocument();
+    expect(screen.queryByText("i.petrov@company.ru")).toBeNull();
+  });
+
+  it("«Сделать штатным» погашен до появления почты", async () => {
+    renderPage();
+    const row = (await screen.findByText("Участник a3f9c2d1")).closest("tr")!;
+    fireEvent.click(within(row).getByLabelText("Действия"));
+    const promote = await screen.findByRole("menuitem", { name: /Сделать штатным/ });
+    expect(promote).toBeDisabled();
+    expect(within(promote).getByText("Сначала задайте почту")).toBeInTheDocument();
+  });
+});

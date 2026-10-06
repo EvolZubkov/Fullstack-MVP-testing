@@ -100,6 +100,13 @@ CREATE TABLE "groups" (
 	"created_by" varchar(36)
 );
 
+CREATE TABLE "lms_import_batch_users" (
+	"batch_id" varchar(36) NOT NULL,
+	"user_id" varchar(36) NOT NULL,
+	"created_user" boolean DEFAULT false NOT NULL,
+	"added_to_group" boolean DEFAULT false NOT NULL
+);
+
 CREATE TABLE "lms_import_batches" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
 	"test_id" varchar(36) NOT NULL,
@@ -535,7 +542,7 @@ CREATE TABLE "user_roles" (
 
 CREATE TABLE "users" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
-	"email" text NOT NULL,
+	"email" text,
 	"email_hash" varchar(64),
 	"password_hash" text,
 	"name" text,
@@ -578,6 +585,8 @@ CREATE INDEX "attempts_snapshot_id_idx" ON "attempts" USING btree ("snapshot_id"
 CREATE INDEX "content_pages_test_topic_position_sort_idx" ON "content_pages" USING btree ("test_id","topic_id","position","sort_order");
 CREATE INDEX "content_pages_test_kind_idx" ON "content_pages" USING btree ("test_id","kind");
 CREATE INDEX "content_pages_topic_id_idx" ON "content_pages" USING btree ("topic_id");
+CREATE UNIQUE INDEX "lms_import_batch_users_pk" ON "lms_import_batch_users" USING btree ("batch_id","user_id");
+CREATE INDEX "lms_import_batch_users_user_idx" ON "lms_import_batch_users" USING btree ("user_id");
 CREATE INDEX "lms_import_batches_test_id_idx" ON "lms_import_batches" USING btree ("test_id");
 CREATE UNIQUE INDEX "media_assets_owner_checksum_idx" ON "media_assets" USING btree ("owner_id","checksum") WHERE "media_assets"."owner_id" is not null;
 CREATE INDEX "media_assets_checksum_idx" ON "media_assets" USING btree ("checksum");

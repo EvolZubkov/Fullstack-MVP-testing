@@ -19,7 +19,6 @@ import {
   Banner,
   Box,
   Button,
-  Checkbox,
   Cluster,
   EmptyState,
   FileItem,
@@ -92,6 +91,8 @@ interface ImportOutcome {
   rowsUpdated: number;
   rowsSkipped: number;
   rowsLinked: number;
+  /** PRD-54 BR-54-38: внешних учётных записей заведено (в сухом прогоне — будет заведено). */
+  usersCreated: number;
   warnings: string[];
 }
 
@@ -189,7 +190,6 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
   const [denied, setDenied] = useState(false);
   const [group, setGroup] = useState<string>(NO_GROUP);
   const [newGroupName, setNewGroupName] = useState("");
-  const [linkUsers, setLinkUsers] = useState(false);
   const [plan, setPlan] = useState<ImportOutcome | null>(null);
   const [done, setDone] = useState<ImportOutcome | null>(null);
   /** Тест, выбранный человеком из кандидатов. Пока не выбран — действует рекомендация. */
@@ -223,7 +223,6 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
     if (ambiguous && testId) fd.append("testId", testId);
     if (group !== NO_GROUP && group !== NEW_GROUP) fd.append("groupId", group);
     if (group === NEW_GROUP) fd.append("newGroupName", newGroupName);
-    fd.append("linkUsers", String(linkUsers));
     return fd;
   }
 
@@ -396,7 +395,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
       <Banner
         tone="success"
         title="Загрузка завершена"
-        description={`Добавлено ${done.rowsCreated}, обновлено ${done.rowsUpdated}, пропущено ${done.rowsSkipped}, связано с пользователями ${done.rowsLinked}.`}
+        description={`Добавлено ${done.rowsCreated}, обновлено ${done.rowsUpdated}, пропущено ${done.rowsSkipped}, связано с пользователями ${done.rowsLinked}, заведено участников ${done.usersCreated}.`}
       />,
       <Button variant="secondary" onClick={reset}>Загрузить ещё</Button>,
     );
@@ -523,15 +522,9 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
         />
       )}
 
-      {/* Флажка «данные уже обезличены» нет: обезличенный файл узнаётся по колонке
-          `external_id`, и спрашивать человека о том, что видно из самого файла, незачем. */}
-      <Checkbox
-        label="Связать с пользователями по ключу"
-        description="Совпадение с внешним ключом пользователя свяжет прохождение с ним."
-        checked={linkUsers}
-        onChange={(e) => setLinkUsers(e.target.checked)}
-        disabled={runMut.isPending}
-      />
+      {/* Флажков нет. «Данные уже обезличены» узнаётся по колонке `external_id`, а связывание с
+          пользователями с 2026-10-06 идёт всегда: участник, которого в системе нет, получает
+          внешнюю учётную запись (PRD-54 BR-54-38). */}
 
       {plan && (
         <Stack gap={2}>
@@ -542,6 +535,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
               Будет пропущено: {plan.rowsSkipped}
             </Tag>
             <Tag variant="outline" size="s">Будет связано: {plan.rowsLinked}</Tag>
+            <Tag variant="outline" size="s">Будет заведено участников: {plan.usersCreated}</Tag>
           </Cluster>
           {/* Ключ с номером: протокол повторяет одну фразу на каждую такую строку файла. */}
           {plan.warnings.map((w, i) => (

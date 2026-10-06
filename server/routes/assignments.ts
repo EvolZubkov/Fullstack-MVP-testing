@@ -39,7 +39,8 @@ async function notifyUser(opts: {
   expiresAt: Date;
 }) {
   const user = await storage.getUser(opts.userId);
-  if (!user) return;
+  // PRD-54 BR-54-42: an account without email has nowhere to receive the letter.
+  if (!user || !user.email) return;
 
   // email зашифрован — расшифровываем
   let email = "";

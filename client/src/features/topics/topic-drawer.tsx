@@ -540,7 +540,7 @@ export function TopicDrawer({
                   options={addableUsers.map((u) => ({
                     value: u.id,
                     label: displayName(u),
-                    searchText: `${u.name ?? ""} ${u.email}`,
+                    searchText: `${u.name ?? ""} ${u.email ?? ""}`,
                   }))}
                 />
                 <Select<AccessLevel>

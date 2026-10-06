@@ -546,7 +546,8 @@ export async function runParticipantsInvite(
       // in the operator's workbook that nothing lives by.
       if (outcome.issued && !report.linksExpireAt) report.linksExpireAt = expiresAt.toISOString();
       report.results.push({
-        email: user.email,
+        // The account was found or created by this row's address, so it has one.
+        email: user.email ?? row.email,
         name: user.name ?? null,
         status: row.status,
         ...(outcome.magicLink ? { magicLink: outcome.magicLink } : {}),

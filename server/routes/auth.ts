@@ -127,6 +127,11 @@ router.post("/change-password", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    // PRD-54 BR-54-42: an account without email has no password either and never signs in;
+    // the session here cannot be its own, so refuse rather than check against nothing.
+    if (!user.email) {
+      return res.status(400).json({ error: "Account has no password" });
+    }
     const isValid = await storage.validatePassword(user.email, currentPassword);
     if (!isValid) {
       return res.status(401).json({ error: "Current password is incorrect" });
@@ -207,7 +212,9 @@ router.post("/forgot-password", async (req, res) => {
     // nothing, and a line of its own — even one naming no address — would, by
     // its timestamp against the request, confirm that the address exists. The
     // two refusals must be identical from the outside, answer and record alike.
-    if (user.isExternal) {
+    // An account found by its email always has one; the check only narrows the type and keeps
+    // the email-less external participant (PRD-54 BR-54-42) on the same neutral answer.
+    if (user.isExternal || !user.email) {
       return res.json({
         success: true,
         message: "If this email exists, a reset link has been sent",
@@ -281,7 +288,7 @@ router.get("/verify-reset-token", async (req, res) => {
     const user = await storage.getUser(resetToken.userId);
     res.json({
       valid: true,
-      emailHint: user ? maskEmail(user.email) : null,
+      emailHint: user?.email ? maskEmail(user.email) : null,
     });
   } catch (error) {
     logger.error("Verify reset token error: " + (error as Error).message, "auth");

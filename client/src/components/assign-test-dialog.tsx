@@ -411,8 +411,10 @@ export function AssignTestDialog({
   // Filter out already assigned users (directly or via group membership)
   const assignedUserIds = new Set(assignments.filter((a) => a.userId).map((a) => a.userId!));
   const groupMemberIds = new Set(assignments.flatMap((a) => a.groupMemberIds ?? []));
+  // PRD-54 BR-54-42: an account without email cannot receive the link, so it is not offered.
   const availableUsers = allUsers.filter(
     (u) => !assignedUserIds.has(u.id) && !groupMemberIds.has(u.id) && (u.roles ?? []).includes("learner")
+      && Boolean(u.email)
   );
 
   // Filter out already assigned groups

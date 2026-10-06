@@ -45,7 +45,8 @@ export interface ReviewInviteOptions {
 
 /** Что произошло с одной строкой. */
 export interface ReviewInviteResult {
-  email: string;
+  /** `null` — the account has no email (PRD-54 BR-54-42); no letter can go to it. */
+  email: string | null;
   userId: string;
   /** Учётная запись заведена этим прогоном. */
   accountCreated: boolean;

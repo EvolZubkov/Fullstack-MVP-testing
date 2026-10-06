@@ -224,7 +224,7 @@ export function TestAccessPanel({
               options={addableUsers.map((u) => ({
                 value: u.id,
                 label: displayName(u),
-                searchText: `${u.name ?? ""} ${u.email}`,
+                searchText: `${u.name ?? ""} ${u.email ?? ""}`,
                 meta: formatRoles(u.roles as Role[] | undefined) || undefined,
               }))}
             />

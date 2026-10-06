@@ -40,7 +40,7 @@ describe("attemptParticipant", () => {
   it("несвязанная обезличенная — псевдонимом по префиксу ключа", () => {
     // Полные 64 знака в таблице нечитаемы, шести хватает, чтобы различать участников глазами.
     const a = { userId: null, participantKey: "abc123def", lmsUserName: null };
-    expect(attemptParticipant(a, new Map())).toBe("Участник abc123");
+    expect(attemptParticipant(a, new Map())).toBe("Участник abc123de");
   });
 
   it("телеметрия — именем из LMS", () => {
@@ -50,7 +50,7 @@ describe("attemptParticipant", () => {
 
   it("связь на удалённого пользователя откатывается к псевдониму, а не к пустоте", () => {
     const a = { userId: "нет-такого", participantKey: "abc123def", lmsUserName: null };
-    expect(attemptParticipant(a, users)).toBe("Участник abc123");
+    expect(attemptParticipant(a, users)).toBe("Участник abc123de");
   });
 
   it("совсем без признаков — понятная заглушка", () => {

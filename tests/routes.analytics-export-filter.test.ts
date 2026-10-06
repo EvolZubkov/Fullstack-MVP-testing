@@ -182,7 +182,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
     const rows = await sheetRows(res.body, "Прохождения");
     expect(rows).toHaveLength(2);
     expect(rows.map(r => r[2])).toEqual(
-      expect.arrayContaining(["Морозова Анна", "Участник 7f3a9c"]),
+      expect.arrayContaining(["Морозова Анна", "Участник 7f3a9c21"]),
     );
   });
 
@@ -191,7 +191,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
 
     const rows = await sheetRows(res.body, "Прохождения");
     expect(rows).toHaveLength(1);
-    expect(rows[0][2]).toBe("Участник 7f3a9c");
+    expect(rows[0][2]).toBe("Участник 7f3a9c21");
   });
 
   it("оставляет в книге только тот исход, который отобран", async () => {
@@ -199,7 +199,7 @@ describe("POST /api/export/excel — состав строк задаёт фил
 
     const rows = await sheetRows(res.body, "Прохождения");
     expect(rows).toHaveLength(1);
-    expect(rows[0][2]).toBe("Участник 7f3a9c");
+    expect(rows[0][2]).toBe("Участник 7f3a9c21");
   });
 
   it("версия публикации сужает и лист прохождений, и листы по веб-попыткам", async () => {

@@ -19,10 +19,11 @@ import { randomUUID } from "crypto";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
-  users, passwordResetTokens, scormAttempts,
+  users, userRoles, passwordResetTokens, scormAttempts,
   type User, type InsertUser, type PasswordResetToken,
 } from "@shared/schema";
 import { ORG_FIELDS, foldOrgValues, type OrgField, type OrgValueCount } from "@shared/org-fields";
+import { PARTICIPANT_LABEL_KEY_CHARS, participantLabel } from "@shared/participant-label";
 import {
   encryptEmail,
   decryptEmail,
@@ -36,12 +37,32 @@ import { logger } from "../logger";
 import { incrementCounter } from "../metrics";
 import { pickDefined } from "./shared";
 
+/**
+ * The row with its email decrypted. An account without email (PRD-54 BR-54-42: an external
+ * participant created by an LMS export import) keeps `null` — there is nothing to decrypt.
+ */
+async function withPlainEmail<T extends { email: string | null }>(user: T): Promise<T> {
+  return { ...user, email: user.email ? await decryptEmail(user.email) : null };
+}
+
+/** What the import knows about a participant it has to create an account for (PRD-54 BR-54-39). */
+export interface ImportedExternalUserInput {
+  /** The participant key (`external_id`); stored as `external_key`. */
+  externalKey: string;
+  /** Full name from the file when anonymisation is off; `null` gives the key label instead. */
+  name: string | null;
+  lmsLearnerId: string | null;
+  organization: string | null;
+  unit: string | null;
+  position: string | null;
+}
+
 /** Repository for the `users` table (PRD-13 identities, encrypted emails). */
 export class UsersRepository {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
+      return withPlainEmail(user);
     }
     return undefined;
   }
@@ -94,7 +115,7 @@ export class UsersRepository {
     const emailHashValue = hashEmail(email);
     const [user] = await db.select().from(users).where(eq(users.emailHash, emailHashValue));
     if (user) {
-      return { ...user, email: await decryptEmail(user.email) };
+      return withPlainEmail(user);
     }
     return undefined;
   }
@@ -105,8 +126,10 @@ export class UsersRepository {
     // password at all (NULL), and the assignment link is the only way in.
     const hashedPassword =
       insertUser.passwordHash != null ? await hashPassword(insertUser.passwordHash) : null;
-    const emailEncrypted = await encryptEmail(insertUser.email);
-    const emailHashValue = hashEmail(insertUser.email);
+    // PRD-54 BR-54-42: no email at all is legal (an imported external participant); then there
+    // is nothing to encrypt and no hash to look the account up by.
+    const emailEncrypted = insertUser.email ? await encryptEmail(insertUser.email) : null;
+    const emailHashValue = insertUser.email ? hashEmail(insertUser.email) : null;
 
     const [user] = await db.insert(users).values({
       id,
@@ -130,7 +153,61 @@ export class UsersRepository {
       createdBy: insertUser.createdBy || null,
     }).returning();
 
-    return { ...user, email: await decryptEmail(user.email) };
+    return withPlainEmail(user);
+  }
+
+  /**
+   * Create the external account of an LMS export participant (PRD-54 BR-54-39, BR-54-40).
+   *
+   * No email, no password, the learner role, status «active». The name is the full name when the
+   * import keeps it; otherwise it is the key label, and the label is checked against the other
+   * external accounts: a taken one is lengthened by a character until it is free. The key itself
+   * is unique anyway — the label only decides how much of it a reader sees, and two different
+   * people must not look the same in a list. Once given, a label never changes.
+   *
+   * @param input what the file says about the participant
+   * @returns the new account
+   */
+  async createImportedExternalUser(input: ImportedExternalUserInput): Promise<User> {
+    let name = input.name?.trim() || null;
+    if (!name) {
+      for (let chars = PARTICIPANT_LABEL_KEY_CHARS; ; chars += 1) {
+        const label = participantLabel(input.externalKey, chars);
+        const [taken] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.isExternal, true), eq(users.name, label)))
+          .limit(1);
+        if (!taken || chars >= input.externalKey.length) {
+          name = label;
+          break;
+        }
+      }
+    }
+
+    const id = randomUUID();
+    return db.transaction(async (tx) => {
+      const [user] = await tx.insert(users).values({
+        id,
+        email: null,
+        emailHash: null,
+        passwordHash: null,
+        name,
+        isExternal: true,
+        status: "active",
+        mustChangePassword: false,
+        gdprConsent: false,
+        externalKey: input.externalKey,
+        lmsLearnerId: input.lmsLearnerId,
+        organization: input.organization,
+        unit: input.unit,
+        position: input.position,
+        createdAt: new Date(),
+        createdBy: null,
+      }).returning();
+      await tx.insert(userRoles).values({ id: randomUUID(), userId: id, role: "learner" });
+      return user;
+    });
   }
 
   async validatePassword(email: string, password: string): Promise<User | null> {
@@ -171,7 +248,7 @@ export class UsersRepository {
 
   async getUsers(): Promise<User[]> {
     const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
-    return Promise.all(allUsers.map(async user => ({ ...user, email: await decryptEmail(user.email) })));
+    return Promise.all(allUsers.map(withPlainEmail));
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
@@ -198,7 +275,7 @@ export class UsersRepository {
       .returning();
 
     if (updated) {
-      return { ...updated, email: await decryptEmail(updated.email) };
+      return withPlainEmail(updated);
     }
     return undefined;
   }
@@ -282,7 +359,7 @@ export class UsersRepository {
       .set({ isExternal: false, mustChangePassword: true })
       .where(eq(users.id, userId))
       .returning();
-    return user ? { ...user, email: await decryptEmail(user.email) } : undefined;
+    return user ? withPlainEmail(user) : undefined;
   }
 
   // ─── Password reset tokens (part of the user aggregate) ─────────────────────

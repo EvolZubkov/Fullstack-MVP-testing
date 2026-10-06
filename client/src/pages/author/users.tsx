@@ -66,7 +66,8 @@ import { mergeShape, stableKey, useListFilters } from "@/features/saved-filters/
 
 interface User {
   id: string;
-  email: string;
+  /** `null` — an external participant created by an LMS export import (PRD-54 BR-54-42). */
+  email: string | null;
   name: string | null;
   /** Effective stored roles (PRD-13 multi-role). */
   roles?: string[];
@@ -528,7 +529,7 @@ export default function UsersPage() {
   const openEditDialog = (user: User) => {
     setSelectedUser(user);
     setFormData({
-      email: user.email,
+      email: user.email ?? "",
       name: user.name || "",
       password: "",
       roles: user.roles ?? [],
@@ -570,7 +571,7 @@ export default function UsersPage() {
   // Filter users
   const filteredUsers = users.filter((user) => {
     const matchesSearch =
-      user.email.toLowerCase().includes(search.toLowerCase()) ||
+      (user.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (user.name && user.name.toLowerCase().includes(search.toLowerCase()));
     const matchesRole = roleFilter === "all" || (user.roles ?? []).includes(roleFilter);
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
@@ -710,7 +711,10 @@ export default function UsersPage() {
       // almost-empty column would eat width the list needs elsewhere.
       render: (u) => (
         <Cluster gap={2} wrap={false}>
-          <Text variant="body-s" weight="medium">{u.email}</Text>
+          {/* PRD-54 BR-54-42: an imported external participant has no address at all. */}
+          {u.email
+            ? <Text variant="body-s" weight="medium">{u.email}</Text>
+            : <Text variant="body-s" tone="muted">—</Text>}
           {u.isExternal && <Tag tone="info" size="s">Внешний</Tag>}
         </Cluster>
       ),
@@ -776,10 +780,13 @@ export default function UsersPage() {
           {u.isExternal && (
             <>
               <MenuDivider />
+              {/* PRD-54 BR-54-42: the conversion mails a password-setup link, so an
+                  account without email cannot take it until an address is set. */}
               <MenuItem
                 icon={<UserCheck size={16} />}
                 title="Сделать штатным"
-                meta="Уйдёт приглашение задать пароль"
+                meta={u.email ? "Уйдёт приглашение задать пароль" : "Сначала задайте почту"}
+                disabled={!u.email}
                 onClick={() => promoteUserMutation.mutate(u.id)}
               />
             </>
@@ -1122,7 +1129,8 @@ export default function UsersPage() {
                   roles: formData.roles,
                 })
               }
-              disabled={!formData.email || formData.roles.length === 0}
+              // An account without email (PRD-54 BR-54-42) may be saved without one.
+              disabled={(!formData.email && Boolean(selectedUser?.email)) || formData.roles.length === 0}
               loading={updateUserMutation.isPending}
             >
               {t.common.save}
@@ -1133,7 +1141,7 @@ export default function UsersPage() {
         <Stack gap={4}>
           <Input
             label={t.users.email}
-            required
+            required={Boolean(selectedUser?.email)}
             type="email"
             fullWidth
             value={formData.email}
@@ -1214,7 +1222,7 @@ export default function UsersPage() {
         open={isResetAttemptsOpen}
         onClose={() => setIsResetAttemptsOpen(false)}
         title="Сбросить попытки"
-        description={`Выберите тест для сброса попыток пользователя ${selectedUser?.email ?? ""}`}
+        description={`Выберите тест для сброса попыток пользователя ${selectedUser?.email ?? selectedUser?.name ?? ""}`}
         footer={
           <>
             <Button variant="secondary" onClick={() => setIsResetAttemptsOpen(false)}>{t.common.cancel}</Button>

@@ -10,7 +10,9 @@ import type { BreakdownFeedback as BreakdownFeedbackShape } from "./breakdown/ty
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  email: text("email").notNull(), // Зашифрованный email
+  // Зашифрованный email. NULL — внешний участник, заведённый импортом выгрузки LMS (PRD-54 BR-54-42):
+  // выгрузка почты не несёт, а выдуманный адрес хуже отсутствующего.
+  email: text("email"),
   emailHash: varchar("email_hash", { length: 64 }).unique(), // SHA-256 хеш для поиска
   passwordHash: text("password_hash"), // scrypt hash (PRD-9); NULL for an external participant (PRD-28)
   name: text("name"), // заполняется при первом входе
@@ -2228,6 +2230,26 @@ export const lmsImportBatches = pgTable("lms_import_batches", {
 }, (table) => ({
   // Партии перечисляются по тесту, новые первыми.
   testIdIdx: index("lms_import_batches_test_id_idx").on(table.testId),
+}));
+
+/**
+ * PRD-54 BR-54-43: что партия импорта сделала с учётными записями — завела ли запись и добавила ли
+ * её в группу партии.
+ *
+ * Без этого откат не отличил бы участника, которого завела эта загрузка, от того, кто был в системе
+ * раньше, и членство, поставленное импортом, от поставленного руками. Строка одна на пару
+ * (партия, пользователь); удаляется вместе с партией.
+ */
+export const lmsImportBatchUsers = pgTable("lms_import_batch_users", {
+  batchId: varchar("batch_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  /** Запись заведена этой партией. */
+  createdUser: boolean("created_user").notNull().default(false),
+  /** Членство в группе партии поставлено этой партией (до неё участник в группе не был). */
+  addedToGroup: boolean("added_to_group").notNull().default(false),
+}, (table) => ({
+  pk: uniqueIndex("lms_import_batch_users_pk").on(table.batchId, table.userId),
+  userIdx: index("lms_import_batch_users_user_idx").on(table.userId),
 }));
 
 /**

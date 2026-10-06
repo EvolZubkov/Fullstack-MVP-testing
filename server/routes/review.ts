@@ -101,7 +101,7 @@ router.get("/:id/review/comments", ...reviewGate, async (req: Request, res: Resp
     await Promise.all(
       [...authorIds].map(async (id) => {
         const user = await storage.getUser(id);
-        if (user) names.set(id, user.name || user.email);
+        if (user) names.set(id, user.name || user.email || "Участник");
       }),
     );
     const named = <T extends { authorId: string }>(row: T) => ({

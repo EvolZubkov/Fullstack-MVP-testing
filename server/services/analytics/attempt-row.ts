@@ -6,6 +6,7 @@
  * Lives in the service layer because both the analytics routes and the observation
  * layer (PRD-56 FR-33) need it, and a service must not import from routes.
  */
+import { participantLabel } from "@shared/participant-label";
 
 /**
  * Пакет, которым выдано LMS-прохождение, — или `undefined`, если пакета нет.
@@ -67,6 +68,7 @@ export function attemptParticipant(
     if (name) return name;
   }
   if (attempt.lmsUserName) return attempt.lmsUserName;
-  if (attempt.participantKey) return `Участник ${attempt.participantKey.slice(0, 6)}`;
+  // PRD-54 BR-54-40: the same eight-character label an imported external account is named with.
+  if (attempt.participantKey) return participantLabel(attempt.participantKey);
   return "Неизвестный участник";
 }

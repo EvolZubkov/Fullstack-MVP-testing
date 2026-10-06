@@ -9,7 +9,7 @@
  * in the repositories). This file holds no query logic of its own — it exists so
  * routes depend only on `IStorage`, never on the concrete repositories.
  */
-import { UsersRepository } from "./storage/users-repository";
+import { UsersRepository, type ImportedExternalUserInput } from "./storage/users-repository";
 import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
 import { TopicsRepository, type TopicDeletionResult, type TopicsBulkDeletionResult } from "./storage/topics-repository";
@@ -109,6 +109,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   /** PRD-54: поиск по внешнему ключу для связывания импортированных прохождений. */
   getUserByExternalKey(key: string): Promise<User | undefined>;
+  createImportedExternalUser(input: ImportedExternalUserInput): Promise<User>;
   /** PRD-54 BR-54-31: пользователь по идентификатору обучающегося в LMS. */
   getUserByLmsLearnerId(learnerId: string): Promise<User | undefined>;
   /** Org-structure values in use (profiles and passages), folded per field. */
@@ -135,6 +136,8 @@ export interface IStorage {
   getUserGroups(userId: string): Promise<Group[]>;
   getGroupUsers(groupId: string): Promise<User[]>;
   addUserToGroup(userId: string, groupId: string): Promise<UserGroup>;
+  ensureGroupMember(userId: string, groupId: string): Promise<boolean>;
+  getGroupImportSummary(groupId: string): Promise<{ attempts: number; batches: number }>;
   removeUserFromGroup(userId: string, groupId: string): Promise<boolean>;
   setUserGroups(userId: string, groupIds: string[]): Promise<void>;
 
@@ -423,6 +426,11 @@ export interface IStorage {
   getLmsImportBatchById(id: string): Promise<LmsImportBatch | undefined>;
   getLmsImportBatches(testId: string): Promise<LmsImportBatch[]>;
   deleteLmsImportBatch(id: string): Promise<void>;
+  recordImportBatchUser(
+    batchId: string,
+    userId: string,
+    flags: { createdUser: boolean; addedToGroup: boolean },
+  ): Promise<void>;
 
   // Content Pages (PRD-1)
   /** PRD-22: variant bindings of many tests in ONE query (tests-list audit). */
@@ -568,6 +576,10 @@ export class DatabaseStorage implements IStorage {
     return this.usersRepo.getUserByExternalKey(key);
   }
 
+  createImportedExternalUser(input: ImportedExternalUserInput): Promise<User> {
+    return this.usersRepo.createImportedExternalUser(input);
+  }
+
   getUserByEmail(email: string): Promise<User | undefined> {
     return this.usersRepo.getUserByEmail(email);
   }
@@ -638,6 +650,14 @@ export class DatabaseStorage implements IStorage {
 
   getGroupUsers(groupId: string): Promise<User[]> {
     return this.groupsRepo.getGroupUsers(groupId);
+  }
+
+  ensureGroupMember(userId: string, groupId: string): Promise<boolean> {
+    return this.groupsRepo.ensureGroupMember(userId, groupId);
+  }
+
+  getGroupImportSummary(groupId: string): Promise<{ attempts: number; batches: number }> {
+    return this.groupsRepo.getGroupImportSummary(groupId);
   }
 
   addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
@@ -1412,6 +1432,14 @@ export class DatabaseStorage implements IStorage {
 
   deleteLmsImportBatch(id: string): Promise<void> {
     return this.scormRepo.deleteLmsImportBatch(id);
+  }
+
+  recordImportBatchUser(
+    batchId: string,
+    userId: string,
+    flags: { createdUser: boolean; addedToGroup: boolean },
+  ): Promise<void> {
+    return this.scormRepo.recordImportBatchUser(batchId, userId, flags);
   }
 
   // ============================================

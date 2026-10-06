@@ -5,10 +5,16 @@
  * entirely with the Skillum design system — layout via Stack/Cluster/Box,
  * typography via Text, data via the DS Table/Tag/Input/Textarea/ModalDialog/
  * EmptyState primitives (no raw utility classes).
+ *
+ * PRD-54 (approved wireframe `prd54-lms-external-participants.html`): external
+ * accounts — imported LMS participants included — are ordinary members, counted
+ * in the «из них N внешних» mark and shown with «—» in place of a missing address;
+ * the delete confirmation names the imported passages that lose the group label.
  */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Plus,
   Search,
   MoreHorizontal,
@@ -22,6 +28,7 @@ import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
 import { LoadingState } from "@/components/loading-state";
 import {
+  Banner,
   Box,
   Button,
   Cluster,
@@ -41,19 +48,25 @@ import {
   type TableColumn,
   useToast,
 } from "@skillum/ui-kit";
-import { t } from "@/lib/i18n";
+import { t, pluralize } from "@/lib/i18n";
 
 interface Group {
   id: string;
   name: string;
   description: string | null;
   userCount: number;
+  /** PRD-54: members that are external accounts. */
+  externalCount?: number;
+  /** PRD-54 BR-54-45: imported LMS passages labelled with the group. */
+  importSummary?: { attempts: number; batches: number };
   createdAt: string;
 }
 
 interface User {
   id: string;
-  email: string;
+  /** `null` — an external participant created by an LMS export import (PRD-54 BR-54-42). */
+  email: string | null;
+  isExternal?: boolean;
   name: string | null;
   roles?: string[];
   status: "pending" | "active" | "inactive";
@@ -284,6 +297,17 @@ export default function GroupsPage() {
     });
   };
 
+  /**
+   * The address cell: an imported external participant has none (PRD-54 BR-54-42) and shows «—»;
+   * every external account carries the same «Внешний» mark as on the users screen.
+   */
+  const renderEmail = (u: User) => (
+    <Cluster gap={2} wrap={false}>
+      {u.email ? <span>{u.email}</span> : <Text variant="body-s" tone="muted">—</Text>}
+      {u.isExternal && <Tag tone="info" size="s">Внешний</Tag>}
+    </Cluster>
+  );
+
   // ── Table columns ──
   const groupColumns: TableColumn<Group>[] = [
     { key: "name", header: t.groups.name, render: (g) => <Text variant="body-s" weight="medium">{g.name}</Text> },
@@ -296,7 +320,14 @@ export default function GroupsPage() {
       key: "members",
       header: t.groups.membersCount,
       render: (g) => (
-        <Tag style={{ cursor: "pointer" }} onClick={() => openMembersDialog(g)}>{g.userCount} чел.</Tag>
+        <Cluster gap={2} wrap={false}>
+          <Tag style={{ cursor: "pointer" }} onClick={() => openMembersDialog(g)}>{g.userCount} чел.</Tag>
+          {(g.externalCount ?? 0) > 0 && (
+            <Tag tone="info" style={{ cursor: "pointer" }} onClick={() => openMembersDialog(g)}>
+              из них {g.externalCount} {pluralize(g.externalCount ?? 0, "внешний", "внешних", "внешних")}
+            </Tag>
+          )}
+        </Cluster>
       ),
     },
     {
@@ -326,7 +357,7 @@ export default function GroupsPage() {
   ];
 
   const memberColumns: TableColumn<User>[] = [
-    { key: "email", header: "Email", render: (u) => u.email },
+    { key: "email", header: "Email", render: renderEmail },
     { key: "name", header: t.users.name, render: (u) => u.name || "—" },
     { key: "role", header: t.users.role, render: (u) => <Tag variant="outline">{formatRoles((u.roles ?? []) as Role[])}</Tag> },
     {
@@ -349,7 +380,7 @@ export default function GroupsPage() {
   ];
 
   const availableUserColumns: TableColumn<User>[] = [
-    { key: "email", header: "Email", render: (u) => u.email },
+    { key: "email", header: "Email", render: renderEmail },
     { key: "name", header: t.users.name, render: (u) => u.name || "—" },
     { key: "role", header: t.users.role, render: (u) => <Tag variant="outline">{formatRoles((u.roles ?? []) as Role[])}</Tag> },
   ];
@@ -547,7 +578,16 @@ export default function GroupsPage() {
             </Button>
           </>
         }
-      />
+      >
+        {/* PRD-54 BR-54-45: the group label comes off the imported passages with the group. */}
+        {(selectedGroup?.importSummary?.attempts ?? 0) > 0 && (
+          <Banner
+            tone="warning"
+            icon={<AlertTriangle size={14} />}
+            description={`Прохождений из LMS в этой группе: ${selectedGroup?.importSummary?.attempts} (${selectedGroup?.importSummary?.batches} ${pluralize(selectedGroup?.importSummary?.batches ?? 0, "загрузка", "загрузки", "загрузок")}). После удаления они останутся в аналитике без группы.`}
+          />
+        )}
+      </ModalDialog>
     </Stack>
   );
 }

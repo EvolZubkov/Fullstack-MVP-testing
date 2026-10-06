@@ -205,7 +205,7 @@ describe("GET /api/analytics/registry", () => {
     const res = await ask();
 
     const row = res.body.rows.find((r: { id: string }) => r.id === "lms-1");
-    expect(row.participant).toBe("Участник 7f3a9c");
+    expect(row.participant).toBe("Участник 7f3a9c21");
     expect(row.source).toBe("import");
   });
 

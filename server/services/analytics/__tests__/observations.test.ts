@@ -88,7 +88,7 @@ describe("toObservation — web and telemetry describe one passage the same way"
 
     const observation = toObservation.lms(row, { users, packages, gradedTest: true });
 
-    expect(observation.participant).toBe("Участник 7f3a9c");
+    expect(observation.participant).toBe("Участник 7f3a9c21");
   });
 
   it("calls an unfinished attempt incomplete, not failed", () => {

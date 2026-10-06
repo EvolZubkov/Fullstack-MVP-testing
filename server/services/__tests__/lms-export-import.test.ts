@@ -65,11 +65,10 @@ describe("buildImportPlan", () => {
     expect(buildImportPlan(withExternal("") as never, ON).rows[0].participantKey).toBe(computed);
   });
 
-  it("предупреждает о сочетании обезличивания и связывания", () => {
-    const plan = buildImportPlan(book as never, { ...ON, linkUsers: true });
-    expect(plan.warnings).toContain(
-      "Обезличивание и связывание включены одновременно: ФИО не сохраняется, но прохождение указывает на конкретного пользователя.",
-    );
+  it("о сочетании обезличивания и связывания больше не предупреждает (BR-54-38)", () => {
+    // Флажка нет, связывание идёт всегда, а заведённая запись носит подпись, а не ФИО.
+    const plan = buildImportPlan(book as never, ON);
+    expect(plan.warnings.join()).not.toContain("Обезличивание и связывание");
   });
 
   it("дата активации модуля идёт и в начало, и в конец попытки", () => {
@@ -128,6 +127,12 @@ function storageStub(
 ) {
   /** Переданные ключи (BR-54-37): какая запись какой ключ переняла. */
   const keyTransfers: Array<{ id: string; attemptKey: string }> = [];
+  /** Заведённые внешние записи (BR-54-38): что о участнике пришло в метод. */
+  const createdUsers: Array<Record<string, unknown>> = [];
+  /** Поставленное членство (BR-54-41). */
+  const memberships: Array<{ userId: string; groupId: string }> = [];
+  /** Учёт партии (BR-54-43). */
+  const batchUsers: Array<{ batchId: string; userId: string; createdUser: boolean; addedToGroup: boolean }> = [];
   const batches: unknown[] = [];
   const attempts: unknown[] = [];
   const answers: unknown[][] = [];
@@ -139,6 +144,18 @@ function storageStub(
   const exposureRebuilds: string[] = [];
   return {
     batches, attempts, answers, snapshotLookups, batchPatches, exposureRebuilds, keyTransfers,
+    createdUsers, memberships, batchUsers,
+    createImportedExternalUser: async (input: Record<string, unknown>) => {
+      createdUsers.push(input);
+      return { id: `ext-${createdUsers.length}` };
+    },
+    ensureGroupMember: async (userId: string, groupId: string) => {
+      memberships.push({ userId, groupId });
+      return true;
+    },
+    recordImportBatchUser: async (
+      batchId: string, userId: string, flags: { createdUser: boolean; addedToGroup: boolean },
+    ) => { batchUsers.push({ batchId, userId, ...flags }); },
     listImportedAttemptKeys: async () => existing.map((e) => ({ ...e })),
     setImportedAttemptKey: async (id: string, attemptKey: string) => { keyTransfers.push({ id, attemptKey }); },
     // PRD-56 FR-19a: у теста одна опубликованная версия — третья.
@@ -220,7 +237,7 @@ describe("buildImportPlan — процент прохождения", () => {
 describe("runImport", () => {
   it("связывает по external_id из файла против внешнего ключа (BR-54-26)", async () => {
     const s = storageStub({ "9f86d081884c7d65": "user-7" });
-    const res = await runImport(withExternal("9F86D081884C7D65") as never, { ...ON, linkUsers: true }, ctx, s as never);
+    const res = await runImport(withExternal("9F86D081884C7D65") as never, ON, ctx, s as never);
     expect(res.rowsLinked).toBe(1);
     expect((s.attempts[0] as { userId: string }).userId).toBe("user-7");
   });
@@ -230,7 +247,7 @@ describe("runImport", () => {
     // значит, и строка сырого файла, для которой ключ посчитал импорт, находит своего человека.
     const computed = buildImportPlan(book as never, ON).rows[0].participantKey;
     const s = storageStub({ [computed]: "user-7" });
-    const res = await runImport(book as never, { ...ON, linkUsers: true }, ctx, s as never);
+    const res = await runImport(book as never, ON, ctx, s as never);
     expect(res.rowsLinked).toBe(1);
     expect((s.attempts[0] as { userId: string }).userId).toBe("user-7");
   });
@@ -239,9 +256,10 @@ describe("runImport", () => {
     // Кто-то вписал ФИО или табельный номер во внешний ключ — сверяется только `external_id`.
     const withCode = { ...book, rows: [{ ...book.rows[0], participantCode: "К-12" }] };
     const s = storageStub({ "иванов иван": "user-7", "к-12": "user-8" });
-    const res = await runImport(withCode as never, { ...OFF, linkUsers: true }, ctx, s as never);
+    const res = await runImport(withCode as never, OFF, ctx, s as never);
     expect(res.rowsLinked).toBe(0);
-    expect((s.attempts[0] as { userId: string | null }).userId).toBeNull();
+    // Ни user-7, ни user-8: человек получает СВОЮ внешнюю запись (BR-54-38), а не чужую.
+    expect((s.attempts[0] as { userId: string | null }).userId).toBe("ext-1");
   });
 
   it("партия помнит, пришёл ли файл с external_id", async () => {
@@ -260,7 +278,7 @@ describe("runImport", () => {
     const withLearner = { ...book, rows: [{ ...book.rows[0], learnerId: "u-4471" }] };
     const s = storageStub({}, { "u-4471": "user-9" });
 
-    const res = await runImport(withLearner as never, { ...ON, linkUsers: true }, ctx, s as never);
+    const res = await runImport(withLearner as never, ON, ctx, s as never);
 
     expect(res.rowsLinked).toBe(1);
     expect((s.attempts[0] as { userId: string }).userId).toBe("user-9");
@@ -271,7 +289,7 @@ describe("runImport", () => {
     const both = { ...withExternal("ext-1"), rows: [{ ...withExternal("ext-1").rows[0], learnerId: "u-4471" }] };
     const s = storageStub({ "ext-1": "user-external" }, { "u-4471": "user-learner" });
 
-    await runImport(both as never, { ...ON, linkUsers: true }, ctx, s as never);
+    await runImport(both as never, ON, ctx, s as never);
 
     expect((s.attempts[0] as { userId: string }).userId).toBe("user-learner");
   });
@@ -280,24 +298,64 @@ describe("runImport", () => {
     const both = { ...withExternal("ext-1"), rows: [{ ...withExternal("ext-1").rows[0], learnerId: "чужой" }] };
     const s = storageStub({ "ext-1": "user-external" }, {});
 
-    await runImport(both as never, { ...ON, linkUsers: true }, ctx, s as never);
+    await runImport(both as never, ON, ctx, s as never);
 
     expect((s.attempts[0] as { userId: string }).userId).toBe("user-external");
   });
 
-  it("не связывает, когда флажок выключен", async () => {
-    // Ключ совпадает — значит, без связи строку оставил именно выключенный флажок.
+  it("связывает всегда: флажка больше нет (BR-54-38)", async () => {
     const s = storageStub({ [buildImportPlan(book as never, ON).rows[0].participantKey]: "user-7" });
     const res = await runImport(book as never, ON, ctx, s as never);
-    expect(res.rowsLinked).toBe(0);
-    expect((s.attempts[0] as { userId: string | null }).userId).toBeNull();
+    expect(res.rowsLinked).toBe(1);
+    expect(res.usersCreated).toBe(0);
+    expect((s.attempts[0] as { userId: string | null }).userId).toBe("user-7");
   });
 
-  it("несовпадение ключа — не ошибка", async () => {
+  it("участник без учётной записи получает внешнюю (BR-54-38, BR-54-39)", async () => {
     const s = storageStub();
-    const res = await runImport(book as never, { ...ON, linkUsers: true }, ctx, s as never);
+    const res = await runImport(book as never, ON, ctx, s as never);
     expect(res.rowsCreated).toBe(1);
     expect(res.rowsLinked).toBe(0);
+    expect(res.usersCreated).toBe(1);
+    expect((s.attempts[0] as { userId: string }).userId).toBe("ext-1");
+    // Обезличено: ни ФИО, ни организации; подразделение и должность — всегда.
+    expect(s.createdUsers[0]).toMatchObject({
+      externalKey: buildImportPlan(book as never, ON).rows[0].participantKey,
+      name: null,
+      organization: null,
+    });
+    expect(s.batchUsers).toEqual([{ batchId: "batch-1", userId: "ext-1", createdUser: true, addedToGroup: false }]);
+  });
+
+  it("без обезличивания запись получает ФИО и организацию из файла", async () => {
+    const s = storageStub();
+    await runImport(book as never, OFF, ctx, s as never);
+    expect(s.createdUsers[0]).toMatchObject({ name: "Иванов Иван", organization: "ПАО" });
+  });
+
+  it("участник с несколькими строками заводится один раз", async () => {
+    const twoRows = { ...book, rows: [book.rows[0], { ...book.rows[0], moduleActivatedAt: "2026-09-10T10:00:00.000Z" }] };
+    const s = storageStub();
+    const res = await runImport(twoRows as never, ON, ctx, s as never);
+    expect(res.usersCreated).toBe(1);
+    expect(s.createdUsers).toHaveLength(1);
+    expect(s.attempts.map((a) => (a as { userId: string }).userId)).toEqual(["ext-1", "ext-1"]);
+  });
+
+  it("группа партии — это и членство (BR-54-41), учёт партии его помнит (BR-54-43)", async () => {
+    const s = storageStub();
+    await runImport(book as never, ON, { ...ctx, groupId: "g1" }, s as never);
+    expect(s.memberships).toEqual([{ userId: "ext-1", groupId: "g1" }]);
+    expect(s.batchUsers).toEqual([{ batchId: "batch-1", userId: "ext-1", createdUser: true, addedToGroup: true }]);
+  });
+
+  it("сухой прогон считает заводимых участников, но ничего не заводит", async () => {
+    const s = storageStub();
+    const res = await runImport(book as never, ON, { ...ctx, groupId: "g1", dryRun: true }, s as never);
+    expect(res.usersCreated).toBe(1);
+    expect(s.createdUsers).toEqual([]);
+    expect(s.memberships).toEqual([]);
+    expect(s.batchUsers).toEqual([]);
   });
 
   it("процент и потолок доезжают до записи прохождения", async () => {

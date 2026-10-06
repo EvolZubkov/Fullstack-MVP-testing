@@ -7,10 +7,10 @@
  * read. Exposed through the `IStorage` facade, never imported by routes.
  */
 import { randomUUID } from "crypto";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
-  groups, userGroups, users,
+  groups, userGroups, users, scormAttempts, lmsImportBatches,
   type Group, type InsertGroup, type User, type UserGroup,
 } from "@shared/schema";
 import { decryptEmail } from "../utils/crypto";
@@ -53,6 +53,10 @@ export class GroupsRepository {
     // result is portable across drivers.
     return db.transaction(async (tx) => {
       await tx.delete(userGroups).where(eq(userGroups.groupId, id));
+      // PRD-54 BR-54-45: imported passages and batches keep no label pointing at a group that is
+      // gone — in the analytics they move to «Без группы».
+      await tx.update(scormAttempts).set({ groupId: null }).where(eq(scormAttempts.groupId, id));
+      await tx.update(lmsImportBatches).set({ groupId: null }).where(eq(lmsImportBatches.groupId, id));
       const result = await tx.delete(groups).where(eq(groups.id, id)).returning();
       return result.length > 0;
     });
@@ -67,13 +71,47 @@ export class GroupsRepository {
     return result.map(r => r.group);
   }
 
+  /**
+   * Add a user to a group unless they are already in it (PRD-54 BR-54-41).
+   *
+   * @returns `true` when the membership was created by this call — the import records it so that a
+   *   rollback can take back exactly what it put in.
+   */
+  async ensureGroupMember(userId: string, groupId: string): Promise<boolean> {
+    const inserted = await db
+      .insert(userGroups)
+      .values({ id: randomUUID(), userId, groupId })
+      .onConflictDoNothing({ target: [userGroups.userId, userGroups.groupId] })
+      .returning({ id: userGroups.id });
+    return inserted.length > 0;
+  }
+
+  /**
+   * Imported LMS passages labelled with the group and the batches they came from (PRD-54
+   * BR-54-45) — the numbers the delete confirmation names.
+   */
+  async getGroupImportSummary(groupId: string): Promise<{ attempts: number; batches: number }> {
+    const [row] = await db
+      .select({
+        attempts: sql<number>`count(*)`,
+        batches: sql<number>`count(distinct ${scormAttempts.batchId})`,
+      })
+      .from(scormAttempts)
+      .where(and(eq(scormAttempts.groupId, groupId), eq(scormAttempts.origin, "import")));
+    return { attempts: Number(row?.attempts ?? 0), batches: Number(row?.batches ?? 0) };
+  }
+
   async getGroupUsers(groupId: string): Promise<User[]> {
     const result = await db
       .select({ user: users })
       .from(userGroups)
       .innerJoin(users, eq(userGroups.userId, users.id))
       .where(eq(userGroups.groupId, groupId));
-    return Promise.all(result.map(async r => ({ ...r.user, email: await decryptEmail(r.user.email) })));
+    // PRD-54 BR-54-42: an imported external participant has no email — keep it `null`.
+    return Promise.all(result.map(async r => ({
+      ...r.user,
+      email: r.user.email ? await decryptEmail(r.user.email) : null,
+    })));
   }
 
   async addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {

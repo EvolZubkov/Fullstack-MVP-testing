@@ -11,7 +11,8 @@ import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../db";
 import {
-  scormPackages, scormAttempts, scormAnswers, lmsImportBatches,
+  scormPackages, scormAttempts, scormAnswers, lmsImportBatches, lmsImportBatchUsers,
+  users, userRoles, userGroups, attempts, testAssignments,
   type ScormPackage, type InsertScormPackage,
   type ScormAttempt, type InsertScormAttempt,
   type ScormAnswer, type InsertScormAnswer,
@@ -357,13 +358,101 @@ export class ScormRepository {
    * в аналитике навсегда и уже ничем бы не удалялись. Телеметрию не задевает: удаляются только
    * строки с этим `batch_id`, а у телеметрии он пуст.
    */
+  /**
+   * Запомнить, что партия сделала с участником (PRD-54 BR-54-43): завела ли его запись и добавила ли
+   * в группу. Флаги только поднимаются: строка файла, встретившая участника второй раз, не должна
+   * стереть то, что о нём записала первая.
+   *
+   * @param batchId партия
+   * @param userId участник
+   * @param flags заведена ли запись этой партией и поставлено ли ею членство
+   */
+  async recordImportBatchUser(
+    batchId: string,
+    userId: string,
+    flags: { createdUser: boolean; addedToGroup: boolean },
+  ): Promise<void> {
+    await db
+      .insert(lmsImportBatchUsers)
+      .values({ batchId, userId, ...flags })
+      .onConflictDoUpdate({
+        target: [lmsImportBatchUsers.batchId, lmsImportBatchUsers.userId],
+        set: {
+          createdUser: sql`${lmsImportBatchUsers.createdUser} OR ${flags.createdUser}`,
+          addedToGroup: sql`${lmsImportBatchUsers.addedToGroup} OR ${flags.addedToGroup}`,
+        },
+      });
+  }
+
+  /**
+   * Откатить партию (PRD-54 раздел 8.6, BR-54-43): прохождения с ответами, затем то, что партия
+   * сделала с участниками, затем сама партия — одной транзакцией.
+   *
+   * Членство, поставленное партией, снимается, только если у участника не осталось прохождений с
+   * этой группой; иначе отметка «поставлено импортом» переходит к другой его партии этой группы,
+   * чтобы её откат снял членство в свой черёд. Запись, заведённая партией, удаляется, только если
+   * ничем больше не занята: ни прохождений, ни членства, ни назначений. Иначе её отметка «заведена
+   * импортом» переходит к другой партии участника.
+   */
   async deleteLmsImportBatch(id: string): Promise<void> {
     await db.transaction(async (tx) => {
-      const attempts = await tx.select({ id: scormAttempts.id }).from(scormAttempts)
+      const [batch] = await tx.select().from(lmsImportBatches).where(eq(lmsImportBatches.id, id));
+      const touched = await tx.select().from(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
+
+      const attemptRows = await tx.select({ id: scormAttempts.id }).from(scormAttempts)
         .where(eq(scormAttempts.batchId, id));
-      const ids = attempts.map((a) => a.id);
+      const ids = attemptRows.map((a) => a.id);
       if (ids.length > 0) await tx.delete(scormAnswers).where(inArray(scormAnswers.attemptId, ids));
       await tx.delete(scormAttempts).where(eq(scormAttempts.batchId, id));
+      await tx.delete(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
+
+      /** Другая партия участника, которой можно передать отметку; с группой — только этой группы. */
+      const heirBatch = async (userId: string, groupId: string | null) => {
+        const [row] = await tx
+          .select({ batchId: lmsImportBatchUsers.batchId })
+          .from(lmsImportBatchUsers)
+          .innerJoin(lmsImportBatches, eq(lmsImportBatches.id, lmsImportBatchUsers.batchId))
+          .where(and(
+            eq(lmsImportBatchUsers.userId, userId),
+            groupId ? eq(lmsImportBatches.groupId, groupId) : sql`true`,
+          ))
+          .orderBy(lmsImportBatches.importedAt)
+          .limit(1);
+        return row?.batchId ?? null;
+      };
+
+      for (const t of touched) {
+        if (t.addedToGroup && batch?.groupId) {
+          const heir = await heirBatch(t.userId, batch.groupId);
+          if (heir) {
+            await tx.update(lmsImportBatchUsers).set({ addedToGroup: true })
+              .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
+          } else {
+            await tx.delete(userGroups)
+              .where(and(eq(userGroups.userId, t.userId), eq(userGroups.groupId, batch.groupId)));
+          }
+        }
+      }
+
+      for (const t of touched) {
+        if (!t.createdUser) continue;
+        const heir = await heirBatch(t.userId, null);
+        if (heir) {
+          await tx.update(lmsImportBatchUsers).set({ createdUser: true })
+            .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
+          continue;
+        }
+        const busy = await Promise.all([
+          tx.select({ id: scormAttempts.id }).from(scormAttempts).where(eq(scormAttempts.userId, t.userId)).limit(1),
+          tx.select({ id: attempts.id }).from(attempts).where(eq(attempts.userId, t.userId)).limit(1),
+          tx.select({ id: userGroups.id }).from(userGroups).where(eq(userGroups.userId, t.userId)).limit(1),
+          tx.select({ id: testAssignments.id }).from(testAssignments).where(eq(testAssignments.userId, t.userId)).limit(1),
+        ]);
+        if (busy.some((rows) => rows.length > 0)) continue;
+        await tx.delete(userRoles).where(eq(userRoles.userId, t.userId));
+        await tx.delete(users).where(and(eq(users.id, t.userId), eq(users.isExternal, true)));
+      }
+
       await tx.delete(lmsImportBatches).where(eq(lmsImportBatches.id, id));
     });
   }

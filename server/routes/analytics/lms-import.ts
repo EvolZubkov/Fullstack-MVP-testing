@@ -28,11 +28,6 @@ const CHOICE_ERRORS: Record<Extract<TestChoice, { ok: false }>["reason"], string
   "not-candidate": "Выбранный тест не содержит вопросов из файла.",
 };
 
-/** Флажок из multipart-формы: там всё приезжает строками. */
-function flag(value: unknown): boolean {
-  return value === true || value === "true";
-}
-
 /**
  * Общий путь загрузки: разобрать, определить тест, свериться с областью доступа, прогнать импорт.
  *
@@ -79,10 +74,8 @@ async function handleUpload(req: Request, res: Response, dryRun: boolean) {
 
   const result = await runImport(
     book,
-    {
-      anonymize: config.analytics.lmsImport.anonymizeParticipants,
-      linkUsers: flag(req.body?.linkUsers),
-    },
+    // PRD-54 BR-54-38: связывание больше не выбирается — каждое прохождение получает учётную запись.
+    { anonymize: config.analytics.lmsImport.anonymizeParticipants },
     {
       testId: choice.testId,
       groupId,

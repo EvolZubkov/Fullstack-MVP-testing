@@ -60,6 +60,16 @@ beforeEach(() => {
 });
 
 describe("deliverAssignmentLink", () => {
+  it("учётке без почты ни письма, ни ссылки (PRD-54 BR-54-42)", async () => {
+    // Ссылка, выпущенная в никуда, — живой пропуск, которого никто не должен был держать.
+    const result = await deliverAssignmentLink({ ...base, email: null });
+
+    expect(result).toEqual({ issued: false, delivered: false });
+    expect(m.createToken).not.toHaveBeenCalled();
+    expect(m.revokeTokens).not.toHaveBeenCalled();
+    expect(m.sendAssignmentEmail).not.toHaveBeenCalled();
+  });
+
   it("возвращает выпущенную ссылку вызывающему", async () => {
     const result = await deliverAssignmentLink(base);
 

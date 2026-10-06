@@ -27,6 +27,7 @@ const { storageMock } = vi.hoisted(() => ({
     getGroups: vi.fn(), getGroup: vi.fn(), createGroup: vi.fn(),
     updateGroup: vi.fn(), deleteGroup: vi.fn(),
     getGroupUsers: vi.fn(), addUserToGroup: vi.fn(), removeUserFromGroup: vi.fn(),
+    getGroupImportSummary: vi.fn(),
     // auth middleware needs getUser; requirePermission also reads user roles
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
@@ -344,10 +345,23 @@ describe("Groups routes", () => {
   it("GET / — returns groups with users", async () => {
     storageMock.getGroups.mockResolvedValue([group]);
     storageMock.getGroupUsers.mockResolvedValue([groupUser]);
+    storageMock.getGroupImportSummary.mockResolvedValue({ attempts: 0, batches: 0 });
     const res = await asAuthor(request(app).get("/api/groups"));
     expect(res.status).toBe(200);
     expect(res.body[0].userCount).toBe(1);
     expect(res.body[0].users[0].email).toBe("user@test.com");
+  });
+
+  it("GET / — counts external members and names the imported passages (PRD-54)", async () => {
+    // An imported LMS participant has no email at all (BR-54-42).
+    const imported = { id: "u3", email: null, name: "Участник a3f9c2d1", isExternal: true };
+    storageMock.getGroups.mockResolvedValue([group]);
+    storageMock.getGroupUsers.mockResolvedValue([groupUser, imported]);
+    storageMock.getGroupImportSummary.mockResolvedValue({ attempts: 41, batches: 2 });
+    const res = await asAuthor(request(app).get("/api/groups"));
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({ userCount: 2, externalCount: 1, importSummary: { attempts: 41, batches: 2 } });
+    expect(res.body[0].users[1]).toEqual({ id: "u3", email: null, name: "Участник a3f9c2d1", isExternal: true });
   });
 
   it("GET /:id — returns group by id with users", async () => {

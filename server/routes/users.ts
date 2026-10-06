@@ -66,13 +66,15 @@ class PasswordEmailBudgetExceeded extends Error {
  * @param opts.rateLimit Whether the shared hourly budget applies (it does not on
  *   the conversion path: the letter is a consequence of an operator's one-off
  *   action on one account, not something the account holder can trigger).
- * @returns Whether the transport accepted the letter.
+ * @returns Whether the transport accepted the letter; `false` without a token for an account that
+ *   has no email (PRD-54 BR-54-42) — there is nowhere to send it.
  * @throws PasswordEmailBudgetExceeded When `rateLimit` is on and the budget is spent.
  */
 async function issuePasswordSetupInvite(
-  user: { id: string; email: string; name?: string | null },
+  user: { id: string; email: string | null; name?: string | null },
   opts: { reason: string; inviterName?: string; rateLimit: boolean },
 ): Promise<boolean> {
+  if (!user.email) return false;
   if (opts.rateLimit) {
     // Same anti-mail-bomb budget as POST /api/auth/forgot-password: both paths
     // mint rows in `password_reset_tokens`, so one shared counter covers both.
@@ -281,7 +283,7 @@ router.post("/", requirePermission("users.create"), async (req, res) => {
     }
 
     const groups = await storage.getUserGroups(user.id);
-    audit.userCreate(user.email, requestedRoles.join("+"));
+    audit.userCreate(user.email ?? user.id, requestedRoles.join("+"));
 
     // The invitation letter, when the create form asked for one. The account is
     // already stored by now, so a mail failure must not fail the request: it is
@@ -568,6 +570,9 @@ router.post("/:id/invite", requirePermission("users.manage"), async (req, res) =
     if (user.isExternal) {
       return res.status(400).json({ error: "An external participant cannot be invited to set a password" });
     }
+    if (!user.email) {
+      return res.status(400).json({ error: "Account has no email", field: "email" });
+    }
 
     if (user.status !== "pending") {
       return res.status(400).json({
@@ -603,6 +608,11 @@ router.post("/:id/promote", requirePermission("users.manage"), async (req, res) 
     if (!user) return res.status(404).json({ error: "User not found" });
     if (!user.isExternal) {
       return res.status(400).json({ error: "Account is not an external participant" });
+    }
+    // PRD-54 BR-54-42: the conversion sends a password-setup letter, and an account without email
+    // could never finish it — it would become an ordinary account that nobody can sign into.
+    if (!user.email) {
+      return res.status(400).json({ error: "Account has no email", field: "email" });
     }
 
     await storage.promoteExternalUser(user.id);

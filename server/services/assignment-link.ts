@@ -50,8 +50,12 @@ export function resolveAssignmentTokenExpiry(
 export interface DeliverAssignmentLinkOptions {
   /** The recipient, already resolved (used for the role check and the greeting). */
   user: Pick<User, "id" | "name" | "emailHash">;
-  /** The recipient's resolved (decrypted, if needed) e-mail address. */
-  email: string;
+  /**
+   * The recipient's resolved (decrypted, if needed) e-mail address. `null` — the account has none
+   * (PRD-54 BR-54-42, an imported external participant): there is nowhere to deliver, and the
+   * call ends without minting a token or sending anything.
+   */
+  email: string | null;
   assignmentId: string;
   testId: string;
   testTitle: string;
@@ -116,6 +120,13 @@ export async function deliverAssignmentLink(
     user, email, assignmentId, testId, testTitle, testDescription, testDescriptionFormat, dueDate, expiresAt,
   } = opts;
   const revokeExisting = opts.revokeExisting ?? true;
+
+  // PRD-54 BR-54-42: no address, no letter — and no token either: a link minted for nobody would
+  // be a live credential that no one was meant to hold.
+  if (!email) {
+    logger.info(`Assignment link not sent: user ${user.id} has no email, test "${testTitle}"`, "assignments");
+    return { issued: false, delivered: false };
+  }
 
   if (!(await mayReceiveAssignmentLink(user))) {
     logger.info(

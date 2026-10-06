@@ -52,7 +52,6 @@ function percentOf(points: number | null): number | null {
 
 export interface ImportOptions {
   anonymize: boolean;
-  linkUsers: boolean;
 }
 
 /** Одна строка выгрузки, приведённая к тому, что пишется в базу. */
@@ -259,11 +258,6 @@ export function rowFingerprint(row: LmsExportRow): string {
 export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): ImportPlan {
   const warnings: string[] = [];
 
-  if (opts.anonymize && opts.linkUsers) {
-    warnings.push(
-      "Обезличивание и связывание включены одновременно: ФИО не сохраняется, но прохождение указывает на конкретного пользователя.",
-    );
-  }
   if (book.unknownColumns.length > 0) {
     warnings.push(`Не разобраны колонки: ${book.unknownColumns.join(", ")}.`);
   }
@@ -478,6 +472,11 @@ export interface ImportResult {
   rowsSkipped: number;
   rowsLinked: number;
   /**
+   * PRD-54 BR-54-38: сколько внешних учётных записей заведено для участников, которых в системе не
+   * было (в сухом прогоне — сколько будет заведено). Считается по участникам, а не по строкам.
+   */
+  usersCreated: number;
+  /**
    * PRD-66 FR-11: сколько взаимодействий файла не удалось привязать к заданию теста.
    *
    * Считается по ВЗАИМОДЕЙСТВИЯМ, а не по колонкам: одна чужая колонка в файле на тысячу
@@ -581,7 +580,8 @@ export async function runImport(
       // Колонка прежнего флажка теперь значит «файл пришёл с `external_id`»: признак берётся из
       // книги, а не со слов загрузившего.
       sourceAnonymized: book.hasExternalId === true,
-      linkUsers: opts.linkUsers,
+      // PRD-54 BR-54-38: связывание идёт всегда; колонка сохраняет смысл для старых партий.
+      linkUsers: true,
       importedBy: ctx.userId,
     });
     batchId = batch.id;
@@ -590,6 +590,15 @@ export async function runImport(
   let rowsCreated = 0;
   let rowsUpdated = 0;
   let rowsLinked = 0;
+  let usersCreated = 0;
+  /**
+   * Участник файла -> его учётная запись. Один человек встречается в файле многими строками, а
+   * заводиться и считаться должен один раз. В сухом прогоне записи нет, и значение `null` значит
+   * «будет заведена».
+   */
+  const resolvedUsers = new Map<string, string | null>();
+  /** Что партия сделала с участником — копится по строкам и пишется один раз в конце (BR-54-43). */
+  const batchUsers = new Map<string, { createdUser: boolean; addedToGroup: boolean }>();
   // BR-54-36: строки без метки, не совпавшие с уже загруженными записями участника за ту же дату.
   let unmatchedSameDay = 0;
 
@@ -605,16 +614,42 @@ export async function runImport(
   for (const row of plan.rows) {
     // ПОРЯДОК СВЯЗЫВАНИЯ (BR-54-33): сначала идентификатор обучающегося в LMS, если внешний
     // обезличиватель положил его в файл отдельной колонкой (BR-54-32), затем `external_id`
-    // против внешнего ключа пользователя. `learner_id` в базу не попадает: он нужен только
-    // чтобы найти учётную запись (PRD-54 раздел 8.5).
+    // против внешнего ключа пользователя. Не нашлось — участник получает внешнюю учётную запись
+    // (BR-54-38): связано каждое прохождение.
     let userId: string | null = null;
-    if (opts.linkUsers) {
+    const known = resolvedUsers.has(row.participantKey);
+    if (known) {
+      userId = resolvedUsers.get(row.participantKey) ?? null;
+    } else {
       const user = (row.learnerId ? await storage.getUserByLmsLearnerId(row.learnerId) : undefined)
         ?? await storage.getUserByExternalKey(row.participantKey);
       if (user) {
         userId = user.id;
-        rowsLinked += 1;
+      } else {
+        usersCreated += 1;
+        if (!dryRun) {
+          // BR-54-39: профиль новой записи — из файла; ФИО и организация только когда импорт
+          // их хранит, подразделение и должность всегда, как у самого прохождения.
+          const created = await storage.createImportedExternalUser({
+            externalKey: row.participantKey,
+            name: row.lmsUserName,
+            lmsLearnerId: row.learnerId,
+            organization: row.lmsUserOrg,
+            unit: row.lmsUserUnit,
+            position: row.lmsUserPosition,
+          });
+          userId = created.id;
+          batchUsers.set(created.id, { createdUser: true, addedToGroup: false });
+        }
       }
+      resolvedUsers.set(row.participantKey, userId);
+    }
+    if (userId && !batchUsers.get(userId)?.createdUser) rowsLinked += 1;
+    // BR-54-41: группа партии — это и членство. Ставится один раз на участника.
+    if (!dryRun && userId && !known) {
+      const entry = batchUsers.get(userId) ?? { createdUser: false, addedToGroup: false };
+      if (ctx.groupId) entry.addedToGroup = await storage.ensureGroupMember(userId, ctx.groupId);
+      batchUsers.set(userId, entry);
     }
 
     // Карта «тема -> вариант» этого прохождения. Форма, которой в тесте больше нет (раздел
@@ -722,6 +757,10 @@ export async function runImport(
     );
   }
 
+  if (batchId) {
+    for (const [userId, flags] of batchUsers) await storage.recordImportBatchUser(batchId, userId, flags);
+  }
+
   if (unmatchedSameDay > 0) {
     warnings.push(
       `Строк без метки регистрации, не совпавших с уже загруженными прохождениями того же участника за ту же дату: ${unmatchedSameDay}. Это новые прохождения: новая попытка либо прежняя, изменившаяся между выгрузками.`,
@@ -745,6 +784,7 @@ export async function runImport(
     rowsUpdated,
     rowsSkipped: book.rows.length - plan.rows.length,
     rowsLinked,
+    usersCreated,
     rowsUnmatched,
     warnings,
   };
