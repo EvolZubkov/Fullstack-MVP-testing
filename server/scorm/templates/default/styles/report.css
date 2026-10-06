@@ -16,7 +16,9 @@
   padding: 20px 25px;
   box-sizing: border-box;
   position: relative;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* ШРИФТ ОТЧЁТА — параметр «Шрифт» шаблона (`--font-sans`), как у экранов. Жёсткая
+     гарнитура здесь печатала отчёт не тем шрифтом, что выбран у теста. */
+  font-family: var(--font-sans, Inter), 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
   color: #ffffff;
   /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
   background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
@@ -477,3 +479,7 @@
   background: #59209b;
   text-decoration: none;
 }
+
+/* ЖИРНЫЙ В АВТОРСКОМ ТЕКСТЕ. Текст отчёта набран весом 300, а `b` / `strong` по умолчанию
+   `bolder` — от 300 это 400, обычное начертание: выделение автора пропадало. */
+.tb-report b, .tb-report strong { font-weight: 600; }

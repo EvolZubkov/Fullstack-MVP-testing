@@ -10249,7 +10249,9 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   padding: 20px 25px;
   box-sizing: border-box;
   position: relative;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* ШРИФТ ОТЧЁТА — параметр «Шрифт» шаблона (`--font-sans`), как у экранов. Жёсткая
+     гарнитура здесь печатала отчёт не тем шрифтом, что выбран у теста. */
+  font-family: var(--font-sans, Inter), 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
   color: #ffffff;
   /* Подложку ставит МАКЕТ инлайном из `report.backgroundUrl`; без неё — этот градиент. */
   background: linear-gradient(180deg, #1c1c2b 0%, #7700ff 100%);
@@ -10710,6 +10712,10 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   background: #59209b;
   text-decoration: none;
 }
+
+/* ЖИРНЫЙ В АВТОРСКОМ ТЕКСТЕ. Текст отчёта набран весом 300, а `b` / `strong` по умолчанию
+   `bolder` — от 300 это 400, обычное начертание: выделение автора пропадало. */
+.tb-report b, .tb-report strong { font-weight: 600; }
 </style>
   <style id="pv-fixes">
     /* Undo template global resets that break the preview chrome */
@@ -21965,7 +21971,7 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     return links;
   }
   async function exportReportPdf(page, testName, deps) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const doc = deps.document || (typeof document !== "undefined" ? document : null);
     if (!doc) throw new Error("\u042D\u043A\u0441\u043F\u043E\u0440\u0442 \u043E\u0442\u0447\u0451\u0442\u0430 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u043D\u043E\u0433\u043E \u043E\u043A\u0440\u0443\u0436\u0435\u043D\u0438\u044F");
     if (!deps.jsPDF || !deps.html2canvas) throw new Error("\u0411\u0438\u0431\u043B\u0438\u043E\u0442\u0435\u043A\u0438 jsPDF \u0438\u043B\u0438 html2canvas \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u044B");
@@ -21998,6 +22004,7 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
       const rendered = stage.firstElementChild;
       if (!rendered) throw new Error("\u041C\u0430\u043A\u0435\u0442 \u043E\u0442\u0447\u0451\u0442\u0430 \u043D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043E\u0442\u0440\u0438\u0441\u043E\u0432\u0430\u043B");
       await new Promise((resolve2) => setTimeout(resolve2, 100));
+      await ((_c = doc.fonts) == null ? void 0 : _c.ready);
       const pages = buildReportPages(rendered, doc, stage);
       const pxToMm = A4_WIDTH_MM / PAGE_WIDTH_PX;
       const pdf = new deps.jsPDF({
@@ -22013,7 +22020,7 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
           backgroundColor: null,
           logging: false
         });
-        if (index > 0) (_c = pdf.addPage) == null ? void 0 : _c.call(pdf);
+        if (index > 0) (_d = pdf.addPage) == null ? void 0 : _d.call(pdf);
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
         for (const link of collectLinks(page2)) {
           if (link.y < 0 || link.y >= PAGE_HEIGHT_PX) continue;

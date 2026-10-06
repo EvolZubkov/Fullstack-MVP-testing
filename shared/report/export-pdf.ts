@@ -224,8 +224,12 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
     const rendered = stage.firstElementChild as HTMLElement | null;
     if (!rendered) throw new Error("Макет отчёта ничего не отрисовал");
 
-    // Let the browser lay the page out (web fonts, grid) before rasterizing.
+    // Let the browser lay the page out (web fonts, grid) before rasterizing. The fonts are
+    // awaited explicitly: html2canvas places every word where the layout measured it and
+    // draws it with the canvas font, so a layout taken while the face was still loading
+    // puts words on top of each other — spaces and punctuation vanish from the PDF.
     await new Promise((resolve) => setTimeout(resolve, 100));
+    await doc.fonts?.ready;
 
     // РАСКЛАДКА ПО СТРАНИЦАМ. Отчёт печатался одной страницей произвольной высоты,
     // которую нельзя ни распечатать, ни пролистать; теперь лист всегда A4, а разрыв
