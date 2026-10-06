@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.39.2](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.39.1...v2.39.2)
+
+### Fixes
+
+- **fix**(analytics): сравнение срезов теряло отбор фильтра на «Качестве вопросов» (2026-10-06) [`f17c6ed90d341ac4ffb811ccf8d19b09ea04ac6a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f17c6ed90d341ac4ffb811ccf8d19b09ea04ac6a)
+  Кнопка «Сравнить со срезом» кладёт отбор фильтра в первый слот временным
+  срезом adhoc. «Результат и темы» передавал его ручке срезов, а «Качество
+  вопросов» — нет, и ручка психометрики таких условий не принимала: при
+  переключении метрик слот оставался пустым, и экран просил выбрать срез.
+  
+  GET /api/analytics/psychometrics/:testId/slices теперь принимает conditions
+  и conditionsName и считает их срезом adhoc тем же разбором (conditionsParam),
+  что ручка срезов PRD-56. Вкладка «Срезы» передаёт отбор обеим метрикам — и
+  присланный фильтром, и выбранный пунктом «Сравнить с другим срезом».
+
 ## [2.39.1](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.39.0...v2.39.1)
 
 ### Fixes
