@@ -20505,8 +20505,18 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     );
   }
 
+  // shared/questions/option-feedback.ts
+  function optionFeedbackAt(value, optionIndex) {
+    if (!Array.isArray(value)) return null;
+    if (typeof optionIndex !== "number" || !Number.isInteger(optionIndex) || optionIndex < 0) return null;
+    const text = value[optionIndex];
+    return typeof text === "string" && text.trim() !== "" ? text : null;
+  }
+
   // shared/template/feedback-banner.ts
-  function feedbackTextFor(q, isCorrect) {
+  function feedbackTextFor(q, isCorrect, answer) {
+    const optionText = optionFeedbackAt(q.optionFeedbackJson, typeof answer === "number" ? answer : null);
+    if (optionText) return optionText;
     const text = q.feedbackMode === "conditional" ? isCorrect ? q.feedbackCorrect : q.feedbackIncorrect : q.feedback;
     return text ? text : null;
   }
