@@ -22,6 +22,7 @@
  */
 
 import { resolvePsychoHash } from "@shared/questions/psycho-hash";
+import { isMeasurementOnly } from "@shared/questions/question-type";
 
 import { storage } from "../../storage";
 import {
@@ -143,6 +144,20 @@ export interface LmsResponseContext {
    * там известна ТОЧНО; прохождение, версии не сообщившее, даёт `null` — «версия неизвестна».
    */
   psychoHashOf: (questionId: string) => string | null;
+  /**
+   * PA-12f: выданные ОЦЕНИВАЕМЫЕ задания прохождения, по которым строки ответа может не быть.
+   *
+   * Строки ответов телеметрии знают только отвеченное, а решение OQ-07 требует считать пропуск
+   * нулём: в вебе и в импорте он им и считается. Задание из этого списка без строки ответа
+   * становится наблюдением `incorrect` с долей ноль. Список передаёт только тот, кто уверен,
+   * что отсутствие строки значит пропуск, а не потерянный ответ (см. {@link loadResponseMatrix});
+   * его отсутствие — прежнее поведение: наблюдения только по строкам.
+   */
+  skippable?: {
+    questionIds: readonly string[];
+    /** Тема задания — по ней вариант выдачи, как у строки ответа. */
+    topicOf: (questionId: string) => string | null;
+  };
 }
 
 /** Выданный состав веб-попытки и раздел, в котором каждое задание пришло. */
@@ -230,11 +245,12 @@ export const toResponses = {
    * (FR-40), а не прятать за похожими числами.
    *
    * Выданным составом служит набор строк ответов: после правки разбора (FR-10a) блок невыданного
-   * задания в выгрузку наблюдений не попадает вовсе, а телеметрия пишет строку только по тому,
-   * что показала.
+   * задания в выгрузку наблюдений не попадает вовсе, а пропуск нынешний пакет пишет в отчёт LMS
+   * исходом `incorrect`. Телеметрия строки по пропуску до PA-12f не слала — такие пропуски
+   * достраиваются из выданного состава прохождения (`skippable`).
    */
   lms(rows: readonly LmsAnswerSource[], ctx: LmsResponseContext): ResponseFact[] {
-    return rows.map(row => {
+    const facts: ResponseFact[] = rows.map(row => {
       const neutral = row.result === "neutral";
       const knownPoints = !neutral && row.points !== null && row.maxPoints !== null;
       // Балл источник сообщил — доля считается из него; не сообщил — остаётся бинарный исход,
@@ -262,6 +278,34 @@ export const toResponses = {
         occurredAt: ctx.occurredAt,
       };
     });
+
+    if (ctx.skippable) {
+      const answered = new Set(rows.map(row => row.questionId));
+      for (const questionId of ctx.skippable.questionIds) {
+        if (answered.has(questionId)) continue;
+        answered.add(questionId);
+        const topicId = ctx.skippable.topicOf(questionId);
+        // Пропуск ценой в ноль (OQ-07). Баллов источник не сообщил, поэтому доля задана прямо,
+        // как у бинарного исхода импорта: ноль из любого максимума — ноль.
+        facts.push({
+          observationId: ctx.observationId,
+          source: ctx.source,
+          respondentId: ctx.respondentId,
+          questionId,
+          psychoHash: ctx.psychoHashOf(questionId),
+          outcome: "incorrect",
+          score: null,
+          maxScore: null,
+          scoreRatio: 0,
+          latencyMs: null,
+          answer: undefined,
+          formKey: topicId ? ctx.forms[topicId] ?? null : null,
+          groupKeys: ctx.groupKeys,
+          occurredAt: ctx.occurredAt,
+        });
+      }
+    }
+    return facts;
   },
 };
 
@@ -300,12 +344,15 @@ export async function loadResponseMatrix(
   const webIds = observations.filter(o => o.source === "web").map(o => o.id);
   const lmsIds = observations.filter(o => o.source !== "web").map(o => o.id);
 
-  const [webRows, lmsAnswers, groupsByUser] = await Promise.all([
+  const telemetryIds = observations.filter(o => o.source === "telemetry" && !o.adaptive).map(o => o.id);
+
+  const [webRows, lmsAnswers, groupsByUser, deliveredByAttempt] = await Promise.all([
     webIds.length ? storage.getAttemptsByIds(webIds) : Promise.resolve([]),
     storage.selectAnswersForAttempts(lmsIds),
     storage.selectGroupsOfUsers(
       [...new Set(observations.map(o => o.userId).filter((id): id is string => !!id))],
     ),
+    storage.selectDeliveredQuestionIds(telemetryIds),
   ]);
 
   const webById = new Map(webRows.map(row => [row.id, row]));
@@ -316,7 +363,7 @@ export async function loadResponseMatrix(
     else lmsByAttempt.set(row.attemptId, [row]);
   }
 
-  const stamps = await snapshotStamps(observations);
+  const snapshots = await snapshotFacts(observations);
 
   const responses: ResponseFact[] = [];
   for (const observation of observations) {
@@ -333,6 +380,7 @@ export async function loadResponseMatrix(
       continue;
     }
 
+    const snapshot = snapshots.get(observation.snapshotId ?? "");
     responses.push(...toResponses.lms(lmsByAttempt.get(observation.id) ?? [], {
       observationId: observation.id,
       source: observation.source,
@@ -340,7 +388,8 @@ export async function loadResponseMatrix(
       occurredAt: observation.startedAt,
       groupKeys,
       forms: observation.forms,
-      psychoHashOf: questionId => stamps.get(observation.snapshotId ?? "")?.get(questionId) ?? null,
+      psychoHashOf: questionId => snapshot?.stamps.get(questionId) ?? null,
+      skippable: skippableOf(observation, snapshot, deliveredByAttempt.get(observation.id)),
     }));
   }
 
@@ -361,19 +410,59 @@ function groupKeysOf(observation: Observation, groupsByUser: ReadonlyMap<string,
   return observation.groupId ? [observation.groupId] : [];
 }
 
+/** Что снимок публикации говорит о прохождениях, которые его сообщили. */
+export interface SnapshotFacts {
+  /** Редакция каждого задания снимка. */
+  stamps: Map<string, string>;
+  /**
+   * Тема каждого ОЦЕНИВАЕМОГО задания снимка. Измерительного здесь нет: его пропуск ничего не
+   * стоит, и ноль за него был бы выдумкой.
+   */
+  gradedTopics: Map<string, string>;
+  /** Быстрый переход (PRD-43) у теста этой публикации. */
+  quickAdvance: boolean;
+}
+
 /**
- * Редакции заданий по версиям публикации, встреченным в выборке.
+ * Какие выданные задания телеметрии можно считать пропуском, если строки ответа по ним нет (PA-12f).
+ *
+ * Отсутствие строки значит «пропуск» не всегда. Пакеты, собранные до исправления PA-12f, слали
+ * ответ только из «Отправить ответ». При быстром переходе (PRD-43) ответ фиксирует «Далее», и
+ * такой пакет не присылал строк вовсе, даже по отвеченному, — ноль за каждое задание оказался бы
+ * ложью. Поэтому достройка идёт только там, где правило известно точно: прохождение сообщило
+ * версию публикации, и у теста этой публикации быстрого перехода нет. Адаптивные прохождения
+ * отсечены раньше: невыданное уровнем там неотличимо от пропущенного.
+ *
+ * Исправленные пакеты шлют строку и по пропуску, поэтому для них достройка ничего не добавляет.
+ * Осознанная неточность старых пакетов: черновик строгого режима, засчитанный в балл при
+ * истечении времени, здесь станет нулём — строки по нему нет, и ответа мы не знаем.
+ */
+export function skippableOf(
+  observation: Observation,
+  snapshot: SnapshotFacts | undefined,
+  delivered: readonly string[] | undefined,
+): LmsResponseContext["skippable"] {
+  if (observation.source !== "telemetry" || observation.adaptive) return undefined;
+  if (!snapshot || snapshot.quickAdvance || !delivered) return undefined;
+  return {
+    questionIds: delivered.filter(id => snapshot.gradedTopics.has(id)),
+    topicOf: questionId => snapshot.gradedTopics.get(questionId) ?? null,
+  };
+}
+
+/**
+ * Редакции заданий и правила выдачи по версиям публикации, встреченным в выборке.
  *
  * Снимок заморожен (PRD-15), поэтому содержание задания в нём — это ровно то, что видел
  * участник прохождения, сообщившего эту версию. Отпечаток считается ТОЙ ЖЕ функцией, что и при
  * записи вопроса: второй способ вычисления развёл бы серии наблюдений на ровном месте.
  *
  * Прохождение, версии не сообщившее, в карту не попадает — его наблюдения идут в серию «версия
- * неизвестна» (FR-09c).
+ * неизвестна» (FR-09c), а пропуски по нему не достраиваются (PA-12f).
  */
-async function snapshotStamps(
+async function snapshotFacts(
   observations: readonly Observation[],
-): Promise<Map<string, Map<string, string>>> {
+): Promise<Map<string, SnapshotFacts>> {
   const ids = [...new Set(
     observations
       .filter(o => o.source !== "web")
@@ -381,18 +470,25 @@ async function snapshotStamps(
       .filter((id): id is string => !!id),
   )];
 
-  const out = new Map<string, Map<string, string>>();
+  const out = new Map<string, SnapshotFacts>();
   for (const id of ids) {
     const snapshot = await storage.getSnapshot(id);
     if (!snapshot) continue;
     const content = snapshot.contentJson as {
+      test?: { quickAdvance?: boolean | null };
       questionsByTopic?: Record<string, Array<{ id: string; type: string; prompt: string; dataJson: unknown; correctJson: unknown; psychoHash?: string | null }>>;
     } | null;
-    const byQuestion = new Map<string, string>();
-    for (const questions of Object.values(content?.questionsByTopic ?? {})) {
-      for (const question of questions) byQuestion.set(question.id, resolvePsychoHash(question));
+    const stamps = new Map<string, string>();
+    const gradedTopics = new Map<string, string>();
+    for (const [topicId, questions] of Object.entries(content?.questionsByTopic ?? {})) {
+      for (const question of questions) {
+        stamps.set(question.id, resolvePsychoHash(question));
+        if (!isMeasurementOnly({ type: question.type, correctJson: question.correctJson })) {
+          gradedTopics.set(question.id, topicId);
+        }
+      }
     }
-    out.set(id, byQuestion);
+    out.set(id, { stamps, gradedTopics, quickAdvance: content?.test?.quickAdvance === true });
   }
   return out;
 }

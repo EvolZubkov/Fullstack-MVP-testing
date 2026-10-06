@@ -456,7 +456,16 @@ function next() {
   // «Отправить ответ»); confirmAnswer marks it too, so this is idempotent in
   // flexible mode but keeps questionStatuses reliable everywhere.
   var fqNext = state.flatQuestions[state.currentIndex];
-  if (fqNext && fqNext.question) state.questionStatuses[fqNext.question.id] = 'answered';
+  if (fqNext && fqNext.question) {
+    // Фиксация «Далее» — такая же точка ответа, как «Отправить ответ»: в строгом режиме с
+    // быстрым переходом (PRD-43) другой нет, и без отправки здесь телеметрия не получала ни
+    // одного ответа (PA-12f). Уже зафиксированный вопрос повторно не уходит.
+    var alreadyAnswered = state.questionStatuses[fqNext.question.id] === 'answered';
+    state.questionStatuses[fqNext.question.id] = 'answered';
+    if (!alreadyAnswered && typeof reportAnswerTelemetry === 'function') {
+      reportAnswerTelemetry(fqNext, state.answers[fqNext.question.id]);
+    }
+  }
 
   advanceAfterCommit();
 }

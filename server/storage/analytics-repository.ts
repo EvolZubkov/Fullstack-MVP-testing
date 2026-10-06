@@ -620,6 +620,26 @@ export class AnalyticsRepository {
    *
    * Строка несёт `topic_id`: по нему ответ находит свой вариант выдачи в карте прохождения.
    */
+  /**
+   * Выданный состав прохождений из LMS (`scorm_attempts.delivered_question_ids`, PRD-55 FR-01).
+   *
+   * Нужен разложению до ответов (PA-12f): строки ответов знают только то, что отвечено, а
+   * пропуск — тоже наблюдение. Прохождение без состава в карту не попадает: «не знаем, что
+   * выдали» и «ничего не выдали» — разные утверждения.
+   */
+  async selectDeliveredQuestionIds(attemptIds: string[]): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    if (attemptIds.length === 0) return out;
+    const rows = await db
+      .select({ id: scormAttempts.id, delivered: scormAttempts.deliveredQuestionIds })
+      .from(scormAttempts)
+      .where(inArray(scormAttempts.id, attemptIds));
+    for (const row of rows) {
+      if (Array.isArray(row.delivered)) out.set(row.id, row.delivered.filter((id): id is string => typeof id === "string"));
+    }
+    return out;
+  }
+
   async selectAnswersForAttempts(attemptIds: string[]): Promise<TestAnswerRow[]> {
     if (attemptIds.length === 0) return [];
     const rows = await db
