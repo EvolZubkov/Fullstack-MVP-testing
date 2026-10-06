@@ -16,8 +16,8 @@
     <!--
     Сценарий в ИС, этап Э0, экраны 2 и 3 (docs/specs/sim-scenario/plan-tests.md).
     Основа — editor-settings-target.html (согласованная цель ящика редактора, 2026-09-03)
-    целиком. Дельта — состояния sim-*: режим теста «Сценарий» (вкладка «Задание», выбор
-    вопроса-сценария, страницы теста) и сценарий в составе теста с роутером («Добавить
+    целиком. Дельта — состояния sim-*: режим теста «Сценарий» (вкладка «Задание»: банк сценариев,
+    выдача случайного или фиксированного сценария, страницы теста) и сценарий в составе теста с роутером («Добавить
     сценарий»). Статус: черновик, на согласование.
   -->
     <title>Редактор теста — целевая структура настроек</title>
@@ -475,7 +475,8 @@
     <nav class="wf-nav">
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s active" onclick="showState(this, 'sim-basic')">сценарий: режим</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-task')">сценарий: задание</button>
-      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-pick')">сценарий: выбор вопроса</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-pick')">сценарий: выбор банка</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-fixed')">сценарий: фиксированный</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-composition')">роутер: сценарий в составе</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-scenario-picker')">роутер: добавить сценарий</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-docs')">сценарий: пояснения</button>
@@ -677,24 +678,36 @@
                 </div>
                 <div class="ou-formsection__body">
           <div class="ou-select ou-field--m ou-field--full">
-            <label class="ou-field__lbl" for="st-question">Вопрос-сценарий</label>
+            <label class="ou-field__lbl" for="st-st-bank">Банк сценариев</label>
             <div class="ou-select__control">
-              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="st-question" aria-haspopup="listbox" aria-expanded="false">
-                <span class="ou-select__value">Регистрация входящего письма · Работа в СЭД</span>
+              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="st-st-bank" aria-haspopup="listbox" aria-expanded="false">
+                <span class="ou-select__value">Работа в СЭД</span>
                 <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
-              <button type="button" class="ou-select__clear" aria-label="Убрать вопрос"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+              <button type="button" class="ou-select__clear" aria-label="Очистить: Банк сценариев"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
             </div>
           </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" id="st-st-pick">Выдача</label>
+                    <div class="ou-seg" role="group" aria-labelledby="st-st-pick">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Случайный сценарий темы</span></button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>Фиксированный сценарий</span></button>
+                    </div>
+                  </div>
                   <div class="ou-tag-group">
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">11 сцен</span>
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">2 ловушки</span>
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">цель: 4 проверки</span>
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">лимит 5:00</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">4 сценария</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">7–14 сцен</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">изображения: 9,6 МБ</span>
+                  </div>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="scenario-exposure-banner">
+                    <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Каждый сценарий темы увидят около 25% участников</div>
+                      <div class="ou-banner__desc">Выдача 1 из 4 — участник получает случайный сценарий, реже выдававшиеся выпадают чаще.</div>
+                    </div>
                   </div>
                   <div class="ou-stack ou-stack--row ou-stack--gap-1">
-                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-play" /></svg></span><span>Сыграть</span></button>
-                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть вопрос</span></button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть банк</span></button>
                   </div>
                 </div>
               </div>
@@ -740,7 +753,7 @@
                 <div class="topic-body">
                       <div class="page-row page-row--system page-row--questions">
                         <span class="page-variant-badge">Задание</span>
-                        <span class="page-title">Сценарий «Регистрация входящего письма» на весь экран</span>
+                        <span class="page-title">Сценарий из банка «Работа в СЭД» на весь экран</span>
                       </div>
                 </div>
               </section>
@@ -823,37 +836,47 @@
                 </div>
                 <div class="ou-formsection__body">
           <div class="ou-select ou-field--m ou-field--full wf-open-static">
-            <label class="ou-field__lbl" for="sp-question">Вопрос-сценарий</label>
+            <label class="ou-field__lbl" for="sp-st-bank">Банк сценариев</label>
             <div class="ou-select__control">
-              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sp-question" aria-haspopup="listbox" aria-expanded="true">
-                <span class="ou-select__value">Регистрация входящего письма · Работа в СЭД</span>
+              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sp-st-bank" aria-haspopup="listbox" aria-expanded="true">
+                <span class="ou-select__value">Работа в СЭД</span>
                 <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
-              <button type="button" class="ou-select__clear" aria-label="Убрать вопрос"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+              <button type="button" class="ou-select__clear" aria-label="Очистить: Банк сценариев"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
             </div>
             <div class="ou-select__menu">
               <div class="ou-select__search">
                 <svg class="ou-select__search-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <input class="ou-select__search-input" type="text" value="регистр" aria-label="Поиск по названию сценария" autocomplete="off">
+                <input class="ou-select__search-input" type="text" value="работ" aria-label="Поиск по названию темы" autocomplete="off">
               </div>
-              <ul class="ou-select__list" role="listbox" aria-labelledby="st-question">
-                <li class="ou-select__optgroup" role="presentation">Работа в СЭД</li>
-                <li class="ou-select__opt is-selected" role="option" aria-selected="true"><mark>Регистр</mark>ация входящего письма</li>
-                <li class="ou-select__opt is-active" role="option" aria-selected="false"><mark>Регистр</mark>ация исходящего письма</li>
-                <li class="ou-select__optgroup" role="presentation">Работа в 1С: склад</li>
-                <li class="ou-select__opt" role="option" aria-selected="false"><mark>Регистр</mark>ация поступления товаров</li>
+              <ul class="ou-select__list" role="listbox" aria-labelledby="sp-st-bank">
+                <li class="ou-select__opt is-selected" role="option" aria-selected="true"><mark>Работ</mark>а в СЭД</li>
+                <li class="ou-select__opt is-active" role="option" aria-selected="false"><mark>Работ</mark>а в 1С: склад</li>
+                <li class="ou-select__opt" role="option" aria-selected="false"><mark>Работ</mark>а с порталом госуслуг</li>
               </ul>
             </div>
           </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" id="sp-st-pick">Выдача</label>
+                    <div class="ou-seg" role="group" aria-labelledby="sp-st-pick">
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Случайный сценарий темы</span></button>
+                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>Фиксированный сценарий</span></button>
+                    </div>
+                  </div>
                   <div class="ou-tag-group">
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">11 сцен</span>
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">2 ловушки</span>
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">цель: 4 проверки</span>
-                    <span class="ou-tag ou-tag--neutral ou-tag--s">лимит 5:00</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">4 сценария</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">7–14 сцен</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">изображения: 9,6 МБ</span>
+                  </div>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="scenario-exposure-banner">
+                    <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                    <div class="ou-banner__body">
+                      <div class="ou-banner__title">Каждый сценарий темы увидят около 25% участников</div>
+                      <div class="ou-banner__desc">Выдача 1 из 4 — участник получает случайный сценарий, реже выдававшиеся выпадают чаще.</div>
+                    </div>
                   </div>
                   <div class="ou-stack ou-stack--row ou-stack--gap-1">
-                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-play" /></svg></span><span>Сыграть</span></button>
-                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть вопрос</span></button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть банк</span></button>
                   </div>
                 </div>
               </div>
@@ -899,7 +922,170 @@
                 <div class="topic-body">
                       <div class="page-row page-row--system page-row--questions">
                         <span class="page-variant-badge">Задание</span>
-                        <span class="page-title">Сценарий «Регистрация входящего письма» на весь экран</span>
+                        <span class="page-title">Сценарий из банка «Работа в СЭД» на весь экран</span>
+                      </div>
+                </div>
+              </section>
+              <section class="zone-block">
+                <div class="zone-header">ПОСЛЕ ТЕСТА</div>
+                <div class="topic-body">
+                      <div class="insert-row">
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                        <button type="button" class="insert-btn"><svg width="12" height="12" aria-hidden="true"><use href="#i-plus" /></svg> Добавить страницу</button>
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                      </div>
+                      <div class="page-row">
+                        <span class="drag-handle" aria-hidden="true"><svg width="12" height="12" aria-hidden="true"><use href="#i-grip" /></svg></span>
+                                                <span class="page-variant-badge">Страница</span>
+                        <span class="page-title">Что дальше</span>
+                        <div class="page-actions">
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Предпросмотр страницы"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия для страницы"><span class="ou-iconbtn__ico"><svg width="13" height="13" aria-hidden="true"><use href="#i-more-vertical" /></svg></span></button>
+                    </div>
+                  </div>
+                      <div class="insert-row">
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                        <button type="button" class="insert-btn"><svg width="12" height="12" aria-hidden="true"><use href="#i-plus" /></svg> Добавить страницу</button>
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                      </div>
+                      <div class="page-row page-row--system">
+                        <span class="page-variant-badge">Итоги</span>
+                        <span class="page-title">Итоги теста</span>
+                        <div class="page-actions">
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Предпросмотр страницы"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия для страницы"><span class="ou-iconbtn__ico"><svg width="13" height="13" aria-hidden="true"><use href="#i-more-vertical" /></svg></span></button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" disabled>Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Применить</button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+
+    <div id="wf-sim-fixed" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h1>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v8</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Задание</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Задание</h3>
+                </div>
+                <div class="ou-formsection__body">
+          <div class="ou-select ou-field--m ou-field--full">
+            <label class="ou-field__lbl" for="sf-st-bank">Банк сценариев</label>
+            <div class="ou-select__control">
+              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sf-st-bank" aria-haspopup="listbox" aria-expanded="false">
+                <span class="ou-select__value">Работа в СЭД</span>
+                <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <button type="button" class="ou-select__clear" aria-label="Очистить: Банк сценариев"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+          </div>
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" id="sf-st-pick">Выдача</label>
+                    <div class="ou-seg" role="group" aria-labelledby="sf-st-pick">
+                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>Случайный сценарий темы</span></button>
+                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Фиксированный сценарий</span></button>
+                    </div>
+                  </div>
+          <div class="ou-select ou-field--m ou-field--full">
+            <label class="ou-field__lbl" for="sf-st-fixed">Сценарий</label>
+            <div class="ou-select__control">
+              <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sf-st-fixed" aria-haspopup="listbox" aria-expanded="false">
+                <span class="ou-select__value">Регистрация входящего письма</span>
+                <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <button type="button" class="ou-select__clear" aria-label="Очистить: Сценарий"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </div>
+          </div>
+                  <div class="ou-tag-group">
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">11 сцен</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">2 ловушки</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">цель: 4 проверки</span>
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">изображения: 2,4 МБ</span>
+                  </div>
+                  <div class="ou-stack ou-stack--row ou-stack--gap-1">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-play" /></svg></span><span>Сыграть</span></button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть банк</span></button>
+                  </div>
+                </div>
+              </div>
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Страницы теста</h3>
+                </div>
+                <div class="ou-formsection__body">
+              <section class="zone-block">
+                <div class="zone-header">ДО ТЕСТА</div>
+                <div class="topic-body">
+                      <div class="page-row page-row--system">
+                        <span class="page-variant-badge">Старт</span>
+                        <span class="page-title">Стартовая страница</span>
+                        <div class="page-actions">
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Предпросмотр страницы"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия для страницы"><span class="ou-iconbtn__ico"><svg width="13" height="13" aria-hidden="true"><use href="#i-more-vertical" /></svg></span></button>
+                    </div>
+                  </div>
+                      <div class="insert-row">
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                        <button type="button" class="insert-btn"><svg width="12" height="12" aria-hidden="true"><use href="#i-plus" /></svg> Добавить страницу</button>
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                      </div>
+                      <div class="page-row">
+                        <span class="drag-handle" aria-hidden="true"><svg width="12" height="12" aria-hidden="true"><use href="#i-grip" /></svg></span>
+                                                <span class="page-variant-badge">Страница</span>
+                        <span class="page-title">Инструкция для участника</span>
+                        <div class="page-actions">
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Предпросмотр страницы"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-eye" /></svg></span></button>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия для страницы"><span class="ou-iconbtn__ico"><svg width="13" height="13" aria-hidden="true"><use href="#i-more-vertical" /></svg></span></button>
+                    </div>
+                  </div>
+                      <div class="insert-row">
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                        <button type="button" class="insert-btn"><svg width="12" height="12" aria-hidden="true"><use href="#i-plus" /></svg> Добавить страницу</button>
+                        <div class="insert-row-line" aria-hidden="true"></div>
+                      </div>
+                </div>
+              </section>
+              <section class="zone-block">
+                <div class="zone-header">ЗАДАНИЕ</div>
+                <div class="topic-body">
+                      <div class="page-row page-row--system page-row--questions">
+                        <span class="page-variant-badge">Задание</span>
+                        <span class="page-title">Сценарий из банка «Работа в СЭД» на весь экран</span>
                       </div>
                 </div>
               </section>
@@ -1260,14 +1446,51 @@
                   <div class="tb-acc-head">
                     <button type="button" class="ou-acc__trigger" aria-expanded="true">
                     <span class="ou-acc__trigger-text">
-                      <span class="ou-acc__title"><svg width="16" height="16" aria-label="Сценарий"><use href="#i-monitor-play" /></svg> 3. Регистрация входящего письма</span>
-                      <span class="ou-acc__subtitle">Сценарий · из темы «Работа в СЭД» · 11 сцен · лимит 5:00</span>
+                      <span class="ou-acc__title"><svg width="16" height="16" aria-label="Сценарий"><use href="#i-monitor-play" /></svg> 3. Работа с документами в СЭД</span>
+                      <span class="ou-acc__subtitle">Сценарий · банк «Работа в СЭД» · случайный из 4<span> · увидят 25%</span></span>
                     </span>
                     </button>
-                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать сценарий «Регистрация входящего письма»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-x" /></svg></span></button></span>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать сценарий «Работа с документами в СЭД»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
                     <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
                   </div>
                   <div class="ou-acc__body" role="region">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="sc-scn-title">Название в меню <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m">
+                        <div class="ou-field__box">
+                          <input class="ou-field__input" id="sc-scn-title" type="text" value="Работа с документами в СЭД" />
+                        </div>
+                      </div>
+                    </div>
+            <div class="ou-select ou-field--m ou-field--full">
+              <label class="ou-field__lbl" for="sc-st-bank">Банк сценариев</label>
+              <div class="ou-select__control">
+                <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sc-st-bank" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="ou-select__value">Работа в СЭД</span>
+                  <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <button type="button" class="ou-select__clear" aria-label="Очистить: Банк сценариев"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+              </div>
+            </div>
+                      <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" id="sc-scn-pick">Выдача</label>
+                      <div class="ou-seg" role="group" aria-labelledby="sc-scn-pick">
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Случайный сценарий темы</span></button>
+                        <button type="button" class="ou-seg__item" aria-pressed="false"><span>Фиксированный сценарий</span></button>
+                      </div>
+                    </div>
+                    <div class="ou-tag-group">
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">4 сценария</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">7–14 сцен</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">изображения: 9,6 МБ</span>
+                    </div>
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="scenario-exposure-banner">
+                      <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Каждый сценарий темы увидят около 25% участников</div>
+                        <div class="ou-banner__desc">Выдача 1 из 4 — участник получает случайный сценарий, реже выдававшиеся выпадают чаще.</div>
+                      </div>
+                    </div>
                     <div class="ou-formfield">
                       <label class="ou-switch-field">
                         <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
@@ -1275,8 +1498,7 @@
                       </label>
                     </div>
                     <div class="ou-stack ou-stack--row ou-stack--gap-1">
-                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-play" /></svg></span><span>Сыграть</span></button>
-                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть вопрос</span></button>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть банк</span></button>
                     </div>
                   </div>
                 </div>
@@ -1319,31 +1541,27 @@
           <header class="ou-modal__head">
             <div class="ou-modal__head-text">
               <h2 class="ou-modal__title">Добавить сценарий</h2>
-              <p class="ou-modal__desc">Вопросы-сценарии из любой доступной вам темы</p>
+              <p class="ou-modal__desc">Темы, в которых есть сценарии. Выдачу — случайный или фиксированный сценарий — настроите в составе</p>
             </div>
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
           </header>
           <div class="ou-modal__body">
             <div class="ou-formfield">
-              <label class="ou-formfield__lbl" for="pk-tp-search">Поиск сценария</label>
-              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="pk-tp-search" type="text" value="" placeholder="Название сценария" /><span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span></div></div>
+              <label class="ou-formfield__lbl" for="pk-tp-search">Поиск темы</label>
+              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="pk-tp-search" type="text" value="" placeholder="Название темы" /><span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span></div></div>
             </div>
             <div class="tb-palette__group">
-            <button type="button" class="tb-palette__item" disabled aria-disabled="true">
-              <span class="tb-palette__name">Регистрация входящего письма</span>
-              <span class="tb-palette__meta">Работа в СЭД · уже в тесте</span>
+            <button type="button" class="tb-palette__item">
+              <span class="tb-palette__name">Работа в СЭД</span>
+              <span class="tb-palette__meta">4 сценария</span>
             </button>
             <button type="button" class="tb-palette__item">
-              <span class="tb-palette__name">Регистрация исходящего письма</span>
-              <span class="tb-palette__meta">Работа в СЭД · 9 сцен</span>
+              <span class="tb-palette__name">Работа в 1С: склад</span>
+              <span class="tb-palette__meta">2 сценария</span>
             </button>
             <button type="button" class="tb-palette__item">
-              <span class="tb-palette__name">Создание поручения по документу</span>
-              <span class="tb-palette__meta">Работа в СЭД · 7 сцен</span>
-            </button>
-            <button type="button" class="tb-palette__item">
-              <span class="tb-palette__name">Регистрация поступления товаров</span>
-              <span class="tb-palette__meta">Работа в 1С: склад · 14 сцен</span>
+              <span class="tb-palette__name">Работа с порталом госуслуг</span>
+              <span class="tb-palette__meta">1 сценарий</span>
             </button>
             </div>
           </div>
@@ -1363,13 +1581,18 @@
           <table class="tb-table">
             <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
             <tbody>
-              <tr><td>Режим «Сценарий»</td><td><code>tests.mode = scenario</code></td><td>Третий сегмент «Режима теста». Тест содержит ровно один вопрос-сценарий из любой темы. План: docs/specs/sim-scenario/plan-tests.md, Э2</td></tr>
+              <tr><td>Режим «Сценарий»</td><td><code>tests.mode = scenario</code></td><td>Третий сегмент «Режима теста». Тест содержит один пункт-сценарий. План: docs/specs/sim-scenario/plan-tests.md, Э2</td></tr>
               <tr><td>Предупреждение при переключении</td><td>как FR-25d режима «Адаптивный»</td><td>Встроенное, без подтверждения: данные не удаляются, темы и их настройки сохраняются и вернутся при возврате к стандартному режиму</td></tr>
               <tr><td>Вкладка «Задание»</td><td>заменяет «Состав и сценарий»</td><td>Тем, выдачи, вариантов и сценария прохождения у теста «Сценарий» нет. Остальные вкладки — правила прохождения, оценка, итоги, оформление, комментарии — работают как у любого теста</td></tr>
-              <tr><td>Вопрос-сценарий</td><td><code>test_scenarios.question_id</code></td><td>Поиск по названию среди вопросов типа «Сценарий» всех доступных тем, группировка по теме. Тема вопроса — только справочно</td></tr>
+              <tr><td>Банк сценариев</td><td><code>test_scenarios.topic_id</code></td><td>Тема, в которой есть вопросы типа «Сценарий»; темы без сценариев в списке нет. Пул пункта — сценарии темы, прочие её вопросы пункт не видит</td></tr>
+              <tr><td>Выдача: случайный сценарий темы</td><td><code>test_scenarios.question_id = null</code>; <code>shared/draw/exposure.ts</code>, PRD-55</td><td>На старте попытки из пула выбирается один сценарий взвешенной выборкой по экспозиции и фиксируется в попытке. Новая попытка — новый выбор. В SCORM-пакет запекается весь пул с весами</td></tr>
+              <tr><td>Выдача: фиксированный сценарий</td><td><code>test_scenarios.question_id</code> — сценарий этой темы</td><td>Все участники получают его. Поправки на экспозицию нет — состав задал автор (как у вариантов PRD-17, PRD-55 FR-20); выдача всё равно учитывается. В SCORM-пакет запекается только он</td></tr>
+              <tr><td>Ожидаемая экспозиция</td><td>PRD-55 FR-33; при выдаче 1 из n — 100/n %</td><td>Только у случайной выдачи. Тот же баннер, что у темы; выше 70% (банк из одного сценария) — предупреждение</td></tr>
+              <tr><td>Сводка</td><td>случайный — число сценариев, диапазон сцен, вес изображений пула; фиксированный — сцены, ловушки, проверки цели, вес</td><td>Вес важен для SCORM-пакета</td></tr>
+              <tr><td>«Открыть банк»</td><td>«Банк контента» с фильтром по теме и типу «Сценарий»</td><td>Там каждый сценарий можно сыграть; у фиксированного — ещё и «Сыграть» здесь</td></tr>
               <tr><td>Страницы теста</td><td><code>content_pages</code></td><td>До теста — стартовая страница и свои страницы; затем задание на весь экран; после — свои страницы и итоги теста</td></tr>
-              <tr><td>Сценарий в составе роутера</td><td><code>test_scenarios</code>, ключ пункта <code>scenario:&lt;id&gt;</code></td><td>Стоит в одном списке с темами и нумеруется вместе с ними; свойства пункта те же, что у темы, где применимы: обязательность. Выдачи, вариантов, порядка вопросов и квот у сценария нет. Правила разблокировки задаются так же, как для тем (в редакторе их интерфейса пока нет)</td></tr>
-              <tr><td>«Добавить сценарий»</td><td>в группе тем, рядом с «Добавить тему в группу»</td><td>Доступно в тесте со сценарием прохождения «Через страницу-маршрутизатор». Сценарий, уже добавленный в тест, в списке неактивен</td></tr>
+              <tr><td>Сценарий в составе роутера</td><td><code>test_scenarios</code>, ключ пункта <code>scenario:&lt;id&gt;</code></td><td>Стоит в одном списке с темами и нумеруется вместе с ними; свойства пункта: название в меню участника (<code>test_scenarios.title</code>, по умолчанию — название темы), банк, выдача, обязательность. Выдачи, вариантов, порядка вопросов и квот у сценария нет. Правила разблокировки задаются так же, как для тем (в редакторе их интерфейса пока нет)</td></tr>
+              <tr><td>«Добавить сценарий»</td><td>в группе тем, рядом с «Добавить тему в группу»</td><td>Доступно в тесте со сценарием прохождения «Через страницу-маршрутизатор». Одну тему можно добавить несколькими пунктами — например, разными фиксированными сценариями</td></tr>
               <tr><td>Пиктограмма сценария</td><td>lucide <code>monitor-play</code></td><td>Отличает сценарий от темы в общем списке</td></tr>
             </tbody>
           </table>
@@ -1379,8 +1602,11 @@
             <tbody>
               <tr><td>Режим теста</td><td><code>SegmentedControl</code></td><td>Третий элемент в существующем контроле</td></tr>
               <tr><td>Предупреждение режима</td><td><code>Banner</code> (<code>warning</code>, <code>subtle</code>)</td><td>Вместо легаси-разметки <code>wf-mode-warn</code> эскиза prd7-mode-switch-warning</td></tr>
-              <tr><td>Выбор вопроса</td><td><code>Select</code> с поиском</td><td>Разметка — из approved/content-bank-explorer.html (поле «Тема»)</td></tr>
+              <tr><td>Банк и фиксированный сценарий</td><td><code>Select</code> с поиском</td><td>Разметка — из approved/content-bank-explorer.html (поле «Тема»)</td></tr>
+              <tr><td>Выдача</td><td><code>SegmentedControl</code></td><td>Как «Режим теста»</td></tr>
               <tr><td>Сводка и действия</td><td><code>Tag</code>, <code>Button</code></td><td></td></tr>
+              <tr><td>Ожидаемая экспозиция</td><td><code>Banner</code> (<code>info</code>, <code>subtle</code>)</td><td>Разметка — баннер темы из editor-settings-target.html</td></tr>
+              <tr><td>Название в меню</td><td><code>TextField</code></td><td>Разметка — поле «Название» вкладки «Основное»</td></tr>
               <tr><td>Страницы теста</td><td>существующие <code>zone-block</code>, <code>page-row</code></td><td>Как в подразделе «Сценарий» вкладки «Состав и сценарий»</td></tr>
               <tr><td>Сценарий в составе</td><td><code>Accordion</code> (элемент темы)</td><td>Та же анатомия строки, что у темы</td></tr>
               <tr><td>«Добавить сценарий»</td><td><code>Modal</code> + палитра <code>tb-palette</code></td><td>Как окно «Добавить тему»</td></tr>
