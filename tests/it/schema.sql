@@ -296,6 +296,7 @@ CREATE TABLE "scorm_attempts" (
 	"batch_id" varchar(36),
 	"group_id" varchar(36),
 	"participant_key" text,
+	"attempt_key" text,
 	"user_id" varchar(36),
 	"scales_json" jsonb,
 	"variables_json" jsonb,
@@ -597,7 +598,7 @@ CREATE INDEX "scales_test_id_idx" ON "scales" USING btree ("test_id");
 CREATE UNIQUE INDEX "scales_test_id_key_uq" ON "scales" USING btree ("test_id","key");
 CREATE INDEX "scorm_answers_attempt_id_idx" ON "scorm_answers" USING btree ("attempt_id");
 CREATE UNIQUE INDEX "scorm_attempts_session_attempt_idx" ON "scorm_attempts" USING btree ("package_id","session_id","attempt_number") WHERE "scorm_attempts"."package_id" IS NOT NULL;
-CREATE UNIQUE INDEX "scorm_attempts_import_row_idx" ON "scorm_attempts" USING btree ("test_id","participant_key","started_at") WHERE "scorm_attempts"."origin" = 'import';
+CREATE UNIQUE INDEX "scorm_attempts_import_row_idx" ON "scorm_attempts" USING btree ("test_id","participant_key","started_at","attempt_key") WHERE "scorm_attempts"."origin" = 'import';
 CREATE INDEX "scorm_attempts_test_id_idx" ON "scorm_attempts" USING btree ("test_id");
 CREATE INDEX "scorm_packages_test_id_idx" ON "scorm_packages" USING btree ("test_id");
 CREATE UNIQUE INDEX "test_access_grants_test_user_idx" ON "test_access_grants" USING btree ("test_id","user_id");

@@ -124,6 +124,7 @@ const legacyState = JSON.stringify({
   retake: { lastCompletedDate: "2026-08-02" },
   sectionBudgets: { t1: { remainingMs: 420000 } },
   sectionGate: { open: null, closed: ["t1"] },
+  rk: "lx1a2b3cq9zk",
 });
 
 describe("учёт попыток (maxAttempts)", () => {
@@ -263,7 +264,8 @@ describe("страж: приведение формата не теряет по
    * держится здесь: миграция, собирающая новый объект, обязана перенести всё.
    */
   // PRD-67: `sectionGate` — разделы, закрытые выходом; потеря открыла бы их снова.
-  const CARRIED = ["attemptsUsed", "timer", "retake", "sectionBudgets", "sectionGate"];
+  // PRD-54 BR-54-35: `rk` — метка регистрации; потеря развела бы строку отчёта LMS на две записи.
+  const CARRIED = ["attemptsUsed", "timer", "retake", "sectionBudgets", "sectionGate", "rk"];
 
   it("каждое поле старого состояния доезжает до нового", () => {
     const migrated = RS.migrate(JSON.parse(legacyState), TEST_DATA_BASE);

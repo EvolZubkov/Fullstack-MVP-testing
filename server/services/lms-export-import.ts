@@ -13,8 +13,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { participantKey } from "../utils/crypto";
 import { decodeLearnerResponse } from "@shared/lms-export/response-codec";
 import { hasBlanks, isMeasurementOnly } from "@shared/questions/question-type";
-import { TOPIC_LEVEL_NOT_ACHIEVED, type LmsExportBook } from "@shared/lms-export/parse";
+import { TOPIC_LEVEL_NOT_ACHIEVED, type LmsExportBook, type LmsExportRow } from "@shared/lms-export/parse";
 import type { IStorage } from "../storage";
+import type { ImportedAttemptKeyRow } from "../storage/scorm-repository";
 
 /**
  * Имена пропусков задания в порядке НАБОРА ПРАВИЛ — в том, в каком пакет их кодировал.
@@ -62,6 +63,19 @@ export interface PlannedRow {
    * `users.external_key` — ключ у участника один.
    */
   participantKey: string;
+  /**
+   * Различитель попытки участника за эту дату (PRD-54 раздел 8.1): `r:<метка>`, если пакет
+   * сообщил метку регистрации (BR-54-35), иначе {@link PlannedRow.contentKey} (BR-54-36).
+   */
+  attemptKey: string;
+  /**
+   * Ключ этой строки по отпечатку содержимого, `c:<отпечаток>:<n>`, — считается ВСЕГДА. У строки с
+   * меткой он нужен, чтобы найти запись той же строки отчёта, загруженную до пересборки пакета
+   * (BR-54-37).
+   */
+  contentKey: string;
+  /** Сообщил ли пакет метку регистрации — то есть точен ли {@link PlannedRow.attemptKey}. */
+  marked: boolean;
   /**
    * Идентификатор обучающегося в LMS, если внешний обезличиватель добавил его колонкой
    * (BR-54-32). В базу не пишется: он нужен только чтобы найти учётную запись.
@@ -192,6 +206,49 @@ export interface ImportPlan {
   warnings: string[];
 }
 
+/** JSON с упорядоченными ключами объектов: одно содержимое — одна строка, в любом порядке полей. */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${stableJson((value as Record<string, unknown>)[k])}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/**
+ * Отпечаток содержимого строки выгрузки (PRD-54 BR-54-36): первые 16 знаков sha-256.
+ *
+ * Поля личности в отпечаток НЕ входят — они уже стоят в ключе псевдонимом. Не входит и метка
+ * регистрации: по отпечатку запись, загруженная до пересборки пакета, узнаётся в строке, которая
+ * метку уже несёт (BR-54-37). Дата активации курса не входит тоже: она про назначение, а не про
+ * прохождение.
+ *
+ * @param row разобранная строка
+ * @returns 16 шестнадцатеричных знаков
+ */
+export function rowFingerprint(row: LmsExportRow): string {
+  const content = {
+    moduleActivatedAt: row.moduleActivatedAt,
+    passed: row.passed,
+    points: row.points,
+    answers: row.answers,
+    results: row.results,
+    latencySeconds: row.latencySeconds,
+    scales: row.scales,
+    scaleLevels: row.scaleLevels,
+    variables: row.variables,
+    responseFormat: row.responseFormat,
+    testVersion: row.testVersion,
+    formIds: row.formIds,
+    topicLevels: row.topicLevels,
+    topicCourses: row.topicCourses,
+  };
+  return createHash("sha256").update(stableJson(content)).digest("hex").slice(0, 16);
+}
+
 /**
  * Превратить разобранную книгу в план записи (PRD-54 разделы 4 и 8).
  *
@@ -212,6 +269,11 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
   }
 
   const rows: PlannedRow[] = [];
+  // BR-54-36: номер строки среди строк того же участника за ту же дату с тем же отпечатком. Две
+  // попытки с одинаковыми ответами так остаются двумя, а повторная загрузка файла даёт те же номера.
+  const sameContent = new Map<string, number>();
+  // BR-54-34: сколько строк у участника за одну дату — для протокола.
+  const sameDay = new Map<string, number>();
   for (const r of book.rows) {
     if (!r.moduleActivatedAt) {
       // Имя в предупреждении раскрывается только тогда, когда мы его и так сохраняем: иначе
@@ -225,6 +287,14 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
     // что посчитал внешний обезличиватель. Нет колонки — импорт считает его сам ТЕМ ЖЕ
     // алгоритмом, поэтому один человек получает одно значение, кто бы его ни вычислил.
     const key = r.externalId || participantKey(r.participantName, r.org, r.unit, r.position);
+    const day = `${key}|${r.moduleActivatedAt}`;
+    sameDay.set(day, (sameDay.get(day) ?? 0) + 1);
+    const fingerprint = rowFingerprint(r);
+    const nth = (sameContent.get(`${day}|${fingerprint}`) ?? 0) + 1;
+    sameContent.set(`${day}|${fingerprint}`, nth);
+    const contentKey = `c:${fingerprint}:${nth}`;
+    const mark = (r.registrationMark ?? "").trim();
+    const marked = mark !== "";
     // Процент берётся только у ОЦЕНЁННОГО прохождения — с хотя бы одним исходом «верно/неверно».
     // Пакеты до 2026-09-12 слали измерительному тесту «0 баллов» (PRD-54 §14 п.1), и такие
     // выгрузки в ходу: без этой проверки опросник стал бы оцененным на ноль.
@@ -233,6 +303,9 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
 
     rows.push({
       participantKey: key,
+      attemptKey: marked ? `r:${mark}` : contentKey,
+      contentKey,
+      marked,
       learnerId: r.learnerId || null,
       lmsUserName: opts.anonymize ? null : r.participantName,
       lmsUserOrg: opts.anonymize ? null : r.org,
@@ -281,7 +354,56 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
     });
   }
 
+  const repeatedDays = [...sameDay.values()].filter((n) => n > 1).length;
+  if (repeatedDays > 0) {
+    warnings.push(
+      `Несколько прохождений одного участника за одну дату: ${repeatedDays}. Каждое записано отдельным прохождением.`,
+    );
+  }
+
   return { rows, warnings };
+}
+
+/** Где искать уже загруженные записи участника за дату: псевдоним и момент активации модуля. */
+function dayKeyOf(participant: string, startedAt: Date): string {
+  return `${participant}|${startedAt.getTime()}`;
+}
+
+/** Итог сопоставления строки файла с базой (PRD-54 BR-54-37). */
+interface KeyResolution {
+  /** Есть ли уже запись с этим ключом — после передачи ключа в том числе. */
+  exists: boolean;
+  /** Запись, которая перенимает ключ строки; `null` — передавать нечего. */
+  heirId: string | null;
+  /** Строка без метки не нашла своей записи, хотя у участника за эту дату записи есть. */
+  unmatchedSameDay: boolean;
+}
+
+/**
+ * Сопоставить строку файла с уже загруженными записями того же участника за ту же дату.
+ *
+ * Своя запись (тот же ключ) — обновится. Иначе ключ перенимает запись без различителя (загружена
+ * до 2026-10-06) или, для строки с меткой, запись с её же отпечатком (загружена до пересборки
+ * пакета). Только после этого строка считается новой. Список мутируется: строки одного файла
+ * видят решения, принятые для предыдущих, — иначе одна старая запись досталась бы двум строкам.
+ *
+ * @param slot записи участника за дату; дополняется и правится на месте
+ * @param row строка плана
+ * @returns решение для строки
+ */
+function resolveKey(slot: ImportedAttemptKeyRow[], row: PlannedRow): KeyResolution {
+  if (slot.some((e) => e.attemptKey === row.attemptKey)) {
+    return { exists: true, heirId: null, unmatchedSameDay: false };
+  }
+  const heir = slot.find((e) => e.attemptKey === null)
+    ?? (row.marked ? slot.find((e) => e.attemptKey === row.contentKey) : undefined);
+  if (heir) {
+    heir.attemptKey = row.attemptKey;
+    return { exists: true, heirId: heir.id, unmatchedSameDay: false };
+  }
+  const unmatchedSameDay = !row.marked && slot.length > 0;
+  slot.push({ id: "", participantKey: row.participantKey, startedAt: row.startedAt, attemptKey: row.attemptKey });
+  return { exists: false, heirId: null, unmatchedSameDay };
 }
 
 /**
@@ -459,6 +581,17 @@ export async function runImport(
   let rowsCreated = 0;
   let rowsUpdated = 0;
   let rowsLinked = 0;
+  // BR-54-36: строки без метки, не совпавшие с уже загруженными записями участника за ту же дату.
+  let unmatchedSameDay = 0;
+
+  // PRD-54 BR-54-37: что уже лежит в базе по этому тесту — один запрос на партию, а не на строку.
+  const existingByDay = new Map<string, ImportedAttemptKeyRow[]>();
+  for (const e of await storage.listImportedAttemptKeys(ctx.testId)) {
+    const day = dayKeyOf(e.participantKey, e.startedAt);
+    const slot = existingByDay.get(day);
+    if (slot) slot.push(e);
+    else existingByDay.set(day, [e]);
+  }
 
   for (const row of plan.rows) {
     // ПОРЯДОК СВЯЗЫВАНИЯ (BR-54-33): сначала идентификатор обучающегося в LMS, если внешний
@@ -485,16 +618,26 @@ export async function runImport(
       else unknownForms.add(formId);
     }
 
+    const day = dayKeyOf(row.participantKey, row.startedAt);
+    if (!existingByDay.has(day)) existingByDay.set(day, []);
+    const resolution = resolveKey(existingByDay.get(day)!, row);
+    if (resolution.unmatchedSameDay) unmatchedSameDay += 1;
+
+    // Сухой прогон считает добавленные и обновлённые тем же сопоставлением, что и запись.
     if (dryRun) {
-      rowsCreated += 1;
+      if (resolution.exists) rowsUpdated += 1;
+      else rowsCreated += 1;
       continue;
     }
+
+    if (resolution.heirId) await storage.setImportedAttemptKey(resolution.heirId, row.attemptKey);
 
     const { id, created } = await storage.upsertImportedAttempt({
       snapshotId: row.testVersion === null ? null : snapshotByVersion.get(row.testVersion) ?? null,
       formsJson: Object.keys(formsJson).length > 0 ? formsJson : null,
       testId: ctx.testId,
       participantKey: row.participantKey,
+      attemptKey: row.attemptKey,
       origin: "import",
       batchId,
       groupId: ctx.groupId,
@@ -570,6 +713,11 @@ export async function runImport(
     );
   }
 
+  if (unmatchedSameDay > 0) {
+    warnings.push(
+      `Строк без метки регистрации, не совпавших с уже загруженными прохождениями того же участника за ту же дату: ${unmatchedSameDay}. Они записаны новыми прохождениями: это новая попытка либо прежняя, изменившаяся между выгрузками.`,
+    );
+  }
   if (resultsMissing > 0) {
     warnings.push(
       `Взаимодействий без исхода у оцениваемых заданий: ${resultsMissing}. Наблюдениями они не стали — выгрузка не сообщила, верен ответ или нет.`,

@@ -17,6 +17,7 @@ import { QuestionsRepository } from "./storage/questions-repository";
 import {
   ScormRepository,
   type ImportedAttemptInput,
+  type ImportedAttemptKeyRow,
   type LmsImportCounts,
 } from "./storage/scorm-repository";
 import { AdaptiveRepository } from "./storage/adaptive-repository";
@@ -414,6 +415,8 @@ export interface IStorage {
 
   // PRD-54: импорт выгрузок отчётов LMS — второй источник прохождений наравне с телеметрией.
   upsertImportedAttempt(data: ImportedAttemptInput): Promise<{ id: string; created: boolean }>;
+  listImportedAttemptKeys(testId: string): Promise<ImportedAttemptKeyRow[]>;
+  setImportedAttemptKey(id: string, attemptKey: string): Promise<void>;
   replaceImportedAnswers(attemptId: string, answers: (InsertScormAnswer & { id: string })[]): Promise<void>;
   createLmsImportBatch(batch: InsertLmsImportBatch & { id: string }): Promise<{ id: string }>;
   updateLmsImportBatch(id: string, counts: LmsImportCounts): Promise<void>;
@@ -1376,6 +1379,14 @@ export class DatabaseStorage implements IStorage {
 
   upsertImportedAttempt(data: ImportedAttemptInput): Promise<{ id: string; created: boolean }> {
     return this.scormRepo.upsertImportedAttempt(data);
+  }
+
+  listImportedAttemptKeys(testId: string): Promise<ImportedAttemptKeyRow[]> {
+    return this.scormRepo.listImportedAttemptKeys(testId);
+  }
+
+  setImportedAttemptKey(id: string, attemptKey: string): Promise<void> {
+    return this.scormRepo.setImportedAttemptKey(id, attemptKey);
   }
 
   replaceImportedAnswers(attemptId: string, answers: (InsertScormAnswer & { id: string })[]): Promise<void> {

@@ -388,3 +388,28 @@ describe("версия публикации и выданные варианты
     expect(parseLmsExport(withRunMeta("3", "form-a")).unknownColumns).toEqual([]);
   });
 });
+
+describe("метка регистрации (PRD-54 BR-54-35)", () => {
+  /** Та же выгрузка плюс блок `meta_registration`, как его шлёт пакет после этой работы. */
+  function withRegistration(mark: string): string[][] {
+    const sheet = SHEET.map((r) => [...r]);
+    sheet[0].push("meta_registration", "", "", "");
+    sheet[1].push("Тип", "Продолжительность (сек.)", "Результат", "Полученный ответ");
+    sheet[2].push("другое", "", "neutral", mark);
+    return sheet;
+  }
+
+  it("метка читается как есть", () => {
+    const [row] = parseLmsExport(withRegistration("lx1a2b3cq9zk")).rows;
+    expect(row.registrationMark).toBe("lx1a2b3cq9zk");
+  });
+
+  it("пакет прошлой сборки метки не сообщает — пустая строка", () => {
+    expect(parseLmsExport(SHEET).rows[0].registrationMark).toBe("");
+    expect(parseLmsExport(withRegistration("")).rows[0].registrationMark).toBe("");
+  });
+
+  it("блок метки не попадает в неопознанные колонки", () => {
+    expect(parseLmsExport(withRegistration("lx1a2b3cq9zk")).unknownColumns).toEqual([]);
+  });
+});

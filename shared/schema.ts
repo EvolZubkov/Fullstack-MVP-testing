@@ -2402,6 +2402,16 @@ export const scormAttempts = pgTable("scorm_attempts", {
    * есть ли псевдоним, а то, хранятся ли рядом человекочитаемые поля.
    */
   participantKey: text("participant_key"),
+  /**
+   * Различитель попыток одного участника за одну дату (PRD-54 раздел 8.1, BR-54-34 - BR-54-37).
+   *
+   * Дата активации модуля приходит из выгрузки без времени, и без различителя две попытки одного
+   * дня склеивались в одну запись. `r:<метка>` — метка регистрации SCO из блока `meta_registration`,
+   * `c:<отпечаток>:<n>` — отпечаток содержимого строки и её номер среди одинаковых, у пакетов без
+   * метки. NULL — строка загружена до 2026-10-06; она перенимает ключ при повторной загрузке файла.
+   * У телеметрии не заполняется.
+   */
+  attemptKey: text("attempt_key"),
   /** Связь с пользователем по внешнему ключу (PRD-54 раздел 8.5). Телеметрия её не заполняет. */
   userId: varchar("user_id", { length: 36 }),
   /** Значения шкал прохождения. Формат один на оба источника. */
@@ -2479,8 +2489,9 @@ export const scormAttempts = pgTable("scorm_attempts", {
     .where(sql`${table.packageId} IS NOT NULL`),
   // PRD-54 раздел 8.1: ключ идемпотентности импорта. Разрешать конфликт должна БАЗА, а не проверка
   // «сначала выбрать, потом вставить»: две параллельные загрузки одного файла иначе задвоили бы строки.
+  // С 2026-10-06 в ключе и различитель попытки: без него попытки одного дня склеивались.
   importRowIdx: uniqueIndex("scorm_attempts_import_row_idx")
-    .on(table.testId, table.participantKey, table.startedAt)
+    .on(table.testId, table.participantKey, table.startedAt, table.attemptKey)
     .where(sql`${table.origin} = 'import'`),
   testIdIdx: index("scorm_attempts_test_id_idx").on(table.testId),
 }));

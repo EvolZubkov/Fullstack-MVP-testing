@@ -531,6 +531,8 @@ function finishScormAdaptive(results, passedForLms, resultComputation, scaleComp
   interactions.push(buildResponseFormatInteraction());
   // PRD-56 FR-19a: версия публикации и выданные варианты — о самом прохождении, а не о ответах.
   pushAll(interactions, buildRunMetaInteractions());
+  // PRD-54 BR-54-35: метка регистрации — по ней импорт различает попытки одного дня.
+  pushAll(interactions, buildRegistrationInteraction());
 
   // A run with nothing to grade reports NO score (shared `lmsScoreFor`): «Пройден, 0 баллов»
   // is a verdict we mean and a number we do not.
@@ -1219,6 +1221,27 @@ function buildRunMetaInteractions() {
 }
 
 /**
+ * Метка регистрации SCO (PRD-54 раздел 7.1b, BR-54-35): по ней импорт выгрузки различает две
+ * строки одного участника за одну дату. Зеркало `REGISTRATION_INTERACTION_ID` из
+ * `shared/lms-export/meta.ts`, парность держит `tests/scorm-meta-blocks`.
+ *
+ * Метку хранит `registrationMark` (`suspendAttempts.js`); блока нет, если состояние недоступно.
+ * `neutral`, как и прочие служебные блоки.
+ */
+function buildRegistrationInteraction() {
+  var mark = (typeof registrationMark === 'function') ? registrationMark() : '';
+  if (!mark) return [];
+  return [{
+    id: 'meta_registration',
+    type: 'other',
+    result: 'neutral',
+    response: mark,
+    correct: '',
+    description: 'Метка прохождения'
+  }];
+}
+
+/**
  * Time spent on this question as an ISO 8601 duration for `cmi.interactions.n.latency`.
  *
  * An empty string when the question was never shown (a run restored mid-way, a question the
@@ -1310,6 +1333,8 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
   interactions.push(buildResponseFormatInteraction());
   // PRD-56 FR-19a: версия публикации и выданные варианты — тем же блоком, что и там.
   pushAll(interactions, buildRunMetaInteractions());
+  // PRD-54 BR-54-35: метка регистрации — тем же блоком, что и в адаптивном пути.
+  pushAll(interactions, buildRegistrationInteraction());
 
   // A run with nothing to grade reports NO score — the same shared decision the adaptive
   // path makes, so the two finish paths cannot drift on what the LMS is told.

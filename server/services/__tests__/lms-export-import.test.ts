@@ -121,7 +121,13 @@ describe("buildImportPlan", () => {
  *
  * @param externalKeys карта «нормализованный ключ -> id пользователя»
  */
-function storageStub(externalKeys: Record<string, string> = {}, learnerIds: Record<string, string> = {}) {
+function storageStub(
+  externalKeys: Record<string, string> = {},
+  learnerIds: Record<string, string> = {},
+  existing: Array<{ id: string; participantKey: string; startedAt: Date; attemptKey: string | null }> = [],
+) {
+  /** Переданные ключи (BR-54-37): какая запись какой ключ переняла. */
+  const keyTransfers: Array<{ id: string; attemptKey: string }> = [];
   const batches: unknown[] = [];
   const attempts: unknown[] = [];
   const answers: unknown[][] = [];
@@ -132,7 +138,9 @@ function storageStub(externalKeys: Record<string, string> = {}, learnerIds: Reco
   /** Тесты, чей срез экспозиции импорта пересчитан (PRD-55 FR-08). */
   const exposureRebuilds: string[] = [];
   return {
-    batches, attempts, answers, snapshotLookups, batchPatches, exposureRebuilds,
+    batches, attempts, answers, snapshotLookups, batchPatches, exposureRebuilds, keyTransfers,
+    listImportedAttemptKeys: async () => existing.map((e) => ({ ...e })),
+    setImportedAttemptKey: async (id: string, attemptKey: string) => { keyTransfers.push({ id, attemptKey }); },
     // PRD-56 FR-19a: у теста одна опубликованная версия — третья.
     getSnapshotByVersion: async (_testId: string, version: number) => {
       snapshotLookups.push(version);
@@ -615,5 +623,129 @@ describe("runImport — уровни и рекомендованные курс�
     await runImport(book as never, ON, ctx, s as never);
     expect(s.lookups.topics).toBe(0);
     expect(s.attempts[0]).toMatchObject({ achievedLevelsJson: null, failedTopicCoursesJson: null });
+  });
+});
+
+describe("PRD-54 раздел 8.1: попытки одного участника за одну дату", () => {
+  /** Две строки одного человека за одну дату, различающиеся ответом. */
+  const twoSameDay = {
+    ...book,
+    rows: [
+      { ...book.rows[0], answers: { q1: "0[.]7,1[.]0" } },
+      { ...book.rows[0], answers: { q1: "0[.]3,1[.]4" } },
+    ],
+  };
+  const marked = (mark: string, over: Record<string, unknown> = {}) => ({
+    ...book.rows[0], registrationMark: mark, ...over,
+  });
+
+  it("две строки за одну дату получают разные ключи и обе записываются (BR-54-34)", async () => {
+    const plan = buildImportPlan(twoSameDay as never, ON);
+    expect(plan.rows[0].attemptKey).not.toBe(plan.rows[1].attemptKey);
+    expect(plan.rows.map((r) => r.attemptKey)).toEqual([
+      expect.stringMatching(/^c:[0-9a-f]{16}:1$/),
+      expect.stringMatching(/^c:[0-9a-f]{16}:1$/),
+    ]);
+
+    const s = storageStub();
+    const res = await runImport(twoSameDay as never, ON, ctx, s as never);
+    expect(s.attempts).toHaveLength(2);
+    expect(res.rowsCreated).toBe(2);
+  });
+
+  it("одинаковое содержимое не схлопывается: порядковый номер различает строки (BR-54-36)", () => {
+    const twins = { ...book, rows: [book.rows[0], book.rows[0]] };
+    const [a, b] = buildImportPlan(twins as never, ON).rows;
+    expect(a.attemptKey.replace(/:1$/, "")).toBe(b.attemptKey.replace(/:2$/, ""));
+    expect(a.attemptKey).toMatch(/:1$/);
+    expect(b.attemptKey).toMatch(/:2$/);
+  });
+
+  it("повторная загрузка того же файла даёт те же ключи", () => {
+    const first = buildImportPlan(twoSameDay as never, ON).rows.map((r) => r.attemptKey);
+    const second = buildImportPlan(twoSameDay as never, OFF).rows.map((r) => r.attemptKey);
+    // Режим обезличивания в отпечаток не входит: ФИО — поле личности, а не содержимого.
+    expect(second).toEqual(first);
+  });
+
+  it("метка регистрации становится ключом, и он не зависит от содержимого (BR-54-35)", () => {
+    const before = buildImportPlan({ ...book, rows: [marked("lx1a2b3c")] } as never, ON).rows[0];
+    const after = buildImportPlan(
+      { ...book, rows: [marked("lx1a2b3c", { points: 90 })] } as never, ON,
+    ).rows[0];
+    expect(before.attemptKey).toBe("r:lx1a2b3c");
+    expect(after.attemptKey).toBe("r:lx1a2b3c");
+    expect(before.marked).toBe(true);
+  });
+
+  it("метка в отпечаток не входит: строка с меткой и без неё дают один contentKey", () => {
+    const plain = buildImportPlan(book as never, ON).rows[0];
+    const withMark = buildImportPlan({ ...book, rows: [marked("lx1a2b3c")] } as never, ON).rows[0];
+    expect(withMark.contentKey).toBe(plain.contentKey);
+  });
+
+  it("протокол называет число участников с несколькими строками за дату", () => {
+    const plan = buildImportPlan(twoSameDay as never, ON);
+    expect(plan.warnings.join()).toContain("Несколько прохождений одного участника за одну дату: 1");
+    expect(buildImportPlan(book as never, ON).warnings.join()).not.toContain("Несколько прохождений");
+  });
+
+  it("запись без различителя перенимает ключ первой строки файла, вторая создаётся (BR-54-37)", async () => {
+    const plan = buildImportPlan(twoSameDay as never, ON);
+    const { participantKey, startedAt } = plan.rows[0];
+    const s = storageStub({}, {}, [{ id: "legacy-1", participantKey, startedAt, attemptKey: null }]);
+
+    await runImport(twoSameDay as never, ON, ctx, s as never);
+
+    expect(s.keyTransfers).toEqual([{ id: "legacy-1", attemptKey: plan.rows[0].attemptKey }]);
+    expect(s.attempts).toHaveLength(2);
+  });
+
+  it("строка с меткой перенимает запись, загруженную по её отпечатку до пересборки пакета", async () => {
+    const plain = buildImportPlan(book as never, ON).rows[0];
+    const s = storageStub({}, {}, [{
+      id: "old-c", participantKey: plain.participantKey, startedAt: plain.startedAt, attemptKey: plain.contentKey,
+    }]);
+
+    const res = await runImport({ ...book, rows: [marked("lx1a2b3c")] } as never, { ...ON }, { ...ctx, dryRun: true }, s as never);
+    expect(res.rowsUpdated).toBe(1);
+    expect(res.rowsCreated).toBe(0);
+    // Сухой прогон ничего не пишет, в том числе не передаёт ключей.
+    expect(s.keyTransfers).toEqual([]);
+
+    await runImport({ ...book, rows: [marked("lx1a2b3c")] } as never, ON, ctx, s as never);
+    expect(s.keyTransfers).toEqual([{ id: "old-c", attemptKey: "r:lx1a2b3c" }]);
+  });
+
+  it("строка БЕЗ метки чужой отпечаток не перенимает и попадает в протокол", async () => {
+    const plain = buildImportPlan(book as never, ON).rows[0];
+    const s = storageStub({}, {}, [{
+      id: "other", participantKey: plain.participantKey, startedAt: plain.startedAt, attemptKey: "c:0000000000000000:1",
+    }]);
+
+    const res = await runImport(book as never, ON, ctx, s as never);
+
+    expect(s.keyTransfers).toEqual([]);
+    expect(res.warnings.join()).toContain("не совпавших с уже загруженными прохождениями того же участника за ту же дату: 1");
+  });
+
+  it("сухой прогон считает добавленные и обновлённые по базе", async () => {
+    const plan = buildImportPlan(twoSameDay as never, ON);
+    const s = storageStub({}, {}, [{
+      id: "a", participantKey: plan.rows[0].participantKey, startedAt: plan.rows[0].startedAt,
+      attemptKey: plan.rows[0].attemptKey,
+    }]);
+
+    const res = await runImport(twoSameDay as never, ON, { ...ctx, dryRun: true }, s as never);
+
+    expect(res.rowsUpdated).toBe(1);
+    expect(res.rowsCreated).toBe(1);
+    expect(s.attempts).toEqual([]);
+  });
+
+  it("ключ уходит в запись прохождения", async () => {
+    const s = storageStub();
+    await runImport({ ...book, rows: [marked("lx1a2b3c")] } as never, ON, ctx, s as never);
+    expect((s.attempts[0] as { attemptKey: string }).attemptKey).toBe("r:lx1a2b3c");
   });
 });

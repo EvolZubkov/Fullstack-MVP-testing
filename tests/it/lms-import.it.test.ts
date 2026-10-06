@@ -3,7 +3,7 @@
  * @description PRD-54 разделы 8.1 и 8.6: импортированные прохождения и партии на реальной базе.
  *
  * Круглый рейс здесь обязателен, а не избыточен. Идемпотентность импорта держится на ЧАСТИЧНОМ
- * уникальном индексе `(test_id, participant_key, started_at) WHERE origin = 'import'` — объекте,
+ * уникальном индексе `(test_id, participant_key, started_at, attempt_key) WHERE origin = 'import'` — объекте,
  * который существует только в базе. Ошибка в нём не роняет ни один запрос: она проявится позже,
  * дублями прохождений в аналитике после второй загрузки того же файла.
  *
@@ -39,6 +39,7 @@ function importedRow(over: Partial<Parameters<ScormRepository["upsertImportedAtt
   return {
     testId,
     participantKey: "a".repeat(64),
+    attemptKey: "c:0123456789abcdef:1",
     origin: "import" as const,
     batchId,
     groupId: null,
@@ -135,6 +136,41 @@ describe("upsertImportedAttempt", () => {
     await repo.upsertImportedAttempt(importedRow({ startedAt: new Date("2026-09-10T10:00:00Z") }));
 
     expect(await h.current!.db.select().from(scormAttempts)).toHaveLength(2);
+  });
+
+  it("тот же участник за ту же дату с другим различителем — другое прохождение (BR-54-34)", async () => {
+    await repo.upsertImportedAttempt(importedRow());
+    await repo.upsertImportedAttempt(importedRow({ attemptKey: "c:0123456789abcdef:2" }));
+    await repo.upsertImportedAttempt(importedRow({ attemptKey: "r:lx1a2b3cq9zk" }));
+
+    expect(await h.current!.db.select().from(scormAttempts)).toHaveLength(3);
+  });
+
+  it("запись без различителя (загружена до 2026-10-06) с новой не конфликтует, а перенимает ключ (BR-54-37)", async () => {
+    // Старую строку имитирует прямая вставка: метод записи без ключа больше не принимает.
+    const legacyId = randomUUID();
+    await h.current!.db.insert(scormAttempts).values({ id: legacyId, ...importedRow(), attemptKey: null });
+
+    const keys = await repo.listImportedAttemptKeys(testId);
+    expect(keys).toEqual([{
+      id: legacyId, participantKey: "a".repeat(64), startedAt: new Date("2026-09-09T13:39:00Z"), attemptKey: null,
+    }]);
+
+    await repo.setImportedAttemptKey(legacyId, "c:0123456789abcdef:1");
+    const r = await repo.upsertImportedAttempt(importedRow({ scalesJson: { cel: 40 } }));
+
+    expect(r).toEqual({ id: legacyId, created: false });
+    const all = await h.current!.db.select().from(scormAttempts);
+    expect(all).toHaveLength(1);
+    expect(all[0].scalesJson).toEqual({ cel: 40 });
+  });
+
+  it("ключи читаются только у импорта этого теста", async () => {
+    await repo.upsertImportedAttempt(importedRow());
+    await repo.upsertImportedAttempt(importedRow({ testId: randomUUID() }));
+
+    const keys = await repo.listImportedAttemptKeys(testId);
+    expect(keys.map((k) => k.attemptKey)).toEqual(["c:0123456789abcdef:1"]);
   });
 
   it("другой участник — это другое прохождение", async () => {

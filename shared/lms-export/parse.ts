@@ -11,6 +11,7 @@
  */
 import { RESPONSE_FORMAT_INTERACTION_ID } from "./response-codec";
 import {
+  REGISTRATION_INTERACTION_ID,
   TEST_VERSION_INTERACTION_ID,
   VARIANT_INTERACTION_ID,
   decodeVariantForms,
@@ -167,6 +168,11 @@ export interface LmsExportRow {
   /** Идентификаторы выданных вариантов (PRD-17); пустой список — вариантов не было. */
   formIds: string[];
   /**
+   * Метка регистрации SCO из блока `meta_registration` (PRD-54 BR-54-35); пустая строка — пакет
+   * её не сообщил. Различает строки одного участника за одну дату.
+   */
+  registrationMark: string;
+  /**
    * Идентификатор темы -> достигнутый уровень, как его записал пакет (блок `topic_<id>_level`).
    *
    * Строка {@link TOPIC_LEVEL_NOT_ACHIEVED} значит «уровень не достигнут»; ключа нет — блок
@@ -277,6 +283,7 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
       responseFormat: null,
       testVersion: null,
       formIds: [],
+      registrationMark: "",
       topicLevels: {},
       topicCourses: {},
     };
@@ -317,6 +324,8 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
         row.testVersion = parseTestVersion(value);
       } else if (b.id === VARIANT_INTERACTION_ID) {
         row.formIds = decodeVariantForms(value);
+      } else if (b.id === REGISTRATION_INTERACTION_ID) {
+        row.registrationMark = value;
       } else {
         const level = TOPIC_LEVEL_RE.exec(b.id);
         const course = level ? null : TOPIC_COURSE_RE.exec(b.id);

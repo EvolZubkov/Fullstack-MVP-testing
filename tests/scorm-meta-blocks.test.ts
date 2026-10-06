@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  REGISTRATION_INTERACTION_ID,
   TEST_VERSION_INTERACTION_ID,
   VARIANT_INTERACTION_ID,
   encodeVariantForms,
@@ -22,6 +23,7 @@ import {
 const RUNTIME = "server/scorm/template/app";
 const resultsSrc = readFileSync(resolve(process.cwd(), `${RUNTIME}/render/resultsPage.js`), "utf8");
 const telemetrySrc = readFileSync(resolve(process.cwd(), `${RUNTIME}/telemetry/telemetry.js`), "utf8");
+const suspendSrc = readFileSync(resolve(process.cwd(), `${RUNTIME}/utils/scorm/suspendAttempts.js`), "utf8");
 
 function extractTopLevel(src: string, name: string): string {
   const m = src.match(new RegExp(`^function ${name}\\([^)]*\\)\\s*\\{[\\s\\S]*?\\n\\}`, "m"));
@@ -146,5 +148,62 @@ describe("телеметрия сообщает версию и выданные
 
     expect(data.publicationVersion).toBeNull();
     expect(data.deliveredForms).toEqual({});
+  });
+});
+
+/**
+ * Метка регистрации поверх поддельного `suspend_data`: `readSuspendObj`/`writeSuspendObj`
+ * подставляются, чтобы проверить ровно то, что метка хранится в состоянии и переживает сессии.
+ */
+function registrationRuntime(initial: Record<string, unknown>) {
+  const store = { state: { ...initial }, writes: 0 };
+  const fn = new Function(
+    "readSuspendObj",
+    "writeSuspendObj",
+    `${extractTopLevel(suspendSrc, "registrationMark")}
+     ${extractTopLevel(resultsSrc, "buildRegistrationInteraction")}
+     return { registrationMark: registrationMark, build: buildRegistrationInteraction };`,
+  );
+  const api = fn(
+    () => JSON.parse(JSON.stringify(store.state)),
+    (s: Record<string, unknown>) => { store.state = s; store.writes += 1; },
+  ) as { registrationMark: () => string; build: () => Interaction[] };
+  return { store, ...api };
+}
+
+describe("метка регистрации в отчёте LMS (PRD-54 BR-54-35)", () => {
+  it("блок уезжает с тем же идентификатором, что знает разбор", () => {
+    const { build } = registrationRuntime({ v: 2, attemptsUsed: 1 });
+    const [block] = build();
+    expect(block).toMatchObject({ id: REGISTRATION_INTERACTION_ID, type: "other", result: "neutral" });
+    expect(block.response).toMatch(/^[0-9a-z]{9,16}$/);
+  });
+
+  it("метка создаётся один раз и сохраняется в suspend_data", () => {
+    const rt = registrationRuntime({ v: 2, attemptsUsed: 1 });
+    const first = rt.registrationMark();
+    const second = rt.registrationMark();
+    expect(second).toBe(first);
+    expect(rt.store.state.rk).toBe(first);
+    // Вторая попытка той же регистрации метку не переписывает.
+    expect(rt.store.writes).toBe(1);
+  });
+
+  it("метка, уже лежащая в состоянии, берётся как есть — она общая для всех попыток регистрации", () => {
+    const rt = registrationRuntime({ v: 2, attemptsUsed: 3, rk: "lx1a2b3cq9zk" });
+    expect(rt.build()[0].response).toBe("lx1a2b3cq9zk");
+    expect(rt.store.writes).toBe(0);
+  });
+
+  it("недоступное состояние не роняет завершение: блока просто нет", () => {
+    const fn = new Function(
+      "readSuspendObj",
+      "writeSuspendObj",
+      `${extractTopLevel(suspendSrc, "registrationMark")}
+       ${extractTopLevel(resultsSrc, "buildRegistrationInteraction")}
+       return buildRegistrationInteraction();`,
+    );
+    const blocks = fn(() => { throw new Error("LMS недоступна"); }, () => {}) as Interaction[];
+    expect(blocks).toEqual([]);
   });
 });

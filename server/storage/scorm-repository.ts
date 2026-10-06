@@ -27,6 +27,11 @@ import {
 export interface ImportedAttemptInput {
   testId: string;
   participantKey: string;
+  /**
+   * Различитель попыток участника за одну дату (PRD-54 раздел 8.1): `r:<метка регистрации>` или
+   * `c:<отпечаток>:<n>`. Входит в ключ вместе с тестом, псевдонимом и датой.
+   */
+  attemptKey: string;
   origin: "import";
   batchId: string | null;
   groupId: string | null;
@@ -64,6 +69,15 @@ export interface ImportedAttemptInput {
   achievedLevelsJson: Array<{ topicId: string; topicName: string | null; levelName: string | null }> | null;
   /** Рекомендованные курсы `[{ title, url }]`, как у телеметрии; `null` — рекомендаций нет. */
   failedTopicCoursesJson: Array<{ title: string; url: string }> | null;
+}
+
+/** Уже загруженное прохождение теста — то, с чем импорт сопоставляет строки файла (BR-54-37). */
+export interface ImportedAttemptKeyRow {
+  id: string;
+  participantKey: string;
+  startedAt: Date;
+  /** `null` — строка загружена до появления различителя (2026-10-06). */
+  attemptKey: string | null;
 }
 
 /** Счётчики и протокол, которыми партия дополняется после прогона. */
@@ -206,12 +220,12 @@ export class ScormRepository {
   /**
    * Записать импортированное прохождение, обновив существующее с тем же ключом (PRD-54 раздел 8.1).
    *
-   * Ключ — `(test_id, participant_key, started_at)`, он же частичный уникальный индекс
+   * Ключ — `(test_id, participant_key, started_at, attempt_key)`, он же частичный уникальный индекс
    * `scorm_attempts_import_row_idx`. Конфликт разрешает БАЗА, а не проверка «сначала выбрать,
    * потом вставить»: две параллельные загрузки одного файла иначе создали бы дубли.
    *
    * Обновляются не все поля подряд, а только те, что приносит новая загрузка. `participant_key`,
-   * `test_id` и `started_at` в набор не входят — они и есть ключ.
+   * `test_id`, `started_at` и `attempt_key` в набор не входят — они и есть ключ.
    *
    * @param data поля прохождения
    * @returns идентификатор строки и признак `created`: создана (true) или обновлена (false)
@@ -222,7 +236,7 @@ export class ScormRepository {
       .insert(scormAttempts)
       .values({ id, ...data })
       .onConflictDoUpdate({
-        target: [scormAttempts.testId, scormAttempts.participantKey, scormAttempts.startedAt],
+        target: [scormAttempts.testId, scormAttempts.participantKey, scormAttempts.startedAt, scormAttempts.attemptKey],
         targetWhere: sql`${scormAttempts.origin} = 'import'`,
         set: {
           batchId: data.batchId,
@@ -253,6 +267,44 @@ export class ScormRepository {
     // Идентификатор генерируется ДО запроса, поэтому совпадение выданного и вернувшегося и есть
     // ответ «строку создали». Отдельный SELECT ради того же факта был бы вторым обращением к базе.
     return { id: row.id, created: row.id === id };
+  }
+
+  /**
+   * Ключи всех импортированных прохождений теста (PRD-54 раздел 8.1, BR-54-37).
+   *
+   * Читается один раз на партию: по нему импорт решает, обновит строка файла свою запись, перенимет
+   * чужую без различителя или создаст новую, — и сухой прогон считает то же самое без записи.
+   *
+   * @param testId тест загрузки
+   * @returns идентификатор, псевдоним, дата и различитель каждой импортированной строки теста
+   */
+  async listImportedAttemptKeys(testId: string): Promise<ImportedAttemptKeyRow[]> {
+    const rows = await db
+      .select({
+        id: scormAttempts.id,
+        participantKey: scormAttempts.participantKey,
+        startedAt: scormAttempts.startedAt,
+        attemptKey: scormAttempts.attemptKey,
+      })
+      .from(scormAttempts)
+      .where(and(eq(scormAttempts.testId, testId), eq(scormAttempts.origin, "import")));
+    // У импорта псевдоним заполнен всегда; строка без него сопоставляться ни с чем не может.
+    return rows.flatMap((r) => (r.participantKey ? [{ ...r, participantKey: r.participantKey }] : []));
+  }
+
+  /**
+   * Передать уже лежащей записи ключ строки файла (BR-54-37): запись без различителя или с
+   * отпечатком той же строки отчёта перестаёт быть отдельным прохождением и обновляется следующим
+   * upsert-ом, а не остаётся рядом дублем.
+   *
+   * @param id запись, которая перенимает ключ
+   * @param attemptKey новый различитель
+   */
+  async setImportedAttemptKey(id: string, attemptKey: string): Promise<void> {
+    await db
+      .update(scormAttempts)
+      .set({ attemptKey })
+      .where(and(eq(scormAttempts.id, id), eq(scormAttempts.origin, "import")));
   }
 
   /** Переписать ответы попытки: повторный импорт заменяет их целиком, а не доливает. */
