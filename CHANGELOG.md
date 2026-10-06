@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.41.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.40.0...v2.41.0)
+
+### Features
+
+- **feat**(analytics): сравнение срезов «Ответы и шкалы» — третий вид метрик (PRD-56 FR-07k - FR-07n) (2026-10-06) [`6781d65d52fe766a68ff3ba27749fdf4378bc7b5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6781d65d52fe766a68ff3ba27749fdf4378bc7b5)
+  Шкалы — средние и уровни таблицами долей по срезам; вопросы — одна таблица
+  с сортировкой по заголовку (по умолчанию «Расхождение»), строка раскрывается
+  в доли всех вариантов. «Разница» только при двух срезах, расхождение от
+  10 п.п. — тегом, срез ниже минимума наблюдений в расхождение не входит.
+  Переключатель видов — у правого края; у измерительного теста сравнение
+  открывается на этом виде.
+
+- **feat**(analytics): ручка сравнения срезов «Ответы и шкалы» (PRD-56 FR-07k - FR-07n) (2026-10-06) [`8b66e9848e4ac2dae21b98bcd6e639dad0c81437`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8b66e9848e4ac2dae21b98bcd6e639dad0c81437)
+  Разброс ответов и профиль шкал считаются по прохождениям каждого среза теми
+  же функциями, что вкладки «Вопросы» и «Шкалы»: расчёт разброса вопроса
+  (questionSpread) и рампа уровней (scaleRampOf) вынесены в сервисы, разбор
+  временного отбора (adhocSource) — к остальным помощникам срезов. Сведение
+  выбранных срезов — чистый shared/analytics/answer-compare.
+
+### Fixes
+
+- **fix**(analytics): сравнение срезов — разница по видимым процентам, вариант в строке и без расхождения (2026-10-06) [`4fe23a12cd8c27fa59591fda6ae818af0abf62e4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4fe23a12cd8c27fa59591fda6ae818af0abf62e4)
+  Найдено приёмкой: «13 %» и «7 %» давали «Разницу +7 п.п.» — доли теперь
+  округляются до разности. Строка вопроса, где годный к сравнению срез один,
+  была пустой — теперь называет вариант с наибольшим размахом по всем срезам
+  с ответами, а «Расхождение» остаётся «—».
+
+### Documentation
+
+- **docs**(wireframes): строка вопроса в сравнении срезов — доли числами, без вырожденных полос (2026-10-06) [`377727eef7a4aeeb0b8c56a09d81e6180199317c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/377727eef7a4aeeb0b8c56a09d81e6180199317c)
+
+- **docs**(prd-56): сравнение срезов — вид «Ответы и шкалы» (FR-07k - FR-07n), эскиз согласован (2026-10-06) [`803535c9cf3e841c26064725a76580f674dac529`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/803535c9cf3e841c26064725a76580f674dac529)
+
+- **docs**(wireframes): колонки срезов в таблице вопросов тоже сортируются (2026-10-06) [`4b776a57bfe477b1d6f891dd871a23e0eaf8624e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4b776a57bfe477b1d6f891dd871a23e0eaf8624e)
+
+- **docs**(wireframes): вопросы в сравнении срезов — одна таблица с сортировкой по «Расхождению» (2026-10-06) [`dcd80b08740c345bdd7e5f2aee8c81bb2228d2d2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/dcd80b08740c345bdd7e5f2aee8c81bb2228d2d2)
+
+- **docs**(wireframes): уровни шкал в сравнении срезов — таблица долей вместо составной полосы (2026-10-06) [`9203b4ed6d53a08bddfd6fcb383ca6b4f7ef7039`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9203b4ed6d53a08bddfd6fcb383ca6b4f7ef7039)
+
+- **docs**(wireframes): переключатель метрик сравнения срезов — у правого края (2026-10-06) [`52729849f9d4511747b2be5e4a12ea376a2643e9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/52729849f9d4511747b2be5e4a12ea376a2643e9)
+
+- **docs**(wireframes): сравнение срезов — вид «Ответы и шкалы» (2026-10-06) [`25ba6f66d69749c212a02422beb00f39fffdffda`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/25ba6f66d69749c212a02422beb00f39fffdffda)
+
 ## [2.40.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.39.3...v2.40.0)
 
 ### Features
