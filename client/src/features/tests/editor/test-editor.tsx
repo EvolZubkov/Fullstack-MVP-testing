@@ -61,6 +61,7 @@ import {
   ScoringTab,
 } from "./sections/editor-tabs";
 import { DesignSection } from "./sections/design-section";
+import { ScenarioTaskSection } from "./sections/scenario-task-section";
 import { describeFeasibilityState } from "@/features/content-protection/issue-text";
 import { ReviewPanel } from "../review/review-panel";
 import type { ReviewAnchorItem } from "../review/review-comment-form";
@@ -163,6 +164,8 @@ function tabForField(field: string): EditorTabKey {
     return "composition";
   }
   if (field === "flowMode" || field.startsWith("adaptive")) return "composition";
+  // «Сценарий в ИС»: банк сценариев — на вкладке «Задание» (ключ той же вкладки).
+  if (field === "scenario") return "composition";
   if (field.startsWith("scoring") || field.startsWith("passRules")) return "scoring";
   if (field.startsWith("scales") || field.startsWith("resultVariables")) return "scoring";
   if (field.startsWith("retakePolicy") || field.startsWith("runtime")) return "rules";
@@ -732,7 +735,8 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
             id: tab,
             label: (
               <>
-                {TAB_LABELS[tab]}
+                {/* «Сценарий в ИС»: вкладка состава у теста «Сценарий» называется «Задание». */}
+                {tab === "composition" && editor.model?.mode === "scenario" ? "Задание" : TAB_LABELS[tab]}
                 {/* PRD-52: на вкладке комментариев — счётчик ОТКРЫТЫХ веток. Точка
                     состояния говорит «тут что-то есть», а число — сколько ещё ждёт
                     ответа, и ради него не нужно открывать вкладку. */}
@@ -746,7 +750,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
             ),
           };
         }),
-    [editor.mode, editor.tabStatuses, structureWarn, reviewOpenCount],
+    [editor.mode, editor.model?.mode, editor.tabStatuses, structureWarn, reviewOpenCount],
   );
 
   if (!open) return null;
@@ -930,7 +934,18 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               issueLevel={issueLevel}
             />
           )}
-          {editor.model && activeTab === "composition" && (
+          {/* «Сценарий в ИС»: у теста «Сценарий» вместо состава и сценария прохождения — задание. */}
+          {editor.model && activeTab === "composition" && editor.model.mode === "scenario" && (
+            <ScenarioTaskSection
+              model={editor.model}
+              updateModel={editor.updateModel}
+              testId={editor.model.id}
+              content={contentPages}
+              savedFlowMode={editor.savedFlowMode}
+              designDraft={design.draft}
+            />
+          )}
+          {editor.model && activeTab === "composition" && editor.model.mode !== "scenario" && (
             <CompositionTab
               model={editor.model}
               updateModel={editor.updateModel}

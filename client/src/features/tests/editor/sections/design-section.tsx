@@ -290,7 +290,7 @@ export function DesignSection({ testId, design: designProp, model, updateModel }
                 // Здесь только облик документа: что в нём показывать, автор задаёт в
                 // «Настройках», рядом с обратной связью (PRD-27 §7.1).
                 scope="appearance"
-                mode={model.mode}
+                mode={model.mode === "adaptive" ? "adaptive" : "standard"}
                 draftTemplateId={design.draft.templateId}
                 designParams={design.draft.params}
                 value={model.report ?? {}}

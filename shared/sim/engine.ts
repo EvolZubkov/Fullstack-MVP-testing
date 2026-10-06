@@ -104,6 +104,14 @@ export interface SimRun {
   commitField(fieldId: string, value: string): Reaction;
   /** An auto-hiding element ran out its time. */
   expire(elementId: string): void;
+  /**
+   * Replay: perform the zone or key binding `id` of the CURRENT scene exactly as the participant
+   * did — its condition, refusal and effects included. `null` when the current scene has no such
+   * action: a protocol that names one is not a protocol of this scenario.
+   */
+  trigger(id: string): Reaction | null;
+  /** Replay: a click past every zone at stage point `(x, y)`. */
+  missAt(x: number, y: number): Reaction;
   exit(): Reaction;
   timeout(): Reaction;
   result(): SimResult;
@@ -364,6 +372,18 @@ export function createRun(scenario: Scenario, options: RunOptions = {}): SimRun 
 
     expire(elementId) {
       visibility.set(elementId, false);
+    },
+
+    trigger(id) {
+      if (finished) return null;
+      const action = [...(current.zones ?? []), ...(current.keys ?? [])].find((a) => a.id === id);
+      if (!action || action.role === "neutral") return null;
+      return act(action);
+    },
+
+    missAt(x, y) {
+      if (finished) return { kind: "none" };
+      return miss(x, y);
     },
 
     exit() {

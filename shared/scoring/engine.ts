@@ -22,7 +22,8 @@
  */
 
 import type { QuestionScoring, ScoringPredicate } from "../schema";
-import { hasBlanks, isSingleIndexChoice, isTextEntry } from "../questions/question-type";
+import { hasBlanks, isSimulation, isSingleIndexChoice, isTextEntry } from "../questions/question-type";
+import { simulationRatio, type GradedRun } from "../sim/scoring";
 import { checkRuleSet, type AnswerRuleSet, type RuleVerdicts } from "../answer-check/rules";
 
 /**
@@ -46,6 +47,8 @@ export type Answer =
   | string
   | Record<string, number>
   | Record<string, string>
+  // «Сценарий в ИС»: результат прогона плеера (`SimResult` или его часть, которую читает оценка).
+  | GradedRun
   | null
   | undefined;
 
@@ -310,6 +313,12 @@ function firstMatchingTier(input: ScoreInput): number | null {
  */
 export function scoreAnswer(input: ScoreInput): ScoreResult {
   const { type, correct, answer, scoring } = input;
+  // «Сценарий в ИС»: эталона нет — долю цены даёт исход прогона за вычетом штрафов
+  // (`shared/sim/scoring`). Градуированные способы оценки (PRD-10) к сценарию не применяются.
+  if (isSimulation(type)) {
+    const ratio = simulationRatio(answer);
+    return { score: ratio, sMax: 1, ratio };
+  }
   const kind = scoring?.kind ?? "exact";
 
   if (kind === "weighted") {

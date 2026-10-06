@@ -66,6 +66,7 @@ import type {
   OverallPassType,
   PassDecisionPolicy,
   TestEditorModel,
+  TestMode,
   TopicPassRule,
 } from "../test-editor.types";
 import { DEFAULT_BREAKDOWN_DISPLAY } from "../test-editor.types";
@@ -173,13 +174,14 @@ export function MainPane({
 
       <div className="ou-formfield" data-testid="settings-mode-group">
         <label className="ou-formfield__lbl">Режим теста</label>
-        <SegmentedControl<"standard" | "adaptive">
+        <SegmentedControl<TestMode>
           size="m"
           value={model.mode}
           aria-label="Режим теста"
           items={[
             { value: "standard", label: "Стандартный" },
             { value: "adaptive", label: "Адаптивный" },
+            { value: "scenario", label: "Сценарий" },
           ]}
           onChange={(value) => {
               updateModel((m) => {
@@ -208,10 +210,25 @@ export function MainPane({
                     adaptive: { ...m.adaptive, topics: [...updatedTopics, ...otherTopics] },
                   };
                 }
+                // «Сценарий в ИС»: у теста «Сценарий» нет тем, поэтому и разбивки потока по темам —
+                // он идёт одним потоком: страницы «До теста», задание, страницы «После теста».
+                if (value === "scenario") return { ...m, mode: value, flowMode: "linear_flat" };
                 return { ...m, mode: value };
               });
             }}
         />
+        {/* «Сценарий в ИС» (согласованный эскиз sim-scenario-test-editor.html, «сценарий: режим»):
+            встроенное предупреждение без подтверждения, как у адаптивного режима — данные не
+            удаляются, темы вернутся при возврате к стандартному режиму. */}
+        {model.mode === "scenario" && model.sections.length > 0 && (
+          <Banner
+            tone="warning"
+            variant="subtle"
+            title="Переключение на режим «Сценарий»"
+            description={`${model.sections.length} ${pluralize(model.sections.length, "тема", "темы", "тем")} теста и их настройки в этом режиме не используются и сохраняются: вернутся при возврате к стандартному режиму. Вкладка «Состав и сценарий» заменяется вкладкой «Задание».`}
+            data-testid="settings-mode-scenario-warning"
+          />
+        )}
       </div>
     </FormSection>
   );
@@ -528,7 +545,8 @@ export function ReportContentPane({ model, updateModel, design }: SettingsSectio
   return (
       <ReportSettingsCard
         scope="content"
-        mode={model.mode}
+        // Тест «Сценарий» печатает стандартный отчёт: его пункт — раздел темы-банка.
+        mode={model.mode === "adaptive" ? "adaptive" : "standard"}
         draftTemplateId={design?.draft.templateId}
         designParams={design?.draft.params}
         value={model.report ?? {}}

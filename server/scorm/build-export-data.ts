@@ -85,6 +85,12 @@ export async function buildScormExportData(
     throw new ScormBuildError("Test not found", 404);
   }
 
+  // «Сценарий в ИС»: пакет научится играть сценарий на этапе Э4 (docs/specs/sim-scenario/plan-tests.md).
+  // До того тест «Сценарий» не выгружается — явный отказ лучше пакета без задания.
+  if (test.mode === "scenario") {
+    throw new ScormBuildError("Тест «Сценарий» пока не выгружается в SCORM", 422);
+  }
+
   const sections = await src.getTestSections(test.id);
 
   /**

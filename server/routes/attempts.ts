@@ -63,6 +63,7 @@ import {
   liveDataSource,
   snapshotDataSource,
   dataSourceForAttempt,
+  isScenarioSection,
   type TestDataSource,
   type TestSnapshotContent,
 } from "../services/test-snapshot";
@@ -70,7 +71,9 @@ import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 import { buildAfterZone, type FlowContentPage } from "@shared/flow/page-sequence";
-import { isMeasurementOnly } from "@shared/questions/question-type";
+import { isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
+import { replayRun } from "@shared/sim/replay";
+import type { Scenario } from "@shared/sim/contract";
 // PRD-50 FR-17: элементы разреза адаптивного прогона собирает хост — движок их вывести не может.
 import type { BreakdownItem } from "@shared/breakdown/types";
 // PRD-32: ONE address rule for a feedback attachment, and ONE source-priority rule for
@@ -666,7 +669,9 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
 
     const testsWithSections = await Promise.all(
       assignedTests.map(async (test) => {
-        const sections = await storage.getTestSections(test.id);
+        // Через источник выдачи, а не хранилище: у теста «Сценарий» его пункт приходит разделом
+        // темы-банка, и «оценивается ли тест» ниже считается по нему.
+        const sections = await liveDataSource().getTestSections(test.id);
         const sectionsWithNames = sections.map((s) => ({
           ...s,
           topicName: topicMap.get(s.topicId) || "Unknown",
@@ -922,7 +927,13 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     // два раздела могут стоять на одной теме, и ключ по `topicId` их бы схлопнул.
     const sectionBanks: Question[][] = [];
     for (const section of sections) {
-      sectionBanks.push(await src.getQuestionsByTopic(section.topicId));
+      // «Сценарий в ИС»: у пункта-сценария свой пул — сценарии его темы (или один фиксированный).
+      // Дальше он идёт обычным отбором одного вопроса со взвешиванием по экспозиции (PRD-55).
+      sectionBanks.push(
+        isScenarioSection(section)
+          ? await src.getScenarioPool(section.scenarioItem)
+          : await src.getQuestionsByTopic(section.topicId),
+      );
     }
 
     /**
@@ -2074,6 +2085,19 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         questions: questions.map((q) => {
           questionTypes[q.id] = q.type as QuestionType;
           const effective = scoring.resolve(q);
+          // «Сценарий в ИС»: присланному исходу сервер не верит — его подделать проще, чем
+          // ответ с эталоном. Протокол переигрывается тем же движком по хранимому сценарию, и
+          // оценивается и сохраняется ТОТ результат (`shared/sim/replay`).
+          if (isSimulation(q.type) && answers && answers[q.id] != null) {
+            const scenario = (q.dataJson as { scenario?: Scenario } | null)?.scenario;
+            if (scenario) {
+              const verdict = replayRun(scenario, answers[q.id]);
+              if (!verdict.consistent) {
+                logger.warn(`Сценарий ${q.id}: присланный результат расходится с протоколом (попытка ${attempt.id})`);
+              }
+              answers[q.id] = verdict.result as unknown as Answer;
+            }
+          }
           return {
             id: q.id,
           type: q.type as QuestionType,

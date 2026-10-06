@@ -24,7 +24,7 @@
  * snapshot attempts share one resolution code path (FR-32).
  */
 
-import { isDeliverable } from "@shared/questions/question-type";
+import { isDeliverable, isSimulation } from "@shared/questions/question-type";
 import { storage } from "../storage";
 import { materializeScaleDomains } from "./scale-domain";
 import { syncEntityUsages } from "./media/usage-index";
@@ -32,6 +32,7 @@ import { logger } from "../logger";
 import type {
   Test,
   TestSection,
+  TestScenario,
   Question,
   Topic,
   TopicCourse,
@@ -86,6 +87,63 @@ export interface TestSnapshotContent {
    * по умолчанию шаблона.
    */
   reportBlocks?: ReportBlockRow[];
+  /**
+   * «Сценарий в ИС»: пункты-сценарии теста. Пул пункта — сценарии его темы, а тема уже лежит в
+   * `questionsByTopic`. Отсутствует в снимках, снятых раньше (читается как `[]`).
+   */
+  scenarios?: TestScenario[];
+}
+
+/**
+ * «Сценарий в ИС»: пункт-сценарий, каким его видит выдача, — раздел своей темы-банка, из
+ * которого выдаётся ровно один вопрос.
+ *
+ * Тест «Сценарий» не заводит своего пути попытки: старт, завершение, итоги, отчёт и аналитика
+ * работают с разделами, и пункт приходит к ним разделом. Синтез живёт в ОДНОМ месте — в
+ * `getTestSections` источников данных ниже, — поэтому все читатели видят один и тот же раздел.
+ * Своё у такого раздела только одно: пул. Его даёт {@link TestDataSource.getScenarioPool}, а
+ * не `getQuestionsByTopic`: тот сценарии из выдачи отбрасывает (см. `isDeliverable`).
+ */
+export type ScenarioSection = TestSection & { scenarioItem: TestScenario };
+
+/** Раздел, синтезированный из пункта-сценария. */
+export function isScenarioSection(section: TestSection): section is ScenarioSection {
+  return (section as Partial<ScenarioSection>).scenarioItem !== undefined;
+}
+
+/** Пункт-сценарий как раздел выдачи: один вопрос из темы-банка. */
+export function scenarioSection(item: TestScenario): ScenarioSection {
+  return {
+    id: item.id,
+    testId: item.testId,
+    topicId: item.topicId,
+    drawCount: 1,
+    drawAll: false,
+    topicPassRuleJson: null,
+    required: item.required,
+    timeLimitMinutes: item.timeLimitMinutes,
+    feedbackJson: null,
+    drawBlueprintJson: null,
+    formSetJson: null,
+    breakdownFeedbackJson: null,
+    interpretationJson: null,
+    breakdownInterpretationJson: null,
+    groupKey: null,
+    questionOrder: null,
+    defaultPoints: null,
+    sortOrder: item.sortOrder,
+    scenarioItem: item,
+  };
+}
+
+/**
+ * Пул пункта-сценария: сценарии его темы; у фиксированной выдачи — только выбранный.
+ * Прочие вопросы темы пункт не выдаёт (решение владельца, plan-tests.md раздел 1).
+ */
+export function scenarioPool(item: TestScenario, topicQuestions: Question[]): Question[] {
+  return topicQuestions.filter(
+    (question) => isSimulation(question.type) && (!item.questionId || question.id === item.questionId),
+  );
 }
 
 /**
@@ -95,7 +153,15 @@ export interface TestSnapshotContent {
  */
 export interface TestDataSource {
   getTest(testId: string): Promise<Test | undefined>;
+  /**
+   * Разделы выдачи. В тесте «Сценарий» — его пункт-сценарий, синтезированный в раздел
+   * ({@link scenarioSection}).
+   */
   getTestSections(testId: string): Promise<TestSection[]>;
+  /** «Сценарий в ИС»: пункты-сценарии теста. */
+  getTestScenarios(testId: string): Promise<TestScenario[]>;
+  /** «Сценарий в ИС»: пул пункта-сценария ({@link scenarioPool}). */
+  getScenarioPool(item: TestScenario): Promise<Question[]>;
   getTopics(): Promise<Topic[]>;
   getTopic(topicId: string): Promise<Topic | undefined>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
@@ -128,7 +194,7 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
   // editor; it writes nothing when the bounds are already there.
   await materializeScaleDomains(testId);
 
-  const [sections, allTopics, scales, measurements, resultVariables, contentPages, questionScoring] =
+  const [sections, allTopics, scales, measurements, resultVariables, contentPages, questionScoring, scenarios] =
     await Promise.all([
       storage.getTestSections(testId),
       storage.getTopics(),
@@ -137,6 +203,7 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
       storage.getResultVariables(testId),
       storage.getContentPages(testId),
       storage.getTestQuestionScoring(testId),
+      storage.getTestScenarios(testId),
     ]);
 
   // PRD-51: документ отчёта морозится ОБОИМИ режимами. Тест хранит обе ветви
@@ -150,6 +217,8 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
   // Topics referenced by sections (plus any referenced by content pages).
   const topicIds = new Set<string>();
   for (const s of sections) topicIds.add(s.topicId);
+  // «Сценарий в ИС»: тема-банк пункта — источник его пула.
+  for (const item of scenarios) topicIds.add(item.topicId);
   for (const p of contentPages) if (p.topicId) topicIds.add(p.topicId);
 
   const topics = allTopics.filter((t) => topicIds.has(t.id));
@@ -206,6 +275,7 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
     contentPages,
     questionScoring,
     reportBlocks,
+    scenarios,
   };
 }
 
@@ -280,7 +350,14 @@ function deliverable(questions: Question[]): Question[] {
 export function liveDataSource(): TestDataSource {
   return {
     getTest: (id) => storage.getTest(id),
-    getTestSections: (id) => storage.getTestSections(id),
+    getTestSections: async (id) => {
+      const test = await storage.getTest(id);
+      return test?.mode === "scenario"
+        ? (await storage.getTestScenarios(id)).map(scenarioSection)
+        : storage.getTestSections(id);
+    },
+    getTestScenarios: (id) => storage.getTestScenarios(id),
+    getScenarioPool: async (item) => scenarioPool(item, await storage.getQuestionsByTopic(item.topicId)),
     getTopics: () => storage.getTopics(),
     getTopic: (id) => storage.getTopic(id),
     getQuestionsByTopic: async (id) => deliverable(await storage.getQuestionsByTopic(id)),
@@ -313,7 +390,15 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
       return content.test;
     },
     async getTestSections() {
-      return content.sections;
+      return content.test.mode === "scenario"
+        ? (content.scenarios ?? []).map(scenarioSection)
+        : content.sections;
+    },
+    async getTestScenarios() {
+      return content.scenarios ?? [];
+    },
+    async getScenarioPool(item) {
+      return scenarioPool(item, content.questionsByTopic[item.topicId] ?? []);
     },
     async getTopics() {
       return content.topics;

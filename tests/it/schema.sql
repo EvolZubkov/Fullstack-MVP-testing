@@ -422,6 +422,18 @@ CREATE TABLE "test_review_comments" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 
+CREATE TABLE "test_scenarios" (
+	"id" varchar(36) PRIMARY KEY NOT NULL,
+	"test_id" varchar(36) NOT NULL,
+	"topic_id" varchar(36) NOT NULL,
+	"question_id" varchar(36),
+	"title" text,
+	"required" boolean DEFAULT true NOT NULL,
+	"time_limit_minutes" integer,
+	"image_url" text,
+	"sort_order" integer DEFAULT 0 NOT NULL
+);
+
 CREATE TABLE "test_sections" (
 	"id" varchar(36) PRIMARY KEY NOT NULL,
 	"test_id" varchar(36) NOT NULL,
@@ -619,6 +631,8 @@ CREATE INDEX "test_question_scoring_question_id_idx" ON "test_question_scoring" 
 CREATE INDEX "test_review_comments_test_idx" ON "test_review_comments" USING btree ("test_id","created_at");
 CREATE INDEX "test_review_comments_test_question_idx" ON "test_review_comments" USING btree ("test_id","question_id");
 CREATE INDEX "test_review_comments_parent_idx" ON "test_review_comments" USING btree ("parent_id");
+CREATE INDEX "test_scenarios_topic_id_idx" ON "test_scenarios" USING btree ("topic_id");
+CREATE INDEX "test_scenarios_test_id_sort_order_idx" ON "test_scenarios" USING btree ("test_id","sort_order");
 CREATE INDEX "test_sections_topic_id_idx" ON "test_sections" USING btree ("topic_id");
 CREATE INDEX "test_sections_test_id_sort_order_idx" ON "test_sections" USING btree ("test_id","sort_order");
 CREATE UNIQUE INDEX "test_snapshots_test_version_idx" ON "test_snapshots" USING btree ("test_id","version");

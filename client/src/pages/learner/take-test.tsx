@@ -68,6 +68,8 @@ import { t } from "@/lib/i18n";
 import { reportClientError } from "@/lib/report-error";
 import { useAuth } from "@/lib/auth";
 import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
+import type { Scenario } from "@shared/sim/contract";
+import { ScenarioRun, requestScenarioFullscreen } from "@/features/questions/scenario/scenario-run";
 import type { ResolvedRule } from "@shared/scoring/pass-rule";
 
 /**
@@ -508,6 +510,14 @@ export default function TakeTestPage() {
   // Common state
   const [isStarting, setIsStarting] = useState(true);
   const [testMode, setTestMode] = useState<"standard" | "adaptive" | null>(null);
+  /**
+   * «Сценарий в ИС»: тест «Сценарий». Прохождение идёт СТАНДАРТНОЙ машиной (`testMode`
+   * остаётся `standard`): таймер, страницы автора, завершение и итоги — общие. Своё одно:
+   * на месте экрана вопроса — плеер сценария на весь экран.
+   */
+  const [scenarioTest, setScenarioTest] = useState(false);
+  /** Прогон закрыт участником, попытка отправляется: плеер больше не показывается. */
+  const [scenarioDone, setScenarioDone] = useState(false);
   const [testInfo, setTestInfo] = useState<Test | null>(null);
   const [phase, setPhase] = useState<"loading" | "start" | "question" | "content" | "finished" | "blocked">("loading");
   // PRD-12 FR-6: the author's structure, delivered with the attempt. `pageQueue`
@@ -800,8 +810,11 @@ export default function TakeTestPage() {
     // PRD-67: under «Закрывать раздел при выходе» the section-results screen and the router
     // hub are past the section — the learner has left it. Without the setting both keep the
     // old behaviour (the section clock is not stopped there).
+    // «Сценарий в ИС»: у теста «Сценарий» время ведёт плеер (его лимит — остаток времени теста),
+    // часов раздела у него нет; без этого хук доотправлял их уже после завершения попытки.
     enabled:
       testMode === "standard" &&
+      !scenarioTest &&
       phase === "question" &&
       flatQuestions.length > 0 &&
       !(navSettings.closeSectionOnLeave && (sectionResultView || showHub)),
@@ -939,8 +952,9 @@ export default function TakeTestPage() {
         description: "Тест будет автоматически завершён",
       });
 
-      // Автоматически завершаем тест
-      if (testMode === "standard" && attempt) {
+      // Автоматически завершаем тест. У теста «Сценарий» время ведёт плеер: его лимит — остаток
+      // времени теста, исход `timeout` он запишет сам и отправит попытку по закрытию итога.
+      if (testMode === "standard" && attempt && !scenarioTest) {
         // Принудительное завершение без проверки ответов
         const forceSubmit = async () => {
           setIsSubmitting(true);
@@ -1024,7 +1038,8 @@ export default function TakeTestPage() {
         }
 
         setTestInfo(test);
-        setTestMode(test.mode || "standard");
+        setTestMode(test.mode === "scenario" ? "standard" : test.mode || "standard");
+        setScenarioTest(test.mode === "scenario");
         setTestMetadata(buildTestMetadataFromListEntry(test));
 
         // PRD-12 web-host: fetch the screen templates. Best-effort per screen —
@@ -1101,6 +1116,12 @@ export default function TakeTestPage() {
   // Функция начала теста
   const handleStartTest = async () => {
     if (!testInfo) return;
+    // «Сценарий в ИС»: полный экран просится ЗДЕСЬ, синхронно в щелчке «Начать» — браузер
+    // даёт его только жесту пользователя, а плеер появится уже после запроса к серверу.
+    if (scenarioTest) {
+      setScenarioDone(false);
+      requestScenarioFullscreen();
+    }
 
     setIsStarting(true);
     try {
@@ -3002,7 +3023,9 @@ export default function TakeTestPage() {
         // Adaptive draws from its levels, not from the section quotas, so the
         // count is unknown up front: omit the fact instead of promising «0
         // вопросов» (the layout hides a fact it is not given).
-        questionCount: testMode === "adaptive" ? undefined : testMetadata.totalQuestions,
+        // У адаптивного теста число вопросов заранее не известно; у теста «Сценарий» задание
+        // одно, и «1 вопрос» на обложке читался бы как опрос (согласованный эскиз, экран 5).
+        questionCount: testMode === "adaptive" || scenarioTest ? undefined : testMetadata.totalQuestions,
         passPercent: testMetadata.passPercent,
         passDecisionPolicy: testMetadata.passDecisionPolicy,
         // The topic condition of the cover, counted from the same rules the grader applies.
@@ -3403,6 +3426,43 @@ export default function TakeTestPage() {
         />
       </div>
     );
+  }
+
+  // «Сценарий в ИС»: задание теста «Сценарий» — плеер на весь экран вместо экрана вопроса.
+  // Результат прогона — ответ на вопрос: сохраняется, как только прогон окончен, и попытка
+  // уходит, когда участник закрывает окно результата. Дальше — обычный путь: страницы
+  // «После теста» и экран итогов.
+  if (scenarioTest && attempt && phase === "question" && flatQuestions.length > 0) {
+    const task = flatQuestions[0].question;
+    const scenario = (task.dataJson as { scenario?: Scenario } | null)?.scenario;
+    if (scenario && !scenarioDone) {
+      return (
+        <ScenarioRun
+          scenario={scenario}
+          caption={testInfo?.title}
+          showDetails={showCorrectAnswers}
+          closeLabel="Перейти к итогам"
+          remainingSeconds={remainingSeconds}
+          onFinish={(result) => {
+            const nextAnswers = { ...answers, [task.id]: result };
+            const nextStatus = { ...questionStatus, [task.id]: "answered" as const };
+            setAnswers(nextAnswers);
+            setQuestionStatus(nextStatus);
+            saveProgress(nextAnswers, 0, nextStatus);
+          }}
+          onClose={(result) => {
+            setScenarioDone(true);
+            const nextAnswers = result ? { ...answers, [task.id]: result } : answers;
+            const nextStatus = result ? { ...questionStatus, [task.id]: "answered" as const } : questionStatus;
+            void handleSubmit({ answers: nextAnswers, status: nextStatus });
+          }}
+          data-testid="scenario-task"
+        />
+      );
+    }
+    if (scenarioDone) {
+      return <LoadingState message="Отправка результата…" />;
+    }
   }
 
   if (

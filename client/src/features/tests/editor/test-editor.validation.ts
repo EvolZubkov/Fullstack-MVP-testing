@@ -163,8 +163,18 @@ export function validateTestEditor(
     });
   }
 
+  // «Сценарий в ИС»: у теста «Сценарий» вместо тем — банк сценариев.
+  if (model.mode === "scenario" && !model.scenario) {
+    errors.push({
+      field: "scenario",
+      code: "required",
+      message: "Выберите банк сценариев.",
+      severity: "error",
+    });
+  }
+
   // FR-12: at least one section (topic) must be added
-  if (model.sections.length === 0) {
+  if (model.mode !== "scenario" && model.sections.length === 0) {
     errors.push({
       field: "sections",
       code: "required",

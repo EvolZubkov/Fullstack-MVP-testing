@@ -231,3 +231,16 @@ export async function buildScenarioArchive(scenario: Scenario): Promise<Buffer> 
   zip.file("scenario.json", JSON.stringify(copy, null, 2));
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
+
+/**
+ * Total size of the distinct images of a stored scenario, bytes — what a package carrying it
+ * grows by. An image missing from the library counts as zero.
+ */
+export async function scenarioMediaBytes(scenario: Scenario): Promise<number> {
+  let total = 0;
+  for (const file of new Set(scenario.media.map((m) => m.file))) {
+    const asset = await storage.getMediaAsset(file.replace(/^\/api\/media\//, ""));
+    total += asset?.byteSize ?? 0;
+  }
+  return total;
+}

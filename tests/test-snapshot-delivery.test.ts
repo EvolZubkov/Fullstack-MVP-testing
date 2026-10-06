@@ -16,6 +16,8 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
     getTestSections: vi.fn(),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
     getTopics: vi.fn(),
     getQuestionsByTopic: vi.fn(),
     getTopicCourses: vi.fn(),

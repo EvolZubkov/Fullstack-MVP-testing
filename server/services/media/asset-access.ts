@@ -73,6 +73,11 @@ async function testIdsForUsages(assetId: string): Promise<string[]> {
         for (const section of await storage.getTestSectionsByTopic(question.topicId)) {
           ids.add(section.testId);
         }
+        // «Сценарий в ИС»: тема-банк пункта-сценария ведёт к тесту так же, как раздел, — без
+        // этого участник теста «Сценарий» не получил бы ни одного изображения сценария.
+        for (const item of await storage.getTestScenariosByTopic(question.topicId)) {
+          ids.add(item.testId);
+        }
         break;
       }
       case "content_page": {

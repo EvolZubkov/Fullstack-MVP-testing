@@ -12,12 +12,12 @@
  * «Сыграть» plays the scenario full-screen with the same player a learner gets (`shared/sim`);
  * the author's run is not recorded anywhere.
  */
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Download, MonitorPlay, Play, Trash2, Upload } from "lucide-react";
 import { Banner, Button, Cluster, FileItem, FileUploader, Label, Stack, Tag, Text, useToast } from "@skillum/ui-kit";
 import type { Scenario } from "@shared/sim/contract";
 import { summarizeScenario, type ScenarioSummary } from "@shared/sim/validate";
-import { mountPlayer, type MountedPlayer } from "@shared/sim/player";
+import { ScenarioRun, requestScenarioFullscreen } from "./scenario-run";
 import { megabytes, plural, summaryTags } from "./scenario-summary";
 
 /** The question content of the type: the scenario with media-library addresses. */
@@ -194,9 +194,7 @@ export function ScenarioBlock({ value, onChange, downloadHref }: ScenarioBlockPr
               size="s"
               leadingIcon={<Play size={14} aria-hidden="true" />}
               onClick={() => {
-                // Asked synchronously, inside the click: the browser grants fullscreen only to
-                // a user gesture, and a request made after React has rendered may come too late.
-                void document.documentElement.requestFullscreen?.().catch(() => undefined);
+                requestScenarioFullscreen();
                 setPlaying(true);
               }}
               data-testid="scenario-play"
@@ -207,46 +205,14 @@ export function ScenarioBlock({ value, onChange, downloadHref }: ScenarioBlockPr
         </Stack>
       )}
 
-      {playing && value && <ScenarioPlayer scenario={value.scenario} onClose={() => setPlaying(false)} />}
+      {playing && value && (
+        <ScenarioRun
+          scenario={value.scenario}
+          caption="Проверка сценария · результат не сохраняется"
+          onClose={() => setPlaying(false)}
+          closeOnFullscreenExit
+        />
+      )}
     </Stack>
   );
-}
-
-/**
- * The full-screen run of «Сыграть». The document is asked for fullscreen by the click itself (see
- * the button); the host is a fixed layer on top of everything, so it fills the screen. A browser
- * that refuses fullscreen leaves the player covering the window, which plays the same.
- */
-function ScenarioPlayer({ scenario, onClose }: { scenario: Scenario; onClose: () => void }) {
-  const host = useRef<HTMLDivElement | null>(null);
-  // The owner passes a fresh callback on every render; the player must not remount for that.
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    const root = host.current;
-    if (!root) return;
-    let player: MountedPlayer | null = null;
-    const close = () => {
-      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-      closeRef.current();
-    };
-    player = mountPlayer(root, {
-      scenario,
-      // Stored scenarios carry media-library addresses already.
-      mediaUrl: (file) => file,
-      showDetails: true,
-      caption: "Проверка сценария · результат не сохраняется",
-      onClose: close,
-    });
-    // Leaving fullscreen with Esc ends the check, as closing the result does.
-    const onFullscreen = () => { if (!document.fullscreenElement) closeRef.current(); };
-    document.addEventListener("fullscreenchange", onFullscreen);
-    return () => {
-      document.removeEventListener("fullscreenchange", onFullscreen);
-      player?.destroy();
-    };
-  }, [scenario]);
-
-  return <div ref={host} className="tb-sim-host" data-testid="scenario-player" />;
 }

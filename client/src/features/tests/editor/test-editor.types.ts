@@ -22,7 +22,18 @@ import type { FeedbackEditorValue } from "./sections/feedback-editor-modal";
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
 
-export type TestMode = "standard" | "adaptive";
+/** `scenario` — «Сценарий в ИС»: один пункт-сценарий вместо тем (docs/specs/sim-scenario/plan-tests.md). */
+export type TestMode = "standard" | "adaptive" | "scenario";
+
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста — тема-банк и способ выдачи. `questionId` пуст —
+ * случайный сценарий темы с поправкой на экспозицию; задан — фиксированный.
+ */
+export type ScenarioItemDraft = {
+  topicId: string;
+  topicName: string;
+  questionId: string | null;
+};
 
 export type TestStatus = "draft" | "published" | "archived";
 
@@ -582,6 +593,12 @@ export type TestEditorModel = {
   id?: string;
   version: number;
   mode: TestMode;
+  /**
+   * «Сценарий в ИС»: пункт теста режима `scenario`. Хранится и в других режимах — смена режима
+   * его не стирает, как и темы (FR-40), — а сохраняется только в своём. Необязательное: черновик,
+   * сохранённый до этой работы, его не несёт.
+   */
+  scenario?: ScenarioItemDraft | null;
   flowMode: FlowMode;
   /**
    * PRD-30 FR-16: the test-wide delivery order and the default every topic

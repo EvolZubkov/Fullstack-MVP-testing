@@ -16,6 +16,7 @@ import { db } from "../db";
 import {
   tests,
   testSections,
+  testScenarios,
   adaptiveTopicSettings,
   adaptiveLevels,
   adaptiveLevelLinks,
@@ -202,7 +203,7 @@ export interface TestPayload {
   /** PRD-30 FR-16: test-wide delivery order; absent = `random` (today's behaviour). */
   questionOrder?: "fixed" | "random" | "shuffle_all";
   startPageContent?: string | null;
-  mode?: "standard" | "adaptive";
+  mode?: "standard" | "adaptive" | "scenario";
   showDifficultyLevel?: boolean;
   designSettingsJson?: unknown;
   folderId?: string | null;
@@ -217,10 +218,27 @@ export interface TestPayload {
   ownerId?: string | null;
 }
 
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста (`test_scenarios`). Порядок задаётся позицией в
+ * массиве, как у разделов.
+ */
+export interface ScenarioPayload {
+  /** Тема-банк сценариев. */
+  topicId: string;
+  /** Фиксированный сценарий темы; `null`/отсутствие — случайный сценарий темы. */
+  questionId?: string | null;
+  title?: string | null;
+  required?: boolean;
+  timeLimitMinutes?: number | null;
+  imageUrl?: string | null;
+}
+
 export interface CreatePayload {
   test: TestPayload;
   sections: SectionPayload[];
   adaptiveSettings?: AdaptiveTopicPayload[];
+  /** «Сценарий в ИС»: пункты-сценарии; отсутствие — пунктов нет. */
+  scenarios?: ScenarioPayload[];
 }
 
 /**
@@ -238,6 +256,11 @@ export interface SavePayload {
   test: TestPayload;
   sections?: SectionPayload[];
   adaptiveSettings?: AdaptiveTopicPayload[];
+  /**
+   * «Сценарий в ИС»: пункты-сценарии. Заменяются ЦЕЛИКОМ в той же транзакции, как разделы;
+   * отсутствие поля их не трогает.
+   */
+  scenarios?: ScenarioPayload[];
   /** When provided, the current DB version must match. Throws {@link VersionConflictError} if not. */
   expectedVersion?: number;
   /**
@@ -355,6 +378,7 @@ export class TestSettingsService {
       }).returning();
 
       await this._insertSections(tx, id, payload.sections);
+      await this._insertScenarios(tx, id, payload.scenarios ?? []);
 
       if (payload.adaptiveSettings?.length) {
         await this._replaceAdaptiveSettings(tx, id, payload.adaptiveSettings);
@@ -464,6 +488,11 @@ export class TestSettingsService {
 
       if (payload.adaptiveSettings !== undefined) {
         await this._replaceAdaptiveSettings(tx, testId, payload.adaptiveSettings);
+      }
+
+      if (payload.scenarios !== undefined) {
+        await tx.delete(testScenarios).where(eq(testScenarios.testId, testId));
+        await this._insertScenarios(tx, testId, payload.scenarios);
       }
 
       // PRD-51: документ отчёта — в ТОЙ ЖЕ транзакции, тем же дескриптором. Ветвь
@@ -819,6 +848,28 @@ export class TestSettingsService {
         defaultPoints: s.defaultPoints ?? null,
         // FR-18: `null` = тема наследует правило теста.
         questionOrder: s.questionOrder ?? null,
+        sortOrder: i,
+      });
+    }
+  }
+
+  /** «Сценарий в ИС»: пункты-сценарии; индекс в массиве становится `sort_order`. */
+  private async _insertScenarios(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    testId: string,
+    scenarios: ScenarioPayload[],
+  ): Promise<void> {
+    for (let i = 0; i < scenarios.length; i += 1) {
+      const s = scenarios[i];
+      await tx.insert(testScenarios).values({
+        id: randomUUID(),
+        testId,
+        topicId: s.topicId,
+        questionId: s.questionId ?? null,
+        title: s.title?.trim() || null,
+        required: s.required ?? true,
+        timeLimitMinutes: s.timeLimitMinutes ?? null,
+        imageUrl: s.imageUrl ?? null,
         sortOrder: i,
       });
     }

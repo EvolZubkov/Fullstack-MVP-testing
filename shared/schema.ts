@@ -613,7 +613,12 @@ export const tests = pgTable("tests", {
   descriptionFormat: text("description_format", {
     enum: ["plain", "richText", "html"],
   }).notNull().default("plain"),
-  mode: text("mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
+  /**
+   * Режим теста. `scenario` («Сценарий в ИС», docs/specs/sim-scenario/plan-tests.md): один
+   * пункт-сценарий из `test_scenarios` вместо тем и разделов; участник сразу попадает в
+   * сценарий на весь экран. Колонка текстовая без CHECK — новое значение миграции не требует.
+   */
+  mode: text("mode", { enum: ["standard", "adaptive", "scenario"] }).notNull().default("standard"),
   showDifficultyLevel: boolean("show_difficulty_level").notNull().default(true),
   overallPassRuleJson: jsonb("overall_pass_rule_json").notNull(),
   /**
@@ -943,6 +948,36 @@ export const testSections = pgTable("test_sections", {
   testIdSortIdx: index("test_sections_test_id_sort_order_idx").on(table.testId, table.sortOrder),
 }));
 
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста (docs/specs/sim-scenario/plan-tests.md, раздел 2).
+ *
+ * Отдельная сущность рядом с разделами, не вид раздела. Пункт ссылается на ТЕМУ — банк
+ * сценариев — и выдаёт из неё только вопросы типа `simulation`: случайный с поправкой на
+ * экспозицию (PRD-55), когда `question_id` пуст, или фиксированный — этот вопрос темы.
+ *
+ * В тесте режима `scenario` строка ровно одна; в тесте с роутером (этап Э3) — сколько угодно.
+ */
+export const testScenarios = pgTable("test_scenarios", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  /** Тема-банк сценариев. */
+  topicId: varchar("topic_id", { length: 36 }).notNull(),
+  /** Фиксированный сценарий этой темы; NULL — случайный сценарий темы. */
+  questionId: varchar("question_id", { length: 36 }),
+  /** Название пункта в меню участника (роутер); NULL — название темы. */
+  title: text("title"),
+  required: boolean("required").notNull().default(true),
+  timeLimitMinutes: integer("time_limit_minutes"),
+  /** Картинка карточки пункта в хабе; NULL — без картинки. */
+  imageUrl: text("image_url"),
+  /** Порядок пунктов теста (в роутере — общий с темами, этап Э3). */
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  // «Где используется тема»: тест, где тема служит банком сценариев, тоже от неё зависит.
+  topicIdIdx: index("test_scenarios_topic_id_idx").on(table.topicId),
+  testIdSortIdx: index("test_scenarios_test_id_sort_order_idx").on(table.testId, table.sortOrder),
+}));
+
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
   id: varchar("id", { length: 36 }).primaryKey(),
   testId: varchar("test_id", { length: 36 }).notNull(),
@@ -1168,6 +1203,9 @@ export type Test = typeof tests.$inferSelect;
 
 export type InsertTestSection = z.infer<typeof insertTestSectionSchema>;
 export type TestSection = typeof testSections.$inferSelect;
+export type TestScenario = typeof testScenarios.$inferSelect;
+export const insertTestScenarioSchema = createInsertSchema(testScenarios).omit({ id: true });
+export type InsertTestScenario = z.infer<typeof insertTestScenarioSchema>;
 
 export type InsertAttempt = z.infer<typeof insertAttemptSchema>;
 export type Attempt = typeof attempts.$inferSelect;
@@ -2086,7 +2124,7 @@ export type QuestionStats = z.infer<typeof questionStatsSchema>;
 export const testAnalyticsSchema = z.object({
   testId: z.string(),
   testTitle: z.string(),
-  testMode: z.enum(["standard", "adaptive"]),
+  testMode: z.enum(["standard", "adaptive", "scenario"]),
   
   // Общая статистика
   summary: z.object({
@@ -2161,7 +2199,7 @@ export const attemptDetailSchema = z.object({
   username: z.string(),
   testId: z.string(),
   testTitle: z.string(),
-  testMode: z.enum(["standard", "adaptive"]),
+  testMode: z.enum(["standard", "adaptive", "scenario"]),
   startedAt: z.string(),
   finishedAt: z.string().nullable(),
   duration: z.number().nullable(),
@@ -2384,7 +2422,7 @@ export const scormPackages = pgTable("scorm_packages", {
   // Без FK, nullable исторически. Пакет удаляется вместе с тестом (PRD-15 FR-07a, `purgeTestLmsData`).
   testId: varchar("test_id", { length: 36 }),
   testTitle: text("test_title").notNull(),
-  testMode: text("test_mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
+  testMode: text("test_mode", { enum: ["standard", "adaptive", "scenario"] }).notNull().default("standard"),
   secretKey: text("secret_key").notNull(),
   apiBaseUrl: text("api_base_url").notNull(),
   exportedAt: timestamp("exported_at").notNull(),

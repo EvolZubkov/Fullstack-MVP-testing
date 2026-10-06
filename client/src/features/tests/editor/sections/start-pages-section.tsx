@@ -170,6 +170,12 @@ export type StructureSectionProps = {
    * — consistent with the «Оформление» template preview.
    */
   designDraft?: { templateId: string; params?: Record<string, unknown> };
+  /**
+   * «Сценарий в ИС»: строка задания теста «Сценарий» («Сценарий из банка «…» на весь экран»).
+   * Задана — поток рисуется одной зоной «Задание» вместо вопросов, без «Обзора теста»: у теста
+   * одно задание, и обозревать нечего (согласованный эскиз sim-scenario-test-editor.html).
+   */
+  taskLabel?: string;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -457,7 +463,7 @@ export function previewTemplateId(
   return hasOwnVariant ? draftTemplateId : "default";
 }
 
-export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false, designDraft }: StructureSectionProps) {
+export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false, designDraft, taskLabel }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
   const fallback = useContentPages(contentProp ? undefined : testId);
@@ -521,6 +527,7 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
           handlers={handlers}
           onGoToComposition={onGoToComposition}
           updateModel={updateModel}
+          taskLabel={taskLabel}
         />
       )}
 
@@ -630,8 +637,10 @@ function ZonesBlock(props: {
   handlers: ZoneHandlers;
   onGoToComposition?: () => void;
   updateModel?: (updater: (model: TestEditorModel) => TestEditorModel) => void;
+  /** «Сценарий в ИС»: см. {@link StructureSectionProps.taskLabel}. */
+  taskLabel?: string;
 }) {
-  const { model, handlers: baseHandlers, onGoToComposition, updateModel } = props;
+  const { model, handlers: baseHandlers, onGoToComposition, updateModel, taskLabel } = props;
   const pages = baseHandlers.cp.pages;
 
   // Видимость «Итогов раздела»: пункт меню строки и переключатель «Показывать итоги
@@ -829,7 +838,8 @@ function ZonesBlock(props: {
     });
   };
 
-  if (model.sections.length === 0) {
+  // «Сценарий в ИС»: у теста «Сценарий» тем нет по определению — вместо них строка задания.
+  if (model.sections.length === 0 && taskLabel === undefined) {
     if (model.flowMode === "router_by_topics") {
       return (
         <Banner
@@ -907,7 +917,14 @@ function ZonesBlock(props: {
         />
       </Zone>
 
-      {model.flowMode === "linear_flat" ? (
+      {taskLabel !== undefined ? (
+        <Zone title="Задание" testId="structure-zone-task">
+          <div className="page-row page-row--system page-row--questions" data-testid="structure-task-row" data-kind="questions">
+            <span className="page-variant-badge">Задание</span>
+            <span className="page-title">{taskLabel}</span>
+          </div>
+        </Zone>
+      ) : model.flowMode === "linear_flat" ? (
         <Zone title="Внутри теста" testId="structure-zone-questions">
           <QuestionsRow
             page={systemSingleton("questions")}

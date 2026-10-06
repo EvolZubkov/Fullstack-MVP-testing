@@ -61,6 +61,7 @@ import type {
   SectionTimeLimit,
   TestEditorModel,
   TestMode,
+  ScenarioItemDraft,
   TestSectionPayload,
   TestSettingsPayload,
   TestStatus,
@@ -141,7 +142,20 @@ function isTestStatus(value: unknown): value is TestStatus {
 }
 
 function isTestMode(value: unknown): value is TestMode {
-  return value === "standard" || value === "adaptive";
+  return value === "standard" || value === "adaptive" || value === "scenario";
+}
+
+/** «Сценарий в ИС»: первый пункт-сценарий ответа — пункт теста режима `scenario`. */
+function readScenarioItemFromApi(src: ApiTestResponse): ScenarioItemDraft | null {
+  const items = (src as { scenarios?: unknown }).scenarios;
+  if (!Array.isArray(items) || items.length === 0) return null;
+  const first = items[0] as { topicId?: unknown; topicName?: unknown; questionId?: unknown };
+  if (typeof first.topicId !== "string") return null;
+  return {
+    topicId: first.topicId,
+    topicName: typeof first.topicName === "string" ? first.topicName : "",
+    questionId: typeof first.questionId === "string" ? first.questionId : null,
+  };
 }
 
 function isFlowMode(value: unknown): value is FlowMode {
@@ -1319,6 +1333,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     id: typeof src.id === "string" ? src.id : undefined,
     version: typeof src.version === "number" ? src.version : 1,
     mode,
+    scenario: readScenarioItemFromApi(src),
     flowMode,
     // PRD-30 FR-16: only the three known values; anything else (including a test
     // saved before the column existed) is the default «перемешивание».

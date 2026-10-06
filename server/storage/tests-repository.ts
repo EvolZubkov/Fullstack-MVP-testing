@@ -18,11 +18,11 @@ import { randomUUID } from "crypto";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { db } from "../db";
 import {
-  tests, testSections, testSnapshots, attempts,
+  tests, testSections, testScenarios, testSnapshots, attempts,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
   testAssignments, testAccessGrants, questions, questionMeasurements, contentPages,
   assignmentAccessTokens, analyticsSlices, questionExposure,
-  type Test, type InsertTest, type TestSection, type TestSnapshot,
+  type Test, type InsertTest, type TestSection, type TestScenario, type TestSnapshot,
 } from "@shared/schema";
 import { countTestLmsTrail, purgeTestLmsData, type TestLmsTrailCounts } from "./scorm-repository";
 
@@ -261,6 +261,7 @@ export class TestsRepository {
 
       // Structural dependents.
       await tx.delete(testSections).where(eq(testSections.testId, id));
+      await tx.delete(testScenarios).where(eq(testScenarios.testId, id));
       await tx.delete(testAssignments).where(eq(testAssignments.testId, id));
       // Personal access links (attempt and review) lead nowhere without the test.
       await tx.delete(assignmentAccessTokens).where(eq(assignmentAccessTokens.testId, id));
@@ -303,6 +304,20 @@ export class TestsRepository {
       .from(testSections)
       .where(eq(testSections.testId, testId))
       .orderBy(testSections.sortOrder);
+  }
+
+  /** «Сценарий в ИС»: пункты-сценарии теста в порядке автора. */
+  async getTestScenarios(testId: string): Promise<TestScenario[]> {
+    return db
+      .select()
+      .from(testScenarios)
+      .where(eq(testScenarios.testId, testId))
+      .orderBy(testScenarios.sortOrder);
+  }
+
+  /** Пункты-сценарии, для которых тема служит банком — «где используется тема». */
+  async getTestScenariosByTopic(topicId: string): Promise<TestScenario[]> {
+    return db.select().from(testScenarios).where(eq(testScenarios.topicId, topicId));
   }
 
   async getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {

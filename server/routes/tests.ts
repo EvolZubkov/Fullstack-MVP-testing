@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isSimulation } from "@shared/questions/question-type";
 import crypto from "node:crypto";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
@@ -37,6 +38,7 @@ import {
   testSettingsService,
   VersionConflictError,
   type SectionPayload,
+  type ScenarioPayload,
   type AdaptiveTopicPayload,
 } from "../services/test-settings";
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
@@ -103,6 +105,41 @@ const sectionBodySchema = z
     }
   });
 
+/**
+ * «Сценарий в ИС»: пункт-сценарий теста (`test_scenarios`). Принадлежность вопроса теме и его
+ * тип проверяет {@link scenarioItemsError} — схеме для этого нужна база.
+ */
+const scenarioBodySchema = z.object({
+  topicId: z.string().min(1),
+  questionId: z.string().min(1).nullable().optional(),
+  title: z.string().max(200).nullable().optional(),
+  required: z.boolean().optional(),
+  timeLimitMinutes: z.number().int().positive().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
+});
+
+/**
+ * Пункты-сценарии, которые нельзя сохранить: фиксированный сценарий не из своей темы или не
+ * сценарий; в тесте «Сценарий» — больше одного пункта.
+ *
+ * @returns Текст ошибки или `null`.
+ */
+async function scenarioItemsError(
+  mode: string | undefined,
+  scenarios: Array<z.infer<typeof scenarioBodySchema>> | undefined,
+): Promise<string | null> {
+  if (!scenarios) return null;
+  if (mode === "scenario" && scenarios.length > 1) return "В тесте «Сценарий» один пункт-сценарий";
+  for (const item of scenarios) {
+    if (!item.questionId) continue;
+    const question = await storage.getQuestion(item.questionId);
+    if (!question || question.topicId !== item.topicId || !isSimulation(question.type)) {
+      return "Фиксированный сценарий должен быть сценарием из выбранной темы";
+    }
+  }
+  return null;
+}
+
 const testBodyBaseSchema = z.object({
   title: z.string().min(1, "Title is required").optional(),
   description: z.string().nullable().optional(),
@@ -125,6 +162,8 @@ const testBodyBaseSchema = z.object({
     .optional(),
   webhookUrl: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
   sections: z.array(sectionBodySchema).optional(),
+  // «Сценарий в ИС»: пункты-сценарии. ОБЯЗАН быть в схеме: неописанный ключ zod срезает молча.
+  scenarios: z.array(scenarioBodySchema).optional(),
   showCorrectAnswers: z.boolean().optional(),
   // PRD-19 (Блок A): правила навигации/завершения.
   allowReturnToUnanswered: z.boolean().optional(),
@@ -152,7 +191,7 @@ const testBodyBaseSchema = z.object({
   maxAttempts: z.number().int().positive().nullable().optional(),
   startPageContent: z.string().nullable().optional(),
   feedback: z.string().nullable().optional(),
-  mode: z.enum(["standard", "adaptive"]).optional(),
+  mode: z.enum(["standard", "adaptive", "scenario"]).optional(),
   showDifficultyLevel: z.boolean().optional(),
   adaptiveSettings: z.array(z.unknown()).optional(),
   // PRD-7 new fields
@@ -363,7 +402,14 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
     adaptive: await storage.listReportBlocks(test.id, "adaptive"),
   };
 
-  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements, questionScoring, publication, reportBlocks };
+  // «Сценарий в ИС»: пункты-сценарии лежат при тесте в любом режиме — переключение режима их
+  // не стирает (FR-40), — а действуют только в режиме «Сценарий» (и в роутере, этап Э3).
+  const scenarios = (await storage.getTestScenarios(test.id)).map((item) => ({
+    ...item,
+    topicName: topicMap.get(item.topicId)?.name || "Unknown",
+  }));
+
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings, scenarios, resultVariables, scales, measurements, questionScoring, publication, reportBlocks };
 }
 
 // GET /api/tests - Список тестов
@@ -705,6 +751,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       passDecisionPolicy,
       webhookUrl,
       sections,
+      scenarios,
       showCorrectAnswers,
       allowReturnToUnanswered,
       allowFreeSectionNavigation,
@@ -741,14 +788,18 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       folderId,
     } = parsed.data;
 
-    // For standard mode, sections are required
-    if (mode !== "adaptive" && (!sections || sections.length === 0)) {
+    // For standard mode, sections are required. A «Сценарий» test has none: its content is
+    // the scenario item.
+    if (mode !== "adaptive" && mode !== "scenario" && (!sections || sections.length === 0)) {
       return res.status(400).json({ error: "Sections are required for standard tests" });
     }
+    const scenarioError = await scenarioItemsError(mode, scenarios);
+    if (scenarioError) return res.status(422).json({ error: scenarioError, field: "scenarios" });
 
     // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
     const referencedTopics = [
       ...(sections ?? []).map((s) => s.topicId),
+      ...(scenarios ?? []).map((s) => s.topicId),
       ...((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId),
     ];
     const invisible = await firstInvisibleTopic(
@@ -836,6 +887,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       adaptiveSettings: mode === "adaptive"
         ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined)
         : undefined,
+      scenarios: scenarios as ScenarioPayload[] | undefined,
     });
 
     // PRD-13: the creator becomes the test owner.
@@ -1191,6 +1243,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       passDecisionPolicy,
       webhookUrl,
       sections,
+      scenarios,
       showCorrectAnswers,
       allowReturnToUnanswered,
       allowFreeSectionNavigation,
@@ -1232,14 +1285,19 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
     // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
     // FR-25 derived in-context read: topics already referenced by this test are
     // exempt, so a soft grant revoke does not block re-saving an existing test.
+    const scenarioError = await scenarioItemsError(mode, scenarios);
+    if (scenarioError) return res.status(422).json({ error: scenarioError, field: "scenarios" });
+
     const referencedTopics = [
       ...(mode === "standard" ? (sections ?? []).map((s) => s.topicId) : []),
+      ...(mode === "scenario" ? (scenarios ?? []).map((s) => s.topicId) : []),
       ...(mode === "adaptive"
         ? ((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId)
         : []),
     ];
     const existingSections = await storage.getTestSections(req.params.id);
-    const exempt = new Set(existingSections.map((s) => s.topicId));
+    const existingScenarios = await storage.getTestScenarios(req.params.id);
+    const exempt = new Set([...existingSections, ...existingScenarios].map((s) => s.topicId));
     const invisible = await firstInvisibleTopic(
       req.effectiveRoles ?? [],
       req.currentUser?.id ?? "",
@@ -1317,6 +1375,9 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       // sections come from the adaptive levels instead.
       sections: mode === "standard" ? (sections as SectionPayload[] | undefined) : undefined,
       adaptiveSettings: mode === "adaptive" ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined) : undefined,
+      // «Сценарий в ИС»: пункт живёт с режимом «Сценарий»; разделы при этом не трогаются и
+      // вернутся при возврате к стандартному режиму (FR-40).
+      scenarios: mode === "scenario" ? (scenarios as ScenarioPayload[] | undefined) : undefined,
       expectedVersion,
     });
 

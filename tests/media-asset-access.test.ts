@@ -12,6 +12,7 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestion: vi.fn(),
     isTestAssignedToUser: vi.fn(),
     getTestSectionsByTopic: vi.fn(),
+    getTestScenariosByTopic: vi.fn(),
     getContentPage: vi.fn(),
     getSnapshot: vi.fn(),
   },
@@ -29,6 +30,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearAssetAccessCache();
   storageMock.getMediaUsagesByAsset.mockResolvedValue([]);
+  storageMock.getTestScenariosByTopic.mockResolvedValue([]);
 });
 
 describe("canDeliverAsset", () => {
@@ -77,6 +79,18 @@ describe("canDeliverAsset", () => {
     storageMock.isTestAssignedToUser.mockResolvedValue(true);
     expect(await canDeliverAsset(asset(), "learner-1", [ROLES.LEARNER])).toBe(true);
     expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t9", "learner-1");
+  });
+
+  it("«Сценарий в ИС»: доходит до теста «Сценарий» через его пункт-сценарий на теме-банке", async () => {
+    storageMock.getMediaUsagesByAsset.mockResolvedValue([
+      { assetId: "a1", entityType: "question", entityId: "q-sim", field: "dataJson.scenario.media.0.file" },
+    ]);
+    storageMock.getQuestion.mockResolvedValue({ id: "q-sim", topicId: "bank" });
+    storageMock.getTestSectionsByTopic.mockResolvedValue([]);
+    storageMock.getTestScenariosByTopic.mockResolvedValue([{ testId: "t-scenario" }]);
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    expect(await canDeliverAsset(asset({ visibility: "private" }), "learner-1", [ROLES.LEARNER])).toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith("t-scenario", "learner-1");
   });
 
   it("lets a learner through when the file is used by the test's own feedback", async () => {

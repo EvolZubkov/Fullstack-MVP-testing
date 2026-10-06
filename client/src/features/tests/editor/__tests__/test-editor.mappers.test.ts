@@ -1193,3 +1193,29 @@ describe("вводный текст по исходу (PRD-61)", () => {
     expect(model.intro?.results).toEqual({ format: "richText", text: "Об итогах" });
   });
 });
+
+// ─── «Сценарий в ИС»: тест «Сценарий» ────────────────────────────────────────
+
+describe("apiToEditorModel — тест «Сценарий»", () => {
+  it("читает режим и пункт-сценарий; темы при этом не теряются (FR-40)", () => {
+    const model = apiToEditorModel({
+      id: "t-sim",
+      version: 3,
+      title: "Регистрация документов",
+      mode: "scenario",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [apiSection({ topicId: "old-topic" })],
+      scenarios: [{ id: "i1", topicId: "bank", topicName: "Работа в СЭД", questionId: "q-fixed" }],
+    });
+    expect(model.mode).toBe("scenario");
+    expect(model.scenario).toEqual({ topicId: "bank", topicName: "Работа в СЭД", questionId: "q-fixed" });
+    expect(model.sections.map((s) => s.topicId)).toEqual(["old-topic"]);
+  });
+
+  it("тест без пунктов — пункта нет; случайная выдача читается как questionId = null", () => {
+    expect(apiToEditorModel({ id: "t", version: 1, title: "x", mode: "standard", sections: [] }).scenario).toBeNull();
+    const random = apiToEditorModel({ id: "t", version: 1, title: "x", mode: "scenario", sections: [], scenarios: [{ topicId: "bank", questionId: null }] });
+    expect(random.scenario).toEqual({ topicId: "bank", topicName: "", questionId: null });
+  });
+});

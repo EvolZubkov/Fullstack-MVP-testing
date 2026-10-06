@@ -38,6 +38,8 @@ vi.mock("../server/storage", () => ({
     // пустой список означает «документ по умолчанию шаблона».
     listReportBlocks: vi.fn().mockResolvedValue([]),
     getTestSections: vi.fn(async () => [sectionRow]),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
     getTopics: vi.fn(async () => [{ id: "tp1", name: "Тема" }]),
     getScales: vi.fn(async () => []),
     getQuestionMeasurements: vi.fn(async () => []),

@@ -45,10 +45,12 @@ import {
   ScenarioArchiveError,
   archiveFileName,
   buildScenarioArchive,
+  scenarioMediaBytes,
   importScenarioArchive,
   storedScenarioErrors,
 } from "../services/sim/scenario-archive";
 import type { Scenario } from "@shared/sim/contract";
+import { summarizeScenario } from "@shared/sim/validate";
 import multer from "multer";
 import { config } from "../config";
 
@@ -233,6 +235,47 @@ interface ExportQuery {
 
 // Сериализация строки вопроса (экспорт) — server/services/questions-export.ts;
 // разбор (импорт) — server/services/questions-import.ts.
+
+// ============================================
+// GET /api/questions/scenario-banks — темы, служащие банками сценариев
+// ============================================
+//
+// Для вкладки «Задание» теста «Сценарий» и пункта-сценария роутера: какие темы можно выбрать
+// банком (в них есть хотя бы один сценарий) и что в каждой лежит — сводка сценария и вес его
+// изображений. Только видимые автору темы. Отдельный маршрут, а не общий список вопросов:
+// редактору теста незачем тянуть весь банк ради одного типа.
+router.get("/scenario-banks", requirePermission("questions.read"), async (req: Request, res: Response) => {
+  try {
+    const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const topics = await storage.getTopics();
+    const visibleTopics = topics.filter((topic) => scope.all || scope.ids.has(topic.id));
+    const banks = [];
+    for (const topic of visibleTopics) {
+      const scenarios = (await storage.getQuestionsByTopic(topic.id)).filter((q) => isSimulation(q.type));
+      if (scenarios.length === 0) continue;
+      banks.push({
+        topicId: topic.id,
+        topicName: topic.name,
+        scenarios: await Promise.all(
+          scenarios.map(async (q) => {
+            const scenario = (q.dataJson as { scenario: Scenario }).scenario;
+            return {
+              questionId: q.id,
+              summary: summarizeScenario(scenario),
+              mediaBytes: await scenarioMediaBytes(scenario),
+              // Для «Сыграть» фиксированного сценария прямо из ящика теста.
+              scenario,
+            };
+          }),
+        ),
+      });
+    }
+    res.json(banks);
+  } catch (error) {
+    logger.error("Get scenario banks error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to get scenario banks" });
+  }
+});
 
 // ============================================
 // GET /api/questions - Список вопросов

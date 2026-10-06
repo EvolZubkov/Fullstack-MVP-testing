@@ -34,6 +34,11 @@ export interface PlayerOptions {
   showDetails?: boolean;
   /** Caption above the task text, e.g. «Задание · вопрос 4 из 12». */
   caption?: string;
+  /**
+   * Label of the button that closes the result dialog. Defaults to «Вернуться к вопросу» — the
+   * scenario as a question; a «Сценарий» test, where the test's results come next, says so.
+   */
+  closeLabel?: string;
 }
 
 /** A mounted player. */
@@ -449,7 +454,7 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
       box.append(k);
     }
     const actions = h(doc, "div", "tbsim__actions");
-    const back = h(doc, "button", "tbsim__btn tbsim__btn--primary", "Вернуться к вопросу");
+    const back = h(doc, "button", "tbsim__btn tbsim__btn--primary", options.closeLabel ?? "Вернуться к вопросу");
     back.type = "button";
     back.addEventListener("click", () => options.onClose?.(result));
     actions.append(back);

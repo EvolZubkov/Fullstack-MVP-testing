@@ -24,6 +24,7 @@
 import type { ScaleResult } from "../formula/types";
 import { distributesBudget, isSingleIndexChoice } from "../questions/question-type";
 import type { AllocationSpec } from "../questions/allocation";
+import type { GradedRun } from "../sim/scoring";
 
 export type ScaleAggregation = "sum" | "avg" | "weighted_avg" | "max" | "min";
 export type ScaleNormalization = "none" | "percent" | "custom";
@@ -77,6 +78,9 @@ export type Answer =
   | string
   | Record<string, number>
   | Record<string, string>
+  // «Сценарий в ИС»: результат прогона. Шкалы его не читают — у сценария нет вариантов, —
+  // но ответы попытки приходят сюда одной картой, и тип обязан её принять.
+  | GradedRun
   | null
   | undefined;
 

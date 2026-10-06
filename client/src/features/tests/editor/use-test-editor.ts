@@ -293,6 +293,10 @@ function diffDirtyTabs(
   ) {
     dirty.add("rules");
   }
+  // «Сценарий в ИС»: банк и выдача теста «Сценарий» — на вкладке «Задание» (ключ «Состава»).
+  if (!shallowEqualJson(draft.scenario ?? null, snapshot.scenario ?? null)) {
+    dirty.add("composition");
+  }
   // «Состав и сценарий»: лестница адаптивного режима и сценарий прохождения.
   if (
     !shallowEqualJson(draft.adaptive, snapshot.adaptive) ||
@@ -421,6 +425,12 @@ function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
   const sections = mapEditorSectionsToPayload(draft);
   const adaptive = mapEditorAdaptiveToPayload(draft);
   const payload: Record<string, unknown> = { ...test, sections };
+  // «Сценарий в ИС»: пункт-сценарий уходит только в своём режиме — как разделы у стандартного.
+  if (draft.mode === "scenario") {
+    payload.scenarios = draft.scenario
+      ? [{ topicId: draft.scenario.topicId, questionId: draft.scenario.questionId }]
+      : [];
+  }
   if (adaptive) {
     payload.showDifficultyLevel = adaptive.showDifficultyLevel;
     payload.adaptiveSettings = adaptive.topics;

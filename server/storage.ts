@@ -74,6 +74,7 @@ import type {
   Question, InsertQuestion,
   Test, InsertTest,
   TestSection,
+  TestScenario,
   Attempt, InsertAttempt,
   AdaptiveTopicSettings, InsertAdaptiveTopicSettings,
   AdaptiveLevel, InsertAdaptiveLevel,
@@ -307,6 +308,10 @@ export interface IStorage {
   /** PRD-15 FR-07a: what `deleteTest` would take with the test — numbers for the delete dialog. */
   getTestDeleteImpact(id: string): Promise<TestDeleteImpact>;
   getTestSections(testId: string): Promise<TestSection[]>;
+  /** «Сценарий в ИС»: пункты-сценарии теста в порядке автора. */
+  getTestScenarios(testId: string): Promise<TestScenario[]>;
+  /** Пункты-сценарии, для которых тема служит банком. */
+  getTestScenariosByTopic(topicId: string): Promise<TestScenario[]>;
   /** PRD-54: разделы сразу по нескольким темам — определение теста по вопросам выгрузки. */
   getTestSectionsByTopicIds(topicIds: string[]): Promise<TestSection[]>;
 
@@ -1116,6 +1121,14 @@ export class DatabaseStorage implements IStorage {
 
   getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
     return this.testsRepo.getTestSectionsByTopic(topicId);
+  }
+
+  getTestScenarios(testId: string): Promise<TestScenario[]> {
+    return this.testsRepo.getTestScenarios(testId);
+  }
+
+  getTestScenariosByTopic(topicId: string): Promise<TestScenario[]> {
+    return this.testsRepo.getTestScenariosByTopic(topicId);
   }
 
   getTestSectionsByTopicIds(topicIds: string[]): Promise<TestSection[]> {
