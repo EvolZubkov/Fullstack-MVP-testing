@@ -1,6 +1,6 @@
 # План: участник выгрузки LMS как внешняя учётная запись
 
-Дата: 2026-10-06. Статус: согласован 2026-10-06, в работе.
+Дата: 2026-10-06. Статус: реализован 2026-10-06, приёмка в браузере пройдена на копии dev-базы.
 Спека, которую меняет трек: [PRD-54](../specs/prd-54/lms-export-import.md). Смежная:
 [PRD-28 «Внешний участник»](../specs/prd-28/external-participant.md).
 Эскиз: [prd54-lms-external-participants.html](../wireframes/approved/prd54-lms-external-participants.html).
