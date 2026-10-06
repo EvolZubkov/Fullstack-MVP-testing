@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Задание-сценарий</title>
+<style>
+  body { margin: 0; font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #16181d; background: #eef0f3; }
+  .orphan { padding: 24px; }
+</style>
+<script src="fs-probe.js"></script>
+</head>
+<body>
+<div class="tbfs" id="stage"></div>
+<script>
+(function () {
+  "use strict";
+
+  /*
+   * Отдельное окно — документ верхнего уровня, а не фрейм LMS, поэтому полный экран в нём
+   * не зависит от разрешений LMS. Прогресс и сессия SCORM остаются в окне пакета: окно
+   * только рисует сценарий и сообщает о событиях. Закрыли окно — сценарий прерван, но не
+   * потерян.
+   */
+  var host = null;
+  try { host = window.opener && window.opener.TBFSHost; } catch (e) { host = null; }
+  var stage = document.getElementById("stage");
+  if (!host) {
+    stage.className = "orphan";
+    stage.textContent = "Окно сценария открыто без окна пакета. Закройте его и начните выполнение из курса.";
+    return;
+  }
+
+  var finishing = false;
+  var s = TBFS.sizeInfo(window);
+  host.log("в отдельном окне: окно " + s.viewport + ", экран " + s.screen + ", fullscreenEnabled = " + TBFS.fsEnabled(document));
+
+  function leave(kind) {
+    finishing = true;
+    TBFS.exitFs(document);
+    if (kind === "finish") host.finish(); else host.collapse();
+  }
+
+  var ui = {
+    log: function (t) { host.log(t); },
+    collapse: function () { leave("collapse"); },
+    finish: function () { leave("finish"); },
+    extra: [{
+      label: "На весь экран",
+      onClick: function (btn) {
+        TBFS.requestFs(document.documentElement).then(function () {
+          host.fsResult(true, "полный экран в отдельном окне включён: " + TBFS.sizeInfo(window).viewport);
+        }, function (e) {
+          host.fsResult(false, "полный экран в отдельном окне отказал: " + (e && (e.name + ": " + e.message)));
+        });
+        btn.blur();
+      },
+    }],
+  };
+
+  function draw() { TBFS.render(stage, host.store, ui); }
+  draw();
+
+  TBFS.onFsChange(document, function () {
+    host.log("отдельное окно: полный экран " + (TBFS.fsElement(document) ? "включён" : "выключен"));
+  });
+  window.addEventListener("resize", function () { host.log("отдельное окно: размер " + window.innerWidth + " × " + window.innerHeight); });
+  window.addEventListener("pagehide", function () { if (!finishing) host.log("отдельное окно выгружено"); });
+})();
+</script>
+</body>
+</html>
