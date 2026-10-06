@@ -61,7 +61,7 @@
 | Эскиз | Экраны | Статус |
 | --- | --- | --- |
 | `docs/wireframes/sim-scenario-question.html` | 1 | Согласован, 2026-10-06 |
-| `docs/wireframes/sim-scenario-test-editor.html` | 2, 3 | На согласовании |
+| `docs/wireframes/sim-scenario-test-editor.html` | 2, 3 | Согласован, 2026-10-06 |
 | `docs/wireframes/sim-scenario-learner.html` | 4, 5 | Согласован, 2026-10-06 |
 
 ### Э1. Вопрос «Сценарий» и импорт архива
