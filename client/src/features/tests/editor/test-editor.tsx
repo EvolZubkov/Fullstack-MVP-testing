@@ -856,9 +856,9 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
             container). With display:contents the wrapper is removed from
             layout but `inert` still propagates to its descendants.
           */}
-          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-          {/* @ts-expect-error inert attribute lacks types in older React/dom-lib versions */}
-          <div className="tb-saving-inert-wrap" inert={combinedSaving ? "" : undefined}>
+          {/* React 19 types `inert` as a boolean and treats the old `""` as FALSE — the wrapper
+              was never inert and the author could keep editing a draft being saved. */}
+          <div className="tb-saving-inert-wrap" inert={combinedSaving || undefined}>
           {/* Стопка баннеров липнет ЦЕЛИКОМ: два sticky-баннера с одинаковым `top`
               наезжают друг на друга, и нижний закрывает верхний вместе с действием.
               Ошибки выше предупреждений — у них разные последствия. */}
