@@ -524,6 +524,7 @@ export const t = {
     shortAnswer: "Короткий ответ",
     blanks: "Пропуски",
     longAnswer: "Развёрнутый ответ",
+    simulation: "Сценарий",
     allocationStatements: "Утверждения",
     allocationStatementPlaceholder: "Текст утверждения",
     allocationBudget: "Бюджет",

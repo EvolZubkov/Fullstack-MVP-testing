@@ -62,6 +62,7 @@ export const TYPE_OPTS: { value: QuestionType; label: string }[] = [
   { value: "short", label: t.questions.shortAnswer },
   { value: "blanks", label: t.questions.blanks },
   { value: "long", label: t.questions.longAnswer },
+  { value: "simulation", label: t.questions.simulation },
 ];
 export const MEDIA_OPTS: { value: MediaBucket; label: string }[] = [
   { value: "image", label: "С изображением" },

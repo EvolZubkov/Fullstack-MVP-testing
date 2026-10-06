@@ -39,7 +39,17 @@ import { allocationDataSchema } from "@shared/schema";
 import { distributesBudget } from "@shared/questions/question-type";
 import type { Question } from "@shared/schema";
 import { shortAnswerDataSchema } from "@shared/schema";
-import { isTextEntry } from "@shared/questions/question-type";
+import { isSimulation, isTextEntry } from "@shared/questions/question-type";
+import {
+  MAX_ARCHIVE_BYTES,
+  ScenarioArchiveError,
+  archiveFileName,
+  buildScenarioArchive,
+  importScenarioArchive,
+  storedScenarioErrors,
+} from "../services/sim/scenario-archive";
+import type { Scenario } from "@shared/sim/contract";
+import multer from "multer";
 import { config } from "../config";
 
 /**
@@ -110,6 +120,21 @@ function shortAnswerConfigError(type: string | undefined, dataJson: unknown): st
     return `Предел длины ответа не может превышать ${ceiling} символов`;
   }
   return null;
+}
+
+/**
+ * «Сценарий в ИС»: содержимое — сценарий контракта с изображениями из медиатеки.
+ *
+ * Те же проверки, что при загрузке архива (`shared/sim/validate`), в режиме хранимого
+ * сценария: ЗАПРОС может прийти и не из ящика, а принятый архив и сохранённый вопрос не
+ * имеют права расходиться в том, что считать годным сценарием.
+ *
+ * Возвращает текст ошибки или `null`.
+ */
+function scenarioConfigError(type: string | undefined, dataJson: unknown): string | null {
+  if (!isSimulation(type ?? "")) return null;
+  const errors = storedScenarioErrors(dataJson);
+  return errors.length ? errors.join("; ") : null;
 }
 
 // PRD-15 FR-02: fields whose change affects delivery or grading of dependent
@@ -325,6 +350,11 @@ router.post(
         return res.status(422).json({ error: shortAnswerError, field: "dataJson" });
       }
 
+      const scenarioError = scenarioConfigError(type, dataJson);
+      if (scenarioError) {
+        return res.status(422).json({ error: scenarioError, field: "dataJson" });
+      }
+
       const questionInput = {
         topicId,
         type,
@@ -379,6 +409,78 @@ router.post(
       res.status(500).json({ error: "Failed to create question" });
     }
   }
+);
+
+// ============================================
+// POST /api/questions/scenario-archive — принять архив сценария («Сценарий в ИС»)
+// ============================================
+//
+// Ящик вопроса присылает `.scenario.zip`; сервер проверяет контракт и, если ошибок нет,
+// кладёт изображения в медиатеку автора и возвращает готовое содержимое вопроса. Сам вопрос
+// здесь НЕ пишется: его сохраняет обычное «Создать»/«Обновить», и сценарий проходит ту же
+// проверку ещё раз — уже как хранимый.
+//
+// Ошибки сценария — не сбой запроса: ответ `200` с `ok: false` и перечнем, его показывает
+// ящик. `422` — только когда сам файл не прочитать (не ZIP, нет `scenario.json`).
+const scenarioUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_ARCHIVE_BYTES } });
+
+router.post(
+  "/scenario-archive",
+  requirePermission("questions.manage"),
+  (req: Request, res: Response, next) =>
+    scenarioUpload.single("file")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ error: `Архив больше ${MAX_ARCHIVE_BYTES / 1024 / 1024} МБ`, maxBytes: MAX_ARCHIVE_BYTES });
+      }
+      next(err);
+    }),
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "Файл не передан" });
+      const result = await importScenarioArchive(req.file.buffer, req.currentUser?.id ?? "");
+      res.json(result);
+    } catch (error) {
+      if (error instanceof ScenarioArchiveError) {
+        return res.status(422).json({ error: error.message, ok: false, errors: [error.message], warnings: [] });
+      }
+      logger.error("Scenario archive import error: " + (error as Error).message);
+      res.status(500).json({ error: "Не удалось принять архив сценария" });
+    }
+  },
+);
+
+// ============================================
+// GET /api/questions/:id/scenario-archive — архив сценария, собранный из сохранённого
+// ============================================
+//
+// Исходный файл не хранится: архив собирается заново — сценарий и его изображения из
+// медиатеки, — поэтому загружается обратно сюда же или в другую установку.
+router.get(
+  "/:id/scenario-archive",
+  requirePermission("questions.read"),
+  async (req: Request, res: Response) => {
+    try {
+      const question = await storage.getQuestion(req.params.id);
+      if (!question || !isSimulation(question.type)) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+      if (!scope.all && !scope.ids.has(question.topicId)) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      const scenario = (question.dataJson as { scenario: Scenario }).scenario;
+      const archive = await buildScenarioArchive(scenario);
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="scenario.zip"; filename*=UTF-8''${encodeURIComponent(archiveFileName(scenario.meta.title))}`,
+      );
+      res.send(archive);
+    } catch (error) {
+      logger.error("Scenario archive export error: " + (error as Error).message);
+      res.status(500).json({ error: "Не удалось собрать архив сценария" });
+    }
+  },
 );
 
 // ============================================
@@ -442,6 +544,13 @@ router.put(
         const shortAnswerError = shortAnswerConfigError(type ?? existing.type, dataJson);
         if (shortAnswerError) {
           return res.status(422).json({ error: shortAnswerError, field: "dataJson" });
+        }
+      }
+      // Смена типа НА сценарий без нового содержимого оставила бы под типом чужие данные.
+      if (dataJson !== undefined || (type !== undefined && type !== existing.type)) {
+        const scenarioError = scenarioConfigError(type ?? existing.type, dataJson ?? existing.dataJson);
+        if (scenarioError) {
+          return res.status(422).json({ error: scenarioError, field: "dataJson" });
         }
       }
       let feasibilityWarnings: unknown[] = [];
@@ -712,7 +821,11 @@ router.get(
       });
 
       // Формируем строки (общая сериализация — server/services/questions-export.ts)
-      const rows = questions.map((q) => serializeQuestionRow(q, topicMap.get(q.topicId) || ""));
+      // Сценарии в книгу не идут: строка без их содержимого при обратном импорте была бы
+      // пропущена, а книга обещает перенос без потерь. Сценарий переносится своим архивом.
+      const rows = questions
+        .filter((q) => !isSimulation(q.type))
+        .map((q) => serializeQuestionRow(q, topicMap.get(q.topicId) || ""));
 
       const wb = new ExcelJS.Workbook();
       addJsonSheet(wb, "Вопросы", rows, QUESTION_WIDTHS);

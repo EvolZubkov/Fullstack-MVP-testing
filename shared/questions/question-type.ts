@@ -29,6 +29,7 @@ export const QUESTION_TYPES = [
   "short",
   "blanks",
   "long",
+  "simulation",
 ] as const;
 
 export type QuestionType = (typeof QUESTION_TYPES)[number];
@@ -107,6 +108,29 @@ export function hasBlanks(type: string): boolean {
  */
 export function isOpenText(type: string): boolean {
   return type === "long";
+}
+
+/**
+ * «Сценарий в ИС» (docs/specs/sim-scenario): the learner performs a task in a simulated
+ * information system, played full-screen by `shared/sim`. The whole content is the scenario
+ * contract in `dataJson.scenario`; there are no options and no answer key — the outcome is
+ * judged by the scenario's own goal checks.
+ */
+export function isSimulation(type: string): boolean {
+  return type === "simulation";
+}
+
+/**
+ * Can a test host hand this question to a learner?
+ *
+ * Every type but the scenario. A scenario sits in its bank from stage Э1 of the sim-scenario
+ * plan (`docs/specs/sim-scenario/plan-tests.md`), while the hosts learn to play it only at
+ * Э2 (web) and Э4 (SCORM). Until then a section must not draw it: a learner would get a
+ * question the host cannot show. The delivery sources (`server/services/test-snapshot.ts`)
+ * drop such questions, so this is the ONE switch to flip when the hosts are ready.
+ */
+export function isDeliverable(type: string): boolean {
+  return !isSimulation(type);
 }
 
 /**

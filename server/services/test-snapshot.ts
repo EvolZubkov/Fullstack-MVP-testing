@@ -24,6 +24,7 @@
  * snapshot attempts share one resolution code path (FR-32).
  */
 
+import { isDeliverable } from "@shared/questions/question-type";
 import { storage } from "../storage";
 import { materializeScaleDomains } from "./scale-domain";
 import { syncEntityUsages } from "./media/usage-index";
@@ -263,6 +264,18 @@ export async function pruneSnapshots(testId: string, keepId: string): Promise<vo
   }
 }
 
+/**
+ * The questions of a topic a host may hand to a learner.
+ *
+ * Both sources below answer `getQuestionsByTopic` through it, and every delivery path — the web
+ * start, the adaptive pool, the SCORM bake, the debug player — reads a topic through a source.
+ * A type a host cannot play yet (see {@link isDeliverable}) therefore never reaches a learner,
+ * from live content or from a snapshot published before the type existed.
+ */
+function deliverable(questions: Question[]): Question[] {
+  return questions.filter((question) => isDeliverable(question.type));
+}
+
 /** A read source backed by live storage (drafts, preview, legacy attempts). */
 export function liveDataSource(): TestDataSource {
   return {
@@ -270,7 +283,7 @@ export function liveDataSource(): TestDataSource {
     getTestSections: (id) => storage.getTestSections(id),
     getTopics: () => storage.getTopics(),
     getTopic: (id) => storage.getTopic(id),
-    getQuestionsByTopic: (id) => storage.getQuestionsByTopic(id),
+    getQuestionsByTopic: async (id) => deliverable(await storage.getQuestionsByTopic(id)),
     getQuestionsByIds: (ids) => storage.getQuestionsByIds(ids),
     getTopicCourses: (id) => storage.getTopicCourses(id),
     getTopicEvents: (id) => storage.getTopicEvents(id),
@@ -309,7 +322,7 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
       return content.topics.find((t) => t.id === topicId);
     },
     async getQuestionsByTopic(topicId) {
-      return content.questionsByTopic[topicId] ?? [];
+      return deliverable(content.questionsByTopic[topicId] ?? []);
     },
     async getQuestionsByIds(ids) {
       return ids.map((id) => byId.get(id)).filter((q): q is Question => !!q);

@@ -61,6 +61,7 @@ import {
   Trash2,
   Unplug,
   type LucideIcon,
+  MonitorPlay,
   Pilcrow,
 } from "lucide-react";
 import { Button, Checkbox, FilterBar, Input, Label, ModalDialog, SegmentedControl, Select, Stack, Tag, Text, useToast } from "@skillum/ui-kit";
@@ -169,8 +170,9 @@ function MenuItem({ icon, danger, onClick, children, testId }: {
 }
 
 import type { QuestionType } from "@shared/questions/question-type";
+import { questionLabel } from "@shared/questions/question-label";
 
-const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: ThermometerSun, allocation: SlidersHorizontal, short: TextCursorInput, blanks: Braces, long: Pilcrow };
+const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered, scale: ThermometerSun, allocation: SlidersHorizontal, short: TextCursorInput, blanks: Braces, long: Pilcrow, simulation: MonitorPlay };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: t.questions.singleChoice,
   multiple: t.questions.multipleChoice,
@@ -181,6 +183,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   short: t.questions.shortAnswer,
   blanks: t.questions.blanks,
   long: t.questions.longAnswer,
+  simulation: t.questions.simulation,
 };
 
 const depthClass = (depth: number): string => `ct-d${Math.min(depth, 6)}`;
@@ -636,7 +639,7 @@ export function ContentTree() {
     const map = new Map<string, Question[]>();
     for (const topic of topics) {
       let qs = (questionsByTopic.get(topic.id) ?? []).filter((q) => facetMatch(q, filter, qualityById));
-      if (searching && !textIncludes(topic.name, query)) qs = qs.filter((q) => textIncludes(q.prompt, query));
+      if (searching && !textIncludes(topic.name, query)) qs = qs.filter((q) => textIncludes(questionLabel(q), query) || textIncludes(q.prompt, query));
       map.set(topic.id, qs);
     }
     return map;
@@ -798,7 +801,7 @@ export function ContentTree() {
           </span>
           <span className="ct-twist">{qOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-qtype" title={TYPE_LABEL[type]}><Icon size={16} /></span>
-          <TruncatedLabel className="ct-name__label" text={q.prompt} />
+          <TruncatedLabel className="ct-name__label" text={questionLabel(q)} />
           {q.mediaType ? <span className="ct-qmedia" title="С медиа"><ImageIcon size={16} /></span> : null}
           {/* FR-21: метка «на ревизии» ведёт на статистику вопроса банка. */}
           {!quality && canAnalytics && qualityById.get(q.id)?.review ? (

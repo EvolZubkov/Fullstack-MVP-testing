@@ -19,7 +19,8 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isAllocationFeasible } from "@shared/questions/allocation";
-import { isTextEntry } from "@shared/questions/question-type";
+import { isSimulation, isTextEntry } from "@shared/questions/question-type";
+import { ScenarioBlock, type ScenarioData } from "./scenario/scenario-block";
 import { AnswerRulesBlock } from "./answer-rules/answer-rules-block";
 import { BlanksBlock } from "./answer-rules/blanks-block";
 import type { BlankRuleSet } from "@shared/questions/blanks-render";
@@ -116,6 +117,7 @@ const questionTypes = [
   { value: "short", label: t.questions.shortAnswer },
   { value: "blanks", label: t.questions.blanks },
   { value: "long", label: t.questions.longAnswer },
+  { value: "simulation", label: t.questions.simulation },
 ] as const;
 
 type QuestionType = typeof questionTypes[number]["value"];
@@ -124,7 +126,7 @@ type QuestionType = typeof questionTypes[number]["value"];
 // and the graded config are configured per test («Оценка» tab of the editor).
 const baseQuestionSchema = z.object({
   topicId: z.string().min(1, t.questions.topicRequired),
-  type: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation", "short", "blanks", "long"]),
+  type: z.enum(["single", "multiple", "matching", "ranking", "scale", "allocation", "short", "blanks", "long", "simulation"]),
   prompt: z.string().min(1, t.questions.textRequired),
 });
 
@@ -191,6 +193,8 @@ export function QuestionEditorDrawer({
   const [longPlaceholder, setLongPlaceholder] = useState<string>("");
   const [longMaxLength, setLongMaxLength] = useState<number | undefined>(undefined);
   const [longRequired, setLongRequired] = useState<boolean>(false);
+  /** «Сценарий в ИС»: принятый сценарий — всё содержимое вопроса этого типа. */
+  const [scenarioData, setScenarioData] = useState<ScenarioData | null>(null);
   /** Поле текста задания: вставка разметки идёт В ПОЗИЦИЮ КУРСОРА. */
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
   /** FR-24g: предпросмотр — окно по кнопке подвала, а не постоянный блок в ящике. */
@@ -388,6 +392,7 @@ export function QuestionEditorDrawer({
     setLongMaxLength(undefined);
     setLongRequired(false);
     setShortMaxLength(undefined);
+    setScenarioData(null);
   };
 
   // Находки показываются там, где автор смотрит: тело ящика подводится к баннеру.
@@ -450,6 +455,8 @@ export function QuestionEditorDrawer({
       } else if (question.type === "short") {
         setAnswerRules(createAnswerRulesDraft(correct as AnswerRuleSet));
         setShortMaxLength(typeof data?.maxLength === "number" ? data.maxLength : undefined);
+      } else if (isSimulation(question.type)) {
+        setScenarioData(data?.scenario ? (data as ScenarioData) : null);
       } else if (question.type === "scale") {
         setSingleOptions(data.options || ["", "", "", ""]);
         // Наличие correctIndex И ЕСТЬ положение переключателя (FR-03).
@@ -582,6 +589,11 @@ export function QuestionEditorDrawer({
         dataJson = {};
         correctJson = { blanks };
         break;
+      case "simulation":
+        // Всё содержимое — сценарий; эталона нет: исход судят проверки цели самого сценария.
+        dataJson = scenarioData ?? {};
+        correctJson = {};
+        break;
       case "scale":
         dataJson = { options: singleOptions.filter((o) => o.trim()) };
         // Переключатель выключен — измерительный режим: ПУСТОЙ объект, а не null
@@ -644,8 +656,9 @@ export function QuestionEditorDrawer({
       promptFormat,
       dataJson,
       correctJson,
-      mediaUrl: mediaUrl.trim() || null,
-      mediaType: mediaType || null,
+      // У сценария своего медиа нет: остаток от прежнего типа не должен уехать в вопрос.
+      mediaUrl: isSimulation(selectedType) ? null : mediaUrl.trim() || null,
+      mediaType: isSimulation(selectedType) ? null : mediaType || null,
       shuffleAnswers,
       difficulty,
       // PRD-30 FR-01: null CLEARS the index — «не задано» is a value.
@@ -692,7 +705,9 @@ export function QuestionEditorDrawer({
   const validationErrors = useMemo(() => {
     const errs: string[] = [];
     if (!watchedTopicId) errs.push(t.questions.topicRequired);
-    if (!watchedPrompt || !watchedPrompt.trim()) errs.push(t.questions.textRequired);
+    if (!watchedPrompt || !watchedPrompt.trim()) {
+      errs.push(isSimulation(selectedType) ? "Текст задания обязателен" : t.questions.textRequired);
+    }
     if (selectedType === "single") {
       if (singleOptions.filter((o) => o.trim()).length < 2) errs.push("Добавьте не менее двух вариантов ответа");
       else if (!singleOptions[singleCorrect]?.trim()) errs.push("Отметьте правильный вариант");
@@ -735,6 +750,8 @@ export function QuestionEditorDrawer({
           }
         }
       }
+    } else if (selectedType === "simulation") {
+      if (!scenarioData) errs.push("Загрузите архив сценария");
     } else if (selectedType === "scale") {
       // Правильная градация обязательна ТОЛЬКО когда включён переключатель:
       // измерительный опросник валиден и без неё.
@@ -742,7 +759,7 @@ export function QuestionEditorDrawer({
       else if (scaleHasCorrect && !singleOptions[singleCorrect]?.trim()) errs.push(t.questions.scaleErrorNoCorrect);
     }
     return errs;
-  }, [watchedTopicId, watchedPrompt, selectedType, singleOptions, singleCorrect, scaleHasCorrect, allocBudget, allocMin, allocMax, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
+  }, [watchedTopicId, watchedPrompt, selectedType, scenarioData, singleOptions, singleCorrect, scaleHasCorrect, allocBudget, allocMin, allocMax, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
 
   /** Option/item texts of the active type — the list carried across type changes. */
   const currentOptionTexts = (): string[] => {
@@ -852,13 +869,16 @@ export function QuestionEditorDrawer({
                 Статистика
               </Button>
             )}
-            <Button
-              variant="ghost"
-              onClick={() => setPreviewOpen(true)}
-              data-testid="button-preview-question"
-            >
-              Предпросмотр
-            </Button>
+            {/* У сценария проверка — «Сыграть» в его блоке: окно предпросмотра его не покажет. */}
+            {!isSimulation(selectedType) && (
+              <Button
+                variant="ghost"
+                onClick={() => setPreviewOpen(true)}
+                data-testid="button-preview-question"
+              >
+                Предпросмотр
+              </Button>
+            )}
             <Button variant="secondary" onClick={closeDrawer}>{t.common.cancel}</Button>
             <Button
               onClick={form.handleSubmit(onSubmit)}
@@ -1049,7 +1069,7 @@ export function QuestionEditorDrawer({
 
           {promptFormat === "richText" ? (
             <RichPromptEditor
-              label={t.questions.questionText}
+              label={isSimulation(selectedType) ? "Текст задания" : t.questions.questionText}
               value={form.watch("prompt") ?? ""}
               onChange={(next) => form.setValue("prompt", next, { shouldDirty: true })}
               // Перепривязка только на внешнюю замену текста: набор в поле её не трогает,
@@ -1058,8 +1078,8 @@ export function QuestionEditorDrawer({
             />
           ) : (
           <Textarea
-            label={t.questions.questionText}
-            placeholder={t.questions.questionTextPlaceholder}
+            label={isSimulation(selectedType) ? "Текст задания" : t.questions.questionText}
+            placeholder={isSimulation(selectedType) ? "Что участник должен сделать в системе" : t.questions.questionTextPlaceholder}
             hint={promptFormat === "html"
               ? "Теги пишутся как есть. Листинг — <pre><code class=\"language-sql\">, формула — двумя долларами, пропуск — двойными фигурными скобками."
               : t.questions.markdownHint}
@@ -1076,6 +1096,26 @@ export function QuestionEditorDrawer({
               handleMarkdownPaste(e, (v) => form.setValue("prompt", v, { shouldDirty: true }))
             }
           />
+          )}
+
+          {isSimulation(selectedType) && (
+            <ScenarioBlock
+              value={scenarioData}
+              onChange={(next) => {
+                setScenarioData(next);
+                // Задание сценария — подсказка для пустого текста задания; набранное автором
+                // не перетирается.
+                if (next && !(form.getValues("prompt") ?? "").trim()) {
+                  form.setValue("prompt", next.scenario.meta.task, { shouldDirty: true });
+                  setPromptSyncKey((key) => key + 1);
+                }
+              }}
+              downloadHref={
+                question && isSimulation(question.type) && scenarioData === (question.dataJson as unknown)
+                  ? `/api/questions/${question.id}/scenario-archive`
+                  : null
+              }
+            />
           )}
 
           {selectedType === "long" && (
@@ -1248,7 +1288,7 @@ export function QuestionEditorDrawer({
           {/* PRD-16 FR-41/42: per-question shuffle (ranking is always shuffled — no toggle).
              Rendered as a Switch to match the approved wireframe (state s-q-drawer).
              PRD-26: a scale has no toggle either — its graduation order is content. */}
-          {selectedType !== "ranking" && selectedType !== "scale" && (
+          {selectedType !== "ranking" && selectedType !== "scale" && !isSimulation(selectedType) && (
             <Switch
               label={t.questions.shuffleAnswers}
               checked={shuffleAnswers}
@@ -1330,6 +1370,8 @@ export function QuestionEditorDrawer({
             <Text as="p" variant="body-xs" tone="muted">{t.questions.orderIndexHint}</Text>
           </Stack>
 
+          {/* Медиа вопроса у сценария нет: его изображения — в самом сценарии. */}
+          {!isSimulation(selectedType) && (
           <Stack gap={4}>
             <Label>{t.questions.mediaOptional}</Label>
             <FileUploader
@@ -1372,6 +1414,7 @@ export function QuestionEditorDrawer({
               </Box>
             )}
           </Stack>
+          )}
 
           <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
 

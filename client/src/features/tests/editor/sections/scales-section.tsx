@@ -1260,6 +1260,7 @@ const UNIT_HEADER: Record<ContributionQuestion["type"], string> = {
   short: "Ответ",
   blanks: "Пропуски",
   long: "Развёрнутый ответ",
+  simulation: "Сценарий",
 };
 
 const UNIT_HINT: Partial<Record<ContributionQuestion["type"], string>> = {

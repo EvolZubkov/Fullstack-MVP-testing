@@ -44,6 +44,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   short: "Короткий ответ",
   blanks: "Пропуски",
   long: "Развёрнутый ответ",
+  simulation: "Сценарий",
 };
 
 const METHOD_LABEL: Record<"exact" | "weighted" | "tiered", string> = {

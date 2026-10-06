@@ -213,6 +213,12 @@ export async function importQuestionRows(
       // Тип вопроса.
       const rawType = String(row["Тип вопроса"] || row["Тип"] || "").trim().toLowerCase();
       const type = typeFromExcel[rawType] as QuestionType | undefined;
+      // «Сценарий в ИС» в клетку не помещается: его содержимое — граф сцен с изображениями,
+      // и переносится он только своим архивом. Строка называет это прямо, а не «неизвестный тип».
+      if (rawType === "simulation" || rawType === "сценарий") {
+        result.warnings.push(`Строка ${rowNum}: вопрос «Сценарий» переносится архивом .scenario.zip, а не книгой — строка пропущена`);
+        continue;
+      }
       if (!type) {
         result.errors.push(`Строка ${rowNum}: неизвестный тип "${row["Тип вопроса"] || row["Тип"]}"`);
         continue;

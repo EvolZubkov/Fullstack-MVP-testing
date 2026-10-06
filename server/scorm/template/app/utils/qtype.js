@@ -96,7 +96,22 @@ var TBQType = (function () {
     return !key || typeof key.correctIndex !== 'number';
   }
 
+  /**
+   * «Сценарий в ИС». Зеркало shared/questions/question-type.ts → isSimulation.
+   * До этапа Э4 пакет сценариев не получает: источник выдачи их отбрасывает (isDeliverable).
+   */
+  function isSimulation(type) {
+    return type === 'simulation';
+  }
+
+  /** Зеркало shared/questions/question-type.ts → isDeliverable. */
+  function isDeliverable(type) {
+    return !isSimulation(type);
+  }
+
   return {
+    isSimulation: isSimulation,
+    isDeliverable: isDeliverable,
     isSingleIndexChoice: isSingleIndexChoice,
     hasOptionList: hasOptionList,
     hasFixedOptionOrder: hasFixedOptionOrder,

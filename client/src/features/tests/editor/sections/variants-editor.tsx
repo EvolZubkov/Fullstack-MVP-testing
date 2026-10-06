@@ -13,7 +13,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Braces, Pilcrow, CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, ThermometerSun, SlidersHorizontal, TextCursorInput, type LucideIcon } from "lucide-react";
+import { Braces, MonitorPlay, Pilcrow, CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, ThermometerSun, SlidersHorizontal, TextCursorInput, type LucideIcon } from "lucide-react";
 import { Button, ModalDialog, Switch, Tabs, Tag, TransferList, type TransferItem } from "@skillum/ui-kit";
 import { pluralize } from "@/lib/i18n";
 import type { FormSet, Form } from "@shared/schema";
@@ -55,6 +55,7 @@ const TYPE_ICON: Record<QuestionType, LucideIcon> = {
   short: TextCursorInput,
   blanks: Braces,
   long: Pilcrow,
+  simulation: MonitorPlay,
 };
 const TYPE_LABEL: Record<QuestionType, string> = {
   single: "Одиночный выбор",
@@ -66,6 +67,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   short: "Короткий ответ",
   blanks: "Пропуски",
   long: "Развёрнутый ответ",
+  simulation: "Сценарий",
 };
 
 /** Буква варианта: A, B, C … Z, дальше — «Вариант 27» (столько вариантов не бывает). */
