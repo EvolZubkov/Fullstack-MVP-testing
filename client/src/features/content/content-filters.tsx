@@ -58,6 +58,10 @@ export const TYPE_OPTS: { value: QuestionType; label: string }[] = [
   { value: "ranking", label: t.questions.ranking },
   { value: "scale", label: t.questions.scaleChoice },
   { value: "allocation", label: t.questions.allocation },
+  // PRD-57: текстовые типы — их не было в фасете, и найти такие вопросы фильтром было нельзя.
+  { value: "short", label: t.questions.shortAnswer },
+  { value: "blanks", label: t.questions.blanks },
+  { value: "long", label: t.questions.longAnswer },
 ];
 export const MEDIA_OPTS: { value: MediaBucket; label: string }[] = [
   { value: "image", label: "С изображением" },

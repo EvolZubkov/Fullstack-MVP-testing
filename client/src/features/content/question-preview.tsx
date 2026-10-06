@@ -9,7 +9,10 @@
 import { CheckSquare, Image as ImageIcon, Music, Square, Video } from "lucide-react";
 import { Chip, Cluster, Grid, Stack, Text } from "@skillum/ui-kit";
 import type { Question } from "@shared/schema";
-import { hasOptionList, distributesBudget } from "@shared/questions/question-type";
+import { hasBlanks, hasOptionList, distributesBudget, isOpenText, isTextEntry } from "@shared/questions/question-type";
+import { describeRuleSet } from "@shared/answer-check/describe";
+import type { AnswerRuleSet } from "@shared/answer-check";
+import type { BlankRuleSet } from "@shared/questions/blanks-render";
 
 export function QuestionPreview({ question }: { question: Question }) {
   const data = question.dataJson as { options?: string[]; left?: string[]; right?: string[]; items?: string[] };
@@ -67,6 +70,26 @@ export function QuestionPreview({ question }: { question: Question }) {
               );
             })}
           </Stack>
+        )}
+
+        {/* PRD-57: у текстовых типов вариантов нет — показывается эталон теми же словами, какими
+            его видит автор в ящике (`describeRuleSet`). Без этого раскрытая строка была пустой. */}
+        {isTextEntry(type) && (
+          <Text variant="body-s" tone={describeRuleSet(correct as AnswerRuleSet) ? undefined : "muted"}>
+            {describeRuleSet(correct as AnswerRuleSet) || "Правил проверки нет — ответ не оценивается"}
+          </Text>
+        )}
+        {hasBlanks(type) && (
+          <Stack gap={1}>
+            {((correct as { blanks?: BlankRuleSet[] }).blanks ?? []).map((blank) => (
+              <Text key={blank.id} variant="body-s">
+                «{blank.id}»: {describeRuleSet(blank) || "без проверки"}
+              </Text>
+            ))}
+          </Stack>
+        )}
+        {isOpenText(type) && (
+          <Text variant="body-s" tone="muted">Развёрнутый ответ без автоматической проверки</Text>
         )}
 
         {type === "matching" && (
