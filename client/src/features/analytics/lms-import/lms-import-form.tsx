@@ -53,11 +53,28 @@ class ImportDenied extends Error {
 const NO_GROUP = "__none__";
 const NEW_GROUP = "__new__";
 
+/** Тест, в разделах которого стоят вопросы файла, — пункт выбора, когда таких тестов несколько. */
+export interface LmsTestCandidate {
+  testId: string;
+  title: string;
+  status: string;
+  createdAt: string | null;
+  /** Сколько вопросов файла стоят в разделах теста. */
+  matched: number;
+}
+
 /** Ответ `/api/workbook/inspect` для выгрузки отчёта LMS. */
 export interface LmsInspectResult {
   kind: "lmsExport";
   testId: string | null;
   testTitle: string | null;
+  /**
+   * Тесты на выбор, когда вопросы файла стоят в нескольких (PRD-54 раздел 6.2, 2026-10-06):
+   * опубликованные первыми. Пусто, если тест определился однозначно или не определился вовсе.
+   */
+  candidates?: LmsTestCandidate[];
+  /** Кандидат, подставляемый в выбор: однозначно лучший опубликованный. */
+  recommendedTestId?: string | null;
   foreignQuestionIds?: string[];
   rows: number;
   questionIds: number;
@@ -114,6 +131,31 @@ export interface LmsImportFormProps {
   onReset?: () => void;
 }
 
+/** Статус теста словами — в пункте выбора теста. */
+const STATUS_LABEL: Record<string, string> = {
+  published: "опубликован",
+  draft: "черновик",
+  archived: "в архиве",
+};
+
+/**
+ * Пункт выбора теста: название, статус, покрытие и дата. Копии теста носят то же название,
+ * поэтому без остального их не различить.
+ *
+ * @param c кандидат
+ * @param total вопросов в файле
+ * @param recommended подставлен ли он рекомендацией
+ */
+function candidateLabel(c: LmsTestCandidate, total: number, recommended: boolean): string {
+  return [
+    c.title,
+    STATUS_LABEL[c.status] ?? c.status,
+    `${c.matched} из ${total} вопросов`,
+    c.createdAt ? `создан ${new Date(c.createdAt).toLocaleDateString("ru-RU")}` : null,
+    recommended ? "рекомендуется" : null,
+  ].filter(Boolean).join(" · ");
+}
+
 /** Килобайты файла для подписи под именем. */
 function formatKb(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
@@ -150,10 +192,15 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
   const [linkUsers, setLinkUsers] = useState(false);
   const [plan, setPlan] = useState<ImportOutcome | null>(null);
   const [done, setDone] = useState<ImportOutcome | null>(null);
+  /** Тест, выбранный человеком из кандидатов. Пока не выбран — действует рекомендация. */
+  const [chosenTestId, setChosenTestId] = useState<string | null>(null);
 
   const file = hostFile ?? ownFile;
   const inspect = hostInspect ?? ownInspect;
-  const testId = inspect?.testId ?? null;
+  const candidates = inspect?.candidates ?? [];
+  /** Вопросы файла стоят в нескольких тестах — тест выбирается из них. */
+  const ambiguous = !!inspect && !inspect.testId && candidates.length > 0;
+  const testId = inspect?.testId ?? (ambiguous ? chosenTestId ?? inspect?.recommendedTestId ?? null : null);
   /**
    * Чьи загрузки показывать. Тест файла главнее заданного заранее: выгрузка другого теста
    * грузится в свой тест, и список переключается на него. Тест, заданный входом из меню, известен
@@ -172,6 +219,8 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
   function body(): FormData {
     const fd = new FormData();
     if (file) fd.append("file", file);
+    // Тест шлётся только выбранный: однозначный сервер определит по файлу сам.
+    if (ambiguous && testId) fd.append("testId", testId);
     if (group !== NO_GROUP && group !== NEW_GROUP) fd.append("groupId", group);
     if (group === NEW_GROUP) fd.append("newGroupName", newGroupName);
     fd.append("linkUsers", String(linkUsers));
@@ -237,6 +286,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
     setDenied(false);
     setPlan(null);
     setDone(null);
+    setChosenTestId(null);
     // Файл мог прийти от хоста — своё состояние он чистит сам.
     onReset?.();
   }
@@ -325,7 +375,7 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
   }
 
   // ── Тест по вопросам не найден ───────────────────────────────────────────
-  if (inspect && !testId) {
+  if (inspect && !testId && !ambiguous) {
     return compose(
       <>
         {fileRow}
@@ -380,8 +430,8 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
         variant="secondary"
         onClick={() => dryMut.mutate()}
         loading={dryMut.isPending}
-        disabled={!file || runMut.isPending || (group === NEW_GROUP && !newGroupName.trim())}
-        title={!file ? "Сначала выберите файл" : undefined}
+        disabled={!file || !testId || runMut.isPending || (group === NEW_GROUP && !newGroupName.trim())}
+        title={!file ? "Сначала выберите файл" : !testId ? "Сначала выберите тест" : undefined}
       >
         Проверить
       </Button>
@@ -390,8 +440,8 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
       <Button
         onClick={() => runMut.mutate()}
         loading={runMut.isPending}
-        disabled={!plan || (group === NEW_GROUP && !newGroupName.trim())}
-        title={!file ? "Сначала выберите файл" : !plan ? "Сначала проверьте файл" : undefined}
+        disabled={!plan || !testId || (group === NEW_GROUP && !newGroupName.trim())}
+        title={!file ? "Сначала выберите файл" : !testId ? "Сначала выберите тест" : !plan ? "Сначала проверьте файл" : undefined}
       >
         Импортировать
       </Button>
@@ -402,7 +452,42 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
     <>
       {file ? fileRow : uploader}
 
-      {inspect && (
+      {ambiguous && inspect && (
+        // Вопросы файла стоят в нескольких тестах (PRD-54 раздел 6.2, 2026-10-06): вместо
+        // подтверждения — выбор из них. Опубликованный подставлен рекомендацией, выбор меняется.
+        <>
+          <Banner
+            tone="warning"
+            variant="subtle"
+            icon={<AlertTriangle size={16} />}
+            title={`Вопросы файла есть в ${candidates.length} ${candidates.length % 10 === 1 && candidates.length % 100 !== 11 ? "тесте" : "тестах"}`}
+            description={[
+              "Выберите, в какой тест загрузить прохождения.",
+              inspect.recommendedTestId ? "Подставлен опубликованный тест — выбор можно изменить." : null,
+              fileCounts ? `В файле ${fileCounts}.` : null,
+            ].filter(Boolean).join(" ")}
+          />
+          <Select
+            label="Тест"
+            hint="Показаны тесты, в разделах которых стоят вопросы файла."
+            placeholder="Выберите тест"
+            fullWidth
+            value={testId ?? undefined}
+            onChange={(v) => {
+              setChosenTestId(v);
+              // План считан для прежнего теста — для нового его надо проверить заново.
+              setPlan(null);
+            }}
+            options={candidates.map((c) => ({
+              value: c.testId,
+              label: candidateLabel(c, inspect.questionIds, c.testId === inspect.recommendedTestId),
+            }))}
+            disabled={runMut.isPending}
+          />
+        </>
+      )}
+
+      {inspect && !ambiguous && (
         // Баннер называет тест и числа файла — без технических пояснений (владелец 2026-10-02).
         <Banner
           tone="info"
@@ -458,8 +543,9 @@ export function LmsImportForm({ file: hostFile, inspect: hostInspect, presetTest
             </Tag>
             <Tag variant="outline" size="s">Будет связано: {plan.rowsLinked}</Tag>
           </Cluster>
-          {plan.warnings.map((w) => (
-            <Banner key={w} tone="warning" icon={<AlertTriangle size={16} />} description={w} />
+          {/* Ключ с номером: протокол повторяет одну фразу на каждую такую строку файла. */}
+          {plan.warnings.map((w, i) => (
+            <Banner key={`${i}:${w}`}tone="warning" icon={<AlertTriangle size={16} />} description={w} />
           ))}
         </Stack>
       )}

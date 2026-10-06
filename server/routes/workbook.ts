@@ -50,7 +50,7 @@ import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/up
 import { DOC_NOT_BUILT_ERROR, findDoc, resolveDocPath, sendDocDownload } from "../services/doc-downloads";
 import { importWorkbook } from "../services/workbook-import";
 import { looksLikeLmsExport, parseLmsExport, type LmsExportBook } from "@shared/lms-export/parse";
-import { resolveTestByQuestionIds } from "../services/lms-test-resolver";
+import { rankCandidates, resolveTestByQuestionIds } from "../services/lms-test-resolver";
 import { testSettingsService } from "../services/test-settings";
 // The role-sheet names and the template itself live in one module, so /inspect
 // and the download can never disagree about what a role sheet is called.
@@ -104,6 +104,16 @@ function sheetToMatrix(sheet: ExcelJS.Worksheet): string[][] {
     }));
   });
   return out;
+}
+
+/** Тест-кандидат выгрузки LMS в ответе разбора: то, по чему человек отличит его от соседнего. */
+export interface LmsTestCandidate {
+  testId: string;
+  title: string;
+  status: string;
+  createdAt: Date | null;
+  /** Сколько вопросов файла стоят в разделах теста. */
+  matched: number;
 }
 
 /**
@@ -163,17 +173,35 @@ router.post(
       if (lms) {
         if (!allowKind(req, res, "lmsExport")) return;
         const resolved = await resolveTestByQuestionIds(lms.questionIds, storage);
-        const test = resolved.testId ? await storage.getTest(resolved.testId) : null;
         // Тест берётся из файла, поэтому и область проверяется здесь: менеджер, которому тест
-        // не виден в аналитике, не узнаёт даже его названия.
-        if (test && !(await canReadTestAnalytics(req.effectiveRoles!, req.currentUser!.id, test))) {
+        // не виден в аналитике, не узнаёт даже его названия. Из нескольких кандидатов
+        // называются только видимые; не видно ни одного — тот же отказ, что и у одного.
+        const visible: LmsTestCandidate[] = [];
+        for (const c of resolved.candidates) {
+          const t = await storage.getTest(c.testId);
+          if (t && (await canReadTestAnalytics(req.effectiveRoles!, req.currentUser!.id, t))) {
+            visible.push({
+              testId: t.id,
+              title: t.title,
+              status: t.status,
+              createdAt: t.createdAt,
+              matched: c.matched,
+            });
+          }
+        }
+        if (resolved.candidates.length > 0 && visible.length === 0) {
           return res.status(403).json({ kind: "lmsExport", error: IMPORT_DENIED_ERROR });
         }
+        const test = resolved.testId ? visible[0] : null;
+        // Кандидаты нужны только для выбора: при однозначном тесте выбирать нечего.
+        const { ranked, recommendedTestId } = rankCandidates(resolved.testId ? [] : visible);
         return res.json({
           kind: "lmsExport",
           sheets: workbook.worksheets.map((w) => w.name),
-          testId: resolved.testId,
+          testId: test?.testId ?? null,
           testTitle: test?.title ?? null,
+          candidates: ranked,
+          recommendedTestId,
           foreignQuestionIds: resolved.foreign,
           rows: lms.rows.length,
           questionIds: lms.questionIds.length,

@@ -169,3 +169,60 @@ describe("<LmsImportForm /> — план загрузки", () => {
     }
   });
 });
+
+describe("<LmsImportForm /> — вопросы файла в нескольких тестах (PRD-54 раздел 6.2)", () => {
+  const AMBIGUOUS: LmsInspectResult = {
+    ...INSPECT,
+    testId: null,
+    testTitle: null,
+    questionIds: 14,
+    candidates: [
+      { testId: "t1", title: "ЧИЛ", status: "published", createdAt: "2026-08-12T00:00:00Z", matched: 14 },
+      { testId: "t2", title: "ЧИЛ", status: "draft", createdAt: "2026-10-01T00:00:00Z", matched: 14 },
+    ],
+    recommendedTestId: "t1",
+  };
+
+  function renderAmbiguous(inspect: LmsInspectResult = AMBIGUOUS) {
+    return render(
+      <QueryClientProvider client={queryClient}><ToastProvider>
+        <LmsImportForm file={new File(["x"], "выгрузка.xlsx")} inspect={inspect} />
+      </ToastProvider></QueryClientProvider>,
+    );
+  }
+
+  /** Тест, ушедший в теле сухого прогона. */
+  function sentTestId(): FormDataEntryValue | null {
+    const call = fetchMock.mock.calls.find(([u]) => String(u).startsWith("/api/analytics/lms-import?dryRun=true"));
+    return (call?.[1]?.body as FormData).get("testId");
+  }
+
+  it("вместо отказа — выбор, опубликованный подставлен рекомендацией", async () => {
+    renderAmbiguous();
+
+    expect(screen.queryByText("Тест по файлу не определён")).toBeNull();
+    expect(screen.getByText("Вопросы файла есть в 2 тестах")).toBeTruthy();
+    expect(screen.getByText(/ЧИЛ · опубликован · 14 из 14 вопросов · создан 12\.08\.2026 · рекомендуется/)).toBeTruthy();
+    // Загрузки рекомендуемого теста видны сразу.
+    await screen.findByText("сентябрь.xlsx");
+
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+    await waitFor(() => expect(sentTestId()).toBe("t1"));
+  });
+
+  it("выбор меняется, и проверка уходит с выбранным тестом", async () => {
+    renderAmbiguous();
+
+    fireEvent.click(screen.getByText(/ЧИЛ · опубликован/));
+    fireEvent.click(screen.getByRole("option", { name: /черновик/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Проверить" }));
+    await waitFor(() => expect(sentTestId()).toBe("t2"));
+  });
+
+  it("без рекомендации тест не подставлен, и проверять нечего", () => {
+    renderAmbiguous({ ...AMBIGUOUS, recommendedTestId: null });
+
+    expect(screen.getByText("Выберите тест")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Проверить" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});

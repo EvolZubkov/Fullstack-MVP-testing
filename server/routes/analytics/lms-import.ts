@@ -16,10 +16,17 @@ import { respondWorkbookReadError, workbookUploadSingle } from "../../middleware
 import { readWorkbookFromBuffer } from "../../utils/excel";
 import { canReadTestAnalytics } from "../../services/test-access";
 import { detectLmsExport, IMPORT_DENIED_ERROR } from "../workbook";
-import { resolveTestByQuestionIds } from "../../services/lms-test-resolver";
+import { chooseTest, resolveTestByQuestionIds, type TestChoice } from "../../services/lms-test-resolver";
 import { runImport } from "../../services/lms-export-import";
 
 const router = Router();
+
+/** Отказ сверки теста — по причине. */
+const CHOICE_ERRORS: Record<Extract<TestChoice, { ok: false }>["reason"], string> = {
+  none: "Не удалось определить тест по вопросам из файла.",
+  ambiguous: "Вопросы файла стоят в нескольких тестах — выберите, в какой загрузить.",
+  "not-candidate": "Выбранный тест не содержит вопросов из файла.",
+};
 
 /** Флажок из multipart-формы: там всё приезжает строками. */
 function flag(value: unknown): boolean {
@@ -43,17 +50,19 @@ async function handleUpload(req: Request, res: Response, dryRun: boolean) {
   const book = workbook.worksheets.map(detectLmsExport).find(Boolean) ?? null;
   if (!book) return res.status(422).json({ error: "Файл не похож на выгрузку отчёта LMS." });
 
+  // Тест определяет ФАЙЛ, а не страница, с которой пришли (Э6, 2026-10-02): выгрузка другого теста
+  // ложится в свой тест, а не отвергается. Человек выбирает только тогда, когда вопросы файла стоят
+  // в нескольких тестах, и только из них (2026-10-06).
   const resolved = await resolveTestByQuestionIds(book.questionIds, storage);
-  if (!resolved.testId) {
+  const choice = chooseTest(resolved, req.body?.testId ? String(req.body.testId) : null);
+  if (!choice.ok) {
     return res.status(422).json({
-      error: "Не удалось однозначно определить тест по вопросам из файла.",
+      error: CHOICE_ERRORS[choice.reason],
       foreignQuestionIds: resolved.foreign,
     });
   }
 
-  // Тест определяет ФАЙЛ, а не страница, с которой пришли (Э6, 2026-10-02): выгрузка другого теста
-  // ложится в свой тест, а не отвергается. Поэтому «открытого» теста запрос больше не несёт.
-  const test = await storage.getTest(resolved.testId);
+  const test = await storage.getTest(choice.testId);
   if (!test) return res.status(404).json({ error: "Тест не найден" });
   if (!(await canReadTestAnalytics(req.effectiveRoles!, req.currentUser!.id, test))) {
     return res.status(403).json({ error: IMPORT_DENIED_ERROR });
@@ -75,7 +84,7 @@ async function handleUpload(req: Request, res: Response, dryRun: boolean) {
       linkUsers: flag(req.body?.linkUsers),
     },
     {
-      testId: resolved.testId,
+      testId: choice.testId,
       groupId,
       fileName: req.file.originalname,
       fileBuffer: req.file.buffer,
@@ -85,7 +94,7 @@ async function handleUpload(req: Request, res: Response, dryRun: boolean) {
     storage,
   );
 
-  res.json({ testId: resolved.testId, testTitle: test.title, ...result });
+  res.json({ testId: choice.testId, testTitle: test.title, ...result });
 }
 
 // POST /api/analytics/lms-import?dryRun=true — план импорта либо сам импорт

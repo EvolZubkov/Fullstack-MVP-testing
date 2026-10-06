@@ -77,6 +77,11 @@
       #admin-from-test-mismatch .wf-open-static .ou-select__chev { transform: rotate(180deg); }
       #admin-from-test-mismatch .wf-open-static { position: relative; }
       #admin-from-test-mismatch .ou-card { overflow: visible; }
+      #admin-lms-ambiguous .wf-open-static .ou-select__menu { display: flex; }
+      #admin-lms-ambiguous .wf-open-static .ou-select__trigger { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
+      #admin-lms-ambiguous .wf-open-static .ou-select__chev { transform: rotate(180deg); }
+      #admin-lms-ambiguous .wf-open-static { position: relative; }
+      #admin-lms-ambiguous .ou-card { overflow: visible; }
       .wf-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--ou-space-3); }
       /* Меню строки теста открыто «как есть», без портала. */
       .wf-menu-stage { position: relative; max-width: var(--wf-size-320); }
@@ -149,6 +154,7 @@
       <button type="button" class="active" onclick="impState(this, 'admin', 'empty')">пусто</button>
       <button type="button" onclick="impState(this, 'admin', 'workbook')">книга</button>
       <button type="button" onclick="impState(this, 'admin', 'lms')">выгрузка LMS</button>
+      <button type="button" onclick="impState(this, 'admin', 'lms-ambiguous')">выгрузка LMS — несколько тестов</button>
       <button type="button" onclick="impState(this, 'admin', 'users')">пользователи</button>
       <button type="button" onclick="impState(this, 'admin', 'package')">пакет теста</button>
       <button type="button" onclick="impState(this, 'admin', 'template')">шаблон</button>
@@ -373,6 +379,67 @@
                       <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash" /></svg> Откатить</button>
                     </div>
                   </div>
+                </div>
+              </section>
+            </div>
+
+            <!-- ── выгрузка LMS: вопросы файла стоят в нескольких тестах (2026-10-06, PRD-54 раздел 6.2) ── -->
+            <div id="admin-lms-ambiguous" class="wf-imp">
+              <section class="ou-card ou-card--outlined">
+                <header class="ou-card__header"><div class="ou-card__heading"><h3 class="ou-card__title">Загрузка файла</h3></div></header>
+                <div class="ou-card__body">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">Определение ведущего стиля человекоцентричного лидерства.xlsx</span><span class="ou-file__meta">выгрузка отчёта LMS · 51 строка · 32 КБ</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="ou-banner ou-banner--warning ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Вопросы файла есть в 2 тестах</p>
+                      <p class="ou-banner__desc">Выберите, в какой тест загрузить прохождения. Подставлен опубликованный тест — выбор можно изменить. В файле 14 вопросов, 4 шкалы, 4 показателя.</p>
+                    </div>
+                  </div>
+                  <!-- Тест: Select без поиска — кандидатов единицы. Опубликованный подставлен рекомендацией, меню раскрыто. -->
+                  <div class="ou-select ou-field--m ou-field--full wf-open-static wf-mt-3">
+                    <label class="ou-field__lbl" for="imp-candidate">Тест</label>
+                    <div class="ou-select__control">
+                      <button type="button" class="ou-field__box ou-select__trigger" id="imp-candidate" aria-haspopup="listbox" aria-expanded="true">
+                        <span class="ou-select__value">Определение ведущего стиля человекоцентричного лидерства · опубликован · 14 из 14 вопросов · создан 12.08.2026 · рекомендуется</span>
+                        <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                    </div>
+                    <div class="ou-select__menu">
+                      <ul class="ou-select__list" role="listbox" aria-labelledby="imp-candidate">
+                        <li class="ou-select__opt is-selected" role="option" aria-selected="true">Определение ведущего стиля человекоцентричного лидерства · опубликован · 14 из 14 вопросов · создан 12.08.2026 · рекомендуется</li>
+                        <li class="ou-select__opt" role="option" aria-selected="false">Определение ведущего стиля человекоцентричного лидерства (копия) · черновик · 14 из 14 вопросов · создан 01.10.2026</li>
+                      </ul>
+                    </div>
+                    <div class="ou-field__msg ou-field__msg--default">Показаны тесты, в разделах которых стоят вопросы файла.</div>
+                  </div>
+                  <div class="ou-select ou-field--m ou-field--full wf-mt-3 wf-field-narrow">
+                    <label class="ou-field__lbl" for="imp-group-amb">Группа</label>
+                    <div class="ou-select__control">
+                      <button type="button" class="ou-field__box ou-select__trigger" id="imp-group-amb" aria-haspopup="listbox" aria-expanded="false">
+                        <span class="ou-select__value">Без группы</span>
+                        <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="ou-check-group wf-mt-4">
+                    <label class="ou-check ou-check--s">
+                      <input class="ou-check__input" type="checkbox" />
+                      <span class="ou-check__box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+                      <span class="ou-check__text"><span class="ou-check__lbl">Связать с пользователями по ключу</span></span>
+                    </label>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Проверить</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true" title="Сначала проверьте файл">Импортировать</button>
+                  </div>
+                  <!-- Ниже — «Загрузки этого теста» выбранного теста, как в состоянии «выгрузка LMS».
+                       Без рекомендации (нет опубликованного или два равных) список пуст до выбора,
+                       поле показывает «Выберите тест», «Проверить» неактивна. -->
                 </div>
               </section>
             </div>
@@ -891,6 +958,7 @@
               <tr><td>«Что можно загрузить»</td><td>Строка на вид — только те, на которые у читателя есть право; шаблон файла и руководство — там, где они есть</td><td>Под менеджером две строки</td></tr>
               <tr><td>Менеджер и пользователи</td><td>Строка с ролью выше участника помечается ошибкой «роль «Автор» вам назначать нельзя» уже в предпросмотре, в счёт «Ошибок» и не в число импортируемых</td><td>Сервер и сегодня отклоняет такую строку (потолок ролей PRD-13), но только после записи</td></tr>
               <tr><td>Роль в предпросмотре</td><td>Названием роли, а не кодом: «Участник», «Автор»</td><td>Сейчас окно «Массовая загрузка пользователей» печатает код роли (<code>learner</code>, <code>author</code>) — исправляется вместе с переносом формы</td></tr>
+              <tr><td>Несколько тестов у выгрузки LMS</td><td>Вопросы файла стоят в разделах нескольких тестов (тема — банк; копия теста; перенос с политикой «долить»). Разбор отдаёт <code>candidates</code> — только тесты, чья аналитика видна читателю; форма вместо баннера-подтверждения показывает предупреждение и <code>Select</code> «Тест». Опубликованные стоят первыми; однозначно лучший опубликованный (<code>recommendedTestId</code>) подставлен и помечен «рекомендуется», выбор меняется. Без рекомендации поле пусто, «Проверить» ждёт выбора; загрузка шлёт <code>testId</code>, сервер принимает его только из кандидатов того же файла</td><td>Изменение 2026-10-06 (PRD-54 раздел 6.2): раньше такой файл отвергался как «Тест по файлу не определён». Пункт списка: название · статус · «N из M вопросов» · дата создания — название у копий совпадает</td></tr>
               <tr><td>Отказ по праву</td><td>Файл распознан, права на вид нет: строка файла и отказ «Недостаточно прав для выполнения операции» — без пояснений и без перечня доступного</td><td>Решение владельца 2026-10-02: отказ не объясняет. Без «Импортировать» — делать нечего</td></tr>
               <tr><td>Загрузки выгрузок LMS</td><td>Часть шага выгрузки LMS, а не раздела: после распознавания файла — загрузки его теста; при входе из меню теста — загрузки этого теста сразу, без файла. откат — <code>DELETE /api/analytics/lms-import/batches/:id</code>, список — <code>GET .../batches/:testId</code>. Переключателя «В расчётах» нет: владелец 2026-10-02 снял его (PRD-66 FR-12) — ошибочная загрузка исправляется откатом и повторной загрузкой</td><td>Решение владельца 2026-10-02: на общей странице раздела списку не место — он не относится к другим видам файлов. В аналитике теста списка больше нет</td></tr>
               <tr><td>Вход из меню теста</td><td>Пункт «Загрузить выгрузку LMS» в меню «Действия» строки теста → <code>/author/import?testId=…</code>. Раздел встаёт сразу на выгрузку LMS этого теста: подзаголовок — название теста, ниже — его загрузки, без файла. Тест задаёт ФАЙЛ: выгрузка другого теста грузится в свой тест, подзаголовок и загрузки переключаются на него — это не ошибка</td><td>Окно в аналитике теста отвергало чужой файл (<code>fixedTestId</code>, ответ 422): там на экране была аналитика конкретного теста. Здесь её нет, и тест из меню — только начальный вид. Обычный вид раздела — пунктом «Импорт» бокового меню</td></tr>
