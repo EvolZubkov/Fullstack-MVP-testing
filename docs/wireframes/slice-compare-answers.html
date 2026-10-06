@@ -19,8 +19,8 @@
     Дельта:
     1. в переключателе метрик третий пункт «Ответы и шкалы»; у теста без эталона он выбран сразу;
     2. блок «Шкалы»: среднее и распределение уровней по каждому срезу;
-    3. блок «Ответы на вопросы»: доли вариантов по срезам рядом, разница при двух срезах,
-       расхождение у каждого вопроса, сортировка по порядку или по расхождению;
+    3. блок «Ответы на вопросы»: одна таблица вопросов с сортируемой колонкой «Расхождение»,
+       вопрос раскрывается в доли всех вариантов по срезам и разницу при двух срезах;
     4. переключатель метрик стоит у правого края карточки — для всех трёх видов сравнения
        (владелец 2026-10-06).
     Всё остальное — существующий экран.
@@ -46,6 +46,8 @@
       .wf-slot-add { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-1); background: transparent; cursor: pointer; color: var(--ou-accent-default); }
       .wf-seg-fit { align-self: flex-start; }
       .wf-grid-fixed { table-layout: fixed; width: 100%; }
+      /* Имя среза в заголовке колонки переносится, а не обрезается — как .wf-th-wrap в approved/e3. */
+      .wf-grid-fixed .ou-grid__th { white-space: normal; }
     </style>
   </head>
   <body class="ou ou--light ou--normal">
@@ -277,105 +279,12 @@
                   </div>
                 </div>
 
-                <!-- ДЕЛЬТА: блок «Ответы на вопросы». -->
-                <div class="ou-stack ou-stack--gap-6">
-                  <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-center ou-stack--gap-4">
-                    <span class="ou-text ou-text--body-s ou-text--w-medium">Ответы на вопросы · 14 вопросов</span>
-                    <div class="ou-seg ou-seg--s" role="group" aria-label="Порядок вопросов">
-                      <button type="button" class="ou-seg__item" aria-pressed="false"><span>По порядку в тесте</span></button>
-                      <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>По расхождению</span></button>
-                    </div>
-                  </div>
-
-                  <div class="ou-stack ou-stack--gap-2">
-                    <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4">
-                      <div class="ou-stack ou-stack--gap-1">
-                        <span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> Какие недостатки вы замечаете в своей работе?</span>
-                        <span class="ou-text ou-text--body-xs ou-text--tone-muted">Человекоцентричное лидерство (ЧИЛ) · 26 и 22 ответа</span>
-                      </div>
-                      <span class="ou-tag ou-tag--info">расхождение 17 п.п.</span>
-                    </div>
-                    <div class="ou-grid">
-                      <div class="ou-grid__scroll">
-                        <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup>
-                          <thead>
-                            <tr>
-                              <th><div class="ou-grid__th">Вариант ответа</div></th>
-                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Опросник ЧИЛ - тестирование HRBP</div></th>
-                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
-                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я могу быть требовательным к срокам и результатам…</span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">32 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:32%;background:var(--ou-cat-business)"></span></span></span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">49 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:49%;background:var(--ou-cat-business)"></span></span></span></td>
-                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">−17 п.п.</span></td>
-                            </tr>
-                            <tr>
-                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Я могу настаивать на соблюдении договорённостей…</span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">31 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:31%;background:var(--ou-cat-bti)"></span></span></span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">24 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:24%;background:var(--ou-cat-bti)"></span></span></span></td>
-                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+7 п.п.</span></td>
-                            </tr>
-                            <tr>
-                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-digital)"></span>Я могу настолько стремиться сохранить отношения…</span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">24 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:24%;background:var(--ou-cat-digital)"></span></span></span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">17 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:17%;background:var(--ou-cat-digital)"></span></span></span></td>
-                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+7 п.п.</span></td>
-                            </tr>
-                            <tr>
-                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-b2c)"></span>Я могу увлекаться новыми идеями и возможностями…</span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">13 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:13%;background:var(--ou-cat-b2c)"></span></span></span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">10 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:10%;background:var(--ou-cat-b2c)"></span></span></span></td>
-                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+3 п.п.</span></td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="ou-stack ou-stack--gap-2">
-                    <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4">
-                      <div class="ou-stack ou-stack--gap-1">
-                        <span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> В чём состоит ваш вклад в работу команды?</span>
-                        <span class="ou-text ou-text--body-xs ou-text--tone-muted">Человекоцентричное лидерство (ЧИЛ) · 26 и 22 ответа</span>
-                      </div>
-                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">расхождение 6 п.п.</span>
-                    </div>
-                    <div class="ou-grid">
-                      <div class="ou-grid__scroll">
-                        <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup>
-                          <thead>
-                            <tr>
-                              <th><div class="ou-grid__th">Вариант ответа</div></th>
-                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Опросник ЧИЛ - тестирование HRBP</div></th>
-                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
-                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я помогаю сфокусироваться на результате…</span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">35 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:35%;background:var(--ou-cat-business)"></span></span></span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">29 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:29%;background:var(--ou-cat-business)"></span></span></span></td>
-                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+6 п.п.</span></td>
-                            </tr>
-                            <tr>
-                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Я поддерживаю в команде атмосферу взаимопомощи…</span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">30 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:30%;background:var(--ou-cat-bti)"></span></span></span></td>
-                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">33 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:33%;background:var(--ou-cat-bti)"></span></span></span></td>
-                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−3 п.п.</span></td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
+                <!-- ДЕЛЬТА: блок «Ответы на вопросы» — один DataGrid: строка на вопрос, сортировка по
+                     колонке «Расхождение» (владелец 2026-10-06), вопрос раскрывается в полную таблицу. -->
+                <div class="ou-stack ou-stack--gap-3">
+                  <span class="ou-text ou-text--body-s ou-text--w-medium">Ответы на вопросы · 14 вопросов</span>
+                  <div class="ou-grid"><div class="ou-grid__scroll"><table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:var(--wf-size-44)" /><col style="width:30%" /><col style="width:24%" /><col style="width:17%" /><col style="width:17%" /><col style="width:12%" /></colgroup><thead><tr><th class="ou-grid__control-cell"></th><th><div class="ou-grid__th is-sortable">Вопрос<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5" /><path d="m7 15 5 5 5-5" /></svg></div></th><th><div class="ou-grid__th">Вариант с наибольшей разницей</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Опросник ЧИЛ - тестирование HRBP</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center is-sortable is-sorted">Расхождение<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5" /></svg></div></th></tr></thead><tbody><tr><td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn is-open" aria-label="Свернуть" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg></button></td><td class="ou-grid__cell-strong"><span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> Какие недостатки вы замечаете в своей работе?</span><span class="ou-grid__cell-sub">Человекоцентричное лидерство (ЧИЛ) · 26 и 22 ответа</span></td><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я могу быть требовательным к срокам и результатам…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">32 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:32%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">49 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:49%;background:var(--ou-cat-business)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-tag ou-tag--info ou-tag--s">17 п.п.</span></td></tr><tr class="ou-grid__expanded"><td colspan="6"><div class="ou-grid__expanded-inner"><div class="ou-grid"><div class="ou-grid__scroll"><table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup><thead><tr><th><div class="ou-grid__th">Вариант ответа</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Опросник ЧИЛ - тестирование HRBP</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th></tr></thead><tbody><tr><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я могу быть требовательным к срокам и результатам…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">32 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:32%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">49 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:49%;background:var(--ou-cat-business)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">−17 п.п.</span></td></tr><tr><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Я могу настаивать на соблюдении договорённостей…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">31 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:31%;background:var(--ou-cat-bti)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">24 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:24%;background:var(--ou-cat-bti)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+7 п.п.</span></td></tr><tr><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-digital)"></span>Я могу настолько стремиться сохранить отношения…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">24 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:24%;background:var(--ou-cat-digital)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">17 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:17%;background:var(--ou-cat-digital)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+7 п.п.</span></td></tr><tr><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-b2c)"></span>Я могу увлекаться новыми идеями и возможностями…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">13 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:13%;background:var(--ou-cat-b2c)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">10 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:10%;background:var(--ou-cat-b2c)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+3 п.п.</span></td></tr></tbody></table></div></div></div></td></tr><tr><td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg></button></td><td class="ou-grid__cell-strong"><span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> Как вы ведёте команду через изменения?</span><span class="ou-grid__cell-sub">Человекоцентричное лидерство (ЧИЛ) · 26 и 22 ответа</span></td><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Я объясняю смысл перемен и прошу обратную связь…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">41 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:41%;background:var(--ou-cat-bti)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">28 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:28%;background:var(--ou-cat-bti)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-tag ou-tag--info ou-tag--s">13 п.п.</span></td></tr><tr><td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg></button></td><td class="ou-grid__cell-strong"><span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> В чём состоит ваш вклад в работу команды?</span><span class="ou-grid__cell-sub">Человекоцентричное лидерство (ЧИЛ) · 26 и 22 ответа</span></td><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я помогаю сфокусироваться на результате…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">35 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:35%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">29 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:29%;background:var(--ou-cat-business)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--tone-muted">6 п.п.</span></td></tr></tbody></table></div></div>
                 </div>
-
               </div>
             </div>
           </section>
@@ -454,45 +363,11 @@
                   </div>
                 </div>
                 <div data-wf-metric></div>
-                <div class="ou-stack ou-stack--gap-2">
-                  <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4">
-                    <div class="ou-stack ou-stack--gap-1">
-                      <span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> Какие недостатки вы замечаете в своей работе?</span>
-                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Человекоцентричное лидерство (ЧИЛ) · 26, 22, 41 и 6 ответов</span>
-                    </div>
-                    <span class="ou-tag ou-tag--info">расхождение 21 п.п.</span>
-                  </div>
-                  <div class="ou-grid">
-                    <div class="ou-grid__scroll">
-                      <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:28%" /><col style="width:18%" /><col style="width:18%" /><col style="width:18%" /><col style="width:18%" /></colgroup>
-                        <thead>
-                          <tr>
-                            <th><div class="ou-grid__th">Вариант ответа</div></th>
-                            <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">HRBP</div></th>
-                            <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
-                            <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тест целиком</div></th>
-                            <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Внешние</div></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я могу быть требовательным…</span></td>
-                            <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">32 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:32%;background:var(--ou-cat-business)"></span></span></span></td>
-                            <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">49 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:49%;background:var(--ou-cat-business)"></span></span></span></td>
-                            <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">40 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:40%;background:var(--ou-cat-business)"></span></span></span></td>
-                            <td><span class="ou-stack ou-stack--gap-1"><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">28 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:28%;background:var(--ou-cat-business)"></span></span></span></span></td>
-                          </tr>
-                          <tr>
-                            <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Я могу настаивать на соблюдении договорённостей…</span></td>
-                            <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">31 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:31%;background:var(--ou-cat-bti)"></span></span></span></td>
-                            <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">24 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:24%;background:var(--ou-cat-bti)"></span></span></span></td>
-                            <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">27 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:27%;background:var(--ou-cat-bti)"></span></span></span></td>
-                            <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">33 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:33%;background:var(--ou-cat-bti)"></span></span></span></td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                <!-- ДЕЛЬТА: блок «Ответы на вопросы» — один DataGrid: строка на вопрос, сортировка по
+                     колонке «Расхождение» (владелец 2026-10-06), вопрос раскрывается в полную таблицу. -->
+                <div class="ou-stack ou-stack--gap-3">
+                  <span class="ou-text ou-text--body-s ou-text--w-medium">Ответы на вопросы · 14 вопросов</span>
+                  <div class="ou-grid"><div class="ou-grid__scroll"><table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:var(--wf-size-44)" /><col style="width:30%" /><col style="width:24%" /><col style="width:8%" /><col style="width:8%" /><col style="width:8%" /><col style="width:8%" /><col style="width:12%" /></colgroup><thead><tr><th class="ou-grid__control-cell"></th><th><div class="ou-grid__th is-sortable">Вопрос<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 9 5-5 5 5" /><path d="m7 15 5 5 5-5" /></svg></div></th><th><div class="ou-grid__th">Вариант с наибольшей разницей</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">HRBP</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тест целиком</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Внешние</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center is-sortable is-sorted">Расхождение<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 15 5 5 5-5" /></svg></div></th></tr></thead><tbody><tr><td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn is-open" aria-label="Свернуть" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg></button></td><td class="ou-grid__cell-strong"><span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> Какие недостатки вы замечаете в своей работе?</span><span class="ou-grid__cell-sub">Человекоцентричное лидерство (ЧИЛ) · 26, 22, 41 и 6 ответов</span></td><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я могу быть требовательным к срокам и результатам…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">32 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:32%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">49 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:49%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">40 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:40%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">28 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:28%;background:var(--ou-cat-business)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-tag ou-tag--info ou-tag--s">17 п.п.</span></td></tr><tr class="ou-grid__expanded"><td colspan="8"><div class="ou-grid__expanded-inner"><div class="ou-grid"><div class="ou-grid__scroll"><table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:28%" /><col style="width:18%" /><col style="width:18%" /><col style="width:18%" /><col style="width:18%" /></colgroup><thead><tr><th><div class="ou-grid__th">Вариант ответа</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">HRBP</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тест целиком</div></th><th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Внешние</div></th></tr></thead><tbody><tr><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я могу быть требовательным к срокам и результатам…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">32 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:32%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">49 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:49%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">40 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:40%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">28 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:28%;background:var(--ou-cat-business)"></span></span></span></td></tr><tr><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Я могу настаивать на соблюдении договорённостей…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">31 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:31%;background:var(--ou-cat-bti)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">24 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:24%;background:var(--ou-cat-bti)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">27 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:27%;background:var(--ou-cat-bti)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">33 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:33%;background:var(--ou-cat-bti)"></span></span></span></td></tr></tbody></table></div></div></div></td></tr><tr><td class="ou-grid__control-cell"><button type="button" class="ou-grid__expand-btn" aria-label="Развернуть" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg></button></td><td class="ou-grid__cell-strong"><span class="tb-psy-prompt"><svg width="14" height="14" aria-hidden="true"><use href="#i-sliders" /></svg> В чём состоит ваш вклад в работу команды?</span><span class="ou-grid__cell-sub">Человекоцентричное лидерство (ЧИЛ) · 26, 22, 41 и 6 ответов</span></td><td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Я помогаю сфокусироваться на результате…</span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">35 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:35%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">29 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:29%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">33 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:33%;background:var(--ou-cat-business)"></span></span></span></td><td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">50 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:50%;background:var(--ou-cat-business)"></span></span></span></td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--tone-muted">6 п.п.</span></td></tr></tbody></table></div></div>
                   <span class="ou-text ou-text--body-xs ou-text--tone-muted">«Внешние»: 6 ответов — меньше минимума наблюдений, в расхождение не входит.</span>
                 </div>
               </div>
@@ -516,8 +391,8 @@
               <tr><td>Уровни шкалы</td><td>полосы толкования шкалы</td><td>Таблица на шкалу: строка — уровень, колонка — срез с долей участников и полосой, «Разница» в п.п. при двух срезах. Тот же вид, что у ответов на вопросы: составную полосу по срезам сравнить на глаз нельзя (владелец 2026-10-06). Цвета уровней — с сервера, как на вкладке «Шкалы». Шкала без полос показывает только среднее</td></tr>
               <tr><td>Блок «Ответы на вопросы»</td><td>тот же расчёт, что «Разброс ответов» вкладки «Вопросы», по условиям каждого среза</td><td>По таблице на вопрос: строка — вариант (у распределения баллов — доля баллов, у шкалы — значение), колонка — срез. Цвет и подпись варианта — те же, что в полосе вкладки «Вопросы»</td></tr>
               <tr><td>«Разница»</td><td>два среза</td><td>Срез 1 минус срез 2, в процентных пунктах, со знаком. При трёх-четырёх срезах колонки нет</td></tr>
-              <tr><td>«Расхождение N п.п.»</td><td>любое число срезов</td><td>Наибольший по вариантам размах долей (наибольшая минус наименьшая) между срезами. Отметкой-тегом выделяется от 10 п.п., ниже — серой подписью. Срез, у которого ответов на вопрос меньше минимума наблюдений (<code>analytics.minObservations</code>), в расхождение не входит и подписан под таблицей</td></tr>
-              <tr><td>Порядок вопросов</td><td>—</td><td>«По расхождению» — по убыванию, вопросы с наибольшей разницей сверху. «По порядку в тесте» — как на вкладке «Вопросы»</td></tr>
+              <tr><td>«Расхождение»</td><td>любое число срезов</td><td>Наибольший по вариантам размах долей (наибольшая минус наименьшая) между срезами. От 10 п.п. — тегом, ниже — серым числом. Срез, у которого ответов на вопрос меньше минимума наблюдений (<code>analytics.minObservations</code>), в расхождение не входит и подписан под таблицей</td></tr>
+              <tr><td>Таблица вопросов</td><td>—</td><td>Один <code>DataGrid</code>: строка — вопрос, в ней вариант с наибольшей разницей и его доли по срезам. Сортировка — щелчком по заголовку колонки, как везде (владелец 2026-10-06): по умолчанию «Расхождение» по убыванию, «Вопрос» возвращает порядок теста. Шеврон раскрывает вопрос в полную таблицу вариантов</td></tr>
               <tr><td>Объём</td><td>—</td><td>Под вопросом — число ответов каждого среза: доля от шести ответов и от двухсот читается по-разному</td></tr>
               <tr><td>Чего здесь нет</td><td>—</td><td>Проверки статистической значимости: при объёмах групп в десятки человек она почти всегда отрицательна и прячет то, что автор хочет увидеть. Порог 10 п.п. и минимум наблюдений — честная замена без претензии на вывод</td></tr>
             </tbody>
@@ -531,6 +406,7 @@
             <tbody>
               <tr><td>Карточка, слоты, переключатели</td><td><code>Card</code>, <code>SliceSlots</code>, <code>SegmentedControl</code></td><td>существующий экран «Срезы»</td></tr>
               <tr><td>Таблицы шкал и ответов</td><td><code>DataGrid</code> (<code>ou-grid</code>), колонки срезов и «Разница» — <code>align: "center"</code></td><td>как в <code>slice-compare.tsx</code></td></tr>
+              <tr><td>Таблица вопросов</td><td><code>DataGrid</code>: <code>sortable</code>, <code>expandable</code> + <code>renderExpanded</code></td><td>возможности компонента, уже в ките</td></tr>
               <tr><td>Доля варианта с полосой</td><td><code>tb-psy-scale</code>, метка варианта <code>tb-dist-dot</code></td><td>как в <code>question-distribution.tsx</code></td></tr>
               <tr><td>Уровни шкалы</td><td><code>DataGrid</code> + <code>tb-psy-scale</code>, метка уровня <code>tb-dist-dot</code></td><td>как таблица ответов</td></tr>
               <tr><td>«расхождение N п.п.»</td><td><code>Tag</code> (<code>info</code>) / <code>Text</code> muted</td><td>DS</td></tr>
