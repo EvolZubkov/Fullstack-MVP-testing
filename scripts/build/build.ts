@@ -17,7 +17,8 @@ const allowlist = [
   // is not disturbed by the bundler.
   "@vvlad1973/pino-logger-tree",
   // ESM-only config utilities (getConfig). Bundled so the CJS app does not
-  // `require()` an ES module (Node 20 in the image cannot require ESM).
+  // `require()` an ES module: the build does not lean on `require(esm)`, which only
+  // newer Node lines support, so the bundle does not depend on the runtime version.
   "@vvlad1973/utils",
   "axios",
   "cors",

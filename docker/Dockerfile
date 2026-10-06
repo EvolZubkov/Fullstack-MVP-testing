@@ -10,7 +10,9 @@
 #   SERVICE_PORT - TCP port the app listens on (default: 8081)
 # =============================================================================
 
-FROM node:20-slim
+# Node 24 — the active LTS line and the version development and tests run on.
+# Node 20 reached end of life on 2026-04-30, and dev tooling already requires >=22.
+FROM node:24-slim
 
 ARG SERVICE_PORT=8081
 
