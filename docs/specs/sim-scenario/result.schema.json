@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skillum.local/schemas/sim-scenario/v1/result.schema.json",
+  "title": "Результат прохождения сценария в ИС (версия 1)",
+  "description": "Что возвращает плеер сценария. Описание — result-format.md рядом; типы — SimResult в shared/sim/contract.ts.",
+  "type": "object",
+  "required": ["format", "version", "scenario", "startedAt", "durationMs", "outcome", "goal", "counts", "traps", "fields", "events"],
+  "properties": {
+    "format": { "const": "skillum.sim-result" },
+    "version": { "const": 1 },
+    "scenario": { "type": "object", "required": ["title"], "properties": { "title": { "type": "string" } } },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "outcome": { "enum": ["success", "partial", "fail", "exited", "timeout"] },
+    "goal": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["scene", "checks", "share"],
+          "properties": {
+            "scene": { "type": "string" },
+            "message": { "type": "string" },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["field", "passed", "critical", "weight"],
+                "properties": {
+                  "field": { "type": "string" },
+                  "passed": { "type": "boolean" },
+                  "critical": { "type": "boolean" },
+                  "weight": { "type": "number" }
+                }
+              }
+            },
+            "share": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        }
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "required": ["actions", "misses", "blocked", "wrongValues", "detours", "traps", "hints"],
+      "additionalProperties": false,
+      "properties": {
+        "actions": { "type": "integer", "minimum": 0 },
+        "misses": { "type": "integer", "minimum": 0 },
+        "blocked": { "type": "integer", "minimum": 0 },
+        "wrongValues": { "type": "integer", "minimum": 0 },
+        "detours": { "type": "integer", "minimum": 0 },
+        "traps": { "type": "integer", "minimum": 0 },
+        "hints": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "traps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "error", "t"],
+        "properties": { "id": { "type": "string" }, "error": { "type": "string" }, "t": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "fields": { "type": "object", "additionalProperties": { "type": "string" } },
+    "events": { "type": "array", "items": { "$ref": "#/$defs/event" } }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "required": ["t", "type"],
+      "properties": { "t": { "type": "integer", "minimum": 0 } },
+      "oneOf": [
+        { "properties": { "type": { "const": "enter" }, "scene": { "type": "string" } }, "required": ["scene"] },
+        { "properties": { "type": { "const": "action" }, "scene": { "type": "string" }, "id": { "type": "string" }, "role": { "enum": ["path", "alt", "detour", "trap"] }, "error": { "type": "string" } }, "required": ["scene", "id", "role"] },
+        { "properties": { "type": { "const": "blocked" }, "scene": { "type": "string" }, "id": { "type": "string" } }, "required": ["scene", "id"] },
+        { "properties": { "type": { "const": "miss" }, "scene": { "type": "string" }, "x": { "type": "integer" }, "y": { "type": "integer" } }, "required": ["scene", "x", "y"] },
+        { "properties": { "type": { "const": "value" }, "scene": { "type": "string" }, "field": { "type": "string" }, "value": { "type": "string" }, "correct": { "type": ["boolean", "null"] } }, "required": ["scene", "field", "value", "correct"] },
+        { "properties": { "type": { "const": "hint" }, "scene": { "type": "string" }, "target": { "type": "string" } }, "required": ["scene", "target"] },
+        { "properties": { "type": { "const": "copy" }, "scene": { "type": "string" }, "id": { "type": "string" } }, "required": ["scene", "id"] },
+        { "properties": { "type": { "const": "goal" }, "scene": { "type": "string" }, "outcome": { "enum": ["success", "partial", "fail", "exited", "timeout"] } }, "required": ["scene", "outcome"] },
+        { "properties": { "type": { "const": "exit" } } },
+        { "properties": { "type": { "const": "timeout" } } }
+      ]
+    }
+  }
+}
