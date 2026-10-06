@@ -21,7 +21,7 @@ import {
   LayoutTemplate,
   BarChart3,
   Users,
-  UsersRound,
+  UserGroup,
   Import,
   type LucideIcon,
 } from "lucide-react";
@@ -51,7 +51,7 @@ const NAV: NavEntry[] = [
   { id: "templates", href: "/author/templates", label: t.navigation.templates, icon: LayoutTemplate, perm: "adminTemplates.manage" },
   { id: "analytics", href: "/author/analytics", label: t.navigation.analytics, icon: BarChart3, perm: "analytics.read" },
   { id: "users", href: "/author/users", label: t.navigation.users, icon: Users, perm: "users.read" },
-  { id: "groups", href: "/author/groups", label: t.navigation.groups, icon: UsersRound, perm: "groups.manage" },
+  { id: "groups", href: "/author/groups", label: t.navigation.groups, icon: UserGroup, perm: "groups.manage" },
   // Э6: единая точка импорта — раздел открыт любым правом на импорт (менеджеру — ради выгрузок
   // LMS и списков пользователей), а виды файлов в нём — по правам.
   { id: "import", href: "/author/import", label: t.navigation.import, icon: Import, perm: IMPORT_CAPABILITIES },
