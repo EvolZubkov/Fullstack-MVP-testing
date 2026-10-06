@@ -36,6 +36,7 @@ import {
   buildPageContext,
   nextLabelOf,
   sectionSubtitleOf,
+  passConditionShownOf,
   type PageContext,
   type SequenceContentPage,
   type SequencePlacement,
@@ -522,6 +523,7 @@ function buildSectionIntroParts(
     timeLimitMinutes: facts.timeLimitMinutes ?? undefined,
     instruction,
     illustration,
+    passConditionShown: passConditionShownOf({ settingsJson: settings ?? null } as SequenceContentPage),
   });
   return {
     expectedSlots: built.sectionIntro.hasInstruction ? ["instruction"] : [],

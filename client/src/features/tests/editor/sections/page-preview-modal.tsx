@@ -21,6 +21,7 @@ import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } fr
 import {
   buildPageContext,
   sectionSubtitleOf,
+  passConditionShownOf,
   type SequenceContentPage,
   type SequencePlacement,
 } from "@shared/template/page-sequences";
@@ -225,6 +226,9 @@ export function PagePreviewModal({
         topicName: section?.topicName ?? effectiveDemo?.course.topics?.[0]?.title ?? "Раздел",
         questionCount: section?.questionCount ?? effectiveDemo?.course.questionCount ?? 0,
         instruction: instr,
+        passConditionShown: passConditionShownOf({
+          settingsJson: page.settingsJson ?? null,
+        } as SequenceContentPage),
       });
       return {
         id: page.id,

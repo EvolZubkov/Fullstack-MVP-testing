@@ -204,6 +204,7 @@ export {
   buildPageContextFor,
   collectSequenceIds,
   sequenceIdOf,
+  passConditionShownOf,
   SEQUENCE_SETTING_KEY,
 } from "./page-sequences";
 // PRD-22 FR-36: relative links in author content resolve against the template's

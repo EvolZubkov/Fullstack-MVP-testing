@@ -1543,6 +1543,12 @@ export interface SectionIntroInput {
   required?: boolean | null;
   /** «Тест пройден, если» — decides whether the topic is marked «Обязательная тема». */
   passDecisionPolicy?: string | null;
+  /**
+   * The `passConditionShown` setting of the intro page (`passConditionShownOf`); `false`
+   * leaves `passCondition` empty, so the layout's `{{#if}}` drops the line. Absent — shown.
+   * The «Обязательная тема» mark and the verdict do not depend on it.
+   */
+  passConditionShown?: boolean;
 }
 
 /**
@@ -1577,7 +1583,8 @@ export function buildSectionIntroContext(input: SectionIntroInput): {
     illustrationUrl: illo,
     hasIllustration: illo.length > 0,
     continueLabel: input.continueLabel || "Далее",
-    passCondition: sectionPassConditionText(input.passRule, input.possiblePoints),
+    passCondition:
+      input.passConditionShown === false ? "" : sectionPassConditionText(input.passRule, input.possiblePoints),
     isRequired: sectionIsRequiredForVerdict(input.passDecisionPolicy, input.required, input.passRule),
     timerWarning: sectionTimerWarningText(input.timeLimitMinutes, input.continueLabel || "Далее"),
   };

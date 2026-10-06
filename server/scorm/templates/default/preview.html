@@ -1201,6 +1201,9 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
   transition: color var(--ou-motion-fast), background var(--ou-motion-fast);
 }
+/* The crumb is inline-flex, and a flex container ignores text-overflow: a long crumb was cut
+   mid-word. The label is its own box, so the ellipsis applies to it. */
+.ou-crumbs__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-hover); }
 .ou-crumbs__item.is-current .ou-crumbs__crumb { color: var(--ou-fg-default); font-weight: 600; }
 .ou-crumbs__ico { display: inline-flex; color: var(--ou-fg-muted); }
@@ -2127,6 +2130,228 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
 
 
+/* ─── ChoiceCard.css ───────────────────────────────── */
+/* Skillum · ChoiceCard — radio input rendered as a full-width card.
+  Inherits Card visual DNA: radius-l, shadow-sm, 20 px padding, hover lift.
+
+  Anatomy:
+    .ou-choice-card-group          fieldset wrapper
+      .ou-choice-card-group__legend
+      .ou-choice-card-group__hint
+      .ou-choice-card-group__items
+        label.ou-choice-card
+          input.ou-choice-card__input   (visually hidden radio)
+          span.ou-choice-card__lead     (icon / avatar)
+          span.ou-choice-card__body
+            span.ou-choice-card__title
+            span.ou-choice-card__desc
+            .ou-choice-card__inset      (hidden until is-selected)
+
+  Tones: (default neutral) · ou-choice-card--destructive
+  States: .is-selected · .is-disabled
+  :has(:checked) mirrors JS-applied is-selected for pure-HTML contexts.
+*/
+
+/* Group ─────────────────────────────────────────────── */
+.ou-choice-card-group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+}
+.ou-choice-card-group__legend {
+  /* The same legend as RadioGroup: cards and plain radios read alike in one window. */
+  font: var(--ou-text-body-m);
+  font-weight: 600;
+  color: var(--ou-fg-default);
+  padding: 0;
+  margin-bottom: var(--ou-space-2);
+}
+.ou-choice-card-group__hint {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  margin: 0 0 var(--ou-space-2);
+}
+.ou-choice-card-group__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+
+/* Card ──────────────────────────────────────────────── */
+.ou-choice-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-5);
+  background: var(--ou-bg-elevated);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-l);
+  box-shadow: var(--ou-shadow-sm);
+  color: var(--ou-fg-default);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform var(--ou-motion-fast),
+    box-shadow var(--ou-motion-fast),
+    border-color var(--ou-motion-fast),
+    background var(--ou-motion-fast);
+}
+
+/* Visually-hidden radio — modern sr-only */
+.ou-choice-card__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Lead (icon) */
+.ou-choice-card__lead {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.25rem;
+  color: var(--ou-fg-muted);
+}
+
+/* Body */
+.ou-choice-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+}
+
+/* Typography matches ou-card__title / ou-card__subtitle */
+.ou-choice-card__title {
+  display: block;
+  font: var(--ou-text-heading-s);
+  color: var(--ou-fg-default);
+}
+.ou-choice-card__desc {
+  display: block;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* Inset — collapsible content, visible only when selected */
+.ou-choice-card__inset {
+  display: none;
+  margin-top: var(--ou-space-3);
+  padding-top: var(--ou-space-3);
+  border-top: 1px solid var(--ou-border-soft);
+}
+
+/* Interactive states ─────────────────────────────────── */
+.ou-choice-card:hover {
+  border-color: var(--ou-border-strong);
+  box-shadow: var(--ou-shadow-md);
+  transform: translateY(-1px);
+}
+.ou-choice-card:active {
+  transform: translateY(0);
+  box-shadow: var(--ou-shadow-sm);
+}
+.ou-choice-card:focus-within {
+  outline: none;
+  box-shadow: var(--ou-shadow-focus);
+}
+
+/* Selected state (JS-applied + :has CSS fallback) */
+.ou-choice-card.is-selected,
+.ou-choice-card:has(.ou-choice-card__input:checked) {
+  border-color: var(--ou-accent-default);
+  box-shadow: 0 0 0 1px var(--ou-accent-default), var(--ou-shadow-sm);
+}
+.ou-choice-card.is-selected .ou-choice-card__lead,
+.ou-choice-card:has(.ou-choice-card__input:checked) .ou-choice-card__lead {
+  color: var(--ou-accent-default);
+}
+.ou-choice-card.is-selected .ou-choice-card__inset,
+.ou-choice-card:has(.ou-choice-card__input:checked) .ou-choice-card__inset {
+  display: block;
+}
+
+/* Destructive tone */
+.ou-choice-card--destructive.is-selected,
+.ou-choice-card--destructive:has(.ou-choice-card__input:checked) {
+  border-color: var(--ou-error-default);
+  box-shadow: 0 0 0 1px var(--ou-error-default), var(--ou-shadow-sm);
+}
+.ou-choice-card--destructive.is-selected .ou-choice-card__lead,
+.ou-choice-card--destructive:has(.ou-choice-card__input:checked) .ou-choice-card__lead {
+  color: var(--ou-error-default);
+}
+.ou-choice-card--destructive.is-selected .ou-choice-card__title,
+.ou-choice-card--destructive:has(.ou-choice-card__input:checked) .ou-choice-card__title {
+  color: var(--ou-error-default);
+}
+
+/* Disabled state */
+.ou-choice-card.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Radio indicator variant (--radio modifier + showRadio prop) ──────────── */
+.ou-choice-card__radio {
+  display: none;
+  flex-shrink: 0;
+  align-self: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--ou-border-strong);
+  align-items: center;
+  justify-content: center;
+  transition:
+    border-color var(--ou-motion-fast),
+    background var(--ou-motion-fast);
+}
+.ou-choice-card__radio::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background var(--ou-motion-fast);
+}
+.ou-choice-card--radio .ou-choice-card__radio {
+  display: flex;
+}
+
+/* Radio selected — neutral */
+.ou-choice-card--radio.is-selected .ou-choice-card__radio,
+.ou-choice-card--radio:has(.ou-choice-card__input:checked) .ou-choice-card__radio {
+  border-color: var(--ou-accent-default);
+}
+.ou-choice-card--radio.is-selected .ou-choice-card__radio::after,
+.ou-choice-card--radio:has(.ou-choice-card__input:checked) .ou-choice-card__radio::after {
+  background: var(--ou-accent-default);
+}
+
+/* Radio selected — destructive */
+.ou-choice-card--radio.ou-choice-card--destructive.is-selected .ou-choice-card__radio,
+.ou-choice-card--radio.ou-choice-card--destructive:has(.ou-choice-card__input:checked) .ou-choice-card__radio {
+  border-color: var(--ou-error-default);
+}
+.ou-choice-card--radio.ou-choice-card--destructive.is-selected .ou-choice-card__radio::after,
+.ou-choice-card--radio.ou-choice-card--destructive:has(.ou-choice-card__input:checked) .ou-choice-card__radio::after {
+  background: var(--ou-error-default);
+}
+
+
 /* ─── ColorPicker.css ───────────────────────────────── */
 /* Skillum · ColorPicker — trigger swatch + popover */
 
@@ -2777,6 +3002,9 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-grid__th svg { width: 12px; height: 12px; opacity: 0.6; }
 .ou-grid__th.is-sorted svg { opacity: 1; }
 .ou-grid__th .ou-grid__th-filter svg { opacity: 1; }
+/* Заголовок следует выравниванию столбца: ячейка заголовка — гибкий ряд, text-align её не двигает. */
+.ou-grid__th--center { justify-content: center; text-align: center; }
+.ou-grid__th--right { justify-content: flex-end; text-align: right; }
 .ou-grid__th-filter {
   width: 18px; height: 18px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -2814,6 +3042,10 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 .ou-grid__table tbody tr:last-child td { border-bottom: 0; }
 .ou-grid__table tbody td.is-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+/* Явное выравнивание столбца важнее правого у is-numeric. */
+.ou-grid__table tbody td.is-align-left { text-align: left; }
+.ou-grid__table tbody td.is-align-center { text-align: center; }
+.ou-grid__table tbody td.is-align-right { text-align: right; }
 .ou-grid__table tbody td.is-muted { color: var(--ou-fg-muted); }
 
 .ou-grid__cell-strong { font: var(--ou-text-body-m); font-weight: 500; color: var(--ou-fg-default); }
@@ -3633,17 +3865,27 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 .ou-filterbar__reset { margin-left: var(--ou-space-1); }
 
-/* Saved sets: the trigger says which set is applied and whether it was changed. */
+/* Saved sets: the trigger says which set is applied and whether it was changed.
+   A long name is cut with an ellipsis (the full one is in the hint); «изменён» stays. */
 .ou-filterbar__saved { max-width: 220px; }
+.ou-filterbar__update { max-width: 320px; }
+.ou-filterbar__saved > span, .ou-filterbar__update > span { display: flex; align-items: baseline; min-width: 0; }
+.ou-filterbar__setname { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ou-filterbar__dirty { flex-shrink: 0; }
 .ou-filterbar__dirty {
   margin-left: var(--ou-space-1);
   font: var(--ou-text-body-xs); color: var(--ou-fg-muted);
 }
-.ou-filterbar__save {
-  display: flex; align-items: center; gap: var(--ou-space-1);
-  padding: var(--ou-space-2);
+/* Saving sits in the row of applied conditions, before the reset: next to what is
+   being saved, and only while there is something to save. Akin controls — 1x. */
+.ou-filterbar__saveactions {
+  display: inline-flex; align-items: center; gap: var(--ou-space-1);
+  margin-left: var(--ou-space-1);
 }
-.ou-filterbar__save > :first-child { flex: 1; min-width: 0; }
+.ou-filterbar__saveactions + .ou-filterbar__reset { margin-left: 0; }
+/* The name popover: 6x from its edges, as every panel of the bar. */
+.ou-filterbar__savepop .ou-popover__body { padding: var(--ou-space-6); }
+.ou-filterbar__savepop .ou-popover__footer { padding: var(--ou-space-3) var(--ou-space-6); }
 .ou-filterbar__setdrop { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); cursor: pointer; }
 .ou-filterbar__setdrop:hover { color: var(--ou-error-default); }
 .ou-filterbar__empty {
@@ -5594,6 +5836,22 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 .ou-popover__footer--between { justify-content: space-between; }
 
+/* FilterPanel — the one filter form: a popover under the «Фильтр» button of a FilterBar.
+   Body scrolls, footer stays; fields sit 6x from the edges, groups 4x apart (modular grid). */
+/* Column: the body takes what is left under the button and scrolls, the footer stays. */
+.ou-filterpanel { display: flex; flex-direction: column; }
+.ou-filterpanel .ou-popover__footer { flex-shrink: 0; }
+.ou-filterpanel .ou-popover__body {
+  max-height: 60vh; flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column; gap: var(--ou-space-4);
+  padding: var(--ou-space-6);
+}
+.ou-filterpanel .ou-popover__footer { padding: var(--ou-space-3) var(--ou-space-6); }
+.ou-filterpanel__group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.ou-filterpanel__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+/* Mark labels of a slider hang under its rail; room for them so they do not run into the next group. */
+.ou-filterpanel .ou-slider--h:has(.ou-slider__mark-lbl) { padding-bottom: var(--ou-space-4); }
+
 /* Arrow — set side via modifier */
 .ou-popover__arrow {
   position: absolute;
@@ -6768,6 +7026,23 @@ span.ou-quiz__dot:hover { transform: none; }
 .ou-slider--h .ou-slider__mark-lbl { top: 14px; transform: translateX(-50%); }
 .ou-slider--v .ou-slider__mark-lbl { left: 14px; transform: translateY(-50%); }
 
+/* Landmarks — a value to check the chosen one against: a down-pointing triangle above the
+   horizontal rail with a tooltip. The slider makes room above the rail for them. */
+.ou-slider--h:has(.ou-slider__landmark) { padding-top: var(--ou-space-5); }
+.ou-slider--h .ou-slider__landmark {
+  position: absolute; bottom: calc(100% + var(--ou-space-2));
+  transform: translateX(-50%); display: flex; cursor: help;
+}
+.ou-slider__landmark-mark {
+  width: 0; height: 0;
+  border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 8px solid var(--ou-fg-muted);
+}
+.ou-slider__landmark:hover .ou-slider__landmark-mark,
+.ou-slider__landmark:focus-visible .ou-slider__landmark-mark { border-top-color: var(--ou-fg-default); }
+/* The anchor is a few pixels wide: the bubble takes its own width, wrapping past 260px. */
+.ou-slider__landmark .ou-tip__bubble { width: max-content; max-width: 260px; }
+
 /* Tooltip bubble */
 .ou-slider__bubble {
   position: absolute;
@@ -7040,6 +7315,10 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-tbl th, .ou-tbl td { text-align: left; border-bottom: 1px solid var(--ou-border-soft); vertical-align: middle; }
 /* Mirrors DataGrid: a numeric column reads right-aligned with lining figures. */
 .ou-tbl tbody td.is-numeric { text-align: right; font-variant-numeric: tabular-nums; }
+/* Заголовок и значения столбца выровнены одинаково; явное выравнивание важнее is-numeric. */
+.ou-tbl th.is-align-center, .ou-tbl tbody td.is-align-center { text-align: center; }
+.ou-tbl th.is-align-right, .ou-tbl tbody td.is-align-right { text-align: right; }
+.ou-tbl tbody td.is-align-left { text-align: left; }
 .ou-tbl thead th {
   font: var(--ou-text-body-s); font-weight: 600;
   color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px;
@@ -10481,7 +10760,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>12 экранов · 42 шаблонов контента · шаблон «Стандартный» v1.19.0</span>
+        <span>12 экранов · 42 шаблонов контента · шаблон «Стандартный» v1.20.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -10493,7 +10772,7 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.19.0",
+  "version": "1.20.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "themes": [
@@ -11197,6 +11476,13 @@ a.tb-rec:hover .tb-rec__ico { color: var(--ou-accent-default); }
           "label": "Подзаголовок раздела",
           "required": false,
           "maxLength": 120
+        },
+        {
+          "key": "passConditionShown",
+          "type": "boolean",
+          "default": true,
+          "label": "Показывать условие прохождения",
+          "description": "Строка «Для прохождения: …» под числом вопросов. Выключение убирает только надпись — порог темы и вердикт не меняются."
         }
       ],
       "placeholders": [
@@ -13995,7 +14281,9 @@ function buildSectionIntroFallback(inp) {
   // intro as before (no condition line, no mark, no warning).
   var TBx = (typeof window !== "undefined") ? window.TBTemplate : null;
   if (TBx && typeof TBx.sectionPassConditionText === "function") {
-    sectionIntro.passCondition = TBx.sectionPassConditionText(inp.passRule, inp.possiblePoints);
+    sectionIntro.passCondition = inp.passConditionShown === false
+      ? ""
+      : TBx.sectionPassConditionText(inp.passRule, inp.possiblePoints);
     sectionIntro.isRequired = TBx.sectionIsRequiredForVerdict(inp.passDecisionPolicy, inp.required, inp.passRule);
     sectionIntro.timerWarning = TBx.sectionTimerWarningText(inp.timeLimitMinutes, sectionIntro.continueLabel);
   }
@@ -14083,6 +14371,10 @@ function renderSectionIntro(page) {
     possiblePoints: sectionIntroPossiblePoints(section.topicId),
     required: section.required,
     passDecisionPolicy: (typeof TEST_DATA !== "undefined" ? TEST_DATA.passDecisionPolicy : null) || null,
+    // The intro variant's `passConditionShown` switch: off hides only the threshold line.
+    passConditionShown: TB.passConditionShownOf
+      ? TB.passConditionShownOf(page)
+      : ((page.settings || page.settingsJson || {}).passConditionShown !== false),
   };
   var built = TB.buildSectionIntroContext
     ? TB.buildSectionIntroContext(introInput)
@@ -15163,6 +15455,7 @@ var TBTemplate = (() => {
     parseBlanks: () => parseBlanks,
     parseIndicatorInterpretation: () => parseIndicatorInterpretation,
     parseScaleInterpretation: () => parseScaleInterpretation,
+    passConditionShownOf: () => passConditionShownOf,
     pluralQuestions: () => pluralQuestions2,
     questionFont: () => questionFont,
     questionHint: () => questionHint,
@@ -18420,7 +18713,7 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
       illustrationUrl: illo,
       hasIllustration: illo.length > 0,
       continueLabel: input.continueLabel || "\u0414\u0430\u043B\u0435\u0435",
-      passCondition: sectionPassConditionText(input.passRule, input.possiblePoints),
+      passCondition: input.passConditionShown === false ? "" : sectionPassConditionText(input.passRule, input.possiblePoints),
       isRequired: sectionIsRequiredForVerdict(input.passDecisionPolicy, input.required, input.passRule),
       timerWarning: sectionTimerWarningText(input.timeLimitMinutes, input.continueLabel || "\u0414\u0430\u043B\u0435\u0435")
     };
@@ -20802,6 +21095,7 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
   var SECTION_SUBTITLE_SHOWN_SETTING_KEY = "sectionSubtitleShown";
   var SECTION_SUBTITLE_SETTING_KEY = "sectionSubtitle";
   var DEFAULT_SECTION_SUBTITLE = "\u0418\u043D\u0441\u0442\u0440\u0443\u043A\u0446\u0438\u044F";
+  var PASS_CONDITION_SHOWN_SETTING_KEY = "passConditionShown";
   function settingsOf(page) {
     var _a, _b;
     if (!page) return null;
@@ -20822,6 +21116,10 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     if (bag && bag[SECTION_SUBTITLE_SHOWN_SETTING_KEY] === false) return "";
     const raw = bag ? bag[SECTION_SUBTITLE_SETTING_KEY] : void 0;
     return (typeof raw === "string" ? raw.trim() : "") || DEFAULT_SECTION_SUBTITLE;
+  }
+  function passConditionShownOf(page) {
+    const bag = settingsOf(page);
+    return !(bag && bag[PASS_CONDITION_SHOWN_SETTING_KEY] === false);
   }
   function segmentKeyOf(page, afterResults) {
     var _a, _b;

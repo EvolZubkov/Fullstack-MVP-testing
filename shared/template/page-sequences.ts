@@ -103,6 +103,13 @@ export const SECTION_SUBTITLE_SETTING_KEY = "sectionSubtitle";
 /** Wording used while the author has set none — the manifest default. */
 export const DEFAULT_SECTION_SUBTITLE = "Инструкция";
 
+/**
+ * The declared setting key that switches off the pass-condition line («Для прохождения:
+ * 7 баллов из 10») of «Введение раздела». A variant setting, not a test one: the author
+ * decides per section intro whether the threshold is worth stating to the learner.
+ */
+export const PASS_CONDITION_SHOWN_SETTING_KEY = "passConditionShown";
+
 /** The settings bag of a page, whichever shape the host ships it in. */
 function settingsOf(page: SequenceContentPage | null | undefined): Record<string, unknown> | null {
   if (!page) return null;
@@ -143,6 +150,16 @@ export function sectionSubtitleOf(page: SequenceContentPage | null | undefined):
   if (bag && bag[SECTION_SUBTITLE_SHOWN_SETTING_KEY] === false) return "";
   const raw = bag ? bag[SECTION_SUBTITLE_SETTING_KEY] : undefined;
   return (typeof raw === "string" ? raw.trim() : "") || DEFAULT_SECTION_SUBTITLE;
+}
+
+/**
+ * Whether «Введение раздела» states the topic threshold. Only an explicit `false` hides it:
+ * a page saved before the setting existed, or a variant that does not declare it, keeps
+ * the line — the verdict is unchanged either way, the switch silences only the wording.
+ */
+export function passConditionShownOf(page: SequenceContentPage | null | undefined): boolean {
+  const bag = settingsOf(page);
+  return !(bag && bag[PASS_CONDITION_SHOWN_SETTING_KEY] === false);
 }
 
 /**

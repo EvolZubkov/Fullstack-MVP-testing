@@ -185,7 +185,9 @@ function buildSectionIntroFallback(inp) {
   // intro as before (no condition line, no mark, no warning).
   var TBx = (typeof window !== "undefined") ? window.TBTemplate : null;
   if (TBx && typeof TBx.sectionPassConditionText === "function") {
-    sectionIntro.passCondition = TBx.sectionPassConditionText(inp.passRule, inp.possiblePoints);
+    sectionIntro.passCondition = inp.passConditionShown === false
+      ? ""
+      : TBx.sectionPassConditionText(inp.passRule, inp.possiblePoints);
     sectionIntro.isRequired = TBx.sectionIsRequiredForVerdict(inp.passDecisionPolicy, inp.required, inp.passRule);
     sectionIntro.timerWarning = TBx.sectionTimerWarningText(inp.timeLimitMinutes, sectionIntro.continueLabel);
   }
@@ -273,6 +275,10 @@ function renderSectionIntro(page) {
     possiblePoints: sectionIntroPossiblePoints(section.topicId),
     required: section.required,
     passDecisionPolicy: (typeof TEST_DATA !== "undefined" ? TEST_DATA.passDecisionPolicy : null) || null,
+    // The intro variant's `passConditionShown` switch: off hides only the threshold line.
+    passConditionShown: TB.passConditionShownOf
+      ? TB.passConditionShownOf(page)
+      : ((page.settings || page.settingsJson || {}).passConditionShown !== false),
   };
   var built = TB.buildSectionIntroContext
     ? TB.buildSectionIntroContext(introInput)

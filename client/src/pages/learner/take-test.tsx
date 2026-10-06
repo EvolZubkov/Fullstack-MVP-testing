@@ -24,6 +24,7 @@ import { buildQuestionProgress } from "@shared/template/question-progress-contex
 import { buildReviewContext } from "@shared/template/review-context";
 import { QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import { buildSectionResultContext, buildSectionIntroContext } from "@shared/template/result-context";
+import { passConditionShownOf, type SequenceContentPage } from "@shared/template/page-sequences";
 import { buildTransitionContext } from "@shared/template/transition-context";
 import {
   buildProtectionSpec,
@@ -2907,6 +2908,7 @@ export default function TakeTestPage() {
             possiblePoints: sectionConditions.byTopic[introTopicId]?.possiblePoints ?? null,
             required: sectionConditions.byTopic[introTopicId]?.required ?? null,
             passDecisionPolicy: sectionConditions.policy,
+            passConditionShown: passConditionShownOf(page as SequenceContentPage),
           })
         : undefined;
     return (
