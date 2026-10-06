@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.39.1](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.39.0...v2.39.1)
+
+### Fixes
+
+- **fix**(deploy): базовый образ node:24-slim вместо node:20-slim (2026-10-06) [`97e2b5755f1a7f4bf47217865a4cd8fbdbcdc49a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/97e2b5755f1a7f4bf47217865a4cd8fbdbcdc49a)
+  Срок поддержки Node 20 закончился 2026-04-30, а разработка и тесты идут на Node 24:
+  продукт работал не на той версии, на которой проверялся. npm ci в образе печатал
+  EBADENGINE на инструменты разработки (vitest, markdownlint требуют &gt;=22).
+  
+  Проверено локально тем же путём, что у deploy.bat: образ собирается без EBADENGINE,
+  приложение стартует на Node 24.21.0, dist/migrate.cjs и reconcile-migration-ledger
+  отрабатывают против dev-базы. Устаревшие упоминания Node 20 поправлены в комментариях
+  docker-compose.yml и build.ts.
+
+- **fix**(template): предпросмотр шаблона default показывал обратную связь без текста варианта (2026-10-06) [`f8c5d03531d90d3c3c8846756eb4128509fe0476`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f8c5d03531d90d3c3c8846756eb4128509fe0476)
+  Предпросмотр шаблона несёт свою копию общего рантайма, и в выпуск 2.39.0 она не попала:
+  сборка тогда не запускалась. В предпросмотре оставался прежний feedbackTextFor, который не
+  знает о тексте выбранного варианта. preview.html пересобран.
+
 ## [2.39.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.38.5...v2.39.0)
 
 ### Features
