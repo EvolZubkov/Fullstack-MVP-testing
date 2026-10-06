@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-54 — участник выгрузки LMS как внешняя учётная запись.
+    План docs/plans/2026-10-06-lms-external-participants.md, спека
+    docs/specs/prd-54/lms-export-import.md (правится этим треком).
+
+    Основа — существующие экраны как есть:
+    - client/src/pages/author/groups.tsx;
+    - client/src/pages/author/users.tsx (раскладка — по prd28-users-external.html).
+    Дельта:
+    1. «Группы», колонка «Участников» — вторая метка «из них N внешних»;
+    2. окно участников группы — внешние записи в общей таблице, «—» вместо почты и отметка
+       «Внешний»;
+    3. подтверждение удаления группы — предупреждение с числом прохождений из LMS;
+    4. «Пользователи» — строка внешней записи без почты и её меню: пункты, которым нужна
+       почта, погашены.
+    Всё остальное — существующие экраны.
+
+    Пояснения и DS Mapping — ПОД холстом, в блоке .wf-doc.
+    -->
+    <title>PRD-54 — Внешние участники из LMS</title>
+    <!-- Порядок подключения как в prd28-users-external.html: wf-utils.css несёт
+         устаревшие shim'ы для ou-tag / ou-banner, поэтому дизайн-система
+         подключается ПОСЛЕ него. -->
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/skillum-ds.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      .wf-sprite { display: none; }
+
+      /* Шапка страницы и ряд фильтров — раскладка существующих экранов (Cluster). */
+      .tb-page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--ou-space-4); }
+      .tb-page-head__act { display: flex; gap: var(--ou-space-2); flex-shrink: 0; }
+      .tb-filters { display: flex; gap: var(--ou-space-4); align-items: flex-end; flex-wrap: wrap; }
+      .tb-filters__search { flex: 1; min-width: var(--wf-size-240); }
+      .tb-cell-stack { display: flex; align-items: center; gap: var(--ou-space-2); }
+
+      /* Меню строки: в продукте MenuTrigger кладёт меню отдельным слоем, в эскизе оно живёт
+         в ячейке, поэтому таблице возвращается видимое переполнение. */
+      .tb-menu-open .ou-tbl { overflow: visible; }
+      .tb-menu-cell { position: relative; overflow: visible; }
+      .tb-menu-cell .ou-menu { position: absolute; top: 100%; right: 0; z-index: 20; }
+
+      /* В продукте ModalDialog — фиксированный слой на весь экран. В эскизе он заперт
+         внутри своего состояния, иначе подложка накрыла бы пояснения. */
+      .wf-state[data-state="members"], .wf-state[data-state="delete"] { position: relative; min-height: var(--wf-size-960); }
+      .wf-state > .ou-modal-root { position: absolute; top: var(--wf-nav-offset); bottom: 0; }
+
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-4) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.17 2.83a2.83 2.83 0 0 0-4 0L3 17v4h4L21.17 6.83a2.83 2.83 0 0 0 0-4Z" /></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-9.6 9.6" /><circle cx="7.5" cy="15.5" r="5.5" /><path d="m15.5 7.5 3 3" /></symbol>
+      <symbol id="i-user-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><polyline points="16 11 18 13 22 9" /></symbol>
+      <symbol id="i-user-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="17" y1="8" x2="22" y2="13" /><line x1="22" y1="8" x2="17" y2="13" /></symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></symbol>
+      <symbol id="i-user-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" x2="19" y1="8" y2="14" /><line x1="22" x2="16" y1="11" y2="11" /></symbol>
+      <symbol id="i-user-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="22" x2="16" y1="11" y2="11" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" /></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">PRD-54 · Внешние из LMS:</span>
+      <button type="button" class="active" onclick="showState(this, 'groups')">группы</button>
+      <button type="button" onclick="showState(this, 'members')">участники группы</button>
+      <button type="button" onclick="showState(this, 'delete')">удаление группы</button>
+      <button type="button" onclick="showState(this, 'users')">пользователи</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+    </nav>
+
+    <!-- ░░░ СОСТОЯНИЕ: список групп ░░░ -->
+    <div class="wf-state active" data-state="groups">
+      <div class="wf-page">
+        <div class="ou-stack ou-stack--gap-6">
+
+          <div class="tb-page-head">
+            <div class="ou-stack ou-stack--gap-1">
+              <h1 class="ou-text ou-text--display-s ou-text--w-bold">Группы</h1>
+              <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление группами пользователей</p>
+            </div>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+              <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span>
+              Создать группу
+            </button>
+          </div>
+
+          <div class="ou-field ou-field--m ou-field--full">
+            <div class="ou-field__box">
+              <span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span>
+              <input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск по названию" />
+            </div>
+          </div>
+
+          <div class="ou-tbl ou-tbl--normal">
+            <table>
+              <thead>
+                <tr>
+                  <th><span class="ou-tbl__th-inner">Название</span></th>
+                  <th><span class="ou-tbl__th-inner">Описание</span></th>
+                  <th><span class="ou-tbl__th-inner">Участников</span></th>
+                  <th><span class="ou-tbl__th-inner">Создана</span></th>
+                  <th style="width: var(--wf-size-70)"><span class="ou-tbl__th-inner">Действия</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="ou-text ou-text--body-s ou-text--w-medium">Опросник ЧИЛ - тестирование HRBP</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                  <td>
+                    <span class="tb-cell-stack">
+                      <span class="ou-tag ou-tag--neutral">37 чел.</span>
+                      <!-- ДЕЛЬТА: сколько из них внешних -->
+                      <span class="ou-tag ou-tag--info">из них 37 внешних</span>
+                    </span>
+                  </td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">06.10.2026</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td><span class="ou-text ou-text--body-s ou-text--w-medium">Тестирование ЧИЛ</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                  <td><span class="ou-tag ou-tag--neutral">5 чел.</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">08.09.2026</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td><span class="ou-text ou-text--body-s ou-text--w-medium">Тестовая ДУЗ</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                  <td>
+                    <span class="tb-cell-stack">
+                      <span class="ou-tag ou-tag--neutral">26 чел.</span>
+                      <span class="ou-tag ou-tag--info">из них 4 внешних</span>
+                    </span>
+                  </td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">13.08.2026</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td><span class="ou-text ou-text--body-s ou-text--w-medium">Тестовая группа - 1</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                  <td><span class="ou-tag ou-tag--neutral">1 чел.</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">13.08.2026</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+                <tr>
+                  <td><span class="ou-text ou-text--body-s ou-text--w-medium">Первая группа</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                  <td><span class="ou-tag ou-tag--neutral">0 чел.</span></td>
+                  <td><span class="ou-text ou-text--body-s ou-text--tone-muted">19.03.2026</span></td>
+                  <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: окно участников группы ░░░ -->
+    <div class="wf-state" data-state="members">
+      <div class="wf-page">
+        <div class="tb-page-head">
+          <div class="ou-stack ou-stack--gap-1">
+            <h1 class="ou-text ou-text--display-s ou-text--w-bold">Группы</h1>
+            <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление группами пользователей</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-members-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="dlg-members-title">Тестовая ДУЗ — Участники</h2>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-box ou-box--border ou-box--radius-l">
+              <div class="ou-scroll ou-scroll--vertical ou-scroll--mh-md">
+                <div class="ou-tbl ou-tbl--normal">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th><span class="ou-tbl__th-inner">Email</span></th>
+                        <th><span class="ou-tbl__th-inner">Имя</span></th>
+                        <th><span class="ou-tbl__th-inner">Роль</span></th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>m.ivanova@company.ru</td>
+                        <td>Иванова Мария</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                        <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить участника"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true" style="color: var(--ou-error-600)"><use href="#i-user-minus" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <!-- ДЕЛЬТА: внешняя запись из выгрузки -->
+                          <span class="tb-cell-stack">
+                            <span>—</span>
+                            <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                          </span>
+                        </td>
+                        <td>Участник a3f9c2</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                        <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить участника"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true" style="color: var(--ou-error-600)"><use href="#i-user-minus" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="tb-cell-stack">
+                            <span>—</span>
+                            <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                          </span>
+                        </td>
+                        <td>Кузнецова Ольга</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                        <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить участника"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true" style="color: var(--ou-error-600)"><use href="#i-user-minus" /></svg></span></button></td>
+                      </tr>
+                      <tr>
+                        <td>p.sidorov@company.ru</td>
+                        <td>Сидоров Павел</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                        <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить участника"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true" style="color: var(--ou-error-600)"><use href="#i-user-minus" /></svg></span></button></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+              <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-user-plus" /></svg></span>
+              Добавить участников
+            </button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: подтверждение удаления группы ░░░ -->
+    <div class="wf-state" data-state="delete">
+      <div class="wf-page">
+        <div class="tb-page-head">
+          <div class="ou-stack ou-stack--gap-1">
+            <h1 class="ou-text ou-text--display-s ou-text--w-bold">Группы</h1>
+            <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление группами пользователей</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-del-title">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--s">
+          <header class="ou-modal__head ou-modal__head--icon">
+            <div class="ou-modal__icon ou-modal__icon--danger"><svg width="20" height="20" aria-hidden="true"><use href="#i-trash" /></svg></div>
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title" id="dlg-del-title">Удалить эту группу?</h2>
+              <p class="ou-modal__desc">Все связи с пользователями будут удалены. Это действие нельзя отменить.</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <!-- ДЕЛЬТА: только когда у группы есть прохождения из LMS -->
+            <div class="ou-banner ou-banner--warning ou-banner--subtle" role="status">
+              <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-alert" /></svg></span>
+              <div class="ou-banner__body">
+                <p class="ou-banner__desc">Прохождений из LMS в этой группе: 41 (2 загрузки). После удаления они останутся в аналитике без группы.</p>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--destructive ou-btn--m">Удалить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ СОСТОЯНИЕ: «Пользователи», внешняя запись без почты и её меню ░░░ -->
+    <div class="wf-state" data-state="users">
+      <div class="wf-page">
+        <div class="ou-stack ou-stack--gap-6">
+
+          <div class="tb-page-head">
+            <div class="ou-stack ou-stack--gap-1">
+              <h1 class="ou-text ou-text--display-s ou-text--w-bold">Пользователи</h1>
+              <p class="ou-text ou-text--body-m ou-text--tone-muted">Управление пользователями системы</p>
+            </div>
+            <div class="tb-page-head__act">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-upload" /></svg></span>
+                Загрузить CSV
+              </button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+                <span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span>
+                Создать пользователя
+              </button>
+            </div>
+          </div>
+
+          <div class="tb-filters">
+            <div class="ou-field ou-field--m ou-field--full tb-filters__search">
+              <div class="ou-field__box">
+                <span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span>
+                <input class="ou-field__input" type="text" placeholder="Поиск по email или имени..." aria-label="Поиск по email или имени" />
+              </div>
+            </div>
+            <div class="ou-select ou-field--m">
+              <button type="button" class="ou-select__trigger" aria-label="Роль"><span class="ou-select__value">Все роли</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m">
+              <button type="button" class="ou-select__trigger" aria-label="Статус"><span class="ou-select__value">Все статусы</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+            <div class="ou-select ou-field--m">
+              <button type="button" class="ou-select__trigger" aria-label="Вид учётной записи"><span class="ou-select__value">Внешние участники</span><svg class="ou-select__chev" width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+            </div>
+          </div>
+
+          <div class="tb-menu-open">
+            <div class="ou-tbl ou-tbl--normal">
+              <table>
+                <thead>
+                  <tr>
+                    <th><span class="ou-tbl__th-inner">Email</span></th>
+                    <th><span class="ou-tbl__th-inner">Имя</span></th>
+                    <th><span class="ou-tbl__th-inner">Роль</span></th>
+                    <th><span class="ou-tbl__th-inner">Статус</span></th>
+                    <th><span class="ou-tbl__th-inner">Последний вход</span></th>
+                    <th><span class="ou-tbl__th-inner">Создан</span></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <span class="tb-cell-stack">
+                        <span class="ou-text ou-text--body-s ou-text--w-medium">anna.frolova@partner.ru</span>
+                        <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                      </span>
+                    </td>
+                    <td><span class="ou-text ou-text--body-s">Фролова Анна</span></td>
+                    <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                    <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">11.08.2026, 14:20</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">10.08.2026, 10:15</span></td>
+                    <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <!-- ДЕЛЬТА: внешняя запись из выгрузки, почты нет -->
+                      <span class="tb-cell-stack">
+                        <span class="ou-text ou-text--body-s ou-text--tone-muted">—</span>
+                        <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                      </span>
+                    </td>
+                    <td><span class="ou-text ou-text--body-s">Участник a3f9c2</span></td>
+                    <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                    <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">06.10.2026, 19:30</span></td>
+                    <td class="tb-menu-cell">
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия" aria-expanded="true"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button>
+                      <div class="ou-menu" role="menu">
+                        <button type="button" role="menuitem" class="ou-menu__item">
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-pencil" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Редактировать</span></span>
+                        </button>
+                        <button type="button" role="menuitem" class="ou-menu__item is-disabled" aria-disabled="true" disabled>
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-key" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Сбросить пароль</span><span class="ou-menu__item-meta">У внешнего участника пароля нет</span></span>
+                        </button>
+                        <button type="button" role="menuitem" class="ou-menu__item">
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-rotate" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Сбросить попытки</span></span>
+                        </button>
+                        <div class="ou-menu__divider" role="separator"></div>
+                        <button type="button" role="menuitem" class="ou-menu__item is-disabled" aria-disabled="true" disabled>
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-user-check" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Сделать штатным</span><span class="ou-menu__item-meta">Сначала задайте почту</span></span>
+                        </button>
+                        <div class="ou-menu__divider" role="separator"></div>
+                        <button type="button" role="menuitem" class="ou-menu__item ou-menu__item--danger">
+                          <span class="ou-menu__item-ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-user-x" /></svg></span>
+                          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Заблокировать</span></span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <span class="tb-cell-stack">
+                        <span class="ou-text ou-text--body-s ou-text--tone-muted">—</span>
+                        <span class="ou-tag ou-tag--info ou-tag--s">Внешний</span>
+                      </span>
+                    </td>
+                    <td><span class="ou-text ou-text--body-s">Кузнецова Ольга</span></td>
+                    <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Обычный пользователь</span></td>
+                    <td><span class="ou-tag ou-tag--success">Активен</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">—</span></td>
+                    <td><span class="ou-text ou-text--body-s ou-text--tone-muted">06.10.2026, 19:30</span></td>
+                    <td><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Действия"><span class="ou-iconbtn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-more" /></svg></span></button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ░░░ ВНЕ ХОЛСТА: пояснения ░░░ -->
+    <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — внешние участники из LMS</h3>
+        <table>
+          <thead><tr><th>Дельта</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td>«N чел.»</td><td><code>GET /api/groups</code> → <code>userCount</code></td><td>Счёт не меняется: внешние записи — обычные члены группы, импорт сам добавляет их в выбранную при загрузке группу</td></tr>
+            <tr><td>«из них N внешних»</td><td><code>GET /api/groups</code> → <code>externalCount</code>; метка есть только при <code>&gt; 0</code></td><td>Сколько членов группы — внешние записи (<code>is_external</code>), включая внешних участников PRD-28, а не только пришедших из выгрузки. Щелчок открывает то же окно участников</td></tr>
+            <tr><td>Внешняя запись в окне участников</td><td><code>email = NULL</code>, <code>is_external</code></td><td>Общая таблица, без отдельного блока. «—» вместо почты и отметка «Внешний», как на экране «Пользователи». Убрать из группы можно как любого участника</td></tr>
+            <tr><td>Имя внешней записи</td><td><code>users.name</code></td><td>ФИО из файла, если обезличивание выключено, иначе «Участник» и первые шесть знаков псевдонима. Так же участник называется в аналитике</td></tr>
+            <tr><td>Предупреждение при удалении группы</td><td>прохождения из LMS с меткой группы <code>&gt; 0</code></td><td>Числа этого объекта: прохождения и загрузки. Удаление снимает метку с прохождений и партий — в аналитике они переходят в «Без группы». Членство внешних записей удаляется вместе с группой, как у всех</td></tr>
+            <tr><td>Строка без почты в «Пользователях»</td><td><code>email = NULL</code></td><td>«—» вместо адреса, «Последний вход» пуст: войти такая запись не может. Статус «Активен» — п. 6.1 плана</td></tr>
+            <tr><td>Меню записи без почты</td><td><code>email = NULL</code></td><td>«Сбросить пароль» погашен как у любого внешнего. «Сделать штатным» погашен: переход отправляет приглашение на почту. «Отправить приглашение» не показан, как у внешних PRD-28. Почту можно задать через «Редактировать» — тогда запись становится обычным внешним участником</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Холст собран из DS-компонентов (<code>ou-*</code>). Классы <code>tb-*</code>/<code>wf-*</code> — каркас ТОЛЬКО эскиза.</p>
+        <table>
+          <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+          <tbody>
+            <tr><td>Списки групп и пользователей</td><td><code>Table</code> (<code>ou-tbl</code>)</td><td>существующие экраны</td></tr>
+            <tr><td>Метки «чел.», «из них N внешних», «Внешний»</td><td><code>Tag</code> (<code>ou-tag--neutral</code>, <code>ou-tag--info</code>)</td><td>существующий компонент</td></tr>
+            <tr><td>Окно участников</td><td><code>ModalDialog</code> (<code>ou-modal--l</code>), <code>Box</code> + <code>ScrollArea</code> + <code>Table</code></td><td>существующий экран</td></tr>
+            <tr><td>Подтверждение удаления</td><td><code>ModalDialog</code> (<code>ou-modal--s</code>, icon danger), <code>Banner</code> (<code>warning</code>, subtle)</td><td>существующий экран + DS</td></tr>
+            <tr><td>Меню строки</td><td><code>MenuTrigger</code> / <code>MenuItem</code> (<code>ou-menu</code>)</td><td>существующий экран</td></tr>
+            <tr><td><code>tb-page-head</code>, <code>tb-filters</code>, <code>tb-cell-stack</code></td><td>—</td><td>каркас эскиза: в коде это <code>Cluster</code>/<code>Stack</code></td></tr>
+            <tr><td><code>tb-menu-open</code>, <code>tb-menu-cell</code></td><td>—</td><td>каркас эскиза: в продукте меню кладётся отдельным слоем над страницей</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-state') === id);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>
