@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.39.3](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.39.2...v2.39.3)
+
+### Fixes
+
+- **fix**(analytics): «Качество вопросов» в сравнении срезов не видело период и часть условий (2026-10-06) [`c1f4c220785a91e954a4e52f634425169475e05b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c1f4c220785a91e954a4e52f634425169475e05b)
+  Ручка GET /api/analytics/psychometrics/:testId/slices разбирала условия среза
+  своей копией, которая теряла outcomes, from и to, а период рамки вкладки
+  «Срезы» не получала вовсе. Срез «июль, сдавшие» на «Качестве вопросов»
+  считался как весь тест, и две метрики одного сравнения расходились по
+  выборке.
+  
+  Ручка переведена на общие conditionsOf, dateOf и withinFrame из ручки срезов
+  PRD-56: период рамки пересекается с периодом среза, как у «Результата и тем».
+  Вкладка передаёт период в обе метрики.
+
 ## [2.39.2](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.39.1...v2.39.2)
 
 ### Fixes
