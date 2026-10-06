@@ -564,6 +564,21 @@ describe("GET /analytics/psychometrics/:testId", () => {
     expect(res.body.slices[0].suspiciousCount).toBe(1);
   });
 
+  it("временный отбор «Сравнить со срезом» считается как срез adhoc", async () => {
+    // Без него переключение сравнения на «Качество вопросов» теряло первый слот.
+    storageMock.getSlices.mockResolvedValue([]);
+    const conditions = encodeURIComponent(JSON.stringify({ groupIds: ["g1"] }));
+
+    const res = await request(makeApp())
+      .get(`/api/analytics/psychometrics/test1/slices?withWhole=1&conditions=${conditions}`)
+      .set("x-test-user", "a1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.slices.map((s: { id: string; name: string }) => [s.id, s.name]))
+      .toEqual([["whole", "Тест целиком"], ["adhoc", "Текущий отбор"]]);
+    expect(res.body.slices[1].conditions).toEqual({ groupIds: ["g1"] });
+  });
+
   it("сравнение берёт только срезы этого теста (Э3)", async () => {
     await request(makeApp())
       .get("/api/analytics/psychometrics/test1/slices?withWhole=1")

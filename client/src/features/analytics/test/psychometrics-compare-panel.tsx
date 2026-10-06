@@ -15,7 +15,8 @@
  * переехало с «Качества вопросов» во вкладку «Срезы» теста — сравнение одно, а «Качество
  * вопросов» — второй вид его метрик рядом с «Результатом и темами». Карточку, режимы и
  * переключатель метрик держит вкладка; здесь — слоты и таблицы. Слоты общие с «Результатом и
- * темами» (управляемые снаружи): переключение метрик не сбрасывает выбор.
+ * темами» (управляемые снаружи): переключение метрик не сбрасывает выбор — в том числе
+ * временный отбор кнопки «Сравнить со срезом», который ручка считает как срез `adhoc`.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
@@ -30,6 +31,13 @@ export interface PsychometricsCompareBodyProps {
   testId: string;
   /** Режим попыток: он меняет числа сильнее любого фильтра и едет в запрос как есть. */
   firstAttemptOnly?: boolean;
+  /**
+   * Отбор, присланный кнопкой «Сравнить со срезом», — временный срез `adhoc`. Без него
+   * переключение на эту метрику оставляло первый слот пустым.
+   */
+  adhoc?: Record<string, unknown> | null;
+  /** Имя присланного отбора. */
+  adhocName?: string | null;
   /** Выбранные срезы — общие с «Результатом и темами» вкладки «Срезы». */
   slots: Array<string | null>;
   onSlotsChange: (slots: Array<string | null>) => void;
@@ -44,7 +52,7 @@ export interface PsychometricsCompareBodyProps {
  * @returns слоты, переключатель метрик вкладки и таблицы сравнения
  */
 export function PsychometricsCompareBody({
-  testId, firstAttemptOnly = true, slots, onSlotsChange, between,
+  testId, firstAttemptOnly = true, adhoc = null, adhocName = null, slots, onSlotsChange, between,
 }: PsychometricsCompareBodyProps) {
   const [available, setAvailable] = useState<PsychometricsSlice[]>([]);
   const [failed, setFailed] = useState(false);
@@ -57,6 +65,11 @@ export function PsychometricsCompareBody({
     let alive = true;
     const query = new URLSearchParams({ withWhole: "1" });
     if (!firstAttemptOnly) query.set("firstAttemptOnly", "false");
+    // Набранный отбор считается сервером тем же разбором, что и у «Результата и тем».
+    if (adhoc && Object.keys(adhoc).length > 0) {
+      query.set("conditions", JSON.stringify(adhoc));
+      if (adhocName?.trim()) query.set("conditionsName", adhocName.trim());
+    }
 
     void (async () => {
       try {
@@ -73,7 +86,7 @@ export function PsychometricsCompareBody({
     })();
 
     return () => { alive = false; };
-  }, [testId, firstAttemptOnly, reloads]);
+  }, [testId, firstAttemptOnly, adhoc, adhocName, reloads]);
 
   const selected = useMemo(
     () => slots

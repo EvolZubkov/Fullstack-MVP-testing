@@ -11,7 +11,7 @@
  * Сравнение одно на два вопроса: «Результат и темы» (расчёт PRD-56) и «Качество вопросов»
  * (расчёт PRD-66). Переключатель метрик стоит между выбором срезов и таблицами, выбор общий —
  * смена метрик его не сбрасывает. Отбор, присланный кнопкой «Сравнить со срезом», занимает первый
- * слот «Результата и тем»; психометрика временных срезов не считает.
+ * слот, и обе метрики считают его одинаково — переключение метрик его не теряет.
  *
  * Разбивка по полю участника («Разбить по») сюда не входит: это не срез, и она живёт на «Обзоре»
  * («Результаты по группам», {@link module:features/analytics/slices/results-by-axis}).
@@ -168,6 +168,8 @@ export function TestSlicesTab({
             <PsychometricsCompareBody
               testId={testId}
               firstAttemptOnly={firstAttemptOnly}
+              adhoc={compareSlice?.conditions ?? adhoc}
+              adhocName={compareSlice?.name ?? adhocName}
               slots={slots}
               onSlotsChange={setSlots}
               between={metricSwitch}

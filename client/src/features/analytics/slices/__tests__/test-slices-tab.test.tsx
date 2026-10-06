@@ -97,4 +97,16 @@ describe("TestSlicesTab", () => {
 
     await waitFor(() => expect(asked("/api/analytics/psychometrics/t1/slices").length).toBeGreaterThan(0));
   });
+
+  it("отбор из фильтра теста не теряется при переключении на «Качество вопросов»", async () => {
+    render(<TestSlicesTab testId="t1" adhoc={{ sources: ["web"] }} onOpenPassages={vi.fn()} />);
+    expect(await screen.findByText("Сравнение срезов")).toBeTruthy();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Качество вопросов" }));
+
+    await waitFor(() => expect(asked("/api/analytics/psychometrics/t1/slices").length).toBeGreaterThan(0));
+    const url = asked("/api/analytics/psychometrics/t1/slices").at(-1) ?? "";
+    expect(JSON.parse(new URLSearchParams(url.split("?")[1]).get("conditions") ?? "null"))
+      .toEqual({ sources: ["web"] });
+  });
 });

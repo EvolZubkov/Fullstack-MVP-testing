@@ -174,7 +174,7 @@ function withinFrame(
  * Условия приезжают из адреса и могут быть испорчены при пересылке: экран аналитики не место
  * для разбора чужих ссылок, поэтому плохой JSON читается как «условий нет».
  */
-function conditionsParam(value: unknown): Record<string, unknown> | null {
+export function conditionsParam(value: unknown): Record<string, unknown> | null {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) return null;
   try {

@@ -23,6 +23,7 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
 import { loadResponseMatrix } from "../../services/analytics/response-matrix";
+import { conditionsParam } from "./slices";
 import {
   computeItemBreakdown,
   computePsychometrics,
@@ -212,6 +213,24 @@ function conditionsOf(raw: unknown): ObservationFilter {
   };
 }
 
+/**
+ * Временный срез из параметров `conditions` и `conditionsName` — тот же разбор, что у ручки
+ * срезов PRD-56, чтобы один отбор считался в обеих метриках сравнения.
+ *
+ * @param conditions - условия отбора (JSON на языке реестра)
+ * @param name - имя отбора; пустое читается как «Текущий отбор»
+ * @returns ноль или один источник среза с id `adhoc`
+ */
+function adhocSource(
+  conditions: unknown,
+  name: unknown,
+): Array<{ id: string; name: string; conditionsJson: Record<string, unknown> }> {
+  const adhoc = conditionsParam(conditions);
+  if (!adhoc) return [];
+  const adhocName = typeof name === "string" ? name.trim().slice(0, 200) : "";
+  return [{ id: "adhoc", name: adhocName || "Текущий отбор", conditionsJson: adhoc }];
+}
+
 // GET /api/analytics/psychometrics/:testId/slices — психометрика по сравниваемым срезам (FR-04b)
 //
 // Свой механизм сравнения трек НЕ заводит: режим, слоты и правила берутся у раздела
@@ -237,6 +256,9 @@ router.get(
         ...(String(req.query.withWhole ?? "") === "1"
           ? [{ id: "whole", name: "Тест целиком", conditionsJson: {} as Record<string, unknown> }]
           : []),
+        // Отбор, присланный кнопкой «Сравнить со срезом», — временный срез с id `adhoc`, как у
+        // ручки срезов PRD-56: без него переключение метрик теряло первый слот сравнения.
+        ...adhocSource(req.query.conditions, req.query.conditionsName),
         ...saved.filter(slice => requested.length === 0 || requested.includes(slice.id)),
       ];
 
