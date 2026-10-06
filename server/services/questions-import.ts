@@ -523,8 +523,11 @@ export async function importQuestionRows(
 
       // PRD-14 Ф0 (FR-04): сложность сохраняет явный 0; диапазон 0..100. T-40:
       // «Балл» больше не свойство вопроса — цена задаётся листом «Оценка» теста.
-      const difficulty = parseIntCell(row["Сложность"], 50);
-      if (difficulty < 0 || difficulty > 100) {
+      // PRD-16 FR-10: пустая клетка — «Не задано» (NULL), как пустая клетка индекса ниже;
+      // раньше она становилась 50, и вопрос без сложности получал её после круга через книгу.
+      const difficultyCell = String(row["Сложность"] ?? "").trim();
+      const difficulty: number | null = difficultyCell === "" ? null : parseIntCell(difficultyCell, 50);
+      if (difficulty !== null && (difficulty < 0 || difficulty > 100)) {
         result.errors.push(`Строка ${rowNum}: сложность вне диапазона 0..100 ("${row["Сложность"]}")`);
         continue;
       }

@@ -115,7 +115,8 @@ export class QuestionsRepository {
         promptFormat: question.promptFormat ?? "markdown",
         dataJson: question.dataJson,
         correctJson: question.correctJson,
-        difficulty: question.difficulty ?? 50,
+        // PRD-16 FR-10: `null` — «Не задано» и сохраняется как NULL; 50 — только когда поля нет.
+        difficulty: question.difficulty === undefined ? 50 : question.difficulty,
         mediaUrl: question.mediaUrl || null,
         mediaType: question.mediaType || null,
         shuffleAnswers: question.shuffleAnswers ?? true,

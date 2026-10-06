@@ -145,7 +145,9 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
     "Тип вопроса": typeToExcel[q.type] || q.type,
     "Текст вопроса": q.prompt,
     "Формат текста": printPromptFormat(String((q as { promptFormat?: string }).promptFormat ?? "markdown")),
-    "Сложность": q.difficulty ?? 50,
+    // PRD-16 FR-10: «Не задано» уходит ПУСТОЙ клеткой — импорт читает её так же, и вопрос
+    // проходит книгу по кругу без выдуманной сложности.
+    "Сложность": q.difficulty ?? "",
     // PRD-30 FR-01: an empty cell means «не задано». The fallback is the EMPTY
     // STRING, not a number: 0 is a real index, and a default like the one above
     // would invent an order the author never set.

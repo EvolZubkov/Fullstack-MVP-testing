@@ -335,7 +335,9 @@ router.post(
         // пересчитывается на приёмнике — иначе её вид зависит от версии библиотеки там.
         dataJson: withFormulas(normalizeQuestionData(dataJson), canonicalPrompt),
         correctJson,
-        difficulty: difficulty || 50,
+        // PRD-16 FR-10: `null` — «Не задано», а не 50; ноль — сложность, а не пустота. Умолчание 50
+        // только для запроса, где поля нет вовсе. `||` подменял и то и другое.
+        difficulty: difficulty === undefined ? 50 : difficulty,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
         shuffleAnswers: shuffleAnswers ?? true,

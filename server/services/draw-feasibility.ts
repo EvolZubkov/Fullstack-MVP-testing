@@ -402,7 +402,8 @@ export async function assessTestPublish(
  */
 export async function assessQuestionChange(
   questionId: string,
-  next: { tags?: string[]; difficulty?: number },
+  // `difficulty: null` — сложность СНИМАЕТСЯ («Не задано», PRD-16 FR-10); отсутствие — не меняется.
+  next: { tags?: string[]; difficulty?: number | null },
 ): Promise<FeasibilityAssessment> {
   const question = await storage.getQuestion(questionId);
   if (!question) return EMPTY_ASSESSMENT;
@@ -411,7 +412,7 @@ export async function assessQuestionChange(
       ? {
           id: q.id,
           tags: next.tags ?? q.tags ?? [],
-          difficulty: next.difficulty ?? q.difficulty,
+          difficulty: next.difficulty !== undefined ? next.difficulty : q.difficulty,
         }
       : toPoolQuestion(q),
   );

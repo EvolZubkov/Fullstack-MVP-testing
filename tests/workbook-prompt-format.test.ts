@@ -80,3 +80,21 @@ describe("строка книги", () => {
     expect(row["Текст вопроса"]).toBe("<p>Текст <b>жирный</b></p>");
   });
 });
+
+describe("Сложность в книге — «Не задано» (PRD-16 FR-10)", () => {
+  const base = {
+    id: "q1", topicId: "t1", type: "single", prompt: "Q?", promptFormat: "markdown",
+    dataJson: { options: ["A", "B"] }, correctJson: { correctIndex: 0 },
+    shuffleAnswers: true, tags: [], orderIndex: null, mediaUrl: null, mediaType: null,
+    feedback: null, feedbackMode: "general", feedbackCorrect: null, feedbackIncorrect: null,
+  };
+
+  it("вопрос без сложности уходит ПУСТОЙ клеткой, а не 50", () => {
+    expect(serializeQuestionRow({ ...base, difficulty: null } as never, "Тема")["Сложность"]).toBe("");
+  });
+
+  it("заданная сложность, в том числе 0, уходит числом", () => {
+    expect(serializeQuestionRow({ ...base, difficulty: 0 } as never, "Тема")["Сложность"]).toBe(0);
+    expect(serializeQuestionRow({ ...base, difficulty: 73 } as never, "Тема")["Сложность"]).toBe(73);
+  });
+});
