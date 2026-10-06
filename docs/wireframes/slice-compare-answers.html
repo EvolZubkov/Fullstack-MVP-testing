@@ -45,9 +45,7 @@
       .wf-slot { min-width: 0; padding: var(--ou-space-6); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-l); }
       .wf-slot-add { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-1); background: transparent; cursor: pointer; color: var(--ou-accent-default); }
       .wf-seg-fit { align-self: flex-start; }
-      /* Полоса уровней одного среза: подпись среза слева, составная полоса справа. */
       .wf-grid-fixed { table-layout: fixed; width: 100%; }
-      .wf-band-row { display: grid; grid-template-columns: var(--wf-size-240) 1fr; gap: var(--ou-space-4); align-items: center; }
     </style>
   </head>
   <body class="ou ou--light ou--normal">
@@ -238,22 +236,42 @@
                       </table>
                     </div>
                   </div>
-                  <!-- Распределение уровней — по строке на срез под каждой шкалой; цвета полос с сервера. -->
-                  <div class="ou-stack ou-stack--gap-4">
-                    <div class="ou-stack ou-stack--gap-2">
-                      <span class="ou-text ou-text--body-s ou-text--w-medium">Целеполагание · уровни</span>
-                      <div class="wf-band-row">
-                        <span class="ou-text ou-text--body-xs ou-text--tone-muted">Опросник ЧИЛ - тестирование HRBP</span>
-                        <div class="ou-progress ou-progress--m"><div class="ou-progress__stack"><span class="ou-progress__stack-seg" style="width:15%;background:var(--ou-cat-digital)"></span><span class="ou-progress__stack-seg" style="width:38%;background:var(--ou-cat-bti)"></span><span class="ou-progress__stack-seg" style="width:47%;background:var(--ou-cat-business)"></span></div></div>
-                      </div>
-                      <div class="wf-band-row">
-                        <span class="ou-text ou-text--body-xs ou-text--tone-muted">Тестовая ДУЗ</span>
-                        <div class="ou-progress ou-progress--m"><div class="ou-progress__stack"><span class="ou-progress__stack-seg" style="width:36%;background:var(--ou-cat-digital)"></span><span class="ou-progress__stack-seg" style="width:41%;background:var(--ou-cat-bti)"></span><span class="ou-progress__stack-seg" style="width:23%;background:var(--ou-cat-business)"></span></div></div>
-                      </div>
-                      <div class="ou-progress__legend">
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background:var(--ou-cat-digital)"></span>Низкий</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background:var(--ou-cat-bti)"></span>Средний</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background:var(--ou-cat-business)"></span>Высокий</span>
+                  <!-- Уровни — таблица на шкалу: строка — уровень, колонка — срез с долей и полосой, как у
+                       ответов на вопросы (владелец 2026-10-06: составную полосу по срезам сравнить нельзя). -->
+                  <div class="ou-stack ou-stack--gap-2">
+                    <span class="ou-text ou-text--body-s ou-text--w-medium">Целеполагание · уровни</span>
+                    <div class="ou-grid">
+                      <div class="ou-grid__scroll">
+                        <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup>
+                          <thead>
+                            <tr>
+                              <th><div class="ou-grid__th">Уровень</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Опросник ЧИЛ - тестирование HRBP</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-digital)"></span>Низкий</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">15 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:15%;background:var(--ou-cat-digital)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">36 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:36%;background:var(--ou-cat-digital)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">−21 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Средний</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">38 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:38%;background:var(--ou-cat-bti)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">41 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:41%;background:var(--ou-cat-bti)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−3 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Высокий</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">47 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:47%;background:var(--ou-cat-business)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">23 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:23%;background:var(--ou-cat-business)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">+24 п.п.</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
                     </div>
                   </div>
@@ -495,7 +513,7 @@
               <tr><td>Место переключателя метрик</td><td>всегда</td><td>У правого края карточки, под слотами (решение владельца 2026-10-06). Переключатель общий для трёх видов сравнения, поэтому сдвигается и у «Результата и тем», и у «Качества вопросов»</td></tr>
               <tr><td>Пункт «Ответы и шкалы»</td><td>всегда</td><td>Третий вид метрик над теми же слотами: выбор срезов при переключении не сбрасывается. У теста без эталона (измерительного) открывается сразу — два других вида у него пусты</td></tr>
               <tr><td>Блок «Шкалы»</td><td>у теста есть шкалы; расчёт вкладки «Шкалы» по условиям каждого среза</td><td>Среднее «X из максимума» по срезам. «Разница» — только при двух срезах и в единицах шкалы, как правило сравнения PRD-56: при трёх и четырёх «разница между какими» не определена. Тон не ставится — у опросника нет «хорошо» и «плохо» (PRD-56 FR-21b); заметная разница выделена начертанием</td></tr>
-              <tr><td>Уровни шкалы</td><td>полосы толкования шкалы</td><td>Строка на срез под шкалой, цвета полос — с сервера, как на вкладке «Шкалы». Шкала без полос показывает только среднее</td></tr>
+              <tr><td>Уровни шкалы</td><td>полосы толкования шкалы</td><td>Таблица на шкалу: строка — уровень, колонка — срез с долей участников и полосой, «Разница» в п.п. при двух срезах. Тот же вид, что у ответов на вопросы: составную полосу по срезам сравнить на глаз нельзя (владелец 2026-10-06). Цвета уровней — с сервера, как на вкладке «Шкалы». Шкала без полос показывает только среднее</td></tr>
               <tr><td>Блок «Ответы на вопросы»</td><td>тот же расчёт, что «Разброс ответов» вкладки «Вопросы», по условиям каждого среза</td><td>По таблице на вопрос: строка — вариант (у распределения баллов — доля баллов, у шкалы — значение), колонка — срез. Цвет и подпись варианта — те же, что в полосе вкладки «Вопросы»</td></tr>
               <tr><td>«Разница»</td><td>два среза</td><td>Срез 1 минус срез 2, в процентных пунктах, со знаком. При трёх-четырёх срезах колонки нет</td></tr>
               <tr><td>«Расхождение N п.п.»</td><td>любое число срезов</td><td>Наибольший по вариантам размах долей (наибольшая минус наименьшая) между срезами. Отметкой-тегом выделяется от 10 п.п., ниже — серой подписью. Срез, у которого ответов на вопрос меньше минимума наблюдений (<code>analytics.minObservations</code>), в расхождение не входит и подписан под таблицей</td></tr>
@@ -514,9 +532,9 @@
               <tr><td>Карточка, слоты, переключатели</td><td><code>Card</code>, <code>SliceSlots</code>, <code>SegmentedControl</code></td><td>существующий экран «Срезы»</td></tr>
               <tr><td>Таблицы шкал и ответов</td><td><code>DataGrid</code> (<code>ou-grid</code>), колонки срезов и «Разница» — <code>align: "center"</code></td><td>как в <code>slice-compare.tsx</code></td></tr>
               <tr><td>Доля варианта с полосой</td><td><code>tb-psy-scale</code>, метка варианта <code>tb-dist-dot</code></td><td>как в <code>question-distribution.tsx</code></td></tr>
-              <tr><td>Уровни шкалы</td><td><code>ProgressStacked</code> (<code>ou-progress__stack</code>)</td><td>как в <code>scale-profile.tsx</code></td></tr>
+              <tr><td>Уровни шкалы</td><td><code>DataGrid</code> + <code>tb-psy-scale</code>, метка уровня <code>tb-dist-dot</code></td><td>как таблица ответов</td></tr>
               <tr><td>«расхождение N п.п.»</td><td><code>Tag</code> (<code>info</code>) / <code>Text</code> muted</td><td>DS</td></tr>
-              <tr><td><code>wf-slot</code>, <code>wf-band-row</code></td><td>—</td><td>каркас эскиза: в коде <code>SliceSlots</code> и <code>Grid</code></td></tr>
+              <tr><td><code>wf-slot</code></td><td>—</td><td>каркас эскиза: в коде <code>SliceSlots</code> и <code>Grid</code></td></tr>
             </tbody>
           </table>
         </div>
