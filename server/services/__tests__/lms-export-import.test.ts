@@ -729,6 +729,12 @@ describe("PRD-54 раздел 8.1: попытки одного участник�
     expect(res.warnings.join()).toContain("не совпавших с уже загруженными прохождениями того же участника за ту же дату: 1");
   });
 
+  it("строки одного файла друг с другом в протокол «не совпало» не идут", async () => {
+    // Найдено приёмкой: три строки за одну дату в пустой базе давали «не совпавших: 2».
+    const res = await runImport(twoSameDay as never, ON, { ...ctx, dryRun: true }, storageStub() as never);
+    expect(res.warnings.join()).not.toContain("не совпавших");
+  });
+
   it("сухой прогон считает добавленные и обновлённые по базе", async () => {
     const plan = buildImportPlan(twoSameDay as never, ON);
     const s = storageStub({}, {}, [{

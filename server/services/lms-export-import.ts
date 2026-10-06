@@ -357,7 +357,7 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
   const repeatedDays = [...sameDay.values()].filter((n) => n > 1).length;
   if (repeatedDays > 0) {
     warnings.push(
-      `Несколько прохождений одного участника за одну дату: ${repeatedDays}. Каждое записано отдельным прохождением.`,
+      `Несколько прохождений одного участника за одну дату: ${repeatedDays}. Каждое — отдельное прохождение.`,
     );
   }
 
@@ -369,13 +369,20 @@ function dayKeyOf(participant: string, startedAt: Date): string {
   return `${participant}|${startedAt.getTime()}`;
 }
 
+/**
+ * Запись участника за дату в рабочем списке сопоставления: из базы либо добавленная строкой этого
+ * же файла (`fresh`). Строки файла между собой в протокол «не совпало» не идут — расходиться
+ * можно только с тем, что лежало в базе до загрузки.
+ */
+type SlotEntry = ImportedAttemptKeyRow & { fresh?: boolean };
+
 /** Итог сопоставления строки файла с базой (PRD-54 BR-54-37). */
 interface KeyResolution {
   /** Есть ли уже запись с этим ключом — после передачи ключа в том числе. */
   exists: boolean;
   /** Запись, которая перенимает ключ строки; `null` — передавать нечего. */
   heirId: string | null;
-  /** Строка без метки не нашла своей записи, хотя у участника за эту дату записи есть. */
+  /** Строка без метки не нашла своей записи, хотя в базе у участника за эту дату записи есть. */
   unmatchedSameDay: boolean;
 }
 
@@ -391,7 +398,7 @@ interface KeyResolution {
  * @param row строка плана
  * @returns решение для строки
  */
-function resolveKey(slot: ImportedAttemptKeyRow[], row: PlannedRow): KeyResolution {
+function resolveKey(slot: SlotEntry[], row: PlannedRow): KeyResolution {
   if (slot.some((e) => e.attemptKey === row.attemptKey)) {
     return { exists: true, heirId: null, unmatchedSameDay: false };
   }
@@ -401,8 +408,10 @@ function resolveKey(slot: ImportedAttemptKeyRow[], row: PlannedRow): KeyResoluti
     heir.attemptKey = row.attemptKey;
     return { exists: true, heirId: heir.id, unmatchedSameDay: false };
   }
-  const unmatchedSameDay = !row.marked && slot.length > 0;
-  slot.push({ id: "", participantKey: row.participantKey, startedAt: row.startedAt, attemptKey: row.attemptKey });
+  const unmatchedSameDay = !row.marked && slot.some((e) => !e.fresh);
+  slot.push({
+    id: "", participantKey: row.participantKey, startedAt: row.startedAt, attemptKey: row.attemptKey, fresh: true,
+  });
   return { exists: false, heirId: null, unmatchedSameDay };
 }
 
@@ -585,7 +594,7 @@ export async function runImport(
   let unmatchedSameDay = 0;
 
   // PRD-54 BR-54-37: что уже лежит в базе по этому тесту — один запрос на партию, а не на строку.
-  const existingByDay = new Map<string, ImportedAttemptKeyRow[]>();
+  const existingByDay = new Map<string, SlotEntry[]>();
   for (const e of await storage.listImportedAttemptKeys(ctx.testId)) {
     const day = dayKeyOf(e.participantKey, e.startedAt);
     const slot = existingByDay.get(day);
@@ -715,7 +724,7 @@ export async function runImport(
 
   if (unmatchedSameDay > 0) {
     warnings.push(
-      `Строк без метки регистрации, не совпавших с уже загруженными прохождениями того же участника за ту же дату: ${unmatchedSameDay}. Они записаны новыми прохождениями: это новая попытка либо прежняя, изменившаяся между выгрузками.`,
+      `Строк без метки регистрации, не совпавших с уже загруженными прохождениями того же участника за ту же дату: ${unmatchedSameDay}. Это новые прохождения: новая попытка либо прежняя, изменившаяся между выгрузками.`,
     );
   }
   if (resultsMissing > 0) {
