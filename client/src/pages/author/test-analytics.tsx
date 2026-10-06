@@ -1328,6 +1328,8 @@ export default function TestAnalyticsPage() {
                                 adhoc={compareAdhoc?.conditions ?? null}
                                 adhocName={compareAdhoc?.name ?? null}
                                 firstAttemptOnly={firstAttemptOnly}
+                                // FR-07k: тот же признак, что у подзаголовка «измерительный тест».
+                                measurement={summary.completedAttempts > 0 && summary.gradedAttempts === 0}
                                 onOpenPassages={openPassages}
                             />
                         ),

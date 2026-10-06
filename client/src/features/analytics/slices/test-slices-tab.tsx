@@ -13,6 +13,11 @@
  * смена метрик его не сбрасывает. Отбор, присланный кнопкой «Сравнить со срезом», занимает первый
  * слот, и обе метрики считают его одинаково — переключение метрик его не теряет.
  *
+ * PRD-56 FR-07k (эскиз approved/slice-compare-answers.html): третий вид — «Ответы и шкалы»
+ * ({@link module:features/analytics/test/answers-compare-panel}). Переключатель видов стоит у
+ * правого края карточки; у теста без эталона сравнение открывается на этом виде — два других у
+ * него пусты.
+ *
  * Разбивка по полю участника («Разбить по») сюда не входит: это не срез, и она живёт на «Обзоре»
  * («Результаты по группам», {@link module:features/analytics/slices/results-by-axis}).
  */
@@ -30,6 +35,7 @@ import {
 
 import { pluralize } from "@/lib/i18n";
 import { PsychometricsCompareBody } from "../test/psychometrics-compare-panel";
+import { AnswersCompareBody } from "../test/answers-compare-panel";
 import { SliceCompare } from "./slice-compare";
 import { SliceList } from "./slice-list";
 
@@ -45,9 +51,17 @@ export interface TestSlicesTabProps {
   adhocName?: string | null;
   /** Режим попыток психометрики — тот же, что у «Качества вопросов». */
   firstAttemptOnly?: boolean;
+  /**
+   * Тест без эталона (измерительный): сравнение открывается на «Ответах и шкалах» — сдавших и
+   * доли верных у него нет, и два других вида пусты (FR-07k).
+   */
+  measurement?: boolean;
   /** Открыть вкладку «Прохождения» этого теста с условиями среза. */
   onOpenPassages: (conditions: Record<string, unknown>) => void;
 }
+
+/** Вид метрик сравнения (FR-07k). */
+type Metric = "result" | "quality" | "answers";
 
 /** Дата календаря в виде `ГГГГ-ММ-ДД` — так её понимают и ручка, и адрес страницы. */
 function isoOf(value: DatePickerValue): string | undefined {
@@ -64,14 +78,16 @@ function isoOf(value: DatePickerValue): string | undefined {
  * @returns рамка «период» и карточка «Сохранённые срезы» / «Сравнение срезов»
  */
 export function TestSlicesTab({
-  testId, adhoc = null, adhocName = null, firstAttemptOnly = true, onOpenPassages,
+  testId, adhoc = null, adhocName = null, firstAttemptOnly = true, measurement = false, onOpenPassages,
 }: TestSlicesTabProps) {
+  /** Вид, с которого открывается сравнение. */
+  const firstMetric: Metric = measurement ? "answers" : "result";
   /** Сколько сохранённых срезов у теста — приходит из списка. */
   const [savedCount, setSavedCount] = useState<number | undefined>(undefined);
   const [from, setFrom] = useState<DatePickerValue>(null);
   const [to, setTo] = useState<DatePickerValue>(null);
   const [mode, setMode] = useState<"list" | "compare">(adhoc ? "compare" : "list");
-  const [metric, setMetric] = useState<"result" | "quality">("result");
+  const [metric, setMetric] = useState<Metric>(firstMetric);
   /** Выбор срезов — общий для обеих метрик. */
   const [slots, setSlots] = useState<Array<string | null>>(["whole", null]);
   /** Срез из строки списка, отправленный в сравнение пунктом «Сравнить с другим срезом». */
@@ -81,24 +97,26 @@ export function TestSlicesTab({
   useEffect(() => {
     if (adhoc) {
       setMode("compare");
-      setMetric("result");
+      setMetric(firstMetric);
       setSlots(["adhoc", null]);
     }
-  }, [adhoc]);
+  }, [adhoc, firstMetric]);
 
   const fromIso = isoOf(from);
   const toIso = isoOf(to);
 
+  // У правого края карточки, под слотами (решение владельца 2026-10-06).
   const metricSwitch = (
-    <Stack direction="row">
+    <Stack direction="row" justify="end">
       <SegmentedControl
         size="s"
         aria-label="Что сравнивать"
         value={metric}
-        onChange={value => setMetric(value as "result" | "quality")}
+        onChange={value => setMetric(value as Metric)}
         items={[
           { value: "result", label: "Результат и темы" },
           { value: "quality", label: "Качество вопросов" },
+          { value: "answers", label: "Ответы и шкалы" },
         ]}
       />
     </Stack>
@@ -149,12 +167,23 @@ export function TestSlicesTab({
               onCompare={(conditions, name) => {
                 setCompareSlice({ conditions, name });
                 setSlots(["adhoc", null]);
-                setMetric("result");
+                setMetric(firstMetric);
                 setMode("compare");
               }}
             />
           ) : metric === "result" ? (
             <SliceCompare
+              testId={testId}
+              from={fromIso}
+              to={toIso}
+              adhoc={compareSlice?.conditions ?? adhoc}
+              adhocName={compareSlice?.name ?? adhocName}
+              slots={slots}
+              onSlotsChange={setSlots}
+              between={metricSwitch}
+            />
+          ) : metric === "answers" ? (
+            <AnswersCompareBody
               testId={testId}
               from={fromIso}
               to={toIso}
