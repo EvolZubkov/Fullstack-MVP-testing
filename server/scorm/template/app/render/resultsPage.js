@@ -286,6 +286,11 @@ function finishAndClose() {
   );
   console.log('📚 failedTopicCourses:', JSON.stringify(failedTopicCourses));
 
+  // PA-12f: пропущенные и неотвеченные вопросы уходят в телеметрию ДО завершения — тем же
+  // нулём, что и в балл, и в отчёт LMS. Адаптивный путь шлёт ответ на каждом шаге и
+  // невыданных уровнем вопросов не знает, поэтому досылка только у стандартной попытки.
+  if (!isAdaptive && typeof reportPendingAnswerTelemetry === 'function') reportPendingAnswerTelemetry();
+
   Telemetry.finish({
     percent: results.percent,
     passed: results.passed,

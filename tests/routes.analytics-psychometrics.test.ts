@@ -32,6 +32,7 @@ const { storageMock } = vi.hoisted(() => ({
     selectOrgSpellings: vi.fn().mockResolvedValue({ organization: [], unit: [], position: [] }),
     getAttemptsByIds: vi.fn().mockResolvedValue([]),
     selectAnswersForAttempts: vi.fn().mockResolvedValue([]),
+    selectDeliveredQuestionIds: vi.fn().mockResolvedValue(new Map()),
     selectGroupsOfUsers: vi.fn().mockResolvedValue(new Map()),
     getSnapshot: vi.fn().mockResolvedValue(undefined),
     getScormPackages: vi.fn().mockResolvedValue([]),

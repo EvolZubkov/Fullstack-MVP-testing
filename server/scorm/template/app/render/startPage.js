@@ -299,6 +299,8 @@ function startTest() {
     var currentAttemptNum = Telemetry.getAttemptNumber();
 
     // ===== ОТПРАВЛЯЕМ ТЕЛЕМЕТРИЮ FINISH ДЛЯ ЭТОЙ ПОПЫТКИ =====
+    // PA-12f: прерванная попытка уходит с тем же нулём за неотвеченное, что и в её баллы.
+    if (typeof reportPendingAnswerTelemetry === 'function') reportPendingAnswerTelemetry();
     Telemetry.finish({
       percent: results.percent,
       passed: results.passed,
@@ -367,6 +369,8 @@ function restart() {
     var currentAttemptNum = Telemetry.getAttemptNumber();
 
     // Отправляем телеметрию finish с явным номером попытки
+    // PA-12f: прерванная попытка уходит с тем же нулём за неотвеченное, что и в её баллы.
+    if (typeof reportPendingAnswerTelemetry === 'function') reportPendingAnswerTelemetry();
     Telemetry.finish({
       percent: results.percent,
       passed: results.passed,

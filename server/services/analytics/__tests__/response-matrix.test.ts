@@ -8,7 +8,8 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { toResponses } from "../response-matrix";
+import { skippableOf, toResponses, type SnapshotFacts } from "../response-matrix";
+import type { Observation } from "../observations";
 
 /** Веб-попытка: два задания выданы, оба отвечены. */
 const webAttempt = {
@@ -179,5 +180,74 @@ describe("toResponses.lms", () => {
 
     expect(rows[0].psychoHash).toBe("snap-hash-1");
     expect(rows[1].psychoHash).toBeNull();
+  });
+});
+
+describe("PA-12f: пропуск в телеметрии", () => {
+  const answeredRow = {
+    questionId: "q1", attemptId: "lms1", result: "correct" as const, latencyMs: null,
+    points: 1, maxPoints: 1, userAnswer: [0], topicId: "t1",
+  };
+  const base = {
+    observationId: "lms1", source: "telemetry" as const, respondentId: "p1",
+    occurredAt: new Date(), groupKeys: [], forms: { t1: "form-a" }, psychoHashOf: () => "hash",
+  };
+
+  it("выданное оцениваемое задание без строки ответа становится нулём, как в вебе", () => {
+    // OQ-07: «выдано, ответа нет» — ошибка. Веб и импорт так и считают; телеметрия строку по
+    // пропуску не присылала, и задание выпадало из знаменателя трудности.
+    const rows = toResponses.lms([answeredRow], {
+      ...base,
+      skippable: { questionIds: ["q1", "q2"], topicOf: () => "t1" },
+    });
+
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatchObject({
+      questionId: "q2", outcome: "incorrect", scoreRatio: 0, score: null, maxScore: null,
+      formKey: "form-a", psychoHash: "hash", source: "telemetry",
+    });
+  });
+
+  it("отвеченное задание не удваивается", () => {
+    const rows = toResponses.lms([answeredRow], {
+      ...base,
+      skippable: { questionIds: ["q1"], topicOf: () => "t1" },
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ questionId: "q1", outcome: "correct" });
+  });
+
+  it("без списка пропусков поведение прежнее — наблюдения только по строкам", () => {
+    expect(toResponses.lms([answeredRow], base)).toHaveLength(1);
+  });
+
+  const observation = {
+    id: "lms1", source: "telemetry", adaptive: false, snapshotId: "s1",
+  } as unknown as Observation;
+  const snapshot: SnapshotFacts = {
+    stamps: new Map(),
+    gradedTopics: new Map([["q1", "t1"], ["q2", "t1"]]),
+    quickAdvance: false,
+  };
+
+  it("пропуском считаются только оцениваемые задания выданного состава", () => {
+    // q3 измерительное: в оцениваемых его нет, и ноль за него был бы выдумкой.
+    const skippable = skippableOf(observation, snapshot, ["q1", "q2", "q3"]);
+    expect(skippable?.questionIds).toEqual(["q1", "q2"]);
+    expect(skippable?.topicOf("q2")).toBe("t1");
+  });
+
+  it("быстрый переход: старый пакет не слал строк по «Далее», достройки нет", () => {
+    // Пакеты до исправления отправляли ответ только из «Отправить ответ». При быстром переходе
+    // (PRD-43) такой кнопки нет — отсутствие строки там значит «ответ потерян», а не «пропуск».
+    expect(skippableOf(observation, { ...snapshot, quickAdvance: true }, ["q1"])).toBeUndefined();
+  });
+
+  it("без версии публикации, без выданного состава, адаптив и импорт — достройки нет", () => {
+    expect(skippableOf(observation, undefined, ["q1"])).toBeUndefined();
+    expect(skippableOf(observation, snapshot, undefined)).toBeUndefined();
+    expect(skippableOf({ ...observation, adaptive: true }, snapshot, ["q1"])).toBeUndefined();
+    expect(skippableOf({ ...observation, source: "import" }, snapshot, ["q1"])).toBeUndefined();
   });
 });
