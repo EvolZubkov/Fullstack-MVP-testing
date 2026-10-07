@@ -69,6 +69,8 @@ import { isEmptyBandRow } from "../test-editor.validation";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { isSingleIndexChoice, distributesBudget, type QuestionType } from "@shared/questions/question-type";
 import { achievableRange } from "@shared/scales/engine";
+import { DEFAULT_SCALE_SCORM_TARGET } from "@shared/schema";
+import { reachesLmsReport } from "@shared/lms-export/meta";
 import type { AllocationSpec } from "@shared/questions/allocation";
 import type { LearnerVisibility, Valence } from "@shared/scales/interpretation";
 import { LevelsEditor } from "./levels-editor";
@@ -192,7 +194,8 @@ function emptyScale(sortOrder: number): ScaleModel {
     displayMax: null,
     valence: "none",
     learnerVisibility: "hidden",
-    scormTarget: "none",
+    // PRD-54, решение 13: новая шкала по умолчанию уходит в отчёт LMS.
+    scormTarget: DEFAULT_SCALE_SCORM_TARGET,
     sortOrder,
   };
 }
@@ -742,6 +745,9 @@ function ScaleForm({
           value={s.scormTarget}
           disabled={readOnly}
           options={TARGET_OPTIONS}
+          // PRD-54, решение 13: шкала, не попавшая в отчёт LMS, выпадает из аналитики по его
+          // выгрузке. Предупреждение, а не запрет: скрыть сырой балл — законный выбор (PRD-29).
+          hint={reachesLmsReport(s.scormTarget) ? undefined : "Аналитика по выгрузке отчёта LMS эту шкалу не увидит"}
           onChange={(value) => onChange({ scormTarget: value })}
           data-testid={`scales-target-${index}`}
         />

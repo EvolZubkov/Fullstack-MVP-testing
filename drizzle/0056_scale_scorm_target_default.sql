@@ -1,0 +1,1 @@
+ALTER TABLE "scales" ALTER COLUMN "scorm_target" SET DEFAULT 'interaction';

@@ -393,6 +393,13 @@
       "when": 1791416281314,
       "tag": "0055_sim_scoring",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1791416454711,
+      "tag": "0056_scale_scorm_target_default",
+      "breakpoints": true
     }
   ]
 }

@@ -111,3 +111,13 @@ export function parseDurationSeconds(raw: string | null | undefined): number | n
   const n = Number(value);
   return Number.isInteger(n) && n >= 0 ? n : null;
 }
+
+/**
+ * Уходит ли шкала или показатель в отчёт LMS — то есть увидит ли его аналитика по выгрузке
+ * (PRD-54, решение 13). Отчёт несёт только взаимодействия: `suspend_data` в выгрузку не попадает.
+ *
+ * @param target куда автор публикует значение (`scorm_target`)
+ */
+export function reachesLmsReport(target: string | null | undefined): boolean {
+  return target === "interaction" || target === "both";
+}

@@ -3129,6 +3129,15 @@ export const insertResultVariableSchema = createInsertSchema(resultVariables)
 export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
 export type ResultVariable = typeof resultVariables.$inferSelect;
 
+/**
+ * Where a NEW scale is published by default (PRD-54, decision 13): as an interaction of the
+ * LMS report. Everything the analytics reads must also travel through the LMS export, and a
+ * scale that stays «none» is invisible to an imported attempt. Existing scales keep what they
+ * have — the old default cannot be told from a deliberate choice; the editor warns instead.
+ * The database default, the editor's blank scale and the workbook import share this value.
+ */
+export const DEFAULT_SCALE_SCORM_TARGET = "interaction" as const;
+
 // PRD-5: measurement scales (шкалы). Test-scoped named aggregates of explicit
 // per-question contributions, normalized (with optional inversion) and banded.
 // Published to scale.* before result.* at completion. See migration 009 for the
@@ -3150,7 +3159,7 @@ export const scales = pgTable("scales", {
   learnerVisibility: text("learner_visibility", { enum: ["hidden", "level", "level_and_value"] })
     .notNull()
     .default("hidden"),
-  scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default("none"),
+  scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default(DEFAULT_SCALE_SCORM_TARGET),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

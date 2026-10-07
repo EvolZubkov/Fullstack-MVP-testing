@@ -428,7 +428,9 @@ export function parseScaleRow(
       // cell silently kept the old levels once merging arrived.
       configJson: config,
       learnerVisibility: parseLearnerVisibility(row["Показывать ученику"]),
-      scormTarget: String(row["SCORM"] ?? "").trim() || "none",
+      // Пустая ячейка — «книга не задаёт»: значение решает импорт — у существующей шкалы
+      // оно прежнее, у новой — общее умолчание (PRD-54, решение 13).
+      scormTarget: String(row["SCORM"] ?? "").trim() || undefined,
     },
   };
 }

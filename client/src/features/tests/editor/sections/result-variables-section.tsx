@@ -103,6 +103,7 @@ import {
   VALENCE_OPTIONS,
   VISIBILITY_OPTIONS,
 } from "./scales-section";
+import { reachesLmsReport } from "@shared/lms-export/meta";
 import { LevelsEditor } from "./levels-editor";
 import { OutcomesEditor } from "./outcomes-editor";
 
@@ -875,6 +876,8 @@ function VariableForm({ variable: v, index, topics, scales, testId, readOnly, fi
         value={v.scormTarget}
         disabled={readOnly}
         options={TARGET_OPTIONS}
+        // PRD-54, решение 13: показатель вне отчёта LMS выпадает из аналитики по его выгрузке.
+        hint={reachesLmsReport(v.scormTarget) ? undefined : "Аналитика по выгрузке отчёта LMS этот показатель не увидит"}
         onChange={(value) => onChange({ scormTarget: value })}
         data-testid={`metrics-target-${index}`}
       />

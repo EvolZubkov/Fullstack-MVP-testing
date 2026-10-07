@@ -160,6 +160,9 @@ describe("колонка «Показывать ученику» (PRD-29)", () =
       scormTarget: "none",
     });
     expect(exported["Показывать ученику"]).toBe("уровень");
+    // Пустая ячейка SCORM — «книга не задаёт»: решает импорт (PRD-54, решение 13).
+    const blank = parseScaleRow({ "Ключ": "ee", "Тип": "number" });
+    expect(blank.ok && blank.value.scormTarget).toBeUndefined();
     const back = parseScaleRow(exported as Record<string, unknown>);
     expect(back.ok && back.value.learnerVisibility).toBe("level");
   });

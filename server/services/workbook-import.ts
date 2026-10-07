@@ -57,6 +57,7 @@ import { db } from "../db";
 import { sheetHeaders, sheetToObjects } from "../utils/excel";
 import {
   templates,
+  DEFAULT_SCALE_SCORM_TARGET,
   insertScaleSchema,
   insertResultVariableSchema,
   type Scale,
@@ -1594,7 +1595,10 @@ export async function importWorkbook(
       const configJson = existing
         ? mergeScaleConfig(existing.configJson, parsed.value.configJson as Record<string, unknown>)
         : parsed.value.configJson;
-      const check = insertScaleSchema.safeParse({ ...parsed.value, configJson, testId, sortOrder });
+      // Пустая ячейка SCORM не стирает выбор автора у существующей шкалы, а новой даёт общее
+      // умолчание (PRD-54, решение 13).
+      const scormTarget = parsed.value.scormTarget ?? existing?.scormTarget ?? DEFAULT_SCALE_SCORM_TARGET;
+      const check = insertScaleSchema.safeParse({ ...parsed.value, scormTarget, configJson, testId, sortOrder });
       if (!check.success) {
         const first = check.error.issues[0];
         result.errors.push(`${where}: ${first.message} (${first.path.join(".")})`);

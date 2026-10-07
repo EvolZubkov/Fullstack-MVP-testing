@@ -273,6 +273,19 @@ describe("POST /api/workbook/import-new", () => {
     expect(storageMock.createScale).toHaveBeenCalled();
   });
 
+  it("новая шкала без колонки SCORM уходит в отчёт LMS (PRD-54, решение 13)", async () => {
+    const buf = await makeWorkbook({ "Шкалы": [scaleRow] });
+    await request(makeApp()).post("/api/workbook/import-new").field("newTestTitle", "Новый тест").attach("file", buf, "wb.xlsx");
+    expect(storageMock.createScale).toHaveBeenCalledWith(expect.objectContaining({ key: "ee", scormTarget: "interaction" }));
+  });
+
+  it("у существующей шкалы пустая ячейка SCORM выбор автора не меняет", async () => {
+    storageMock.getScales.mockResolvedValue([{ id: "scale-1", key: "ee", scormTarget: "none", configJson: {}, sortOrder: 0 }]);
+    const buf = await makeWorkbook({ "Шкалы": [scaleRow] });
+    await request(makeApp()).post("/api/workbook/import-new").field("newTestTitle", "Новый тест").attach("file", buf, "wb.xlsx");
+    expect(storageMock.updateScale).toHaveBeenCalledWith("scale-1", expect.objectContaining({ scormTarget: "none" }));
+  });
+
   it("со «Структурой»: создаёт тест и применяет разделы", async () => {
     const buf = await makeWorkbook({
       "Вопросы": [questionRow],

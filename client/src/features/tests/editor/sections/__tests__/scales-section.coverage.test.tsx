@@ -235,9 +235,22 @@ describe("<ScalesSection /> — «Список шкал»", () => {
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("инверсия");
     selectOption("scales-recalc-0", "Проценты");
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("проценты");
+    // PRD-54, решение 13: шкала вне отчёта LMS — с предупреждением, в отчёте — без него.
+    expect(screen.getByTestId("scales-card-0")).toHaveTextContent("Аналитика по выгрузке отчёта LMS эту шкалу не увидит");
     selectOption("scales-target-0", "Столбцом в отчёте");
+    expect(screen.getByTestId("scales-card-0")).not.toHaveTextContent("Аналитика по выгрузке отчёта LMS эту шкалу не увидит");
     // Subtitle reflects the new aggregation label.
     expect(screen.getByTestId("scales-card-0")).toHaveTextContent("среднее");
+  });
+
+  it("новая шкала по умолчанию уходит в отчёт LMS — без предупреждения (PRD-54, решение 13)", () => {
+    renderStateful(baseModel({ scales: [] }));
+    fireEvent.click(screen.getAllByText("Добавить шкалу")[0]);
+    const expand = screen.queryByLabelText("Развернуть шкалу");
+    if (expand) fireEvent.click(expand);
+    const card = screen.getByTestId("scales-card-0");
+    expect(card).toHaveTextContent("Столбцом в отчёте");
+    expect(card).not.toHaveTextContent("Аналитика по выгрузке отчёта LMS эту шкалу не увидит");
   });
 
   it("levels editor: add, edit, and remove levels (from the empty state)", () => {

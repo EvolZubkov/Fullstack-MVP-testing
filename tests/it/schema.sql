@@ -261,7 +261,7 @@ CREATE TABLE "scales" (
 	"direction" text DEFAULT 'positive' NOT NULL,
 	"config_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"learner_visibility" text DEFAULT 'hidden' NOT NULL,
-	"scorm_target" text DEFAULT 'none' NOT NULL,
+	"scorm_target" text DEFAULT 'interaction' NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,

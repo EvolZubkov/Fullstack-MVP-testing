@@ -102,6 +102,19 @@ describe("<ResultVariablesSection /> — домен и направление ч
     expect(screen.getByTestId("metrics-valence-0")).toBeInTheDocument();
   });
 
+  it("показатель вне отчёта LMS — с предупреждением, в отчёте — без него (PRD-54, решение 13)", () => {
+    const HINT = "Аналитика по выгрузке отчёта LMS этот показатель не увидит";
+    renderStateful(baseModel({ resultVariables: [makeVar({ scormTarget: "suspend_data" })] }));
+    expandFirstCard();
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+  });
+
+  it("показатель, уходящий в отчёт LMS, предупреждения не несёт", () => {
+    renderStateful(baseModel({ resultVariables: [makeVar({ scormTarget: "both" })] }));
+    expandFirstCard();
+    expect(screen.queryByText("Аналитика по выгрузке отчёта LMS этот показатель не увидит")).toBeNull();
+  });
+
   it("строковый показатель НЕ показывает границы/направление — только исходы", () => {
     renderStateful(
       baseModel({ resultVariables: [makeVar({ type: "string", formula: '"a"' })] }),
