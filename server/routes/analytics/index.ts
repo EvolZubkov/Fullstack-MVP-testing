@@ -54,7 +54,7 @@ router.use("/", deliveryRouter);
 // PRD-56 FR-21: вкладка «Шкалы» — GET /api/analytics/tests/:testId/scales
 router.use("/", scalesRouter);
 
-// PRD-56 FR-07k - FR-07n: сравнение срезов «Ответы и шкалы» — GET /api/analytics/tests/:testId/answer-slices
+// PRD-56 FR-07k - FR-07n: сравнение срезов «Ответы, шкалы и показатели» — GET /api/analytics/tests/:testId/answer-slices
 router.use("/", answerSlicesRouter);
 
 // PRD-66 FR-56: психометрика теста — GET /api/analytics/psychometrics/:testId
