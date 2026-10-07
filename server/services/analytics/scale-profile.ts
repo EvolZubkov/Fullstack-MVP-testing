@@ -16,7 +16,13 @@
  * покрасится одинаково у шкалы, где выше лучше, и у той, где выше хуже.
  */
 
-import { findBand, parseScaleInterpretation, type LevelTone } from "@shared/scales/interpretation";
+import {
+  findBand,
+  parseScaleInterpretation,
+  type InterpretationBand,
+  type LevelTone,
+  type Valence,
+} from "@shared/scales/interpretation";
 import { zoneColors, type LevelRamp } from "@shared/template/level-ramp";
 import type { ScaleValuesRow } from "../../storage/analytics-repository";
 
@@ -65,6 +71,39 @@ export interface ScaleProfileOptions {
 }
 
 /**
+ * Shares of the values in each interpretation band, coloured by the test's level ramp.
+ *
+ * Shared by scales and numeric indicators (PRD-56 FR-21d): a band of an indicator must take the
+ * same colour as the same band of a scale, or the two cards of one tab would contradict each
+ * other.
+ *
+ * @param values the measured values (only runs that produced one)
+ * @param interpretation the bands and the valence of the scale or indicator
+ * @param ramp the test's level ramp
+ * @returns one share per band, in the author's band order
+ */
+export function bandShares(
+  values: readonly number[],
+  interpretation: { bands: InterpretationBand[]; valence: Valence },
+  ramp: LevelRamp,
+): ScaleBandShare[] {
+  const colors = zoneColors(ramp, interpretation.bands.length, interpretation.valence);
+  return interpretation.bands.map((band, index) => {
+    const count = values.filter(value => findBand(interpretation.bands, value) === band).length;
+    return {
+      level: band.level,
+      label: band.label ?? band.level,
+      count,
+      share: values.length > 0 ? (count / values.length) * 100 : 0,
+      color: `hsl(${colors[index]})`,
+      // Тон автора печатается как есть; цвет полосы при этом остаётся из рампы, а тон
+      // говорит экрану, что оценка ЗАДАНА, а не выведена из порядка.
+      tone: band.tone ?? null,
+    };
+  });
+}
+
+/**
  * Профиль по каждой шкале теста.
  *
  * @param rows значения шкал прохождений (оба источника)
@@ -84,25 +123,7 @@ export function summariseScales(
       .map(row => row.values[scale.key])
       .filter((value): value is number => typeof value === "number");
 
-    const colors = zoneColors(
-      opts.ramp,
-      interpretation.bands.length,
-      interpretation.valence,
-    );
-
-    const bands: ScaleBandShare[] = interpretation.bands.map((band, index) => {
-      const count = values.filter(value => findBand(interpretation.bands, value) === band).length;
-      return {
-        level: band.level,
-        label: band.label ?? band.level,
-        count,
-        share: values.length > 0 ? (count / values.length) * 100 : 0,
-        color: `hsl(${colors[index]})`,
-        // Тон автора печатается как есть; цвет полосы при этом остаётся из рампы, а тон
-        // говорит экрану, что оценка ЗАДАНА, а не выведена из порядка.
-        tone: band.tone ?? null,
-      };
-    });
+    const bands = bandShares(values, interpretation, opts.ramp);
 
     return {
       key: scale.key,
