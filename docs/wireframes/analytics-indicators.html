@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="ru" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: показатели (PRD-2) в аналитике теста — PRD-56 FR-21c - FR-21h.
+
+    Повод (владелец 2026-10-07): в аналитике есть шкалы, а показателей нет, хотя значения
+    показателей сохраняются у каждого прохождения всех трёх источников (веб — result_json,
+    телеметрия и импорт выгрузки LMS — variables_json из блоков var_*).
+
+    Основа — экран как он реализован сейчас:
+      вкладка «Шкалы»   — client/src/features/analytics/test/scale-profile.tsx
+                          (карточки «Профиль по шкалам» и «Распределение уровней»);
+      сравнение срезов  — approved/slice-compare-answers.html (вид «Ответы и шкалы»).
+    Набор вкладок теста — как в продукте сейчас.
+
+    Дельта:
+    1. вкладка «Шкалы» называется «Шкалы и показатели», id в адресе прежний (scales);
+    2. над карточками шкал — карточка «Показатели»: строка на показатель, вид строки зависит
+       от типа показателя (числовой с уровнями / числовой без уровней / строковый и логический);
+    3. вкладка подчиняется фильтру экрана (раньше запрос шкал фильтр не передавал);
+    4. в сравнении срезов над блоком «Шкалы» — блок «Показатели».
+    Всё остальное — существующий экран.
+
+    Состояния: вкладка; вкладка — показатели не переданы LMS; сравнение срезов; пояснения.
+    -->
+    <title>Показатели в аналитике теста</title>
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/client/src/styles/vendor/skillum-ds.css" />
+    <link rel="stylesheet" href="/client/src/styles/tb-components.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <style>
+      body { --wf-nav-offset: var(--wf-size-52); }
+      .wf-state { display: none; padding-top: var(--wf-nav-offset); }
+      .wf-state.active { display: block; }
+      .wf-state .ou-shell__header { position: static; }
+      .wf-sprite { display: none; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-960); margin: 0 auto; }
+      .wf-slots { align-items: start; }
+      .wf-slot { min-width: 0; padding: var(--ou-space-6); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-l); }
+      .wf-slot-add { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-1); background: transparent; cursor: pointer; color: var(--ou-accent-default); }
+      .wf-grid-fixed { table-layout: fixed; width: 100%; }
+      .wf-grid-fixed .ou-grid__th { white-space: normal; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></symbol>
+      <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+    </svg>
+
+    <template id="wf-side-tpl">
+      <aside class="ou-side">
+        <div class="ou-side__brand">
+          <a href="#" class="ou-link-reset ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-2">
+            <span class="ou-shell__brand-mark"><svg width="16" height="16"><use href="#i-book" /></svg></span>
+            <span class="ou-text ou-text--body-m ou-text--w-semibold">Skill'Ум</span>
+          </a>
+        </div>
+        <nav class="ou-side__nav">
+          <div class="ou-side__group">
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-home" /></svg></span><span class="ou-side__lbl">Главная</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-clipboard" /></svg></span><span class="ou-side__lbl">Тесты</span></button>
+            <button type="button" class="ou-side__item is-active" aria-current="page"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-chart" /></svg></span><span class="ou-side__lbl">Аналитика</span></button>
+            <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users" /></svg></span><span class="ou-side__lbl">Пользователи</span></button>
+          </div>
+        </nav>
+      </aside>
+    </template>
+
+    <template id="wf-header-tpl">
+      <div class="ou-shell__actions">
+        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" aria-label="Переключить на тёмную тему"><span class="ou-iconbtn__ico"><svg width="20" height="20"><use href="#i-moon" /></svg></span></button>
+      </div>
+    </template>
+
+    <template id="wf-test-head-tpl">
+      <div class="ou-stack ou-stack--gap-1 ou-stack--ai-start">
+        <nav class="ou-crumbs" aria-label="Хлебные крошки">
+          <ol class="ou-crumbs__list">
+            <li class="ou-crumbs__item"><a class="ou-crumbs__crumb" href="#"><span class="ou-crumbs__label">Аналитика</span></a></li>
+            <li class="ou-crumbs__sep" aria-hidden="true"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></li>
+            <li class="ou-crumbs__item is-current"><span class="ou-crumbs__crumb" aria-current="page"><span class="ou-crumbs__label">Определение ведущего стиля человек…</span></span></li>
+          </ol>
+        </nav>
+        <h1 class="ou-text ou-text--heading-l">Определение ведущего стиля человекоцентричного лидерства</h1>
+        <p class="ou-text ou-text--body-m ou-text--tone-muted">412 завершённых прохождений · веб, телеметрия LMS и импортированные выгрузки · измерительный тест, эталона у вопросов нет</p>
+      </div>
+      <div class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-download" /></svg></span><span>Экспорт Excel</span></button>
+        <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Обновить"><span class="ou-iconbtn__ico"><svg width="16" height="16"><use href="#i-refresh" /></svg></span></button>
+      </div>
+    </template>
+
+    <!-- ДЕЛЬТА: последняя вкладка — «Шкалы и показатели». -->
+    <template id="wf-tabs-measures-tpl">
+      <div class="ou-tabs__list" role="tablist">
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Обзор</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Прохождения</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Вопросы</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Срезы</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Выдача</span></button>
+        <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Шкалы и показатели</span></button>
+      </div>
+    </template>
+
+    <template id="wf-tabs-slices-tpl">
+      <div class="ou-tabs__list" role="tablist">
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Обзор</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Прохождения</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Вопросы</span></button>
+        <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Срезы</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Выдача</span></button>
+        <button type="button" class="ou-tabs__tab" role="tab"><span class="ou-tabs__label">Шкалы и показатели</span></button>
+      </div>
+    </template>
+
+    <!-- Фильтр экрана — тот же, что на остальных вкладках. ДЕЛЬТА: вкладка ему подчиняется. -->
+    <template id="wf-filter-tpl">
+      <div class="ou-filterbar">
+        <div class="ou-filterbar__row">
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span><span class="ou-chip__count">1</span></button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+        </div>
+        <div class="ou-filterbar__applied">
+          <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Период: 01.01.2026 — 07.10.2026</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button>
+        </div>
+      </div>
+    </template>
+
+    <template id="wf-filter-lms-tpl">
+      <div class="ou-filterbar">
+        <div class="ou-filterbar__row">
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span><span class="ou-chip__count">1</span></button>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+        </div>
+        <div class="ou-filterbar__applied">
+          <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: импорт выгрузки LMS</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Карточки шкал — существующие, без изменений (сокращены до двух шкал). -->
+    <template id="wf-scales-tpl">
+      <section class="ou-card ou-card--outlined">
+        <header class="ou-card__header">
+          <div class="ou-card__heading">
+            <h2 class="ou-card__title">Профиль по шкалам</h2>
+            <p class="ou-card__subtitle">412 прохождений опросника · среднее значение по каждой шкале</p>
+          </div>
+        </header>
+        <div class="ou-card__body">
+          <div class="ou-stack ou-stack--gap-4">
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s">Командный</span>
+              <span class="ou-progress ou-progress--s"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 78%"></span></span></span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 27,3 из 35 · 412 прохождений</span>
+            </div>
+            <div class="ou-stack ou-stack--gap-1">
+              <span class="ou-text ou-text--body-s">Вдохновляющий</span>
+              <span class="ou-progress ou-progress--s"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 61%"></span></span></span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 21,4 из 35 · 412 прохождений</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="ou-card ou-card--outlined">
+        <header class="ou-card__header">
+          <div class="ou-card__heading">
+            <h2 class="ou-card__title">Распределение уровней</h2>
+            <p class="ou-card__subtitle">Доля участников в каждой полосе толкования — у каждой шкалы своя шкала полос</p>
+          </div>
+        </header>
+        <div class="ou-card__body">
+          <div class="ou-stack ou-stack--gap-1">
+            <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
+              <span class="ou-text ou-text--body-s ou-text--w-medium">Командный</span>
+              <span class="ou-text ou-text--body-xs ou-text--tone-muted">412 прохождений · 3 полос</span>
+            </div>
+            <div class="ou-progress ou-progress--m">
+              <div class="ou-progress__stack">
+                <span class="ou-progress__stack-seg" style="width: 12%; background: var(--ou-cat-digital)"></span>
+                <span class="ou-progress__stack-seg" style="width: 41%; background: var(--ou-cat-bti)"></span>
+                <span class="ou-progress__stack-seg" style="width: 47%; background: var(--ou-cat-business)"></span>
+              </div>
+              <div class="ou-progress__legend">
+                <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-digital)"></span>Низкий — 12 %</span>
+                <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-bti)"></span>Средний — 41 %</span>
+                <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-business)"></span>Высокий — 47 %</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <nav class="wf-nav" aria-label="Переключатель состояний эскиза">
+      <span class="wf-nav-title">Показатели в аналитике:</span>
+      <button type="button" class="active" onclick="showState(this, 'tab')">вкладка</button>
+      <button type="button" onclick="showState(this, 'not-sent')">не переданы LMS</button>
+      <button type="button" onclick="showState(this, 'slices')">сравнение срезов</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+    </nav>
+
+    <!-- ════════════════ Вкладка «Шкалы и показатели» ════════════════ -->
+    <div id="wf-tab" class="wf-state active">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-test-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs-measures></div>
+          <div data-wf-filter></div>
+
+          <div class="ou-stack ou-stack--gap-5" role="tabpanel">
+            <!-- ДЕЛЬТА: карточка «Показатели». Строка на показатель, вид — по типу. -->
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header">
+                <div class="ou-card__heading">
+                  <h2 class="ou-card__title">Показатели</h2>
+                  <p class="ou-card__subtitle">412 прохождений · сохранённые значения показателей, без пересчёта по ответам</p>
+                </div>
+              </header>
+              <div class="ou-card__body">
+                <div class="ou-stack ou-stack--gap-5">
+
+                  <!-- Числовой с уровнями: среднее + распределение уровней. -->
+                  <div class="ou-stack ou-stack--gap-1">
+                    <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">Индекс человекоцентричности</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 64,2 из 100 · 380 прохождений · у 32 не передано</span>
+                    </div>
+                    <div class="ou-progress ou-progress--m">
+                      <div class="ou-progress__stack">
+                        <span class="ou-progress__stack-seg" style="width: 9%; background: var(--ou-error-default)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 34%; background: var(--ou-warning-default)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 57%; background: var(--ou-success-default)"></span>
+                      </div>
+                      <div class="ou-progress__legend">
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-error-default)"></span>Зона развития — 9 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-warning-default)"></span>Базовый — 34 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-success-default)"></span>Сильная сторона — 57 %</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Числовой без уровней: только среднее в домене, полоса акцентом (FR-21b). -->
+                  <div class="ou-stack ou-stack--gap-1">
+                    <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">Разброс стилей</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 6,8 из 28 · 412 прохождений</span>
+                    </div>
+                    <span class="ou-progress ou-progress--s"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 24%"></span></span></span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">уровни толкования не заданы</span>
+                  </div>
+
+                  <!-- Строковый: доли исходов; без тона — категориальные цвета, «Прочее» — нейтральный. -->
+                  <div class="ou-stack ou-stack--gap-1">
+                    <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">Ведущий стиль</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">412 прохождений · 4 исхода</span>
+                    </div>
+                    <div class="ou-progress ou-progress--m">
+                      <div class="ou-progress__stack">
+                        <span class="ou-progress__stack-seg" style="width: 34%; background: var(--ou-cat-business)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 27%; background: var(--ou-cat-bti)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 22%; background: var(--ou-cat-digital)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 12%; background: var(--ou-cat-leadership)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 5%; background: var(--ou-fg-muted)"></span>
+                      </div>
+                      <div class="ou-progress__legend">
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-business)"></span>Командный — 34 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-bti)"></span>Вдохновляющий — 27 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-digital)"></span>Целеустремлённый — 22 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-leadership)"></span>Процессный — 12 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-fg-muted)"></span>Прочее — 5 %</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Логический: исходы «да / нет» с тонами, заданными автором. -->
+                  <div class="ou-stack ou-stack--gap-1">
+                    <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">Рекомендован в кадровый резерв</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">412 прохождений · 2 исхода</span>
+                    </div>
+                    <div class="ou-progress ou-progress--m">
+                      <div class="ou-progress__stack">
+                        <span class="ou-progress__stack-seg" style="width: 61%; background: var(--ou-success-default)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 39%; background: var(--ou-info-default)"></span>
+                      </div>
+                      <div class="ou-progress__legend">
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-success-default)"></span>Да — 61 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-info-default)"></span>Нет — 39 %</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </section>
+
+            <div class="ou-stack ou-stack--gap-5" data-wf-scales></div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Только импорт LMS: часть показателей не передана ════════════════ -->
+    <div id="wf-not-sent" class="wf-state">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-test-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs-measures></div>
+          <div data-wf-filter-lms></div>
+
+          <div class="ou-stack ou-stack--gap-5" role="tabpanel">
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header">
+                <div class="ou-card__heading">
+                  <h2 class="ou-card__title">Показатели</h2>
+                  <p class="ou-card__subtitle">120 прохождений · сохранённые значения показателей, без пересчёта по ответам</p>
+                </div>
+              </header>
+              <div class="ou-card__body">
+                <div class="ou-stack ou-stack--gap-5">
+                  <div class="ou-stack ou-stack--gap-1">
+                    <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">Индекс человекоцентричности</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 61,7 из 100 · 88 прохождений · у 32 не передано</span>
+                    </div>
+                    <div class="ou-progress ou-progress--m">
+                      <div class="ou-progress__stack">
+                        <span class="ou-progress__stack-seg" style="width: 11%; background: var(--ou-error-default)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 38%; background: var(--ou-warning-default)"></span>
+                        <span class="ou-progress__stack-seg" style="width: 51%; background: var(--ou-success-default)"></span>
+                      </div>
+                      <div class="ou-progress__legend">
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-error-default)"></span>Зона развития — 11 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-warning-default)"></span>Базовый — 38 %</span>
+                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-success-default)"></span>Сильная сторона — 51 %</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Показатель, которого нет ни в одном прохождении выборки: честный прочерк. -->
+                  <div class="ou-stack ou-stack--gap-1">
+                    <span class="ou-text ou-text--body-s ou-text--w-medium ou-text--tone-muted">Рекомендован в кадровый резерв</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">не передано ни в одном из 120 прохождений: выгрузки LMS не содержат этого показателя</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <div class="ou-stack ou-stack--gap-5" data-wf-scales></div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сравнение срезов ════════════════ -->
+    <div id="wf-slices" class="wf-state">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-test-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs-slices></div>
+
+          <section class="ou-card ou-card--outlined" role="tabpanel">
+            <header class="ou-card__header">
+              <div class="ou-card__heading">
+                <h2 class="ou-card__title">Сравнение срезов</h2>
+                <p class="ou-card__subtitle">Срезы этого теста в одной рамке: сравниваются доли, а не объёмы</p>
+              </div>
+              <div class="ou-card__trail">
+                <div class="ou-seg ou-seg--s" role="group">
+                  <button type="button" class="ou-seg__item" aria-pressed="false"><span>Список срезов</span></button>
+                  <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Сравнение</span></button>
+                </div>
+              </div>
+            </header>
+            <div class="ou-card__body">
+              <div class="ou-stack ou-stack--gap-6">
+                <div class="ou-lgrid ou-lgrid--auto ou-lgrid--min-md ou-lgrid--gap-4 wf-slots">
+                  <div class="ou-stack ou-stack--gap-4 wf-slot">
+                    <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 1</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">26 прохождений</span>
+                    </div>
+                    <div class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+                      <div class="ou-select ou-field--s"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Группа: HRBP</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button></div>
+                    </div>
+                    <div class="ou-stack ou-stack--row ou-stack--gap-1"><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Изменить условия</span></button></div>
+                  </div>
+                  <div class="ou-stack ou-stack--gap-4 wf-slot">
+                    <div class="ou-stack ou-stack--row ou-stack--ai-center ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-s ou-text--w-medium">Срез 2</span>
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">22 прохождения</span>
+                    </div>
+                    <div class="ou-stack ou-stack--gap-1">
+                      <span class="ou-text ou-text--body-xs ou-text--tone-muted">Сохранённый срез</span>
+                      <div class="ou-select ou-field--s"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Группа: Тестовая ДУЗ</span><span class="ou-select__chev"><svg width="14" height="14"><use href="#i-chevron-down" /></svg></span></button></div>
+                    </div>
+                    <div class="ou-stack ou-stack--row ou-stack--gap-1"><button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span>Изменить условия</span></button><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Убрать</span></button></div>
+                  </div>
+                  <button type="button" class="ou-box ou-box--border-dashed ou-box--radius-l ou-box--pad-6 wf-slot-add">
+                    <span class="ou-text ou-text--body-s ou-text--w-medium">+ Добавить срез</span>
+                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">до четырёх срезов</span>
+                  </button>
+                </div>
+
+                <div class="ou-stack ou-stack--row ou-stack--jc-end">
+                  <div class="ou-seg ou-seg--s" role="group" aria-label="Что сравнивать">
+                    <button type="button" class="ou-seg__item" aria-pressed="false"><span>Результат и темы</span></button>
+                    <button type="button" class="ou-seg__item" aria-pressed="false"><span>Качество вопросов</span></button>
+                    <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Ответы и шкалы</span></button>
+                  </div>
+                </div>
+
+                <!-- ДЕЛЬТА: блок «Показатели» — над блоком «Шкалы», тот же вид таблиц. -->
+                <div class="ou-stack ou-stack--gap-3">
+                  <span class="ou-text ou-text--body-s ou-text--w-medium">Показатели</span>
+                  <div class="ou-grid">
+                    <div class="ou-grid__scroll">
+                      <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup>
+                        <thead>
+                          <tr>
+                            <th><div class="ou-grid__th">Показатель</div></th>
+                            <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">HRBP</div></th>
+                            <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
+                            <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr><td>Индекс человекоцентричности</td><td class="is-numeric is-align-center">66,1 из 100</td><td class="is-numeric is-align-center">58,4 из 100</td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">+7,7</span></td></tr>
+                          <tr><td>Разброс стилей</td><td class="is-numeric is-align-center">6,2 из 28</td><td class="is-numeric is-align-center">7,5 из 28</td><td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−1,3</span></td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <!-- Числовой с уровнями — таблица уровней, как у шкалы. -->
+                  <div class="ou-stack ou-stack--gap-2">
+                    <span class="ou-text ou-text--body-s ou-text--w-medium">Индекс человекоцентричности · уровни</span>
+                    <div class="ou-grid">
+                      <div class="ou-grid__scroll">
+                        <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup>
+                          <thead>
+                            <tr>
+                              <th><div class="ou-grid__th">Уровень</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">HRBP</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-error-default)"></span>Зона развития</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">8 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:8%;background:var(--ou-error-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">18 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:18%;background:var(--ou-error-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">−10 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-warning-default)"></span>Базовый</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">31 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:31%;background:var(--ou-warning-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">36 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:36%;background:var(--ou-warning-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−5 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-success-default)"></span>Сильная сторона</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">61 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:61%;background:var(--ou-success-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">46 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:46%;background:var(--ou-success-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">+15 п.п.</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Строковый — та же таблица, строка — исход. -->
+                  <div class="ou-stack ou-stack--gap-2">
+                    <span class="ou-text ou-text--body-s ou-text--w-medium">Ведущий стиль · исходы</span>
+                    <div class="ou-grid">
+                      <div class="ou-grid__scroll">
+                        <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup>
+                          <thead>
+                            <tr>
+                              <th><div class="ou-grid__th">Исход</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">HRBP</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-business)"></span>Командный</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">42 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:42%;background:var(--ou-cat-business)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">27 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:27%;background:var(--ou-cat-business)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">+15 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-bti)"></span>Вдохновляющий</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">27 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:27%;background:var(--ou-cat-bti)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">23 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:23%;background:var(--ou-cat-bti)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+4 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-digital)"></span>Целеустремлённый</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">19 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:19%;background:var(--ou-cat-digital)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">32 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:32%;background:var(--ou-cat-digital)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s ou-text--w-semibold">−13 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td><span class="tb-psy-prompt"><span class="tb-dist-dot" style="background:var(--ou-cat-leadership)"></span>Процессный</span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">12 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:12%;background:var(--ou-cat-leadership)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">18 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:18%;background:var(--ou-cat-leadership)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−6 п.п.</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Блок «Шкалы» и «Ответы на вопросы» — без изменений (approved/slice-compare-answers.html). -->
+                <div class="ou-stack ou-stack--gap-3">
+                  <span class="ou-text ou-text--body-s ou-text--w-medium">Шкалы</span>
+                  <span class="ou-text ou-text--body-xs ou-text--tone-muted">… как в утверждённом эскизе сравнения срезов …</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Пояснения ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — показатели в аналитике теста</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Вкладка «Шкалы и показатели»</td><td><code>hasScales || hasIndicators</code></td><td>Прежняя вкладка «Шкалы», id в адресе прежний (<code>scales</code>) — сохранённые ссылки не ломаются. Порядок — показатели, затем шкалы, как в деталях попытки. Пустой блок не выводится (FR-21c)</td></tr>
+              <tr><td>Фильтр экрана</td><td>условия <code>FilterBar</code> в запросе вкладки</td><td>Источник, группа, период действуют и на показатели, и на шкалы (FR-21f). Раньше запрос шкал их не передавал</td></tr>
+              <tr><td>Значение показателя</td><td>веб — <code>result_json.resultVariables</code>; телеметрия и импорт — <code>variables_json</code></td><td>Только сохранённое значение, без пересчёта по ответам (FR-21e, решение владельца 2026-10-07). Строки из пакета и выгрузки приводятся по типу показателя</td></tr>
+              <tr><td>«у N не передано»</td><td>прохождения выборки без значения этого показателя</td><td>Не входят в n и в доли. Выводится, только если N &gt; 0</td></tr>
+              <tr><td>Показатель без значений вовсе</td><td>n = 0</td><td>Название приглушено, вместо полосы — «не передано ни в одном из N прохождений». Ноль и пустая полоса запрещены (FR-27)</td></tr>
+              <tr><td>Числовой с уровнями</td><td><code>type = number</code>, есть полосы толкования</td><td>Среднее «X из максимума» в строке заголовка и составная полоса уровней. Цвета — с сервера по FR-21a (тон уровня, иначе рампа теста с учётом валентности)</td></tr>
+              <tr><td>Числовой без уровней</td><td><code>type = number</code>, полос нет</td><td>Среднее в домене полосой акцента (FR-21b) и «уровни толкования не заданы». Если домена нет — только «среднее X»</td></tr>
+              <tr><td>Строковый и логический</td><td><code>type = string | boolean</code></td><td>Доли исходов толкования (<code>findOutcome</code>, тот же порядок сопоставления, что в итогах участника). Цвет — тон исхода; исходам без тона — категориальные цвета по порядку исходов в толковании: исходы не упорядочены, рампа уровней к ним неприменима. Значения вне исходов — «Прочее» нейтральным цветом, последним. Исходы без единого прохождения не выводятся</td></tr>
+              <tr><td>Скрытый от участника показатель</td><td><code>learner_visibility = hidden</code></td><td>В аналитике виден: автор видит его всегда</td></tr>
+              <tr><td>Сравнение срезов: «Показатели»</td><td><code>slices[].indicators</code></td><td>Над блоком «Шкалы». Числовые — средние в одной таблице, «Разница» при двух срезах в единицах показателя. Уровни числового и исходы строкового и логического — таблица на показатель, как уровни шкалы. Переключатель метрик не переименовывается</td></tr>
+              <tr><td>Выгрузки (вне холста)</td><td>Excel аналитики, протокол попытки</td><td>FR-21h: лист «Прохождения» книги одного теста — колонки шкал и показателей у всех источников; лист «Измерения» — строки всех источников, «Уровень» показателя — метка уровня или исхода; протокол — лист «Показатели»: Ключ, Название, Значение, Уровень / исход</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="wf-mapping">
+          <h2 class="wf-mapping-title">DS Mapping</h2>
+          <p class="wf-mapping-sub">Холст собран из DS-компонентов (<code>ou-*</code>) и проектных <code>tb-*</code>, уже живущих в продукте. <code>wf-*</code> — каркас эскиза.</p>
+          <table>
+            <thead><tr><th>Элемент</th><th>DS-компонент</th><th>Источник</th></tr></thead>
+            <tbody>
+              <tr><td>Карточка «Показатели»</td><td><code>Card</code>, <code>CardHeader</code>, <code>CardBody</code>, <code>Stack</code>, <code>Text</code></td><td>как <code>scale-profile.tsx</code></td></tr>
+              <tr><td>Распределение уровней и исходов</td><td><code>ProgressStacked</code> c <code>showLegend</code></td><td>как «Распределение уровней»</td></tr>
+              <tr><td>Среднее без уровней</td><td><code>ProgressBar</code> <code>size="s"</code> <code>hideHeader</code></td><td>как «Профиль по шкалам»</td></tr>
+              <tr><td>Таблицы сравнения</td><td><code>DataGrid</code> + <code>tb-psy-scale</code>, метка <code>tb-dist-dot</code></td><td>как уровни шкалы в <code>answers-compare.tsx</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        function fill(selector, templateId) {
+          var tpl = document.getElementById(templateId);
+          document.querySelectorAll(selector).forEach(function (el) { el.appendChild(tpl.content.cloneNode(true)); });
+        }
+        fill('[data-wf-side]', 'wf-side-tpl');
+        fill('[data-wf-header]', 'wf-header-tpl');
+        fill('[data-wf-test-head]', 'wf-test-head-tpl');
+        fill('[data-wf-tabs-measures]', 'wf-tabs-measures-tpl');
+        fill('[data-wf-tabs-slices]', 'wf-tabs-slices-tpl');
+        fill('[data-wf-filter]', 'wf-filter-tpl');
+        fill('[data-wf-filter-lms]', 'wf-filter-lms-tpl');
+        fill('[data-wf-scales]', 'wf-scales-tpl');
+      })();
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        if (btn) document.querySelectorAll('.wf-nav button').forEach(function (b) { b.classList.toggle('active', b === btn); });
+        window.scrollTo(0, 0);
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+    </script>
+  </body>
+</html>
