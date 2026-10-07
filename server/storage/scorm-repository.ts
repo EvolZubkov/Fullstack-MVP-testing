@@ -154,6 +154,30 @@ export class ScormRepository {
       .where(inArray(scormAttempts.id, ids));
   }
 
+  /**
+   * PRD-56 FR-21h: stored scale and indicator values of LMS runs, for the analytics workbook.
+   *
+   * The observations layer does not carry them; the export reads them in one query over its
+   * selection, like the outcomes above.
+   *
+   * @param ids run ids (`scorm_attempts.id`)
+   */
+  async getScormAttemptMeasures(ids: string[]): Promise<Array<{
+    id: string;
+    scalesJson: unknown;
+    variablesJson: unknown;
+  }>> {
+    if (ids.length === 0) return [];
+    return db
+      .select({
+        id: scormAttempts.id,
+        scalesJson: scormAttempts.scalesJson,
+        variablesJson: scormAttempts.variablesJson,
+      })
+      .from(scormAttempts)
+      .where(inArray(scormAttempts.id, ids));
+  }
+
   async getScormAttemptBySession(
     packageId: string,
     sessionId: string,

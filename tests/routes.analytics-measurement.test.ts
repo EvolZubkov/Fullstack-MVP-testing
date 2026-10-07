@@ -45,6 +45,11 @@ const { storageMock } = vi.hoisted(() => ({
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     isTestAssignedToUser: vi.fn().mockResolvedValue(false),
+    // PRD-56 FR-21h: LMS runs of the book and their stored measurements.
+    getAllScormAttempts: vi.fn().mockResolvedValue([]),
+    getScormPackages: vi.fn().mockResolvedValue([]),
+    getScormAttemptMeasures: vi.fn().mockResolvedValue([]),
+    getScormAttemptOutcomes: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -167,6 +172,9 @@ beforeEach(() => {
   storageMock.getScales.mockResolvedValue([]);
   storageMock.getQuestionMeasurements.mockResolvedValue([]);
   storageMock.getResultVariables.mockResolvedValue([]);
+  storageMock.getAllScormAttempts.mockResolvedValue([]);
+  storageMock.getScormPackages.mockResolvedValue([]);
+  storageMock.getScormAttemptMeasures.mockResolvedValue([]);
   storageMock.getUser.mockImplementation((id: string) =>
     Promise.resolve(id === "admin1" ? adminUser : { id, name: `User ${id}`, email: `${id}@t.com` }),
   );
@@ -494,5 +502,66 @@ describe("GET /attempts/:attemptId — the detail of a measurement run", () => {
     expect(res.body.scored).toBe(false);
     expect(res.body.verdictPronounced).toBe(false);
     expect(res.body.hasPassThreshold).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe("POST /export/excel — measurements of LMS runs (PRD-56 FR-21h)", () => {
+  const SCALES = [{
+    id: "s1", testId: "test1", key: "kom", label: "Командный", sortOrder: 0, aggregation: "sum",
+    normalization: "none", direction: "positive",
+    configJson: { bands: [{ min: 0, max: 20, level: "low", label: "Низкий" }, { min: 21, max: 40, level: "high", label: "Высокий" }] },
+  }];
+  const INDICATORS = [{
+    id: "rv1", testId: "test1", name: "lead_style", label: "Ведущий стиль", type: "string", formula: "x",
+    sortOrder: 0, controlsStatus: null,
+    configJson: { outcomes: [{ code: "kom", label: "Командный стиль" }] },
+  }];
+  const lmsRow = (id: string, origin: string) => ({
+    id, testId: "test1", packageId: null, origin,
+    userId: null, participantKey: null, groupId: null, lmsUserId: id, lmsUserName: "Пётр",
+    startedAt: new Date("2026-09-01T09:00:00Z"), finishedAt: new Date("2026-09-01T09:30:00Z"),
+    resultPercent: null, resultPassed: null, maxPoints: 0, totalPoints: 0,
+  });
+
+  beforeEach(() => {
+    storageMock.getTest.mockResolvedValue(MEASUREMENT_TEST);
+    storageMock.getTests.mockResolvedValue([MEASUREMENT_TEST]);
+    storageMock.getScales.mockResolvedValue(SCALES);
+    storageMock.getResultVariables.mockResolvedValue(INDICATORS);
+    storageMock.getAllAttempts.mockResolvedValue([]);
+    storageMock.getAllScormAttempts.mockResolvedValue([lmsRow("tel-1", "telemetry"), lmsRow("imp-1", "import")]);
+    storageMock.getScormAttemptMeasures.mockResolvedValue([
+      { id: "tel-1", scalesJson: { kom: 30 }, variablesJson: { lead_style: "kom" } },
+      // An export without `var_*` blocks: the indicator was not reported.
+      { id: "imp-1", scalesJson: { kom: 12 }, variablesJson: null },
+    ]);
+  });
+
+  it("fills the scale and indicator columns of LMS rows on the passages sheet", async () => {
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
+    expect(res.status).toBe(200);
+    const rows = await sheetRows(res.body, "Прохождения");
+    const head = rows[0];
+    const row = (id: string) => rows.find(r => r.includes(id))!;
+
+    expect(row("tel-1")[head.indexOf("Командный")]).toBe("30");
+    expect(row("tel-1")[head.indexOf("Командный, уровень")]).toBe("Высокий");
+    expect(row("tel-1")[head.indexOf("Ведущий стиль")]).toBe("kom");
+    expect(row("imp-1")[head.indexOf("Командный")]).toBe("12");
+    expect(row("imp-1")[head.indexOf("Ведущий стиль")]).toBe("—");
+  });
+
+  it("lists LMS runs on the measurements sheet with the indicator's outcome as its level", async () => {
+    const res = await asWorkbook(request(app).post("/api/analytics/export/excel").send({ testIds: ["test1"] }));
+    const rows = await sheetRows(res.body, "Измерения");
+    const head = rows[0];
+    const of = (id: string, kind: string) => rows.find(r => r.includes(id) && r[head.indexOf("Вид")] === kind)!;
+
+    expect(of("tel-1", "Показатель")[head.indexOf("Значение")]).toBe("kom");
+    expect(of("tel-1", "Показатель")[head.indexOf("Уровень")]).toBe("Командный стиль");
+    expect(of("tel-1", "Шкала")[head.indexOf("Уровень")]).toBe("Высокий");
+    expect(of("imp-1", "Показатель")[head.indexOf("Значение")]).toBe("—");
+    expect(of("imp-1", "Шкала")[head.indexOf("Значение")]).toBe("12");
   });
 });

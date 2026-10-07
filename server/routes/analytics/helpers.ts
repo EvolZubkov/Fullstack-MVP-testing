@@ -12,6 +12,7 @@ import {
   findOutcome,
 } from "@shared/scales/interpretation";
 import type { AttemptResult } from "@shared/schema";
+import { indicatorValuesOf } from "../../services/analytics/indicator-values";
 // Разбор строки прохождения переехал в слой наблюдений (PRD-56 FR-33): сервис не может
 // зависеть от маршрутов, а эти помощники нужны обоим. Реэкспорт оставлен, чтобы места
 // чтения не переписывались ради переезда.
@@ -155,6 +156,62 @@ export function buildIndicatorViews(
         interpretation: band ? band.label || band.level || null : outcome?.label || null,
       };
     });
+}
+
+/**
+ * What a test's scales and indicators ARE — the interpretation configs a level is read from.
+ *
+ * Kept apart from {@link MeasureCatalogue} on purpose: the catalogue travels to the screen and
+ * carries names only, while this one is server-side input for reading LMS runs (PRD-56 FR-21h).
+ */
+export interface MeasureDefinitions {
+  scales: Array<{ key: string; configJson: unknown }>;
+  indicators: Array<{ name: string; label: string; type: string; configJson: unknown; sortOrder?: number | null }>;
+}
+
+/** Load the scale and indicator definitions of a test. */
+export async function loadMeasureDefinitions(testId: string): Promise<MeasureDefinitions> {
+  const [scales, indicators] = await Promise.all([
+    storage.getScales(testId),
+    storage.getResultVariables(testId),
+  ]);
+  return { scales, indicators };
+}
+
+/**
+ * The stored measurements of an LMS run in the SHAPE of a web result
+ * (`scaleResults[key] = { raw, label }`, `resultVariables`).
+ *
+ * Telemetry and an imported export keep a flat «key -> number» map for scales and strings for
+ * indicators (PRD-54). Bringing them into the web shape lets every per-run report read all three
+ * sources through the same {@link measureCells} — so an LMS row stops printing the «неприменимо»
+ * dash next to values that were reported all along. The scale level is read off the scale's own
+ * bands: the import does not store a level label, and the analytics profile reads it the same
+ * way (`scale-profile`). Nothing is recomputed from the answers (FR-21e).
+ *
+ * @param definitions the test's scales and indicators
+ * @param stored the run's `scales_json` and `variables_json`
+ */
+export function lmsStoredResult(
+  definitions: MeasureDefinitions,
+  stored: { scalesJson: unknown; variablesJson: unknown } | undefined,
+): { scaleResults: Record<string, { raw: number; label: string }>; resultVariables: Record<string, unknown> } {
+  const scalesJson = (stored?.scalesJson ?? {}) as Record<string, unknown>;
+  const scaleResults: Record<string, { raw: number; label: string }> = {};
+  for (const scale of definitions.scales) {
+    const raw = scalesJson[scale.key];
+    const value = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
+    if (!Number.isFinite(value)) continue;
+    const band = findBand(parseScaleInterpretation(scale.configJson).bands, value);
+    scaleResults[scale.key] = { raw: value, label: band ? band.label || band.level : "" };
+  }
+  return {
+    scaleResults,
+    resultVariables: indicatorValuesOf(
+      definitions.indicators,
+      stored?.variablesJson as Record<string, unknown> | null | undefined,
+    ),
+  };
 }
 
 /** Is there anything to report about this test's measurements at all? */

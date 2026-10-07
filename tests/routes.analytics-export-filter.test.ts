@@ -32,6 +32,12 @@ const { storageMock } = vi.hoisted(() => ({
       return rows.filter(row => ids.includes(row.id))
         .map(row => ({ id: row.id, achievedLevelsJson: row.achievedLevelsJson ?? null, failedTopicCoursesJson: row.failedTopicCoursesJson ?? null }));
     },
+    // PRD-56 FR-21h: stored measurements of LMS runs — from the same rows.
+    async getScormAttemptMeasures(ids: string[]) {
+      const rows = ((await this.getAllScormAttempts()) ?? []) as Array<{ id: string; scalesJson?: unknown; variablesJson?: unknown }>;
+      return rows.filter(row => ids.includes(row.id))
+        .map(row => ({ id: row.id, scalesJson: row.scalesJson ?? null, variablesJson: row.variablesJson ?? null }));
+    },
     getScales: vi.fn().mockResolvedValue([]),
     getResultVariables: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),

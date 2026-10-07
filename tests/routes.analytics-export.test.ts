@@ -21,6 +21,12 @@ const { storageMock } = vi.hoisted(() => ({
     getTestSections: vi.fn(), getTestQuestionScoring: vi.fn(),
     getGroups: vi.fn(), getGroupUsers: vi.fn(),
     getScormPackages: vi.fn(), getAllScormAttempts: vi.fn(),
+    // PRD-56 FR-21h: stored measurements of LMS runs — from the same rows.
+    getScormAttemptMeasures: vi.fn(async (ids: string[]) => ((await storageMock.getAllScormAttempts()) ?? [])
+      .filter((row: { id: string }) => ids.includes(row.id))
+      .map((row: { id: string; scalesJson?: unknown; variablesJson?: unknown }) => ({
+        id: row.id, scalesJson: row.scalesJson ?? null, variablesJson: row.variablesJson ?? null,
+      }))),
     getScormAnswersByAttempt: vi.fn(),
     // PRD-56 FR-04: the registry book reads answers of every source and org spellings.
     selectAnswersForTest: vi.fn().mockResolvedValue([]),

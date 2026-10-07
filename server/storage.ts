@@ -413,6 +413,8 @@ export interface IStorage {
   getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]>;
   /** Уровни и курсы проваленных тем прохождений LMS — для листов книги выгрузки. */
   getScormAttemptOutcomes(ids: string[]): Promise<Array<{ id: string; achievedLevelsJson: unknown; failedTopicCoursesJson: unknown }>>;
+  /** PRD-56 FR-21h: stored scale and indicator values of LMS runs. */
+  getScormAttemptMeasures(ids: string[]): Promise<Array<{ id: string; scalesJson: unknown; variablesJson: unknown }>>;
   updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined>;
   getAllScormAttempts(): Promise<ScormAttempt[]>;
   
@@ -1386,6 +1388,10 @@ export class DatabaseStorage implements IStorage {
 
   getScormAttemptOutcomes(ids: string[]): Promise<Array<{ id: string; achievedLevelsJson: unknown; failedTopicCoursesJson: unknown }>> {
     return this.scormRepo.getScormAttemptOutcomes(ids);
+  }
+
+  getScormAttemptMeasures(ids: string[]): Promise<Array<{ id: string; scalesJson: unknown; variablesJson: unknown }>> {
+    return this.scormRepo.getScormAttemptMeasures(ids);
   }
 
   updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {

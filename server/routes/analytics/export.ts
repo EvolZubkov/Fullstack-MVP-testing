@@ -30,12 +30,16 @@ import {
   formatCorrectAnswerText,
   formatUserAnswerText,
   formatContributions,
+  buildIndicatorViews,
   hasMeasures,
+  lmsStoredResult,
   loadMeasureCatalogue,
+  loadMeasureDefinitions,
   measureCells,
   measureHeaders,
   NOT_APPLICABLE,
   type MeasureCatalogue,
+  type MeasureDefinitions,
 } from "./helpers";
 import { buildObservationFilter, conditionsFromBody } from "./observation-query";
 import { isMeasurementOnly } from "@shared/questions/question-type";
@@ -288,6 +292,28 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
     const lmsOutcomes = (includeSheets.levelStats || includeSheets.recommendations) && completedLms.length
       ? new Map((await storage.getScormAttemptOutcomes(completedLms.map(o => o.id))).map(row => [row.id, row]))
       : new Map<string, { achievedLevelsJson: unknown; failedTopicCoursesJson: unknown }>();
+    // PRD-56 FR-21h: scale and indicator values the LMS runs REPORTED (telemetry, or the
+    // `scale_*` / `var_*` blocks of an imported export). Read once over the selection, like the
+    // outcomes above, and brought into the web shape so every sheet reads all sources alike.
+    const lmsMeasures = includeSheets.attempts && completedLms.length
+      ? new Map((await storage.getScormAttemptMeasures(completedLms.map(o => o.id))).map(row => [row.id, row]))
+      : new Map<string, { scalesJson: unknown; variablesJson: unknown }>();
+    const definitionsByTest = new Map<string, MeasureDefinitions>();
+    const definitionsOf = async (testId: string): Promise<MeasureDefinitions> => {
+      let definitions = definitionsByTest.get(testId);
+      if (!definitions) {
+        definitions = await loadMeasureDefinitions(testId);
+        definitionsByTest.set(testId, definitions);
+      }
+      return definitions;
+    };
+    /** Stored measurements of a run in the web shape, whichever source it came from. */
+    const storedOf = async (o: Observation): Promise<WebResult | null> => {
+      if (o.source === "web") return (webById.get(o.id)?.resultJson ?? null) as WebResult | null;
+      const measures = lmsMeasures.get(o.id);
+      if (!measures || !o.testId) return null;
+      return lmsStoredResult(await definitionsOf(o.testId), measures);
+    };
 
     // Тесты выборки — в порядке справочника. Удалённый тест (строки LMS без теста) остаётся
     // в листах строк, но в разрезе по тестам ему нечего сказать о вопросах.
@@ -354,14 +380,15 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         "Время (сек)", "Результат (%)", "Баллы", "Макс. баллы", "Статус", "Источник",
       ]];
       // One test: its achieved levels (adaptive) and one column per scale and indicator —
-      // what a measurement run actually produced. Values are what was STORED at finish; the
-      // LMS reports none of them, so its rows carry the «неприменимо» dash.
+      // what a measurement run actually produced. Values are what was STORED at finish, by the
+      // web attempt or reported by the LMS (FR-21h); a run without a value gets the
+      // «неприменимо» dash, never a recompute.
       const adaptiveColumn = singleTest?.mode === "adaptive";
       if (adaptiveColumn) rows[0].push("Достигнутые уровни");
       if (singleMeasures) rows[0].push(...measureHeaders(singleMeasures));
 
       for (const o of observed) {
-        const stored = (webById.get(o.id)?.resultJson ?? null) as WebResult | null;
+        const stored = await storedOf(o);
         const extra: unknown[] = [];
         if (adaptiveColumn) {
           extra.push((stored?.topicResults ?? [])
@@ -477,16 +504,19 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       addAoaSheet(wb, "Ответы", rows, [24, 36, 22, 14, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8, 14, 15, 30]);
     }
 
-    // Sheet: Измерения — PRD-5 scales and PRD-2 indicators, per web run.
+    // Sheet: Измерения — PRD-5 scales and PRD-2 indicators, per finished run of ANY source.
     //
     // LONG format here, and WIDE columns on the passages sheet only for a one-test book: a
     // selection may span several tests, whose scales have nothing in common, so a column per
     // scale would be a sparse matrix where most cells cannot apply. One row per (run, measure)
-    // pivots cleanly and stays readable however many tests were selected. The values live
-    // in the stored result of a web attempt; the LMS reports none of them.
-    if (includeSheets.attempts && completedWeb.length > 0) {
+    // pivots cleanly and stays readable however many tests were selected. The values are the
+    // STORED ones: a web attempt's result, or what the LMS reported (PRD-56 FR-21h).
+    const completedWebIds = new Set(completedWeb.map(a => a.id));
+    const measuredRuns = observed.filter(o =>
+      !!o.testId && (o.source === "web" ? completedWebIds.has(o.id) : lmsMeasures.has(o.id)));
+    if (includeSheets.attempts && measuredRuns.length > 0) {
       const measuresByTest = new Map<string, MeasureCatalogue>();
-      for (const testId of new Set(completedWeb.map(a => a.testId))) {
+      for (const testId of new Set(measuredRuns.map(o => o.testId!))) {
         measuresByTest.set(testId, await loadMeasureCatalogue(testId));
       }
 
@@ -495,17 +525,16 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         "Вид", "Ключ", "Название", "Значение", "Уровень",
       ]];
 
-      for (const a of completedWeb) {
-        const catalogue = measuresByTest.get(a.testId);
+      for (const o of measuredRuns) {
+        const catalogue = measuresByTest.get(o.testId!);
         if (!catalogue || !hasMeasures(catalogue)) continue;
-        const o = observationById.get(a.id);
 
-        const r = (a.resultJson ?? {}) as WebResult;
+        const r = (await storedOf(o)) ?? {};
         const head = [
-          titleOf(a.testId),
-          a.id,
-          o?.participant ?? "—",
-          o?.finishedAt ? new Date(o.finishedAt).toLocaleString("ru-RU") : "",
+          titleOf(o.testId),
+          o.id,
+          o.participant ?? "—",
+          o.finishedAt ? new Date(o.finishedAt).toLocaleString("ru-RU") : "",
         ];
 
         for (const sc of catalogue.scales) {
@@ -516,12 +545,19 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
             v?.label || v?.level || NOT_APPLICABLE,
           ]);
         }
+        // The level of an indicator is its band or outcome LABEL, resolved the way the attempt
+        // window resolves it (`buildIndicatorViews`).
+        const views = new Map(
+          buildIndicatorViews((await definitionsOf(o.testId!)).indicators, r.resultVariables)
+            .map(view => [view.name, view]),
+        );
         for (const i of catalogue.indicators) {
-          const v = r.resultVariables?.[i.name];
+          const view = views.get(i.name);
+          const v = view?.value;
           rows.push([
             ...head, "Показатель", i.name, i.label,
-            v === undefined || v === null || v === "" ? NOT_APPLICABLE : String(v),
-            NOT_APPLICABLE,
+            v === undefined || v === null ? NOT_APPLICABLE : String(v),
+            view?.interpretation || NOT_APPLICABLE,
           ]);
         }
       }

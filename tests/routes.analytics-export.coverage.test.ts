@@ -33,6 +33,12 @@ const { storageMock } = vi.hoisted(() => ({
     getGroups: vi.fn(), getGroupUsers: vi.fn(),
     getScormPackages: vi.fn(), getAllScormAttempts: vi.fn(),
     // Уровни и курсы прохождений LMS — для листов уровней и рекомендаций книги.
+    // PRD-56 FR-21h: stored measurements of LMS runs — from the same rows.
+    getScormAttemptMeasures: vi.fn(async (ids: string[]) => ((await storageMock.getAllScormAttempts()) ?? [])
+      .filter((row: { id: string }) => ids.includes(row.id))
+      .map((row: { id: string; scalesJson?: unknown; variablesJson?: unknown }) => ({
+        id: row.id, scalesJson: row.scalesJson ?? null, variablesJson: row.variablesJson ?? null,
+      }))),
     getScormAttemptOutcomes: vi.fn(async (ids: string[]) => ((await storageMock.getAllScormAttempts()) ?? [])
       .filter((row: { id: string }) => ids.includes(row.id))
       .map((row: { id: string; achievedLevelsJson?: unknown; failedTopicCoursesJson?: unknown }) => ({
