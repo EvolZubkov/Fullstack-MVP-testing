@@ -480,6 +480,9 @@
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-composition')">роутер: сценарий в составе</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-scenario-picker')">роутер: добавить сценарий</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-docs')">сценарий: пояснения</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-e5-answer')">Э5а: штрафы в оценке</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-e5-qscoring')">Э5а: оценка сценария</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-e5-docs')">Э5а: пояснения</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'basic')">s-basic</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'composition')">s-composition</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'composition-questions')">s-composition-questions</button>
@@ -1616,6 +1619,420 @@
       </div>
     </div>
 
+    <!-- ═══════════ СЦЕНАРИЙ В ИС (Э5а): оценка сценариев ═══════════ -->
+<div id="wf-sim-e5-answer" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v8</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы оценки результата">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Оценка ответа</button>
+                <button type="button" class="ou-drawer__rail-item">Вердикт</button>
+                <button type="button" class="ou-drawer__rail-item">Шкалы</button>
+                <button type="button" class="ou-drawer__rail-item">Показатели</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="tb-qscoring">
+              <div class="tb-qscoring__default-row">
+                <span class="tb-qscoring__default-lbl">Балл за вопрос по умолчанию</span>
+                <div class="ou-field ou-field--m tb-qscoring__num"><div class="ou-field__box"><input class="ou-field__input" id="e5a-q-default" type="text" inputmode="numeric" value="1" aria-label="Балл за вопрос по умолчанию для теста" /></div></div>
+                <span class="tb-qscoring__default-hint">Пусто — системное умолчание: 1 балл за полностью верный ответ.</span>
+              </div>
+
+              <div class="tb-qscoring__price">
+                <span class="tb-qscoring__price-lbl">Штрафы сценариев по умолчанию</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline">% цены вопроса за каждый случай</span>
+              </div>
+              <table class="tb-table tb-weights" aria-label="Штрафы сценариев по умолчанию">
+                <thead>
+                  <tr>
+                    <th>Штраф</th>
+                    <th>В этом тесте</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Промах — щелчок мимо действий экрана</td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5a-pen-miss" type="text" inputmode="numeric" value="" placeholder="2" aria-label="Промах — щелчок мимо действий экрана" /><span class="ou-field__affix">%</span></div></div></td>
+                  </tr>
+                  <tr>
+                    <td>Недоступное действие — условие действия не выполнено</td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5a-pen-blocked" type="text" inputmode="numeric" value="" placeholder="2" aria-label="Недоступное действие — условие действия не выполнено" /><span class="ou-field__affix">%</span></div></div></td>
+                  </tr>
+                  <tr>
+                    <td>Неверное значение в поле</td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5a-pen-wrong" type="text" inputmode="numeric" value="10" placeholder="5" aria-label="Неверное значение в поле" /><span class="ou-field__affix">%</span></div></div></td>
+                  </tr>
+                  <tr>
+                    <td>Шаг в сторону — действие мимо основного и других путей</td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5a-pen-detour" type="text" inputmode="numeric" value="" placeholder="1" aria-label="Шаг в сторону — действие мимо основного и других путей" /><span class="ou-field__affix">%</span></div></div></td>
+                  </tr>
+                  <tr>
+                    <td>Ловушка</td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5a-pen-trap" type="text" inputmode="numeric" value="" placeholder="15" aria-label="Ловушка" /><span class="ou-field__affix">%</span></div></div></td>
+                  </tr>
+                  <tr>
+                    <td>Подсказка</td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5a-pen-hint" type="text" inputmode="numeric" value="" placeholder="5" aria-label="Подсказка" /><span class="ou-field__affix">%</span></div></div></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="ou-formfield">
+                <label class="ou-switch-field" for="e5a-partial">
+                  <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" id="e5a-partial" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                  <span class="ou-switch-field__text"><span class="ou-switch-field__label">Засчитывать частичное выполнение</span><span class="ou-switch-field__desc">Все критичные проверки цели прошли, часть остальных — нет: балл по доле пройденных проверок</span></span>
+                </label>
+              </div>
+              <div class="tb-qscoring__mode-note">Пусто — системное умолчание (в поле серым). Вопрос может переопределить штрафы в окне «Оценка вопроса в тесте». Балл сценария = цена × (доля цели − сумма штрафов), не меньше нуля.</div>
+              <div class="tb-fold-toolbar">
+                    <span class="tb-fold-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                    </span>
+                  </div>
+
+              <div class="tb-fold-sec">
+                <div class="tb-fold-sec-head">
+                  <button type="button" class="tb-fold-trigger" aria-expanded="true">
+                    <span class="tb-fold-chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                    <span class="tb-fold-sec-name">О компании</span>
+                  </button>
+                  <span class="ou-tag ou-tag--neutral ou-tag--outline">выдача 16 из 41</span>
+                  <span class="tb-qscoring__sec-default">
+                    <span class="tb-qscoring__sec-default-lbl">Балл по умолчанию в секции</span>
+                    <div class="ou-field ou-field--s tb-qscoring__num"><div class="ou-field__box"><input class="ou-field__input" type="text" inputmode="numeric" value="1" aria-label="Балл по умолчанию секции «О компании»" /></div></div>
+                  </span>
+                </div>
+                  <table class="tb-table" aria-label="Оценка вопросов темы «О компании»">
+                    <thead>
+                      <tr>
+                        <th>Вопрос</th>
+                        <th>Балл</th>
+                        <th>Цена ответа</th>
+                        <th>Сложность</th>
+                        <th aria-label="Состояние"></th>
+                        <th aria-label="Действия"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Один ответ"><svg width="16" height="16" aria-hidden="true"><use href="#i-circle-dot" /></svg></span>
+                          Сотрудники из кросс-функциональных подразделений разработали для сервисных центров виртуальную игру. Какую ценность компании проявили сотрудники?
+                        </td>
+                        <td>1</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Точное</span></td>
+                        <td>50</td>
+                        <td></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Несколько ответов"><svg width="16" height="16" aria-hidden="true"><use href="#i-check-square" /></svg></span>
+                          «Ростелеком» стремится наращивать долю цифровых сервисов в портфеле Группы. Какая доля запланирована к 2030 году?
+                        </td>
+                        <td>1</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Точное</span></td>
+                        <td>50</td>
+                        <td></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr class="tb-qscoring__row--override">
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Ранжирование"><svg width="16" height="16" aria-hidden="true"><use href="#i-list-ordered" /></svg></span>
+                          «Ростелеком» — ключевой партнёр государства в цифровизации. Какие проекты и продукты компания реализует для B2G-сегмента?
+                        </td>
+                        <td class="tb-qscoring__cell--override">2</td>
+                        <td class="tb-qscoring__cell--override"><span class="ou-tag ou-tag--neutral ou-tag--outline">Ступени</span></td>
+                        <td class="tb-qscoring__cell--override">50</td>
+                        <td><span class="ou-tag ou-tag--warning">задано в тесте</span></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Сбросить настройку оценки"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Распределение баллов"><svg width="16" height="16" aria-hidden="true"><use href="#i-sliders-horizontal" /></svg></span>
+                          Совместно с подчинённым вы составляете его траекторию развития. Какой метод обучения порекомендуете?
+                        </td>
+                        <td>1</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Точное</span></td>
+                        <td>50</td>
+                        <td></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+              </div>
+
+              <div class="tb-fold-sec">
+                <div class="tb-fold-sec-head">
+                  <button type="button" class="tb-fold-trigger" aria-expanded="true">
+                    <span class="tb-fold-chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                    <span class="tb-fold-sec-name"><svg width="16" height="16" aria-label="Сценарий"><use href="#i-monitor-play" /></svg> Работа с документами в СЭД</span>
+                  </button>
+                  <span class="ou-tag ou-tag--neutral ou-tag--outline">выдаётся 1 из 4</span>
+                  <span class="tb-qscoring__sec-default">
+                    <span class="tb-qscoring__sec-default-lbl">Балл по умолчанию в секции</span>
+                    <div class="ou-field ou-field--s tb-qscoring__num"><div class="ou-field__box"><input class="ou-field__input" type="text" inputmode="numeric" value="" placeholder="1" aria-label="Балл по умолчанию пункта «Работа с документами в СЭД»" /></div></div>
+                  </span>
+                </div>
+                  <table class="tb-table" aria-label="Оценка сценариев пункта «Работа с документами в СЭД»">
+                    <thead>
+                      <tr>
+                        <th>Вопрос</th>
+                        <th>Балл</th>
+                        <th>Цена ответа</th>
+                        <th>Сложность</th>
+                        <th aria-label="Состояние"></th>
+                        <th aria-label="Действия"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr class="tb-qscoring__row--override">
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Сценарий"><svg width="16" height="16" aria-hidden="true"><use href="#i-monitor-play" /></svg></span>
+                          Регистрация входящего письма
+                        </td>
+                        <td class="tb-qscoring__cell--override">1</td>
+                        <td class="tb-qscoring__cell--override"><span class="ou-tag ou-tag--neutral ou-tag--outline">Штрафы</span></td>
+                        <td class="tb-qscoring__cell--override">50</td>
+                        <td><span class="ou-tag ou-tag--warning">задано в тесте</span></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Сбросить настройку оценки"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Сценарий"><svg width="16" height="16" aria-hidden="true"><use href="#i-monitor-play" /></svg></span>
+                          Создание поручения по документу
+                        </td>
+                        <td>1</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Штрафы</span></td>
+                        <td>55</td>
+                        <td></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Сценарий"><svg width="16" height="16" aria-hidden="true"><use href="#i-monitor-play" /></svg></span>
+                          Отправка документа на согласование
+                        </td>
+                        <td>1</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Штрафы</span></td>
+                        <td>60</td>
+                        <td></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="tb-qscoring__qtype" title="Сценарий"><svg width="16" height="16" aria-hidden="true"><use href="#i-monitor-play" /></svg></span>
+                          Поиск документа в архиве
+                        </td>
+                        <td>1</td>
+                        <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Штрафы</span></td>
+                        <td>40</td>
+                        <td></td>
+                        <td>
+                          <div class="tb-qscoring__actions">
+                            <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Настроить оценку вопроса"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-pencil" /></svg></span></button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+              </div>
+
+              <div class="tb-fold-sec">
+                <div class="tb-fold-sec-head">
+                  <button type="button" class="tb-fold-trigger" aria-expanded="false">
+                    <span class="tb-fold-chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                    <span class="tb-fold-sec-name">Корпоративные финансы</span>
+                  </button>
+                  <span class="ou-tag ou-tag--neutral ou-tag--outline">выдача 10 из 25</span>
+                  <span class="tb-qscoring__sec-default">
+                    <span class="tb-qscoring__sec-default-lbl">Балл по умолчанию в секции</span>
+                    <div class="ou-field ou-field--s tb-qscoring__num"><div class="ou-field__box"><input class="ou-field__input" type="text" inputmode="numeric" value="1" aria-label="Балл по умолчанию секции «Корпоративные финансы»" /></div></div>
+                  </span>
+                </div>
+              </div>
+            </div>
+            </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" disabled>Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Применить</button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+    <div id="wf-sim-e5-qscoring" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l tb-qscoring">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h2 class="ou-modal__title">Оценка вопроса в тесте</h2>
+              <p class="ou-modal__desc">Пункт «Работа с документами в СЭД»</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="tb-qscoring__recap">
+              <b>Регистрация входящего письма</b>
+              <br />
+              Сценарий: 11 сцен, 1 ловушка, 4 проверки цели. Базовая сложность вопроса: 50. Сцены, действия и проверки правятся в архиве сценария; здесь — только оценка для этого теста.
+            </div>
+
+            <div class="tb-qscoring__modal-grid">
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="e5q-qs-points">Балл за вопрос в этом тесте</label>
+                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="e5q-qs-points" type="text" inputmode="numeric" value="1" /></div></div>
+                <div class="ou-formfield__desc">Пусто — балл по цепочке умолчаний. 0 — вопрос без баллов в этом тесте.</div>
+              </div>
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="e5q-qs-difficulty">Сложность в этом тесте</label>
+                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="e5q-qs-difficulty" type="text" inputmode="numeric" value="" placeholder="50" /></div></div>
+                <div class="ou-formfield__desc">Используется адаптивной выдачей. Пусто — базовая сложность вопроса.</div>
+              </div>
+            </div>
+
+            <div class="tb-qscoring__price">
+              <span class="tb-qscoring__price-lbl">Цена ответа · штрафы</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">% цены вопроса за каждый случай</span>
+            </div>
+            <table class="tb-table tb-weights" aria-label="Штрафы сценария в этом тесте">
+              <thead>
+                <tr>
+                  <th>Штраф</th>
+                  <th>В этом тесте</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Промах — щелчок мимо действий экрана</td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5q-pen-miss" type="text" inputmode="numeric" value="5" placeholder="2" aria-label="Промах — щелчок мимо действий экрана" /><span class="ou-field__affix">%</span></div></div></td>
+                </tr>
+                <tr>
+                  <td>Недоступное действие — условие действия не выполнено</td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5q-pen-blocked" type="text" inputmode="numeric" value="" placeholder="2" aria-label="Недоступное действие — условие действия не выполнено" /><span class="ou-field__affix">%</span></div></div></td>
+                </tr>
+                <tr>
+                  <td>Неверное значение в поле</td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5q-pen-wrong" type="text" inputmode="numeric" value="" placeholder="10" aria-label="Неверное значение в поле" /><span class="ou-field__affix">%</span></div></div></td>
+                </tr>
+                <tr>
+                  <td>Шаг в сторону — действие мимо основного и других путей</td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5q-pen-detour" type="text" inputmode="numeric" value="" placeholder="1" aria-label="Шаг в сторону — действие мимо основного и других путей" /><span class="ou-field__affix">%</span></div></div></td>
+                </tr>
+                <tr>
+                  <td>Ловушка</td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5q-pen-trap" type="text" inputmode="numeric" value="30" placeholder="15" aria-label="Ловушка" /><span class="ou-field__affix">%</span></div></div></td>
+                </tr>
+                <tr>
+                  <td>Подсказка</td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box" style="width:var(--wf-size-120)"><input class="ou-field__input" id="e5q-pen-hint" type="text" inputmode="numeric" value="" placeholder="5" aria-label="Подсказка" /><span class="ou-field__affix">%</span></div></div></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" id="e5q-partial-lbl">Частичное выполнение</label>
+              <div class="ou-seg ou-seg--s" role="group" aria-labelledby="e5q-partial-lbl">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Как в тесте</span></button>
+                <button type="button" class="ou-seg__item" aria-pressed="false"><span>Засчитывать</span></button>
+                <button type="button" class="ou-seg__item" aria-pressed="false"><span>Не засчитывать</span></button>
+              </div>
+              <div class="ou-formfield__desc">В тесте — засчитывается: все критичные проверки цели прошли, балл по доле пройденных проверок</div>
+            </div>
+            <div class="tb-qscoring__mode-note">Пусто — как в тесте (в поле серым). Балл = цена × (доля цели − сумма штрафов), не меньше нуля.</div>
+          </div>
+          <footer class="ou-modal__foot ou-modal__foot--between">
+            <div class="tb-qscoring__foot-left">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span><span>Сбросить настройку</span></button>
+            </div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><span>Отмена</span></button>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m"><span>Предпросмотр балла</span></button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><span>Применить</span></button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <div id="wf-sim-e5-docs" class="wf-state">
+      <div class="ou-stack ou-stack--gap-4" style="padding: var(--ou-space-6); padding-top: calc(var(--wf-nav-offset, var(--ou-space-12)) + var(--ou-space-6));">
+        <section class="ou-card ou-card--outlined"><div class="ou-card__body ou-stack ou-stack--gap-4">
+          <h3 class="ou-text ou-text--heading-s">Пояснения — оценка сценариев (Э5а)</h3>
+          <table class="tb-table">
+            <thead><tr><th>Узел эскиза</th><th>Данные</th><th>Поведение</th></tr></thead>
+            <tbody>
+              <tr><td>Штрафы сценариев по умолчанию</td><td>новое поле теста; пусто — системное умолчание <code>DEFAULT_SIM_PENALTIES</code> (<code>shared/sim/scoring.ts</code>)</td><td>Видно, только когда в тесте есть сценарий (тест «Сценарий» или пункт-сценарий роутера). Шесть штрафов — шесть счётчиков прогона: промахи, недоступные действия, неверные значения, шаги в сторону, ловушки, подсказки</td></tr>
+              <tr><td>Единица штрафа</td><td>доля цены вопроса, хранится долей (0,05), показывается процентами (5 %)</td><td>Штраф за каждый случай; сумма вычитается из доли цели. Балл не уходит ниже нуля</td></tr>
+              <tr><td>Засчитывать частичное выполнение</td><td>флаг теста и переопределение вопроса</td><td>Включено (по умолчанию): исход «частично» даёт долю цели по весам пройденных проверок. Выключено: «частично» — ноль, как провал</td></tr>
+              <tr><td>Цепочка</td><td>система → тест → вопрос в тесте (<code>test_question_scoring</code>)</td><td>Каждый штраф переопределяется сам по себе: пустое поле берёт значение уровнем выше, оно показано в поле серым</td></tr>
+              <tr><td>Карточка пункта-сценария</td><td>пул пункта: сценарии темы-банка или один фиксированный</td><td>Стоит в общем списке, как раздел темы; «выдаётся 1 из n». Цена ответа — «Штрафы»; «задано в тесте» — у вопроса есть свои штрафы</td></tr>
+              <tr><td>Окно «Оценка вопроса в тесте»</td><td>то же окно, что у прочих вопросов (решение владельца 2026-10-06)</td><td>Вместо выбора способа оценки — таблица штрафов и переключатель частичного выполнения: градуированные способы (PRD-10) к сценарию не применяются</td></tr>
+              <tr><td>Пересчёт</td><td>прогон хранится с исходом и счётчиками</td><td>Новые штрафы действуют на новые попытки; сохранённые попытки не пересчитываются — как при смене цены вопроса</td></tr>
+            </tbody>
+          </table>
+          <h3 class="ou-text ou-text--heading-s">Соответствие компонентам дизайн-системы</h3>
+          <table class="tb-table">
+            <thead><tr><th>Узел эскиза</th><th>Компонент</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Таблица штрафов</td><td><code>Table</code> + <code>Input</code> с суффиксом</td><td>Разметка — таблица весов окна оценки (состояние qscoring-weighted); суффикс — как «символов» в approved/prd57-answer-rule.html</td></tr>
+              <tr><td>Частичное выполнение</td><td><code>Switch</code> с описанием</td><td></td></tr>
+              <tr><td>Карточка пункта-сценария</td><td>карточка раздела вкладки «Оценка ответа»</td><td>Пиктограмма lucide <code>monitor-play</code>, как в составе</td></tr>
+            </tbody>
+          </table>
+        </div></section>
+      </div>
+    </div>
+    <!-- ═══════════ /Э5а ═══════════ -->
     <div id="wf-basic" class="wf-state">
       <div class="ou-drawer-root" role="dialog" aria-modal="true">
         <div class="ou-drawer__backdrop"></div>
