@@ -81,10 +81,15 @@ describe("AnswersCompare", () => {
       {
         name: "idx", label: "Индекс", type: "number" as const, kind: "average" as const, sampleSize: 20, missing: 0,
         average, domainMin: 0, domainMax: 100, shares: [],
+        histogram: [
+          { label: "0–9", from: 0, to: 9, count: 0, share: 0 },
+          { label: "60–69", from: 60, to: 69, count: 0, share: kom },
+          { label: "90–100", from: 90, to: 100, count: 0, share: 0 },
+        ],
       },
       {
         name: "style", label: "Ведущий стиль", type: "string" as const, kind: "outcomes" as const, sampleSize: 20, missing: 0,
-        average: null, domainMin: null, domainMax: null,
+        average: null, domainMin: null, domainMax: null, histogram: [],
         shares: [
           { key: "kom", label: "Командный", count: 0, share: kom, color: "red", tone: null },
           ...(rest === null ? [] : [{ key: "__rest__", label: "Прочее", count: 0, share: rest, color: "grey", tone: null, rest: true }]),
@@ -103,6 +108,10 @@ describe("AnswersCompare", () => {
     expect(screen.getByText("+7,7")).toBeInTheDocument();
     expect(screen.getByText("Ведущий стиль · исходы")).toBeInTheDocument();
     // An outcome one slice did not have is a zero there, not a gap: both slices hold values.
+    // The histogram compares interval by interval; an interval empty in every slice is not shown.
+    expect(screen.getByText("Индекс · распределение")).toBeInTheDocument();
+    expect(screen.getByText("60–69")).toBeInTheDocument();
+    expect(screen.queryByText("0–9")).toBeNull();
     const prochee = screen.getByText("Прочее").closest("tr")!;
     expect(within(prochee).getByText(/^0\s%$/)).toBeInTheDocument();
   });

@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LEVEL_SCHEMES, zoneColors } from "@shared/template/level-ramp";
-import { summariseIndicators } from "../indicator-profile";
+import { indicatorRanges, summariseIndicators } from "../indicator-profile";
 
 const ramp = LEVEL_SCHEMES.traffic;
 
@@ -102,6 +102,55 @@ describe("summariseIndicators — numeric without bands", () => {
     const [profile] = summariseIndicators(rows({ spread: 6 }, { spread: "8" }), [SPREAD], { ramp });
 
     expect(profile).toMatchObject({ kind: "average", average: 7, sampleSize: 2, domainMax: 28, shares: [] });
+  });
+});
+
+describe("summariseIndicators — histogram of a numeric indicator without bands (2026-10-08)", () => {
+  it("splits the domain into ten integer intervals", () => {
+    const [profile] = summariseIndicators(rows({ spread: 0 }, { spread: 4 }, { spread: 5 }, { spread: 28 }), [SPREAD], { ramp });
+
+    expect(profile.histogram.map(b => b.label)).toEqual([
+      "0–2", "3–5", "6–8", "9–11", "12–14", "15–17", "18–20", "21–23", "24–26", "27–28",
+    ]);
+    expect(profile.histogram.map(b => b.count)).toEqual([1, 2, 0, 0, 0, 0, 0, 0, 0, 1]);
+    expect(profile.histogram[1].share).toBe(50);
+  });
+
+  it("one interval per value when there are ten values or fewer", () => {
+    const small = { ...SPREAD, configJson: { domainMin: 0, domainMax: 4 } };
+
+    const [profile] = summariseIndicators(rows({ spread: 1 }, { spread: 1 }, { spread: 4 }), [small], { ramp });
+
+    expect(profile.histogram.map(b => [b.label, b.count])).toEqual([["0", 0], ["1", 2], ["2", 0], ["3", 0], ["4", 1]]);
+  });
+
+  it("without a domain the range of the whole test fixes the intervals", () => {
+    const open = { ...SPREAD, configJson: {} };
+
+    const [profile] = summariseIndicators(rows({ spread: 12 }), [open], { ramp, ranges: { spread: { min: 10, max: 29 } } });
+
+    expect(profile.histogram[0]).toMatchObject({ label: "10–11", count: 0 });
+    expect(profile.histogram.find(b => b.count === 1)?.label).toBe("12–13");
+  });
+
+  it("fractional values get fractional bounds with a decimal comma", () => {
+    const open = { ...SPREAD, configJson: { domainMin: 0, domainMax: 1 } };
+
+    const [profile] = summariseIndicators(rows({ spread: 0.05 }, { spread: 1 }), [open], { ramp });
+
+    expect(profile.histogram).toHaveLength(10);
+    expect(profile.histogram[0]).toMatchObject({ label: "0–0,1", count: 1 });
+    expect(profile.histogram[9]).toMatchObject({ label: "0,9–1", count: 1 });
+  });
+
+  it("indicatorRanges reads the min and max of every numeric indicator over all rows", () => {
+    expect(indicatorRanges(rows({ spread: "7" }, { spread: 3 }, {}), [SPREAD, STYLE])).toEqual({ spread: { min: 3, max: 7 } });
+  });
+
+  it("a banded or outcome indicator has no histogram", () => {
+    const [banded] = summariseIndicators(rows({ idx: 50 }), [INDEX], { ramp });
+
+    expect(banded.histogram).toEqual([]);
   });
 });
 

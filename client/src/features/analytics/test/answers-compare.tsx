@@ -273,24 +273,39 @@ export function AnswersCompare({ slices, questions, minObservations }: AnswersCo
    */
   const indicatorShareTable = (name: string) => {
     const head = indicatorOf(slices[0], name);
-    if (!head || head.kind === "average") return null;
+    if (!head) return null;
+    // A numeric indicator without bands compares by the intervals of its histogram (2026-10-08):
+    // the server takes them from ALL runs of the test, so every slice has the same intervals.
+    const sharesOf = (indicator: IndicatorProfileView | undefined): IndicatorShareView[] =>
+      !indicator ? [] : indicator.kind === "average"
+        ? (indicator.histogram ?? []).map(bin => ({
+          key: bin.label, label: bin.label, count: bin.count, share: bin.share,
+          color: "var(--ou-accent-default)", tone: null,
+        }))
+        : indicator.shares;
     const byKey = new Map<string, IndicatorShareView>();
     for (const slice of slices) {
-      for (const share of indicatorOf(slice, name)?.shares ?? []) {
+      for (const share of sharesOf(indicatorOf(slice, name))) {
         if (!byKey.has(share.key)) byKey.set(share.key, share);
       }
     }
-    const shareRows = [...byKey.values()].sort((a, b) => Number(!!a.rest) - Number(!!b.rest));
-    if (shareRows.length === 0) return null;
     const shareOf = (slice: AnswersSlice, key: string): number | null => {
       const indicator = indicatorOf(slice, name);
       if (!indicator || indicator.sampleSize === 0) return null;
-      return indicator.shares.find(share => share.key === key)?.share ?? 0;
+      return sharesOf(indicator).find(share => share.key === key)?.share ?? 0;
     };
+    // An interval empty in every slice says nothing; levels and outcomes are already non-empty.
+    const shareRows = [...byKey.values()]
+      .filter(share => slices.some(slice => (shareOf(slice, share.key) ?? 0) > 0))
+      .sort((a, b) => Number(!!a.rest) - Number(!!b.rest));
+    if (shareRows.length === 0) return null;
     const columns = [
       {
-        key: "share", header: head.kind === "bands" ? "Уровень" : "Исход", width: "36%",
-        render: (share: IndicatorShareView) => <Labelled label={share.label} color={share.color} />,
+        key: "share", header: head.kind === "bands" ? "Уровень" : head.kind === "average" ? "Интервал" : "Исход", width: "36%",
+        // Intervals carry no category: the label alone, as in the wireframe.
+        render: (share: IndicatorShareView) => (head.kind === "average"
+          ? <span>{share.label}</span>
+          : <Labelled label={share.label} color={share.color} />),
       },
       ...slices.map((slice, slot) => ({
         key: `slice-${slot}`,
@@ -312,7 +327,7 @@ export function AnswersCompare({ slices, questions, minObservations }: AnswersCo
     return (
       <Stack key={name} gap={1}>
         <Text variant="body-s" weight="medium">
-          {`${head.label} · ${head.kind === "bands" ? "уровни" : "исходы"}`}
+          {`${head.label} · ${head.kind === "bands" ? "уровни" : head.kind === "average" ? "распределение" : "исходы"}`}
         </Text>
         <DataGrid columns={columns} rows={shareRows} rowKey={share => share.key} />
       </Stack>

@@ -3442,3 +3442,9 @@
    Между строками 2x, между колонками 4x (модульная сетка); список версий не шире 360px. */
 .tb-saveas-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--ou-space-2) var(--ou-space-4); align-items: baseline; }
 .tb-saveas-select { max-width: 360px; }
+
+/* ─── PRD-56 FR-21d: гистограмма числового показателя без уровней ───────────
+   Половина ширины карточки (эскиз approved/analytics-indicators.html, владелец
+   2026-10-08): на всю ширину десять столбиков становились плитами. BarChart
+   меряет ширину контейнера, поэтому узкий контейнер даёт и узкие столбики. */
+.tb-indicator-hist { max-width: 50%; }

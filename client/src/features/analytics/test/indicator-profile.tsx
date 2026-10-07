@@ -2,23 +2,25 @@
  * @module features/analytics/test/indicator-profile
  * @description PRD-56 FR-21c - FR-21e: the «Показатели» card of the «Шкалы и показатели» tab.
  *
- * One row per indicator, and the row follows the indicator's type, as the server summarised it
- * (`server/services/analytics/indicator-profile`):
+ * One block per indicator, and the block follows the indicator's type, as the server summarised
+ * it (`server/services/analytics/indicator-profile`), approved/analytics-indicators.html:
  *
- *  - `bands` — the average with its domain and the shares of the interpretation bands;
- *  - `average` — the average alone, drawn in the ACCENT colour: without bands the value carries
- *    no «good» or «bad» (FR-21b);
- *  - `outcomes` — the shares of the outcomes of a string or boolean indicator.
+ *  - `bands` and `outcomes` — a row per level or outcome, laid out like «Профиль по шкалам»: each
+ *    share has its own bar, so shares compare by length (owner 2026-10-08: a stacked bar could not
+ *    be compared);
+ *  - `average` — a compact histogram over ten intervals of the domain, half the card wide, in the
+ *    ACCENT colour: without bands the value carries no «good» or «bad» (FR-21b), and an average
+ *    alone says nothing about the group.
  *
  * Values are the STORED ones (FR-21e): a run that holds no value is counted as «не передано»,
- * never as zero. Colours come ready from the server; the screen chooses none, or the same level
- * would be painted one way in the learner's results and another way here.
+ * never as zero.
  */
-import { Card, CardBody, CardHeader, ProgressBar, ProgressStacked, Stack, Text } from "@skillum/ui-kit";
+import { BarChart, Card, CardBody, CardHeader, ProgressBar, Stack, Text } from "@skillum/ui-kit";
 
 import { pluralize } from "@/lib/i18n";
 
 import { percent } from "../format";
+import { shareAxis } from "./score-distribution";
 
 export interface IndicatorShareView {
   key: string;
@@ -42,6 +44,16 @@ export interface IndicatorProfileView {
   domainMin: number | null;
   domainMax: number | null;
   shares: IndicatorShareView[];
+  /** Ten intervals of the domain — only for `kind: "average"`. */
+  histogram: IndicatorHistogramBin[];
+}
+
+export interface IndicatorHistogramBin {
+  label: string;
+  from: number;
+  to: number;
+  count: number;
+  share: number;
 }
 
 export interface IndicatorProfilePanelProps {
@@ -63,13 +75,29 @@ export function indicatorAverageText(indicator: Pick<IndicatorProfileView, "aver
   return indicator.domainMax === null ? `среднее ${value}` : `среднее ${value} из ${indicator.domainMax}`;
 }
 
-/** Fill of the average bar: the share of the average in the domain. */
-function fill(indicator: IndicatorProfileView): number {
-  if (indicator.average === null) return 0;
-  const min = indicator.domainMin ?? 0;
-  const max = indicator.domainMax ?? 0;
-  if (max <= min) return 0;
-  return Math.max(0, Math.min(100, ((indicator.average - min) / (max - min)) * 100));
+/** Compact histogram of a numeric indicator without bands. */
+function IndicatorHistogram({ bins }: { bins: IndicatorHistogramBin[] }) {
+  const axis = shareAxis(Math.max(0, ...bins.map(bin => Math.round(bin.share))));
+  return (
+    <div className="tb-indicator-hist">
+      <BarChart
+        height={120}
+        yMax={axis.max}
+        yTickValues={[0, axis.max / 2, axis.max]}
+        categories={bins.map(bin => bin.label)}
+        series={[{
+          id: "share",
+          label: "Доля прохождений",
+          data: bins.map(bin => Math.round(bin.share)),
+          color: "var(--ou-accent-default)",
+          labels: "outside",
+          // An empty interval needs no «0 %» over a missing bar.
+          labelFormat: value => (value > 0 ? percent(value) : ""),
+        }]}
+        yTickFormat={value => percent(value)}
+      />
+    </div>
+  );
 }
 
 /** The caption on the right of the indicator's name. */
@@ -105,27 +133,26 @@ function IndicatorRow({ indicator }: { indicator: IndicatorProfileView }) {
   }
 
   return (
-    <Stack gap={1}>
+    <Stack gap={2}>
       <Stack direction="row" gap={4} justify="between" align="baseline">
         <Text variant="body-s" weight="medium">{indicator.label}</Text>
         <Text variant="body-xs" tone="muted">{metaText(indicator)}</Text>
       </Stack>
       {indicator.kind === "average" ? (
-        <>
-          {/* Accent, not a tone: without bands the value is not judged. Without a domain there
-              is nothing to fill the bar against — the number alone says it. */}
-          {indicator.domainMax !== null && <ProgressBar value={fill(indicator)} size="s" hideHeader />}
-          <Text variant="body-xs" tone="muted">уровни толкования не заданы</Text>
-        </>
+        // `?? []`: an answer of a server older than the histogram carries none.
+        <IndicatorHistogram bins={indicator.histogram ?? []} />
       ) : (
-        <ProgressStacked
-          showLegend
-          segments={indicator.shares.map(share => ({
-            value: Math.round(share.share),
-            color: share.color,
-            label: `${share.label} — ${percent(share.share)}`,
-          }))}
-        />
+        <Stack gap={2}>
+          {indicator.shares.map(share => (
+            <ProgressBar
+              key={share.key}
+              size="s"
+              label={share.label}
+              value={share.share}
+              valueLabel={percent(share.share)}
+            />
+          ))}
+        </Stack>
       )}
     </Stack>
   );

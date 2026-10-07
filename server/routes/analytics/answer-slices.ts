@@ -19,7 +19,7 @@ import { storage } from "../../storage";
 import { questionSpread } from "../../services/analytics/answer-spread";
 import { loadObservations } from "../../services/analytics/observations";
 import { loadTestAnswerFacts } from "../../services/analytics/test-answer-facts";
-import { summariseIndicators } from "../../services/analytics/indicator-profile";
+import { indicatorRanges, summariseIndicators } from "../../services/analytics/indicator-profile";
 import { summariseScales } from "../../services/analytics/scale-profile";
 import { scaleRampOf } from "../../services/analytics/scale-ramp";
 import { adhocSource, conditionsOf, dateOf, withinFrame } from "./slices";
@@ -119,6 +119,8 @@ router.get(
           indicators: summariseIndicators(indicatorRows.filter(row => selects(row.attemptId)), indicators, {
             ramp,
             scaleLabels: Object.fromEntries(scales.map(scale => [scale.key, scale.label || scale.key])),
+            // Same intervals in every slice: taken from ALL runs of the test.
+            ranges: indicatorRanges(indicatorRows, indicators),
           }),
         });
       }

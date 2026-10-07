@@ -783,6 +783,7 @@ describe("<TestAnalyticsPage />", () => {
       indicators: [{
         name: "idx", label: "Индекс человекоцентричности", type: "number", kind: "average",
         sampleSize: 10, missing: 2, average: 64.24, domainMin: 0, domainMax: 100, shares: [],
+        histogram: [{ label: "60–69", from: 60, to: 69, count: 10, share: 100 }],
       }],
     };
 

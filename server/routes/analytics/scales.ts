@@ -20,7 +20,7 @@ import { logger } from "../../logger";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
-import { summariseIndicators } from "../../services/analytics/indicator-profile";
+import { indicatorRanges, summariseIndicators } from "../../services/analytics/indicator-profile";
 import { loadObservations } from "../../services/analytics/observations";
 import { summariseScales } from "../../services/analytics/scale-profile";
 import { scaleRampOf } from "../../services/analytics/scale-ramp";
@@ -75,6 +75,8 @@ router.get(
           ramp,
           // A string indicator often stores scale keys: they read as the scales' names.
           scaleLabels: Object.fromEntries(scales.map(scale => [scale.key, scale.label || scale.key])),
+          // Intervals of an indicator without a domain: from ALL runs, so the filter does not move them.
+          ranges: indicatorRanges(indicatorRows, indicators),
         }),
       });
     } catch (error) {

@@ -67,6 +67,22 @@ export interface IndicatorProfile {
   domainMin: number | null;
   domainMax: number | null;
   shares: IndicatorShare[];
+  /**
+   * Distribution of a numeric indicator WITHOUT bands (owner 2026-10-08: an average alone says
+   * nothing about the group). Ten equal intervals of the domain; empty for other kinds.
+   */
+  histogram: HistogramBin[];
+}
+
+/** One interval of the histogram. */
+export interface HistogramBin {
+  /** «0–2», «7», «0,9–1». */
+  label: string;
+  from: number;
+  to: number;
+  count: number;
+  /** Percent of the runs that hold a value. */
+  share: number;
 }
 
 export interface IndicatorProfileOptions {
@@ -78,6 +94,85 @@ export interface IndicatorProfileOptions {
    * screen as codes. With this map they read as the scales' names.
    */
   scaleLabels?: Readonly<Record<string, string>>;
+  /**
+   * The range of each numeric indicator over ALL runs of the test ({@link indicatorRanges}). An
+   * indicator without a domain takes its intervals from here, so a filter or a slice does not
+   * move their bounds and slices stay comparable interval by interval.
+   */
+  ranges?: Readonly<Record<string, { min: number; max: number }>>;
+}
+
+/** How many intervals the histogram of a numeric indicator has at most. */
+const HISTOGRAM_BINS = 10;
+
+/** A bound as the screen prints it: up to two decimals, Russian decimal mark. */
+function boundText(value: number): string {
+  return String(Math.round(value * 100) / 100).replace(".", ",");
+}
+
+/**
+ * Min and max of every numeric indicator over the given rows.
+ *
+ * @param rows stored values of ALL runs of the test
+ * @param indicators the test's indicators
+ * @returns «name -> {min, max}» for indicators that hold at least one number
+ */
+export function indicatorRanges(
+  rows: readonly IndicatorValuesRow[],
+  indicators: readonly ProfileIndicator[],
+): Record<string, { min: number; max: number }> {
+  const out: Record<string, { min: number; max: number }> = {};
+  for (const indicator of indicators) {
+    if (indicator.type !== "number") continue;
+    for (const row of rows) {
+      const value = indicatorValueOf("number", row.values[indicator.name]);
+      if (typeof value !== "number") continue;
+      const range = out[indicator.name];
+      if (!range) out[indicator.name] = { min: value, max: value };
+      else {
+        range.min = Math.min(range.min, value);
+        range.max = Math.max(range.max, value);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Histogram of numeric values over `[lo, hi]`.
+ *
+ * Integer data gets integer bounds: one interval per value when there are at most ten values,
+ * otherwise intervals of `ceil(span / 10)` values («0–2», «3–5»). Fractional data gets ten equal
+ * intervals. A value outside the range (a domain narrower than reality) lands in the edge interval
+ * rather than vanishing.
+ */
+function histogramOf(values: readonly number[], lo: number, hi: number): HistogramBin[] {
+  const total = values.length;
+  const integer = Number.isInteger(lo) && Number.isInteger(hi) && values.every(Number.isInteger);
+  const bins: Array<{ from: number; to: number; label: string }> = [];
+  if (integer) {
+    const span = hi - lo + 1;
+    const width = Math.max(1, Math.ceil(span / HISTOGRAM_BINS));
+    for (let from = lo; from <= hi; from += width) {
+      const to = Math.min(hi, from + width - 1);
+      bins.push({ from, to, label: from === to ? String(from) : `${from}–${to}` });
+    }
+  } else {
+    const width = (hi - lo) / HISTOGRAM_BINS || 1;
+    for (let i = 0; i < HISTOGRAM_BINS; i += 1) {
+      const from = lo + width * i;
+      const to = i === HISTOGRAM_BINS - 1 ? hi : lo + width * (i + 1);
+      bins.push({ from, to, label: `${boundText(from)}–${boundText(to)}` });
+    }
+  }
+  const counts = bins.map(() => 0);
+  for (const value of values) {
+    let index = bins.findIndex((bin, i) => (i === bins.length - 1 ? value <= bin.to : integer ? value <= bin.to : value < bin.to));
+    if (value < lo) index = 0;
+    if (index < 0) index = bins.length - 1;
+    counts[index] += 1;
+  }
+  return bins.map((bin, i) => ({ ...bin, count: counts[i], share: percentOf(counts[i], total) }));
 }
 
 /** Key of the «Прочее» bucket; cannot clash with an outcome code or a band level. */
@@ -205,6 +300,22 @@ function outcomeShares(
   ];
 }
 
+/** The interval range of an indicator: its domain, else the whole test's range, else the selection's. */
+function rangeOf(
+  name: string,
+  interpretation: { domainMin: number | null; domainMax: number | null },
+  values: readonly number[],
+  opts: IndicatorProfileOptions,
+): [number, number] {
+  if (interpretation.domainMin !== null && interpretation.domainMax !== null
+    && interpretation.domainMax > interpretation.domainMin) {
+    return [interpretation.domainMin, interpretation.domainMax];
+  }
+  const test = opts.ranges?.[name];
+  if (test) return [test.min, test.max];
+  return [Math.min(...values), Math.max(...values)];
+}
+
 /**
  * Profile of every indicator of the test, in the author's order.
  *
@@ -244,6 +355,9 @@ export function summariseIndicators(
           kind: hasBands ? "bands" : "average",
           // No value — no average: a zero would read as a measured zero.
           average: numbers.length > 0 ? numbers.reduce((sum, value) => sum + value, 0) / numbers.length : null,
+          histogram: !hasBands && numbers.length > 0
+            ? histogramOf(numbers, ...rangeOf(indicator.name, interpretation, numbers, opts))
+            : [],
           shares: hasBands && numbers.length > 0
             // Bands nobody fell into are dropped, like empty outcomes: an indicator may carry many
             // bands (a real one has fifteen), and a legend of zeros hides the ones that matter.
@@ -259,6 +373,7 @@ export function summariseIndicators(
         kind: "outcomes",
         average: null,
         shares: outcomeShares(values, interpretation.outcomes, opts.scaleLabels ?? {}),
+        histogram: [],
       } satisfies IndicatorProfile;
     });
 }

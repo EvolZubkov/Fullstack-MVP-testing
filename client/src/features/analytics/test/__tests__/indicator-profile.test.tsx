@@ -21,6 +21,7 @@ const INDEX: IndicatorProfileView = {
   average: 64.24,
   domainMin: 0,
   domainMax: 100,
+  histogram: [],
   shares: [
     { key: "dev", label: "Зона развития", count: 34, share: 9, color: "hsl(0 84% 60%)", tone: null },
     { key: "strong", label: "Сильная сторона", count: 346, share: 91, color: "hsl(142 76% 36%)", tone: null },
@@ -38,6 +39,11 @@ const SPREAD: IndicatorProfileView = {
   domainMin: 0,
   domainMax: 28,
   shares: [],
+  histogram: [
+    { label: "0–2", from: 0, to: 2, count: 37, share: 9 },
+    { label: "3–5", from: 3, to: 5, count: 99, share: 24 },
+    { label: "27–28", from: 27, to: 28, count: 0, share: 0 },
+  ],
 };
 
 const STYLE: IndicatorProfileView = {
@@ -50,6 +56,7 @@ const STYLE: IndicatorProfileView = {
   average: null,
   domainMin: null,
   domainMax: null,
+  histogram: [],
   shares: [
     { key: "kom", label: "Командный", count: 140, share: 34, color: "hsl(257.9 71.3% 65.9%)", tone: null },
     { key: "__rest__", label: "Прочее", count: 21, share: 5, color: "var(--ou-border-strong)", tone: null, rest: true },
@@ -72,22 +79,26 @@ describe("IndicatorProfilePanel", () => {
     expect(screen.getByText("Показатели")).toBeTruthy();
     expect(screen.getByText("Индекс человекоцентричности")).toBeTruthy();
     expect(screen.getByText("среднее 64,2 из 100 · 380 прохождений · у 32 не передано")).toBeTruthy();
-    expect(screen.getByText(/Зона развития — 9/)).toBeTruthy();
+    expect(screen.getByText("Зона развития")).toBeTruthy();
   });
 
   it("says nothing about missing values when every run holds one", () => {
     render(<IndicatorProfilePanel indicators={[SPREAD]} observations={412} />);
 
     expect(screen.getByText("среднее 6,8 из 28 · 412 прохождений")).toBeTruthy();
-    expect(screen.getByText("уровни толкования не заданы")).toBeTruthy();
+    // The histogram replaces the bare average: intervals on the axis, shares over the bars.
+    expect(screen.getByText("3–5")).toBeTruthy();
+    expect(screen.getByText(/^24\s%$/)).toBeTruthy();
   });
 
   it("shows outcome shares with the count of outcomes, «Прочее» included in the legend", () => {
     render(<IndicatorProfilePanel indicators={[STYLE]} observations={412} />);
 
     expect(screen.getByText("412 прохождений · 1 исход")).toBeTruthy();
-    expect(screen.getByText(/Командный — 34/)).toBeTruthy();
-    expect(screen.getByText(/Прочее — 5/)).toBeTruthy();
+    // A row per outcome, like «Профиль по шкалам»: label and share in the bar's header.
+    expect(screen.getByText("Командный")).toBeTruthy();
+    expect(screen.getByText("Прочее")).toBeTruthy();
+    expect(screen.getAllByRole("progressbar")).toHaveLength(2);
   });
 
   it("an indicator no run reported gets a muted line instead of an empty bar", () => {
@@ -103,12 +114,10 @@ describe("IndicatorProfilePanel", () => {
     expect(screen.queryByText(/не передано/)).toBeNull();
   });
 
-  it("an average without a domain is a number only: no bar to fill", () => {
-    const { container } = render(
-      <IndicatorProfilePanel indicators={[{ ...SPREAD, domainMin: null, domainMax: null }]} observations={412} />,
-    );
+  it("an average without a domain still gets its histogram, the caption names no maximum", () => {
+    render(<IndicatorProfilePanel indicators={[{ ...SPREAD, domainMin: null, domainMax: null }]} observations={412} />);
 
     expect(screen.getByText("среднее 6,8 · 412 прохождений")).toBeTruthy();
-    expect(container.querySelector(".ou-progress")).toBeNull();
+    expect(screen.getByText("0–2")).toBeTruthy();
   });
 });
