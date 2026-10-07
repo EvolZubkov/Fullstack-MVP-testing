@@ -78,6 +78,13 @@ describe("summariseIndicators — numeric with bands", () => {
     ]);
   });
 
+  it("drops bands no run fell into, like empty outcomes", () => {
+    // A real ЧИЛ indicator carries fifteen bands; a legend of fifteen mostly-zero items says nothing.
+    const [profile] = summariseIndicators(rows({ idx: 80 }, { idx: 90 }), [INDEX], { ramp });
+
+    expect(profile.shares.map(s => s.key)).toEqual(["strong"]);
+  });
+
   it("counts the runs of the selection without a value as missing, not as zero", () => {
     const [profile] = summariseIndicators(rows({ idx: 60 }, {}, { idx: "" }), [INDEX], { ramp });
 

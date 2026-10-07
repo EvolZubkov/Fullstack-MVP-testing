@@ -6,7 +6,7 @@
  * summary per indicator, and its form follows the indicator's TYPE:
  *
  *  - numeric with interpretation bands — the average and the shares of the bands, coloured
- *    exactly like the bands of a scale (`bandShares`, FR-21a);
+ *    exactly like the bands of a scale (`bandShares`, FR-21a); bands without runs are dropped;
  *  - numeric without bands — the average alone;
  *  - string and boolean — the shares of the outcomes (`findOutcome`, the same matching the
  *    learner's results screen uses). Without outcomes in the interpretation, the shares of the
@@ -210,7 +210,11 @@ export function summariseIndicators(
           // No value — no average: a zero would read as a measured zero.
           average: numbers.length > 0 ? numbers.reduce((sum, value) => sum + value, 0) / numbers.length : null,
           shares: hasBands && numbers.length > 0
-            ? bandShares(numbers, interpretation, opts.ramp).map(({ level, ...band }) => ({ key: level, ...band }))
+            // Bands nobody fell into are dropped, like empty outcomes: an indicator may carry many
+            // bands (a real one has fifteen), and a legend of zeros hides the ones that matter.
+            ? bandShares(numbers, interpretation, opts.ramp)
+              .filter(band => band.count > 0)
+              .map(({ level, ...band }) => ({ key: level, ...band }))
             : [],
         } satisfies IndicatorProfile;
       }

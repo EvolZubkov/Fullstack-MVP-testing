@@ -94,7 +94,11 @@ function IndicatorRow({ indicator }: { indicator: IndicatorProfileView }) {
       <Stack gap={1}>
         <Text variant="body-s" weight="medium" tone="muted">{indicator.label}</Text>
         <Text variant="body-xs" tone="muted">
-          {`не передано ни в одном из ${indicator.missing} прохождений`}
+          {/* Two different silences: the runs are there but hold no value, or the filter left
+              no runs at all. «не передано ни в одном из 0» would be nonsense. */}
+          {indicator.missing > 0
+            ? `не передано ни в одном из ${indicator.missing} прохождений`
+            : "в выборке нет прохождений"}
         </Text>
       </Stack>
     );

@@ -21948,6 +21948,80 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     return sheets;
   }
 
+  // shared/report/clone-fonts.ts
+  var DEFAULT_TIMEOUT_MS = 5e3;
+  var DEFAULT_POLL_MS = 50;
+  var PROBE_SIZE_PX = 16;
+  var PROBE_TEXT = "\u0421\u044A\u0435\u0448\u044C \u0436\u0435 \u0435\u0449\u0451 \u044D\u0442\u0438\u0445 \u043C\u044F\u0433\u043A\u0438\u0445 \u0444\u0440\u0430\u043D\u0446\u0443\u0437\u0441\u043A\u0438\u0445 \u0431\u0443\u043B\u043E\u043A, \u0434\u0430 \u0432\u044B\u043F\u0435\u0439 \u0447\u0430\u044E. Quick fox 0123456789";
+  var WIDTH_TOLERANCE = 5e-3;
+  function fontSetOf(doc) {
+    const fonts = doc.fonts;
+    return fonts && typeof fonts.forEach === "function" && typeof fonts.load === "function" ? fonts : null;
+  }
+  function loadedFaceDescriptors(fonts) {
+    const seen = /* @__PURE__ */ new Set();
+    fonts.forEach((face) => {
+      if (face.status !== "loaded") return;
+      const family = face.family.replace(/^["']|["']$/g, "");
+      const weight = String(face.weight).trim().split(/\s+/)[0] || "400";
+      const style = face.style || "normal";
+      seen.add(`${style} ${weight} ${PROBE_SIZE_PX}px "${family}"`);
+    });
+    return [...seen];
+  }
+  function delay(ms) {
+    return new Promise((resolve2) => setTimeout(resolve2, ms));
+  }
+  function mismatchedFaces(source, clone, descriptors) {
+    const ctx = source.createElement("canvas").getContext("2d");
+    if (!ctx || !clone.body) return [];
+    const bad = [];
+    for (const font of descriptors) {
+      ctx.font = font;
+      const canvasWidth = ctx.measureText(PROBE_TEXT).width;
+      const probe = clone.createElement("span");
+      probe.setAttribute("data-tb-font-probe", "");
+      probe.style.cssText = "position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;";
+      probe.style.font = font;
+      probe.textContent = PROBE_TEXT;
+      clone.body.appendChild(probe);
+      const domWidth = probe.getBoundingClientRect().width;
+      probe.remove();
+      if (!canvasWidth || !domWidth) continue;
+      if (Math.abs(domWidth - canvasWidth) > canvasWidth * WIDTH_TOLERANCE) bad.push(font);
+    }
+    return bad;
+  }
+  async function syncCloneFonts(source, clone, options = {}) {
+    var _a, _b;
+    const sourceFonts = fontSetOf(source);
+    const cloneFonts = fontSetOf(clone);
+    if (!sourceFonts || !cloneFonts) return;
+    const descriptors = loadedFaceDescriptors(sourceFonts);
+    if (!descriptors.length) return;
+    const timeoutMs = (_a = options.timeoutMs) != null ? _a : DEFAULT_TIMEOUT_MS;
+    const pollMs = (_b = options.pollMs) != null ? _b : DEFAULT_POLL_MS;
+    const deadline = Date.now() + timeoutMs;
+    const remaining = () => Math.max(0, deadline - Date.now());
+    try {
+      await Promise.race([
+        Promise.all(descriptors.map((font) => cloneFonts.load(font, PROBE_TEXT).catch(() => []))).then(
+          () => cloneFonts.ready
+        ),
+        delay(remaining())
+      ]);
+      let bad = mismatchedFaces(source, clone, descriptors);
+      while (bad.length && remaining() > 0) {
+        await delay(Math.min(pollMs, remaining()));
+        bad = mismatchedFaces(source, clone, bad);
+      }
+      if (bad.length) {
+        console.warn("[report-pdf] \u0448\u0440\u0438\u0444\u0442 \u043A\u043B\u043E\u043D\u0430 \u0440\u0430\u0441\u0442\u0435\u0440\u0438\u0437\u0430\u0442\u043E\u0440\u0430 \u0440\u0430\u0441\u0445\u043E\u0434\u0438\u0442\u0441\u044F \u0441 \u0445\u043E\u043B\u0441\u0442\u043E\u043C:", bad.join("; "));
+      }
+    } catch (e) {
+    }
+  }
+
   // shared/report/export-pdf.ts
   var A4_WIDTH_MM = 210;
   var A4_HEIGHT_MM = 297;
@@ -22028,7 +22102,10 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
           useCORS: true,
           allowTaint: true,
           backgroundColor: null,
-          logging: false
+          logging: false,
+          // Слова меряются в КЛОНЕ, а рисуются холстом этого документа: клон обязан видеть те
+          // же начертания, иначе слова ложатся друг на друга и пробелы пропадают (clone-fonts).
+          onclone: (clonedDoc) => syncCloneFonts(doc, clonedDoc)
         });
         if (index > 0) (_d = pdf.addPage) == null ? void 0 : _d.call(pdf);
         pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);

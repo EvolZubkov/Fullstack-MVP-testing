@@ -95,4 +95,11 @@ describe("IndicatorProfilePanel", () => {
 
     expect(screen.getByText("не передано ни в одном из 120 прохождений")).toBeTruthy();
   });
+
+  it("an empty selection says so instead of «не передано ни в одном из 0»", () => {
+    render(<IndicatorProfilePanel indicators={[{ ...EMPTY, missing: 0 }]} observations={0} />);
+
+    expect(screen.getByText("в выборке нет прохождений")).toBeTruthy();
+    expect(screen.queryByText(/не передано/)).toBeNull();
+  });
 });
