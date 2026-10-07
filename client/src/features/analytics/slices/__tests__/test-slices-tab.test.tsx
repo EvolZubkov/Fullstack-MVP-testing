@@ -124,7 +124,7 @@ describe("TestSlicesTab", () => {
   });
 });
 
-describe("TestSlicesTab — вид «Ответы и шкалы» (PRD-56 FR-07k)", () => {
+describe("TestSlicesTab — вид «Ответы, шкалы и показатели» (PRD-56 FR-07k)", () => {
   it("у измерительного теста сравнение открывается на «Ответах и шкалах»", async () => {
     render(<TestSlicesTab testId="t1" measurement adhoc={{ groupIds: ["g1"] }} onOpenPassages={vi.fn()} />);
 
@@ -133,7 +133,7 @@ describe("TestSlicesTab — вид «Ответы и шкалы» (PRD-56 FR-07k
     const query = new URLSearchParams(asked("/answer-slices?")[0].split("?")[1]);
     expect(query.get("withWhole")).toBe("1");
     expect(JSON.parse(query.get("conditions") ?? "null")).toEqual({ groupIds: ["g1"] });
-    expect(screen.getByRole("button", { name: "Ответы и шкалы" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Ответы, шкалы и показатели" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("у оцениваемого теста — на «Результате и темах», третий вид доступен переключателем", async () => {
@@ -141,7 +141,7 @@ describe("TestSlicesTab — вид «Ответы и шкалы» (PRD-56 FR-07k
 
     expect(await screen.findByText("Сравнение срезов")).toBeTruthy();
     expect(asked("/answer-slices?")).toEqual([]);
-    await userEvent.click(screen.getByRole("button", { name: "Ответы и шкалы" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ответы, шкалы и показатели" }));
     await waitFor(() => expect(asked("/api/analytics/tests/t1/answer-slices?").length).toBeGreaterThan(0));
   });
 });

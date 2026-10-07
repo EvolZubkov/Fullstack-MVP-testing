@@ -13,7 +13,8 @@
  * смена метрик его не сбрасывает. Отбор, присланный кнопкой «Сравнить со срезом», занимает первый
  * слот, и обе метрики считают его одинаково — переключение метрик его не теряет.
  *
- * PRD-56 FR-07k (эскиз approved/slice-compare-answers.html): третий вид — «Ответы и шкалы»
+ * PRD-56 FR-07k, FR-21g (эскизы approved/slice-compare-answers.html, analytics-indicators.html):
+ * третий вид — «Ответы, шкалы и показатели»
  * ({@link module:features/analytics/test/answers-compare-panel}). Переключатель видов стоит у
  * правого края карточки; у теста без эталона сравнение открывается на этом виде — два других у
  * него пусты.
@@ -117,7 +118,7 @@ export function TestSlicesTab({
         items={[
           { value: "result", label: "Результат и темы" },
           { value: "quality", label: "Качество вопросов" },
-          { value: "answers", label: "Ответы и шкалы" },
+          { value: "answers", label: "Ответы, шкалы и показатели" },
         ]}
       />
     </Stack>

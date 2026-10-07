@@ -1,6 +1,6 @@
 /**
  * @module features/analytics/test/__tests__/answers-compare
- * @description PRD-56 FR-07k - FR-07n: таблицы сравнения срезов «Ответы и шкалы».
+ * @description PRD-56 FR-07k - FR-07n, FR-21g: таблицы сравнения срезов «Ответы, шкалы и показатели».
  *
  * Стережётся то, что приёмка эскиза выбила у владельца: сортировка — щелчком по заголовку, по
  * умолчанию по «Расхождению»; «Разница» только при двух срезах; срез ниже минимума наблюдений
@@ -74,6 +74,43 @@ describe("AnswersCompare", () => {
     expect(screen.getByText("Целеполагание · уровни")).toBeInTheDocument();
     expect(screen.getByText("27,4 из 35")).toBeInTheDocument();
     expect(screen.getByText("22,1 из 35")).toBeInTheDocument();
+  });
+
+  it("indicators: averages with the difference, then a share table per banded or outcome indicator", () => {
+    const indicators = (average: number, kom: number, rest: number | null) => [
+      {
+        name: "idx", label: "Индекс", type: "number" as const, kind: "average" as const, sampleSize: 20, missing: 0,
+        average, domainMin: 0, domainMax: 100, shares: [],
+      },
+      {
+        name: "style", label: "Ведущий стиль", type: "string" as const, kind: "outcomes" as const, sampleSize: 20, missing: 0,
+        average: null, domainMin: null, domainMax: null,
+        shares: [
+          { key: "kom", label: "Командный", count: 0, share: kom, color: "red", tone: null },
+          ...(rest === null ? [] : [{ key: "__rest__", label: "Прочее", count: 0, share: rest, color: "grey", tone: null, rest: true }]),
+        ],
+      },
+    ];
+    render(<AnswersCompare
+      slices={[{ ...HRBP, indicators: indicators(66.1, 42, null) }, { ...DUZ, indicators: indicators(58.4, 27, 5) }]}
+      questions={QUESTIONS}
+      minObservations={10}
+    />);
+
+    expect(screen.getByText("Показатели")).toBeInTheDocument();
+    expect(screen.getByText("66,1 из 100")).toBeInTheDocument();
+    expect(screen.getByText("58,4 из 100")).toBeInTheDocument();
+    expect(screen.getByText("+7,7")).toBeInTheDocument();
+    expect(screen.getByText("Ведущий стиль · исходы")).toBeInTheDocument();
+    // An outcome one slice did not have is a zero there, not a gap: both slices hold values.
+    const prochee = screen.getByText("Прочее").closest("tr")!;
+    expect(within(prochee).getByText(/^0\s%$/)).toBeInTheDocument();
+  });
+
+  it("no indicators block when the slices carry none", () => {
+    render(<AnswersCompare slices={[HRBP, DUZ]} questions={QUESTIONS} minObservations={10} />);
+
+    expect(screen.queryByText("Показатели")).toBeNull();
   });
 
   it("срез ниже минимума наблюдений подписан и в расхождение не входит", () => {
