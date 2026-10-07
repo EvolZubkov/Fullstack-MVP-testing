@@ -84,6 +84,24 @@ describe("summariseIndicators — numeric with bands", () => {
     expect(profile.shares.map(s => s.key)).toEqual(["strong"]);
   });
 
+  it("bands the author labelled alike become one row", () => {
+    const alike = {
+      ...INDEX,
+      configJson: {
+        ...INDEX.configJson,
+        bands: [
+          { min: 0, max: 39, level: "a", label: "Другие стили" },
+          { min: 40, max: 69, level: "b", label: "Другие стили" },
+          { min: 70, max: 100, level: "c", label: "Ведущий" },
+        ],
+      },
+    };
+
+    const [profile] = summariseIndicators(rows({ idx: 10 }, { idx: 50 }, { idx: 80 }, { idx: 90 }), [alike], { ramp });
+
+    expect(profile.shares.map(s => [s.label, s.count, s.share])).toEqual([["Другие стили", 2, 50], ["Ведущий", 2, 50]]);
+  });
+
   it("counts the runs of the selection without a value as missing, not as zero", () => {
     const [profile] = summariseIndicators(rows({ idx: 60 }, {}, { idx: "" }), [INDEX], { ramp });
 

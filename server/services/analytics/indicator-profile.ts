@@ -364,6 +364,15 @@ export function summariseIndicators(
             ? bandShares(numbers, interpretation, opts.ramp)
               .filter(band => band.count > 0)
               .map(({ level, ...band }) => ({ key: level, ...band }))
+              // Alike labels become one row, like outcomes: the reader tells rows apart by label.
+              .reduce<IndicatorShare[]>((out, band) => {
+                const seen = out.find(row => row.label === band.label);
+                if (seen) {
+                  seen.count += band.count;
+                  seen.share += band.share;
+                } else out.push({ ...band });
+                return out;
+              }, [])
             : [],
         } satisfies IndicatorProfile;
       }

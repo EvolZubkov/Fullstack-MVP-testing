@@ -77,7 +77,10 @@ export function indicatorAverageText(indicator: Pick<IndicatorProfileView, "aver
 
 /** Compact histogram of a numeric indicator without bands. */
 function IndicatorHistogram({ bins }: { bins: IndicatorHistogramBin[] }) {
-  const axis = shareAxis(Math.max(0, ...bins.map(bin => Math.round(bin.share))));
+  const top = Math.max(0, ...bins.map(bin => Math.round(bin.share)));
+  // A 120 px chart has little room above the tallest bar: without extra headroom its «67 %» is
+  // pushed inside the bar and lost (live ЧИЛ data). A fifth more of the axis keeps it above.
+  const axis = shareAxis(Math.min(100, Math.ceil(top * 1.2)));
   return (
     <div className="tb-indicator-hist">
       <BarChart
