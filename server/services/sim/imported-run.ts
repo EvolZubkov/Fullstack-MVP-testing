@@ -62,14 +62,3 @@ export function importedSimAnswer(scenario: Scenario | null, steps: string, prot
     ? { answer: replayed, restored: true, rejected: false }
     : { answer: steps, restored: false, rejected: true };
 }
-
-/**
- * Доля цены прогона из подколонки «Результат»: пакет пишет туда число (Э4).
- *
- * @returns доля в 0..1 либо `null`, когда ячейка пуста или не число
- */
-export function importedSimRatio(result: string): number | null {
-  if (result.trim() === "") return null;
-  const ratio = Number(result.replace(",", "."));
-  return Number.isFinite(ratio) && ratio >= 0 && ratio <= 1 ? ratio : null;
-}

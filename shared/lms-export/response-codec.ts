@@ -201,3 +201,20 @@ export function encodeLearnerResponse(
 
   return "";
 }
+
+/**
+ * Доля цены из подколонки «Результат» взаимодействия.
+ *
+ * SCORM 2004 разрешает в `result` число. Пакет пишет туда долю у сценария (всегда) и у частичного
+ * ответа оцениваемого задания (PRD-54, решение 13); у полного и нулевого ответа там по-прежнему
+ * `correct` и `incorrect`.
+ *
+ * @param result ячейка «Результат»
+ * @returns доля в 0..1 либо `null`, когда ячейка пуста, не число или вне 0..1
+ */
+export function decodeResultShare(result: string): number | null {
+  const s = String(result ?? "").trim();
+  if (s === "") return null;
+  const share = Number(s.replace(",", "."));
+  return Number.isFinite(share) && share >= 0 && share <= 1 ? share : null;
+}

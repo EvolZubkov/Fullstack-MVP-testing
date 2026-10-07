@@ -24,7 +24,8 @@ import {
 } from "@shared/sim/protocol-codec";
 import { parseLmsExport } from "@shared/lms-export/parse";
 import example from "../docs/specs/sim-scenario/example/scenario.json";
-import { importedSimAnswer, importedSimRatio } from "../server/services/sim/imported-run";
+import { importedSimAnswer } from "../server/services/sim/imported-run";
+import { decodeResultShare } from "@shared/lms-export/response-codec";
 import { buildSimulationStats } from "../server/services/analytics/simulation-stats";
 
 const scenario = example as unknown as Scenario;
@@ -172,7 +173,7 @@ describe("выгрузка отчёта LMS", () => {
     const stats = buildSimulationStats(scenario, [{ answer: run.answer, earnedPoints: 0.9, possiblePoints: 1, latencyMs: 40000 }]);
     expect(stats.withProtocol).toBe(1);
     expect(stats.missMap.filter((s) => s.sceneId === "form").map((s) => s.stateLabel)).toEqual([null, "+ «save-error»"]);
-    expect(importedSimRatio(r.results.Q1)).toBe(0.9);
+    expect(decodeResultShare(r.results.Q1)).toBe(0.9);
   });
 
   it("без протокола и при изменённом сценарии остаются шаги — исход без разбора", () => {
@@ -183,8 +184,9 @@ describe("выгрузка отчёта LMS", () => {
     const rejected = importedSimAnswer(edited, stepsOf(original), encoded);
     expect(rejected).toMatchObject({ answer: stepsOf(original), restored: false, rejected: true });
     expect(importedSimAnswer(scenario, "не шаги", encoded).answer).toBeNull();
-    expect(importedSimRatio("")).toBeNull();
-    expect(importedSimRatio("1,0")).toBe(1);
-    expect(importedSimRatio("correct")).toBeNull();
+    expect(decodeResultShare("")).toBeNull();
+    expect(decodeResultShare("1,0")).toBe(1);
+    expect(decodeResultShare("correct")).toBeNull();
+    expect(decodeResultShare("1.5")).toBeNull();
   });
 });

@@ -1083,10 +1083,21 @@ function correctPatternFor(q) {
  * to get wrong. SCORM 2004 has a separate outcome for exactly this — `neutral`
  * (PRD-26 FR-08, PRD-44 FR-09). The rule reads the TYPE trait, so it covers both
  * measurement types at once and any future one.
+ *
+ * A PARTIAL answer (part of the price earned: multiple choice, matching, graded scoring) is
+ * reported as the earned share — SCORM 2004 allows a real number in `result`. «incorrect»
+ * there hid the half of the points the learner did earn, and the LMS export lost it for the
+ * analytics (PRD-54 decision 13). Full and zero stay `correct` / `incorrect`, so every
+ * all-or-nothing answer reads exactly as before.
+ *
+ * @param ratio The earned share of the price, `checkAnswer` of the reported answer.
  */
-function interactionResultFor(question, fullCorrect) {
+function interactionResultFor(question, fullCorrect, ratio) {
   var measurementOnly = typeof TBQType !== 'undefined' && TBQType.isMeasurementOnly(question);
-  return measurementOnly ? 'neutral' : (fullCorrect ? 'correct' : 'incorrect');
+  if (measurementOnly) return 'neutral';
+  if (fullCorrect) return 'correct';
+  if (typeof ratio === 'number' && ratio > 0 && ratio < 1) return String(Math.round(ratio * 10000) / 10000);
+  return 'incorrect';
 }
 
 /**
@@ -1326,9 +1337,10 @@ function buildQuestionInteraction(question, answer, fullCorrect) {
   // «Сценарий в ИС»: прогон с целью и штрафами не делится на «верно / неверно» — достигнутая
   // цель со штрафом за промах в отчёте LMS читалась бы как провал. SCORM 2004 разрешает в
   // `result` число, и сценарий пишет долю цены, ту же, что пошла в балл.
+  var ratio = checkAnswer(question, answer);
   var result = TBQType.isSimulation(question.type)
-    ? String(Math.round(checkAnswer(question, answer) * 10000) / 10000)
-    : interactionResultFor(question, fullCorrect);
+    ? String(Math.round(ratio * 10000) / 10000)
+    : interactionResultFor(question, fullCorrect, ratio);
   return {
     id: 'q_' + question.id,
     type: mapScormType(question),

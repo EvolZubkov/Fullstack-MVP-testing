@@ -46,6 +46,8 @@ function makeBuilder() {
     `${qtypeSrc}
      ${textSrc}
      ${questionTimeSrc}
+     // Оценка здесь не проверяется: сборщик спрашивает долю цены для исхода (PRD-54, решение 13).
+     function checkAnswer() { return 0; }
      ${SHARED.map((n) => extractTopLevel(resultsSrc, n)).join("\n")}
      return { build: buildQuestionInteraction, time: TBQuestionTime };`,
   )({ now: () => clock.t }, { createQuestionTime: () => createQuestionTime(() => clock.t) }) as {

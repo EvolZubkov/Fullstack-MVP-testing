@@ -871,3 +871,34 @@ describe("runImport — «Сценарий в ИС» (Э5б)", () => {
     expect((s as unknown as { answers: unknown[][] }).answers[0]).toEqual([]);
   });
 });
+
+describe("runImport — частичный балл (PRD-54, решение 13)", () => {
+  const partialBook = (result: string) => ({
+    ...book,
+    rows: [{ ...book.rows[0], answers: { q1: "1,3" }, results: { q1: result } }],
+  });
+  const withMultiple = () => ({
+    ...storageStub(),
+    getQuestionsByIds: async () => [{ id: "q1", type: "multiple", prompt: "Вопрос", topicId: "t1" }],
+  });
+  const firstRow = (s: unknown) => (s as { answers: Array<Array<Record<string, unknown>>> }).answers[0][0];
+
+  it("доля числом — в баллы при потолке 1, исход «неверно», как у веба", async () => {
+    const s = withMultiple();
+    await runImport(partialBook("0.5") as never, ON, ctx, s as never);
+    expect(firstRow(s)).toMatchObject({ result: "incorrect", isCorrect: false, points: 0.5, maxPoints: 1, userAnswerJson: [0, 2] });
+  });
+
+  it("«верно» и «неверно» читаются как раньше — без баллов", async () => {
+    const s = withMultiple();
+    await runImport(partialBook("correct") as never, ON, ctx, s as never);
+    expect(firstRow(s)).toMatchObject({ result: "correct", isCorrect: true, points: null, maxPoints: null });
+  });
+
+  it("не число и не исход — пробел, наблюдения нет", async () => {
+    const s = withMultiple();
+    const res = await runImport(partialBook("наполовину") as never, ON, ctx, s as never);
+    expect((s as unknown as { answers: unknown[][] }).answers[0]).toEqual([]);
+    expect(res.warnings.join(" ")).toContain("Взаимодействий без исхода");
+  });
+});

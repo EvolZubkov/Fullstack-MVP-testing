@@ -11,11 +11,11 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { participantKey } from "../utils/crypto";
-import { decodeLearnerResponse } from "@shared/lms-export/response-codec";
+import { decodeLearnerResponse, decodeResultShare } from "@shared/lms-export/response-codec";
 import { hasBlanks, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
 import type { Scenario } from "@shared/sim/contract";
 import type { InsertScormAnswer } from "@shared/schema";
-import { importedSimAnswer, importedSimRatio } from "./sim/imported-run";
+import { importedSimAnswer } from "./sim/imported-run";
 import { TOPIC_LEVEL_NOT_ACHIEVED, type LmsExportBook, type LmsExportRow } from "@shared/lms-export/parse";
 import type { IStorage } from "../storage";
 import type { ImportedAttemptKeyRow } from "../storage/scorm-repository";
@@ -738,7 +738,7 @@ export async function runImport(
         // `performance`, рядом — протокол блоками `sim_<id>_<n>`. Прогон восстанавливается
         // повтором протокола; доля идёт в баллы, как у телеметрии.
         if (isSimulation(q.type)) {
-          const ratio = importedSimRatio(a.result);
+          const ratio = decodeResultShare(a.result);
           if (ratio === null) {
             resultsMissing += 1;
             return [];
@@ -770,7 +770,11 @@ export async function runImport(
         // `neutral` — объявить измерительным то, что оценивается. Наблюдения нет, есть пробел,
         // и партия о нём говорит.
         const known = a.result === "correct" || a.result === "incorrect";
-        if (!known && !isMeasurementOnly({ type: q.type, correctJson: q.correctJson })) {
+        const measurement = isMeasurementOnly({ type: q.type, correctJson: q.correctJson });
+        // PRD-54, решение 13: частичный ответ пакет сообщает долей цены числом. Доля идёт в
+        // баллы при потолке 1 — так же, как у сценария; исход — «неверно», как у веба.
+        const share = known || measurement ? null : decodeResultShare(a.result);
+        if (!known && !measurement && share === null) {
           resultsMissing += 1;
           return [];
         }
@@ -788,10 +792,14 @@ export async function runImport(
           userAnswerJson: decodeLearnerResponse(q.type, a.raw, row.responseFormat, blankIdsOf(q)),
           // Три состояния вместо булева: измерительный ответ не может быть неверным
           // (PRD-54 раздел 5.3). Всё, что не «верно» и не «неверно», — `neutral`.
-          result: a.result === "correct" || a.result === "incorrect" ? a.result : "neutral",
-          isCorrect: a.result === "correct" ? true : a.result === "incorrect" ? false : null,
-          points: null,
-          maxPoints: null,
+          result: share !== null
+            ? (share >= 1 ? "correct" : "incorrect")
+            : a.result === "correct" || a.result === "incorrect" ? a.result : "neutral",
+          isCorrect: share !== null
+            ? share >= 1
+            : a.result === "correct" ? true : a.result === "incorrect" ? false : null,
+          points: share,
+          maxPoints: share === null ? null : 1,
           correctAnswerJson: null,
           latencyMs: a.latencyMs,
           answeredAt: row.finishedAt,

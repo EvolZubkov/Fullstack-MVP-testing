@@ -58,9 +58,14 @@ function finishPath(name: string): string {
 // половины извлекаются вместе, иначе в круге останется та, что уже разъезжалась.
 const SHARED = ["to1", "mapScormType", "formatResponse", "getCorrectAnswerFor", "correctPatternFor", "interactionResultFor", "questionLatency", "buildQuestionInteraction"];
 
+/** Доля цены, которую вернёт `checkAnswer` пакета: оценка здесь не проверяется, только отчёт. */
+const grading = { ratio: 0 };
+
 const runtime = new Function(
+  "grading",
   `${qtypeSrc}
   ${textSrc}
+  function checkAnswer() { return grading.ratio; }
   ${SHARED.map(extractTopLevel).join("\n")}
   return {
     mapScormType: mapScormType,
@@ -68,10 +73,10 @@ const runtime = new Function(
     interactionResultFor: interactionResultFor,
     buildQuestionInteraction: buildQuestionInteraction
   };`,
-)() as {
+)(grading) as {
   mapScormType: (q: { type: string }) => string;
   formatResponse: (q: { type: string }, ans: unknown) => string;
-  interactionResultFor: (q: { type: string }, fullCorrect: boolean) => string;
+  interactionResultFor: (q: { type: string }, fullCorrect: boolean, ratio?: number) => string;
   buildQuestionInteraction: (
     q: { id: string; type: string; prompt?: string; correct?: unknown },
     ans: unknown,
@@ -123,6 +128,25 @@ describe("исход взаимодействия", () => {
   it("обычный вопрос сохраняет верность ответа", () => {
     expect(runtime.interactionResultFor({ type: "single" }, true)).toBe("correct");
     expect(runtime.interactionResultFor({ type: "single" }, false)).toBe("incorrect");
+  });
+
+  it("частичный ответ — долей цены числом; полный и нулевой — как раньше (PRD-54, решение 13)", () => {
+    expect(runtime.interactionResultFor({ type: "multiple" }, false, 0.5)).toBe("0.5");
+    expect(runtime.interactionResultFor({ type: "multiple" }, false, 2 / 3)).toBe("0.6667");
+    expect(runtime.interactionResultFor({ type: "multiple" }, false, 0)).toBe("incorrect");
+    expect(runtime.interactionResultFor({ type: "multiple" }, true, 1)).toBe("correct");
+    // Измерительный вопрос остаётся neutral при любой доле.
+    expect(runtime.interactionResultFor(ALLOC, false, 0.5)).toBe("neutral");
+  });
+
+  it("сборщик берёт долю из оценки того же ответа", () => {
+    grading.ratio = 0.25;
+    try {
+      const interaction = runtime.buildQuestionInteraction({ id: "q1", type: "matching" }, { 0: 1 }, false);
+      expect(interaction.result).toBe("0.25");
+    } finally {
+      grading.ratio = 0;
+    }
   });
 });
 
