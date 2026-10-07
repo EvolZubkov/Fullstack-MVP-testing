@@ -72,10 +72,19 @@ import {
 } from "@skillum/ui-kit";
 import { effectiveSectionOrder, type TestQuestionOrder } from "@shared/draw/assemble-delivery";
 import { VariantsEditor } from "./variants-editor";
-import { RouterScenariosBlock } from "./router-scenarios-block";
+import { ScenarioItemRow, ScenarioPickerModal } from "./router-scenarios-block";
+import { useScenarioBanks, type ScenarioBank } from "./scenario-bank-fields";
+import {
+  compositionEntries,
+  entryGroup,
+  moveEntryOnto,
+  moveEntryToGroup,
+  type CompositionEntry,
+} from "./composition-items";
 import { FoldAllButtons, useSectionFold, type SectionFold } from "./section-fold";
 import type {
   EditorSection,
+  ScenarioItemDraft,
   TestEditorModel,
 } from "../test-editor.types";
 import { applyFormSetChange } from "../test-editor.mappers";
@@ -141,8 +150,19 @@ const NO_GROUP = "none";
  */
 const UNGROUPED = "__ungrouped__";
 
-/** Префиксы адресов перетаскивания: по ним обработчик отличает тему от группы и от зоны. */
-const DRAG = { topic: "topic:", group: "group:", zone: "zone:" } as const;
+/**
+ * Префиксы адресов перетаскивания: по ним обработчик отличает пункт от группы и от зоны. Адрес
+ * темы и пункта-сценария — их ключ пункта (`topic:<id>` / `scenario:<id>`, `shared/test-items`).
+ */
+const DRAG = { topic: "topic:", scenario: "scenario:", group: "group:", zone: "zone:" } as const;
+
+/** Адрес перетаскивания — пункт состава (тема или сценарий). */
+function isEntryDragId(id: string): boolean {
+  return id.startsWith(DRAG.topic) || id.startsWith(DRAG.scenario);
+}
+
+/** Пункт состава с номером в общем списке. */
+type NumberedEntry = CompositionEntry & { number: number };
 
 /**
  * PRD-50 FR-11: the block's `key` is a housekeeping id the author never types —
@@ -279,9 +299,13 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
    * потому что кнопок «Добавить тему» теперь несколько, и каждая отвечает за своё место.
    */
   const [pickerGroup, setPickerGroup] = useState<string | null>(null);
-  /** «Сценарий в ИС»: окно «Добавить сценарий» — только у теста с роутером. */
-  const [scenarioPickerOpen, setScenarioPickerOpen] = useState(false);
+  /**
+   * «Сценарий в ИС»: окно «Добавить сценарий» — только у теста с роутером. Хранит группу, в
+   * которую встанет пункт (`undefined` — окно закрыто), как выбор темы.
+   */
+  const [scenarioPickerGroup, setScenarioPickerGroup] = useState<string | null | undefined>(undefined);
   const routerScenarios = model.mode === "standard" && model.flowMode === "router_by_topics";
+  const { banks: scenarioBanks, isLoading: banksLoading } = useScenarioBanks();
   const [search, setSearch] = useState("");
   /**
    * Решение владельца 2026-10-01: недостающую тему создают из ящика теста. Это тот же
@@ -324,16 +348,26 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
 
   // Темы открываются СВЁРНУТЫМИ (комментарий эскиза): в списке на два десятка тем
   // раскрытые тела превращают экран в простыню.
-  const fold = useSectionFold(model.sections.map((s) => s.topicId), true);
+  // «Сценарий в ИС»: пункты-сценарии роутера стоят в ОДНОМ списке с темами и нумеруются
+  // вместе с ними (эскиз, «роутер: сценарий в составе»). Адрес свёртки сценария — его ключ.
+  const entries = useMemo(() => compositionEntries(model), [model]);
+  const fold = useSectionFold(
+    entries.map((e) => (e.kind === "topic" ? e.section.topicId : e.key)),
+    true,
+  );
 
   // Поиск сужает СПИСОК, а не модель: индекс темы остаётся прежним, иначе адреса
-  // ошибок `sections[i]` начали бы указывать не на ту тему.
-  const visibleSections = useMemo(() => {
+  // ошибок `sections[i]` начали бы указывать не на ту тему. Номер — место в общем списке.
+  const visibleEntries = useMemo<NumberedEntry[]>(() => {
     const needle = search.trim().toLowerCase();
-    return model.sections
-      .map((section, index) => ({ section, index }))
-      .filter(({ section }) => !needle || section.topicName.toLowerCase().includes(needle));
-  }, [model.sections, search]);
+    return entries
+      .map((entry, n) => ({ ...entry, number: n + 1 }))
+      .filter((entry) => {
+        if (!needle) return true;
+        const name = entry.kind === "topic" ? entry.section.topicName : entry.item.title?.trim() || entry.item.topicName;
+        return name.toLowerCase().includes(needle);
+      });
+  }, [entries, search]);
 
   const usedTopicIds = useMemo(
     () => new Set(model.sections.map((s) => s.topicId)),
@@ -419,14 +453,10 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
   const groupFold = useSectionFold(groups.map((g) => g.key));
   /** Ключи существующих групп — по ним раздел с чужим ключом считается «вне групп» (FR-12). */
   const groupKeys = useMemo(() => new Set(groups.map((g) => g.key)), [groups]);
-  const groupOf = useCallback(
-    (section: EditorSection) => resolvedGroupKey(section, groupKeys),
-    [groupKeys],
-  );
-  /** Разделы по группам, в порядке модели: номер темы остаётся её местом в выдаче. */
+  /** Пункты по группам, в общем порядке: номер пункта остаётся его местом в выдаче. */
   const inGroup = useCallback(
-    (key: string | null) => visibleSections.filter(({ section }) => groupOf(section) === key),
-    [visibleSections, groupOf],
+    (key: string | null) => visibleEntries.filter((entry) => entryGroup(entry, groupKeys) === key),
+    [visibleEntries, groupKeys],
   );
 
   const addGroup = () =>
@@ -454,7 +484,32 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
       ...m,
       sectionGroups: (m.sectionGroups ?? []).filter((g) => g.key !== key),
       sections: m.sections.map((s) => (s.groupKey === key ? { ...s, groupKey: null } : s)),
+      scenarioItems: (m.scenarioItems ?? []).map((item) => (item.groupKey === key ? { ...item, groupKey: null } : item)),
     }));
+
+  /** Пункт-сценарий: строка встаёт в конец списка, в группу, из которой его позвали. */
+  const addScenario = (bank: ScenarioBank) => {
+    const id = crypto.randomUUID();
+    const groupKey = scenarioPickerGroup ?? null;
+    updateModel((m) => ({
+      ...m,
+      scenarioItems: [
+        ...(m.scenarioItems ?? []),
+        // Название в меню обязательно; по умолчанию — название темы (эскиз).
+        { id, topicId: bank.topicId, topicName: bank.topicName, questionId: null, title: bank.topicName, required: true, groupKey },
+      ],
+    }));
+    // Свёрнуты только пункты, бывшие при открытии: новый стоит раскрытым — его сейчас настроят.
+    setScenarioPickerGroup(undefined);
+  };
+
+  const updateScenario = (index: number, next: ScenarioItemDraft | null) =>
+    updateModel((m) => {
+      const list = [...(m.scenarioItems ?? [])];
+      if (next) list[index] = { ...list[index], ...next };
+      else list.splice(index, 1);
+      return { ...m, scenarioItems: list };
+    });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -481,33 +536,55 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
       return;
     }
 
-    if (!from.startsWith(DRAG.topic)) return;
-    const topicId = from.slice(DRAG.topic.length);
+    if (!isEntryDragId(from)) return;
 
-    // Тема, брошенная на КАРТОЧКУ: у настоящей группы приёмник назван `group:<ключ>` (это
+    // Пункт, брошенный на КАРТОЧКУ: у настоящей группы приёмник назван `group:<ключ>` (это
     // её сортируемый узел), у карточки «вне групп» — `zone:__ungrouped__`.
     if (to.startsWith(DRAG.zone) || to.startsWith(DRAG.group)) {
       const raw = to.startsWith(DRAG.zone)
         ? to.slice(DRAG.zone.length)
         : to.slice(DRAG.group.length);
-      updateModel((m) => moveTopicToGroup(m, topicId, raw === UNGROUPED ? null : raw));
+      updateModel((m) => moveEntryToGroup(m, from, raw === UNGROUPED ? null : raw));
       return;
     }
 
-    if (!to.startsWith(DRAG.topic)) return;
-    const overTopicId = to.slice(DRAG.topic.length);
-    updateModel((m) => moveTopicOnto(m, topicId, overTopicId));
+    if (!isEntryDragId(to)) return;
+    updateModel((m) => moveEntryOnto(m, from, to));
   };
 
   // PRD-30 FR-16: absent = «перемешивание», today's behaviour of every test.
   const testOrder: TestQuestionOrder = model.questionOrder ?? "random";
   const flatFlow = model.flowMode === "linear_flat";
 
-  /** Одна строка темы — и в плоском списке, и внутри карточки группы. */
-  const renderTopic = ({ section, index }: { section: EditorSection; index: number }) => (
+  /** Одна строка пункта — и в плоском списке, и внутри карточки группы. */
+  const renderEntry = (entry: NumberedEntry) => {
+    if (entry.kind === "scenario") {
+      return (
+        <ScenarioItemRow
+          key={entry.key}
+          itemKey={entry.key}
+          index={entry.index}
+          number={entry.number}
+          item={entry.item}
+          banks={scenarioBanks}
+          isLoading={banksLoading}
+          open={fold.isOpen(entry.key)}
+          onToggleOpen={() => fold.toggle(entry.key)}
+          onChange={(next) => updateScenario(entry.index, next)}
+          titleError={fieldErrors.get(`scenarioItems[${entry.index}].title`)}
+          hasIssue={fieldErrors.has(`scenarioItems[${entry.index}]`)}
+        />
+      );
+    }
+    return renderTopic({ section: entry.section, index: entry.index, number: entry.number });
+  };
+
+  /** Строка темы. */
+  const renderTopic = ({ section, index, number }: { section: EditorSection; index: number; number: number }) => (
     <TopicRow
       key={section.topicId}
       index={index}
+      number={number}
       section={section}
       open={fold.isOpen(section.topicId)}
       onToggleOpen={() => fold.toggle(section.topicId)}
@@ -612,12 +689,12 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
             )}
             {/* «Сценарий в ИС»: пункт-сценарий живёт рядом с темами только в тесте с роутером —
                 в линейном потоке его некуда поставить (согласованный эскиз, «роутер: сценарий в составе»). */}
-            {routerScenarios && (
+            {routerScenarios && groups.length === 0 && (
               <Button
                 variant="ghost"
                 size="s"
                 leadingIcon={<Plus size={16} aria-hidden="true" />}
-                onClick={() => setScenarioPickerOpen(true)}
+                onClick={() => setScenarioPickerGroup(null)}
                 data-testid="composition-add-scenario"
               >
                 Добавить сценарий
@@ -674,7 +751,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         {groups.length === 0 ? (
-          <TopicList testId="composition-topics" sections={visibleSections} renderTopic={renderTopic} />
+          <TopicList testId="composition-topics" entries={visibleEntries} renderEntry={renderEntry} />
         ) : (
           <SortableContext
             items={groups.map((g) => DRAG.group + g.key)}
@@ -684,13 +761,14 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
               <GroupCard
                 key={group.key}
                 group={group}
-                sections={inGroup(group.key)}
+                entries={inGroup(group.key)}
                 open={groupFold.isOpen(group.key)}
                 onToggleOpen={() => groupFold.toggle(group.key)}
                 onRename={(label) => renameGroup(group.key, label)}
                 onRemove={() => removeGroup(group.key)}
                 onAddTopic={() => openPickerFor(group.key)}
-                renderTopic={renderTopic}
+                onAddScenario={routerScenarios ? () => setScenarioPickerGroup(group.key) : undefined}
+                renderEntry={renderEntry}
               />
             ))}
             {/* Карточка «вне групп» стоит ВСЕГДА, пока есть хоть одна группа: это
@@ -698,23 +776,23 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
                 мишень, чтобы вытащить тему из группы перетаскиванием. */}
             <GroupCard
               group={null}
-              sections={inGroup(null)}
+              entries={inGroup(null)}
               open={groupFold.isOpen(UNGROUPED)}
               onToggleOpen={() => groupFold.toggle(UNGROUPED)}
               onAddTopic={() => openPickerFor(null)}
-              renderTopic={renderTopic}
+              renderEntry={renderEntry}
             />
           </SortableContext>
         )}
       </DndContext>
 
       {routerScenarios && (
-        <RouterScenariosBlock
-          model={model}
-          updateModel={updateModel}
-          startNumber={model.sections.length + 1}
-          pickerOpen={scenarioPickerOpen}
-          onPickerClose={() => setScenarioPickerOpen(false)}
+        <ScenarioPickerModal
+          open={scenarioPickerGroup !== undefined}
+          banks={scenarioBanks}
+          isLoading={banksLoading}
+          onPick={addScenario}
+          onCancel={() => setScenarioPickerGroup(undefined)}
         />
       )}
 
@@ -765,13 +843,15 @@ export const TopicsStructureSection = CompositionSection;
  */
 function GroupCard(props: {
   group: SectionGroup | null;
-  sections: { section: EditorSection; index: number }[];
+  entries: NumberedEntry[];
   open: boolean;
   onToggleOpen: () => void;
   onRename?: (label: string) => void;
   onRemove?: () => void;
   onAddTopic: () => void;
-  renderTopic: (entry: { section: EditorSection; index: number }) => React.ReactNode;
+  /** «Добавить сценарий» в подвале группы — только у теста с роутером и у настоящей группы. */
+  onAddScenario?: () => void;
+  renderEntry: (entry: NumberedEntry) => React.ReactNode;
 }) {
   const key = props.group?.key ?? UNGROUPED;
   /**
@@ -784,7 +864,9 @@ function GroupCard(props: {
   const sortable = useSortable({ id: DRAG.group + key, disabled: !props.group });
   const droppable = useDroppable({ id: DRAG.zone + key, disabled: !!props.group });
   const isOver = props.group ? sortable.isOver : droppable.isOver;
-  const count = props.sections.length;
+  const count = props.entries.length;
+  const topicCount = props.entries.filter((e) => e.kind === "topic").length;
+  const scenarioCount = count - topicCount;
   const dragStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -830,7 +912,14 @@ function GroupCard(props: {
         </div>
         <div className="ou-card__trail tb-level-card__trail">
           <Tag tone="neutral" size="s" data-testid={`composition-group-count-${key}`}>
-            {`${count} ${topicWord(count)}`}
+            {/* «2 темы · 1 сценарий» (эскиз); без сценариев — прежнее «N тем», без тем — только
+                сценарии: «0 тем · 1 сценарий» читалось бы как ошибка. */}
+            {scenarioCount === 0
+              ? `${count} ${topicWord(count)}`
+              : [
+                  topicCount > 0 ? `${topicCount} ${topicWord(topicCount)}` : null,
+                  `${scenarioCount} ${scenarioWord(scenarioCount)}`,
+                ].filter(Boolean).join(" · ")}
           </Tag>
           {props.group && (
             <IconButton
@@ -867,8 +956,8 @@ function GroupCard(props: {
           ) : (
             <TopicList
               testId={`composition-group-topics-${key}`}
-              sections={props.sections}
-              renderTopic={props.renderTopic}
+              entries={props.entries}
+              renderEntry={props.renderEntry}
             />
           )}
           <div className="tb-fold-toolbar tb-group-card__foot">
@@ -881,6 +970,17 @@ function GroupCard(props: {
             >
               {props.group ? "Добавить тему в группу" : "Добавить тему"}
             </Button>
+            {props.group && props.onAddScenario && (
+              <Button
+                variant="ghost"
+                size="s"
+                leadingIcon={<Plus size={14} aria-hidden="true" />}
+                onClick={props.onAddScenario}
+                data-testid={`composition-group-add-scenario-${key}`}
+              >
+                Добавить сценарий
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -898,19 +998,26 @@ function topicWord(count: number): string {
   return "тем";
 }
 
-/** Список тем одной области — плоский список теста либо содержимое группы. */
+/** «1 сценарий» / «2 сценария» / «5 сценариев». */
+function scenarioWord(count: number): string {
+  const tail = count % 100;
+  const last = count % 10;
+  if (tail >= 11 && tail <= 14) return "сценариев";
+  if (last === 1) return "сценарий";
+  if (last >= 2 && last <= 4) return "сценария";
+  return "сценариев";
+}
+
+/** Список пунктов одной области — плоский список теста либо содержимое группы. */
 function TopicList(props: {
   testId: string;
-  sections: { section: EditorSection; index: number }[];
-  renderTopic: (entry: { section: EditorSection; index: number }) => React.ReactNode;
+  entries: NumberedEntry[];
+  renderEntry: (entry: NumberedEntry) => React.ReactNode;
 }) {
   return (
-    <SortableContext
-      items={props.sections.map(({ section }) => DRAG.topic + section.topicId)}
-      strategy={verticalListSortingStrategy}
-    >
+    <SortableContext items={props.entries.map((entry) => entry.key)} strategy={verticalListSortingStrategy}>
       <div className="ou-acc ou-acc--separated" data-testid={props.testId}>
-        {props.sections.map(props.renderTopic)}
+        {props.entries.map(props.renderEntry)}
       </div>
     </SortableContext>
   );
@@ -919,6 +1026,8 @@ function TopicList(props: {
 function TopicRow(props: {
   /** Position in `model.sections`; feeds the `sections[i]` FR-20c anchor. */
   index: number;
+  /** Номер в общем списке пунктов (у роутера со сценариями отличается от `index + 1`). */
+  number?: number;
   section: EditorSection;
   /** Test runs in adaptive mode — forces "draw all" on + locks the controls. */
   adaptive: boolean;
@@ -1076,7 +1185,7 @@ function TopicRow(props: {
             data-testid={`topic-toggle-${section.topicId}`}
           >
             <span className="ou-acc__trigger-text">
-              <span className="ou-acc__title">{`${props.index + 1}. ${section.topicName}`}</span>
+              <span className="ou-acc__title">{`${props.number ?? props.index + 1}. ${section.topicName}`}</span>
               <span className="ou-acc__subtitle">
                 {`${section.maxQuestions} вопрос${plural(section.maxQuestions)} в банке · выдаётся ${
                   effectiveDrawAll ? section.maxQuestions : section.drawCount

@@ -434,6 +434,7 @@ function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
     questionId: item.questionId,
     title: item.title?.trim() || null,
     required: item.required !== false,
+    groupKey: item.groupKey ?? null,
   }));
   if (adaptive) {
     payload.showDifficultyLevel = adaptive.showDifficultyLevel;

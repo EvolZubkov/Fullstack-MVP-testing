@@ -1,0 +1,1 @@
+ALTER TABLE "test_scenarios" ADD COLUMN "group_key" text;

@@ -2657,7 +2657,13 @@
   cursor: pointer;
 }
 .tb-fold-chev { flex: none; color: var(--ou-fg-muted); }
-.tb-fold-toolbar { display: flex; align-items: center; }
+/* Панель не дробит ряд кнопок добавления: не помещаясь, «Развернуть все / Свернуть все»
+   уходят строкой ниже целиком — у роутера со сценариями кнопок добавления три. */
+.tb-fold-toolbar { display: flex; align-items: center; flex-wrap: wrap; row-gap: var(--ou-space-2); }
+
+/* Пиктограмма вида пункта в заголовке строки состава (сценарий, lucide monitor-play): сброс
+   делает svg блочным, и без этого правила знак вставал строкой над названием. */
+.tb-acc-title-ico { display: inline-block; vertical-align: text-bottom; margin-right: var(--ou-space-1); }
 
 /* ─── Шапка раздела с действиями ──────────────────────────────────────────────
    Эскиз `editor-settings-target.html` ставит действия списка («Развернуть все /

@@ -119,6 +119,8 @@ const scenarioBodySchema = z.object({
   required: z.boolean().optional(),
   timeLimitMinutes: z.number().int().positive().nullable().optional(),
   imageUrl: z.string().nullable().optional(),
+  // Группа тем, в которой стоит пункт роутера (как `group_key` раздела).
+  groupKey: z.string().min(1).nullable().optional(),
 });
 
 /**

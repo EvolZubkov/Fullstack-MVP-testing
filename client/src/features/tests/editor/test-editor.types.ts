@@ -38,6 +38,8 @@ export type ScenarioItemDraft = {
   /** Название в меню участника (роутер); пусто — название темы. */
   title?: string | null;
   required?: boolean;
+  /** Группа тем, в которой стоит пункт роутера (как `EditorSection.groupKey`); нет — вне групп. */
+  groupKey?: string | null;
 };
 
 export type TestStatus = "draft" | "published" | "archived";
@@ -212,6 +214,11 @@ export type RouterUnlockRule =
 export type FlowRouterSettings = {
   completionPolicy: RouterCompletionPolicy;
   sectionUnlockRules: Record<string, RouterUnlockRule>;
+  /**
+   * «Сценарий в ИС»: общий порядок тем и пунктов-сценариев, ключами `topic:<id>` /
+   * `scenario:<id>` (`shared/test-items`). Нет — темы в порядке разделов, затем сценарии.
+   */
+  itemOrder?: string[];
 };
 
 export type FlowSettings = {

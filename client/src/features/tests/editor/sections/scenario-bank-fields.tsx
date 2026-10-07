@@ -70,10 +70,12 @@ export interface ScenarioBankFieldsProps {
   onChange: (next: ScenarioItemDraft | null) => void;
   banks: ScenarioBank[];
   isLoading: boolean;
+  /** Поля пункта, стоящие перед действиями («Обязательный» у пункта роутера). */
+  beforeActions?: React.ReactNode;
 }
 
 /** Поля пункта-сценария. */
-export function ScenarioBankFields({ item, onChange, banks, isLoading }: ScenarioBankFieldsProps) {
+export function ScenarioBankFields({ item, onChange, banks, isLoading, beforeActions }: ScenarioBankFieldsProps) {
   const [playing, setPlaying] = useState<Scenario | null>(null);
   const { bank, fixed, exposure } = scenarioItemFacts(item, banks);
   const mode: PickMode = item?.questionId ? "fixed" : "random";
@@ -167,6 +169,8 @@ export function ScenarioBankFields({ item, onChange, banks, isLoading }: Scenari
           data-testid="scenario-bank-empty"
         />
       )}
+
+      {beforeActions}
 
       <Cluster gap={1}>
         {fixed && (

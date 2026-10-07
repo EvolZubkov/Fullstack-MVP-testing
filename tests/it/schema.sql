@@ -431,6 +431,7 @@ CREATE TABLE "test_scenarios" (
 	"required" boolean DEFAULT true NOT NULL,
 	"time_limit_minutes" integer,
 	"image_url" text,
+	"group_key" text,
 	"sort_order" integer DEFAULT 0 NOT NULL
 );
 

@@ -173,6 +173,21 @@ export function validateTestEditor(
     });
   }
 
+  // «Сценарий в ИС»: у пункта-сценария роутера название в меню обязательно (эскиз, «роутер:
+  // сценарий в составе»): по нему участник выбирает пункт в хабе.
+  if (model.mode === "standard" && model.flowMode === "router_by_topics") {
+    (model.scenarioItems ?? []).forEach((item, index) => {
+      if (!item.title?.trim()) {
+        errors.push({
+          field: `scenarioItems[${index}].title`,
+          code: "required",
+          message: "Укажите название пункта в меню.",
+          severity: "error",
+        });
+      }
+    });
+  }
+
   // FR-12: at least one section (topic) must be added
   if (model.mode !== "scenario" && model.sections.length === 0) {
     errors.push({

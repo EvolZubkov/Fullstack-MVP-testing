@@ -970,6 +970,11 @@ export const testScenarios = pgTable("test_scenarios", {
   timeLimitMinutes: integer("time_limit_minutes"),
   /** Картинка карточки пункта в хабе; NULL — без картинки. */
   imageUrl: text("image_url"),
+  /**
+   * Группа тем, в которой стоит пункт (PRD-50 `tests.section_groups_json`), — как
+   * `test_sections.group_key`. NULL или ключ, которого тест не объявлял, — «вне групп».
+   */
+  groupKey: text("group_key"),
   /** Порядок пунктов теста (в роутере — общий с темами, этап Э3). */
   sortOrder: integer("sort_order").notNull().default(0),
 }, (table) => ({

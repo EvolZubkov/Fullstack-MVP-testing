@@ -165,7 +165,7 @@ function tabForField(field: string): EditorTabKey {
   }
   if (field === "flowMode" || field.startsWith("adaptive")) return "composition";
   // «Сценарий в ИС»: банк сценариев — на вкладке «Задание» (ключ той же вкладки).
-  if (field === "scenario") return "composition";
+  if (field === "scenario" || field.startsWith("scenarioItems[")) return "composition";
   if (field.startsWith("scoring") || field.startsWith("passRules")) return "scoring";
   if (field.startsWith("scales") || field.startsWith("resultVariables")) return "scoring";
   if (field.startsWith("retakePolicy") || field.startsWith("runtime")) return "rules";

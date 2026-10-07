@@ -233,6 +233,8 @@ export interface ScenarioPayload {
   required?: boolean;
   timeLimitMinutes?: number | null;
   imageUrl?: string | null;
+  /** Группа тем, в которой стоит пункт; `null`/отсутствие — «вне групп». */
+  groupKey?: string | null;
 }
 
 export interface CreatePayload {
@@ -884,6 +886,7 @@ export class TestSettingsService {
         required: s.required ?? true,
         timeLimitMinutes: s.timeLimitMinutes ?? null,
         imageUrl: s.imageUrl ?? null,
+        groupKey: s.groupKey ?? null,
         sortOrder: i,
       });
     }

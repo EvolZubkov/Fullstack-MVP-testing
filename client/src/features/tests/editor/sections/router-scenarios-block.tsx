@@ -1,36 +1,27 @@
 /**
  * @module features/tests/editor/sections/router-scenarios-block
- * @description Пункты-сценарии теста с роутером в «Составе» — согласованный эскиз
+ * @description Пункт-сценарий теста с роутером в «Составе» — согласованный эскиз
  * `docs/wireframes/sim-scenario-test-editor.html` (состояния «роутер: сценарий в составе»,
  * «роутер: добавить сценарий»).
  *
- * Пункт стоит в одном списке с темами и нумеруется вместе с ними; его карточка устроена как
- * карточка темы. Свойства пункта: название в меню участника, тема-банк, выдача (случайный или
- * фиксированный сценарий), обязательность. Правила разблокировки пунктов задаются так же, как у
- * тем — в настройках маршрутизатора.
- *
- * Порядок: пункты идут после тем. Выдача уже понимает общий порядок `router.itemOrder`
- * (`shared/test-items`); перетаскивание сценария между темами в редакторе — следующий шаг.
+ * Пункт стоит в ОДНОМ списке с темами и нумеруется вместе с ними; его строка устроена как
+ * строка темы (ручка, заголовок со сводкой, «Убрать», шеврон) и отличается пиктограммой
+ * `monitor-play`. Свойства пункта: название в меню участника, тема-банк, выдача (случайный или
+ * фиксированный сценарий), обязательность. Порядок и группу задаёт перетаскивание — общее с
+ * темами (`composition-items`).
  */
-import { useState } from "react";
-import { Trash2 } from "lucide-react";
-import { IconButton, Input, ModalDialog, Button, Switch, Stack } from "@skillum/ui-kit";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { ChevronDown, GripVertical, MonitorPlay, Search, Trash2 } from "lucide-react";
+import { Button, IconButton, Input, ModalDialog, Stack, Switch } from "@skillum/ui-kit";
 import { plural } from "@/features/questions/scenario/scenario-summary";
-import type { ScenarioItemDraft, TestEditorModel } from "../test-editor.types";
-import { ScenarioBankFields, scenarioItemFacts, useScenarioBanks, type ScenarioBank } from "./scenario-bank-fields";
+import { REVEAL_EVENT } from "../field-errors";
+import type { ScenarioItemDraft } from "../test-editor.types";
+import { ScenarioBankFields, scenarioItemFacts, type ScenarioBank } from "./scenario-bank-fields";
 
-export interface RouterScenariosBlockProps {
-  model: TestEditorModel;
-  updateModel: (updater: (model: TestEditorModel) => TestEditorModel) => void;
-  /** Номер первого пункта-сценария: после тем. */
-  startNumber: number;
-  /** Открыто ли окно «Добавить сценарий» (кнопка стоит в панели состава). */
-  pickerOpen: boolean;
-  onPickerClose: () => void;
-}
-
-/** Сводка свёрнутой карточки: банк и выдача, как у темы — «N в банке · выдаётся …». */
-function subtitleOf(item: ScenarioItemDraft, banks: ScenarioBank[]): string {
+/** Сводка свёрнутой строки: банк и выдача, как у темы — «… · выдаётся …». */
+export function scenarioSubtitle(item: ScenarioItemDraft, banks: ScenarioBank[]): string {
   const { bank, fixed, exposure } = scenarioItemFacts(item, banks);
   const name = item.topicName || bank?.topicName || "";
   if (fixed) return `Сценарий · банк «${name}» · фиксированный «${fixed.summary.title}»`;
@@ -38,127 +29,198 @@ function subtitleOf(item: ScenarioItemDraft, banks: ScenarioBank[]): string {
   return `Сценарий · банк «${name}» · случайный${size}${exposure ? ` · увидят ${exposure.percent}%` : ""}`;
 }
 
-/** Пункты-сценарии роутера и окно их добавления. */
-export function RouterScenariosBlock({ model, updateModel, startNumber, pickerOpen, onPickerClose }: RouterScenariosBlockProps) {
-  const { banks, isLoading } = useScenarioBanks();
-  const items = model.scenarioItems ?? [];
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+export interface ScenarioItemRowProps {
+  /** Ключ пункта `scenario:<id>` — он же адрес перетаскивания. */
+  itemKey: string;
+  /** Место пункта в `model.scenarioItems` — адрес ошибок `scenarioItems[i]`. */
+  index: number;
+  /** Номер в общем списке с темами. */
+  number: number;
+  item: ScenarioItemDraft;
+  banks: ScenarioBank[];
+  isLoading: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
+  /** Новое состояние пункта; `null` — пункт убран. */
+  onChange: (next: ScenarioItemDraft | null) => void;
+  titleError?: string;
+  /** Ошибка внутри пункта — точка в шапке видна, пока строка свёрнута. */
+  hasIssue?: boolean;
+}
 
-  const updateItem = (index: number, next: ScenarioItemDraft | null) =>
-    updateModel((m) => {
-      const list = [...(m.scenarioItems ?? [])];
-      if (next) list[index] = { ...list[index], ...next };
-      else list.splice(index, 1);
-      return { ...m, scenarioItems: list };
-    });
-
-  const addItem = (bank: ScenarioBank) => {
-    const id = crypto.randomUUID();
-    updateModel((m) => ({
-      ...m,
-      scenarioItems: [...(m.scenarioItems ?? []), { id, topicId: bank.topicId, topicName: bank.topicName, questionId: null, title: null, required: true }],
-    }));
-    setOpen((prev) => ({ ...prev, [id]: true }));
-    onPickerClose();
+/** Строка пункта-сценария в списке «Состава». */
+export function ScenarioItemRow(props: ScenarioItemRowProps) {
+  const { item } = props;
+  const name = item.title?.trim() || item.topicName;
+  const sortable = useSortable({ id: props.itemKey });
+  const dragStyle: React.CSSProperties = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : undefined,
   };
 
-  return (
-    <>
-      {items.length > 0 && (
-        <div className="ou-acc" data-testid="router-scenarios">
-          {items.map((item, index) => {
-            const key = item.id ?? `new-${index}`;
-            const isOpen = open[key] === true;
-            const name = item.title?.trim() || item.topicName;
-            return (
-              <div key={key} className={`ou-acc__item${isOpen ? " is-open" : ""}`} data-testid={`router-scenario-${key}`}>
-                <div className="tb-acc-head">
-                  <button
-                    type="button"
-                    className="ou-acc__trigger"
-                    aria-expanded={isOpen}
-                    onClick={() => setOpen((prev) => ({ ...prev, [key]: !isOpen }))}
-                  >
-                    <span className="ou-acc__trigger-text">
-                      <span className="ou-acc__title">{`${startNumber + index}. ${name}`}</span>
-                      <span className="ou-acc__subtitle">{subtitleOf(item, banks)}</span>
-                    </span>
-                  </button>
-                  <span className="tb-topic-actions">
-                    <IconButton
-                      icon={<Trash2 size={14} aria-hidden="true" />}
-                      aria-label={`Убрать сценарий «${name}»`}
-                      variant="ghost"
-                      size="s"
-                      onClick={() => updateItem(index, null)}
-                      data-testid={`router-scenario-remove-${key}`}
-                    />
-                  </span>
-                </div>
-                {isOpen && (
-                  <div className="ou-acc__body" role="region">
-                    <Stack gap={4}>
-                      <Input
-                        size="m"
-                        fullWidth
-                        label="Название в меню"
-                        placeholder={item.topicName}
-                        hint="Так пункт называется в меню участника. Пусто — название темы."
-                        value={item.title ?? ""}
-                        onChange={(e) => updateItem(index, { ...item, title: e.target.value })}
-                        data-testid="router-scenario-title"
-                      />
-                      <ScenarioBankFields
-                        item={item}
-                        // Убрать банк у пункта роутера значит убрать сам пункт: пункт без банка
-                        // ничего не выдаёт, а держать пустую карточку незачем.
-                        onChange={(next) => updateItem(index, next ? { ...item, ...next } : null)}
-                        banks={banks}
-                        isLoading={isLoading}
-                      />
-                      <Switch
-                        label="Обязательный"
-                        checked={item.required !== false}
-                        onChange={(e) => updateItem(index, { ...item, required: e.target.checked })}
-                        data-testid="router-scenario-required"
-                      />
-                    </Stack>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+  // «Перейти к ошибкам» просит свёрнутую строку раскрыться — так же, как у темы.
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const setRowRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      rowRef.current = el;
+      sortable.setNodeRef(el);
+    },
+    [sortable],
+  );
+  const { open, onToggleOpen } = props;
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    const reveal = () => {
+      if (!open) onToggleOpen();
+    };
+    el.addEventListener(REVEAL_EVENT, reveal);
+    return () => el.removeEventListener(REVEAL_EVENT, reveal);
+  }, [open, onToggleOpen]);
 
-      <ModalDialog
-        open={pickerOpen}
-        onClose={onPickerClose}
+  return (
+    <div
+      ref={setRowRef}
+      style={dragStyle}
+      className={`ou-acc__item${open ? " is-open" : ""}`}
+      data-testid={`router-scenario-${props.itemKey}`}
+      data-field={`scenarioItems[${props.index}]`}
+    >
+      <div className="tb-acc-head">
+        <span
+          className="drag-handle"
+          aria-label={`Переместить сценарий «${name}»`}
+          data-testid={`router-scenario-grip-${props.itemKey}`}
+          {...sortable.attributes}
+          {...sortable.listeners}
+        >
+          <GripVertical size={14} aria-hidden="true" />
+        </span>
+        {props.hasIssue && (
+          <span className="tb-status-dot tb-status-dot--err" aria-label={`Есть ошибки: ${name}`} />
+        )}
+        <button
+          type="button"
+          className="ou-acc__trigger"
+          aria-expanded={open}
+          onClick={onToggleOpen}
+          data-testid={`router-scenario-toggle-${props.itemKey}`}
+        >
+          <span className="ou-acc__trigger-text">
+            <span className="ou-acc__title">
+              <MonitorPlay size={16} className="tb-acc-title-ico" aria-label="Сценарий" />{`${props.number}. ${name}`}
+            </span>
+            <span className="ou-acc__subtitle">{scenarioSubtitle(item, props.banks)}</span>
+          </span>
+        </button>
+        <span className="tb-topic-actions">
+          <IconButton
+            icon={<Trash2 size={14} aria-hidden="true" />}
+            aria-label={`Убрать сценарий «${name}»`}
+            variant="ghost"
+            size="s"
+            onClick={() => props.onChange(null)}
+            data-testid={`router-scenario-remove-${props.itemKey}`}
+          />
+        </span>
+        {/* Шеврон — мишень мыши, как у темы; клавиатурный путь — кнопка-триггер рядом. */}
+        <span className="ou-acc__chev" aria-hidden="true" onClick={onToggleOpen}>
+          <ChevronDown size={16} />
+        </span>
+      </div>
+      <div className="ou-acc__body" role="region">
+        <Stack gap={4}>
+          <Input
+            size="m"
+            fullWidth
+            required
+            label="Название в меню"
+            value={item.title ?? ""}
+            error={props.titleError}
+            onChange={(e) => props.onChange({ ...item, title: e.target.value })}
+            data-field={`scenarioItems[${props.index}].title`}
+            data-testid="router-scenario-title"
+          />
+          <ScenarioBankFields
+            item={item}
+            // Убрать банк у пункта роутера значит убрать сам пункт: пункт без банка ничего не
+            // выдаёт, а держать пустую строку незачем.
+            onChange={(next) => props.onChange(next ? { ...item, ...next } : null)}
+            banks={props.banks}
+            isLoading={props.isLoading}
+            beforeActions={
+              <Switch
+                label="Обязательный"
+                checked={item.required !== false}
+                onChange={(e) => props.onChange({ ...item, required: e.target.checked })}
+                data-testid="router-scenario-required"
+              />
+            }
+          />
+        </Stack>
+      </div>
+    </div>
+  );
+}
+
+export interface ScenarioPickerModalProps {
+  open: boolean;
+  banks: ScenarioBank[];
+  isLoading: boolean;
+  onPick: (bank: ScenarioBank) => void;
+  onCancel: () => void;
+}
+
+/** Окно «Добавить сценарий»: темы со сценариями, с поиском — как окно «Добавить тему». */
+export function ScenarioPickerModal({ open, banks, isLoading, onPick, onCancel }: ScenarioPickerModalProps) {
+  const [filter, setFilter] = useState("");
+  const needle = filter.trim().toLowerCase();
+  const filtered = banks.filter((b) => b.topicName.toLowerCase().includes(needle));
+  return (
+    <ModalDialog
+      open={open}
+      onClose={onCancel}
+      size="m"
+      title="Добавить сценарий"
+      description="Темы, в которых есть сценарии. Выдачу — случайный или фиксированный сценарий — настроите в составе"
+      footer={<Button variant="ghost" size="m" onClick={onCancel}>Отмена</Button>}
+      data-testid="router-scenario-picker"
+    >
+      <Input
         size="m"
-        title="Добавить сценарий"
-        description="Темы, в которых есть сценарии. Выдачу — случайный или фиксированный сценарий — настроите в составе"
-        footer={<Button variant="ghost" size="m" onClick={onPickerClose}>Отмена</Button>}
-        data-testid="router-scenario-picker"
-      >
-        <ul className="tb-topic-picker__list">
-          {banks.length === 0 && (
-            <li className="tb-topic-picker__empty">{isLoading ? "Загрузка…" : "В доступных темах нет сценариев"}</li>
-          )}
-          {banks.map((bank) => (
-            <li key={bank.topicId}>
-              <button
-                type="button"
-                className="tb-topic-picker__item"
-                onClick={() => addItem(bank)}
-                data-testid={`router-scenario-picker-${bank.topicId}`}
-              >
-                <span>{bank.topicName}</span>
-                <span className="tb-topic-picker__item-count">{plural(bank.scenarios.length, ["сценарий", "сценария", "сценариев"])}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </ModalDialog>
-    </>
+        fullWidth
+        label="Поиск темы"
+        placeholder="Название темы"
+        iconRight={<Search size={16} aria-hidden="true" />}
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        autoFocus
+        className="tb-topic-picker__search"
+        data-testid="router-scenario-picker-search"
+      />
+      <ul className="tb-topic-picker__list">
+        {filtered.length === 0 && (
+          <li className="tb-topic-picker__empty">
+            {isLoading ? "Загрузка…" : banks.length === 0 ? "В доступных темах нет сценариев" : "Ничего не найдено"}
+          </li>
+        )}
+        {filtered.map((bank) => (
+          <li key={bank.topicId}>
+            <button
+              type="button"
+              className="tb-topic-picker__item"
+              onClick={() => onPick(bank)}
+              data-testid={`router-scenario-picker-${bank.topicId}`}
+            >
+              <span>{bank.topicName}</span>
+              <span className="tb-topic-picker__item-count">
+                {plural(bank.scenarios.length, ["сценарий", "сценария", "сценариев"])}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </ModalDialog>
   );
 }

@@ -70,6 +70,7 @@ import type {
 import { DEFAULT_BREAKDOWN_DISPLAY } from "./test-editor.types";
 import { makeQuestionOverride, type QuestionScoringOverride } from "./scoring-api";
 import type { DraftBlock } from "./use-report-document";
+import { itemOrderForSave } from "./sections/composition-items";
 
 // ─── API response shape ───────────────────────────────────────────────────────
 
@@ -150,7 +151,7 @@ function readScenarioItemsFromApi(src: ApiTestResponse): ScenarioItemDraft[] {
   const items = (src as { scenarios?: unknown }).scenarios;
   if (!Array.isArray(items)) return [];
   return items.flatMap((raw): ScenarioItemDraft[] => {
-    const item = raw as { id?: unknown; topicId?: unknown; topicName?: unknown; questionId?: unknown; title?: unknown; required?: unknown };
+    const item = raw as { id?: unknown; topicId?: unknown; topicName?: unknown; questionId?: unknown; title?: unknown; required?: unknown; groupKey?: unknown };
     if (typeof item.topicId !== "string") return [];
     return [{
       ...(typeof item.id === "string" ? { id: item.id } : {}),
@@ -159,6 +160,7 @@ function readScenarioItemsFromApi(src: ApiTestResponse): ScenarioItemDraft[] {
       questionId: typeof item.questionId === "string" ? item.questionId : null,
       title: typeof item.title === "string" ? item.title : null,
       required: item.required !== false,
+      ...(typeof item.groupKey === "string" ? { groupKey: item.groupKey } : {}),
     }];
   });
 }
@@ -608,7 +610,11 @@ function buildRouterFlowFromApi(src: ApiTestResponse): FlowRouterSettings {
     }
   }
 
-  return { completionPolicy, sectionUnlockRules };
+  const itemOrder = Array.isArray(router.itemOrder)
+    ? router.itemOrder.filter((key): key is string => typeof key === "string")
+    : [];
+
+  return { completionPolicy, sectionUnlockRules, ...(itemOrder.length > 0 ? { itemOrder } : {}) };
 }
 
 // ─── Flow settings builder ────────────────────────────────────────────────────
@@ -1720,9 +1726,11 @@ export function mapEditorRouterFlowToPayload(model: TestEditorModel): FlowRouter
   if (!router) {
     return { completionPolicy: "all_required_completed", sectionUnlockRules: {} };
   }
+  const itemOrder = itemOrderForSave(model);
   return {
     completionPolicy: router.completionPolicy,
     sectionUnlockRules: router.sectionUnlockRules,
+    ...(itemOrder ? { itemOrder } : {}),
   };
 }
 
