@@ -92,6 +92,7 @@ beforeEach(() => {
   storageMock.getQuestionsByIds.mockResolvedValue([]);
   storageMock.getTopics.mockResolvedValue([]);
   storageMock.getTest.mockResolvedValue(undefined);
+  storageMock.getResultVariables.mockResolvedValue([]);
   app = makeApp();
 });
 
@@ -386,5 +387,41 @@ describe("GET /scorm-attempts/:attemptId/export/excel", () => {
     const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1/export/excel"));
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /scorm-attempts/:attemptId — показатели из сохранённого значения (FR-21e)", () => {
+  // The formula yields 99 on any answers: if the route recomputed, the detail would say 99.
+  const RV = [{
+    name: "idx", label: "Индекс", type: "number", formula: "99", sortOrder: 0,
+    learnerVisibility: "level_and_value", scormTarget: "both", controlsStatus: "none",
+    configJson: { bands: [{ min: 0, max: 49, level: "low", label: "Низкий" }, { min: 50, max: 100, level: "high", label: "Высокий" }] },
+  }];
+
+  beforeEach(() => {
+    storageMock.getScormPackage.mockResolvedValue(pkgOwned);
+    storageMock.getResultVariables.mockResolvedValue(RV);
+  });
+
+  it("reads the value the LMS reported, typed, with its interpretation", async () => {
+    storageMock.getScormAttempt.mockResolvedValue({ ...baseAttempt, variablesJson: { idx: "64" } });
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.resultVariables).toEqual({ idx: 64 });
+    expect(res.body.indicatorViews).toEqual([
+      { name: "idx", label: "Индекс", value: 64, interpretation: "Высокий" },
+    ]);
+  });
+
+  it("does not recompute an indicator the LMS did not report", async () => {
+    storageMock.getScormAttempt.mockResolvedValue({ ...baseAttempt, variablesJson: null });
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.resultVariables).toEqual({});
+    expect(res.body.indicatorViews[0]).toMatchObject({ name: "idx", value: null, interpretation: null });
   });
 });

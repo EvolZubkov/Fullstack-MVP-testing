@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
-import { analyticsScope, attemptPackage } from "./helpers";
+import { analyticsScope, attemptPackage, buildIndicatorViews } from "./helpers";
 import { loadScoringConfig } from "../../services/scoring-config";
 import { computeAttemptResult, type AttemptResultBase } from "../../services/result-compute";
 import { computeAnswerContributions, type Answer, type QuestionType } from "@shared/scales/engine";
@@ -10,6 +10,7 @@ import { computeBreakdowns } from "@shared/breakdown/compute";
 import type { BreakdownItem } from "@shared/breakdown/types";
 import type { AttemptDetailOutcome } from "./attempts";
 import { sendAttemptProtocol } from "../../services/analytics/attempt-protocol";
+import { indicatorValuesOf } from "../../services/analytics/indicator-values";
 
 const router = Router();
 
@@ -136,10 +137,10 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
 
     const answers = await storage.getScormAnswersByAttempt(attempt.id);
 
-    // Scale/indicator config (PRD-5/PRD-2) for per-answer contributions and the
-    // attempt-level summary. Recomputed from the test's CURRENT config from the
-    // stored answers — may drift if the test changed after the attempt (unlike
-    // baked points, contributions are not persisted). Empty for a deleted test.
+    // Scale config (PRD-5) for per-answer contributions and the attempt-level scale
+    // summary. Recomputed from the test's CURRENT config from the stored answers — may
+    // drift if the test changed after the attempt (unlike baked points, contributions are
+    // not persisted). Empty for a deleted test. Indicators are NOT recomputed: see below.
     const scoringConfig = testId
       ? await loadScoringConfig(testId)
       : { scales: [], measurements: [], resultVariables: [], budgets: {} };
@@ -271,6 +272,16 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
       ? computeAttemptResult(scoringConfig, rawAnswers, questionTypes, gradedBase)
       : { scaleResults: {}, resultVariables: {}, status: {} };
 
+    // PRD-56 FR-21e: indicators are the values the LMS REPORTED (`variables_json` — telemetry or
+    // the `var_*` blocks of an imported export), never a replay of the formulas against today's
+    // config: that would present as the participant's result a number the package never sent.
+    // An indicator the run did not report stays empty.
+    const rvRows = testId ? await storage.getResultVariables(testId) : [];
+    const resultVariables = indicatorValuesOf(
+      rvRows,
+      attempt.variablesJson as Record<string, unknown> | null,
+    );
+
     let achievedLevels = null;
     if (attempt.achievedLevelsJson) {
       try {
@@ -306,7 +317,8 @@ export async function loadScormAttemptDetail(req: Request, attemptId: string): P
       answers: detailedAnswers,
       topicResults,
       scaleResults: graded.scaleResults,
-      resultVariables: graded.resultVariables,
+      resultVariables,
+      indicatorViews: buildIndicatorViews(rvRows, resultVariables),
       achievedLevels,
       source: "lms",
     } };
