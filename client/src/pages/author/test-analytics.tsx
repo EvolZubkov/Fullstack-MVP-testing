@@ -122,6 +122,7 @@ import {
     exportAttemptWorkbook,
     type CombinedAttempt,
 } from "@/features/analytics/attempt/attempt-details-dialog";
+import { ATTEMPT_PICK_CHIP_LABEL, DEFAULT_ATTEMPT_PICK, type AttemptPick } from "@shared/analytics/attempt-pick";
 import { percent } from "@/features/analytics/format";
 import { useRegistryDictionaries, useTestDictionary } from "@/features/analytics/registry/use-dictionaries";
 import { useRegistryFilter } from "@/features/analytics/registry/use-registry-filter";
@@ -278,12 +279,13 @@ interface DeliveryAnalytics {
  * The dash is the same answer `formatDuration` has always given for a missing duration.
  */
 /**
- * Ключ чипа «Только первая попытка» в строке фильтра (PRD-66 FR-51).
+ * Ключ чипа правила попыток («Только первая / лучшая / последняя попытка») в строке фильтра
+ * (PRD-66 FR-51).
  *
  * Без двоеточия намеренно: ключи условий фильтра имеют вид «вид:значение», и этот с ними не
  * совпадёт ни при каком значении.
  */
-const FIRST_ATTEMPT_CHIP = "first-attempt-only";
+const ATTEMPTS_CHIP = "attempts-pick";
 
 /** Процент на плитке обзора — целым, как в эскизе: «79 %». */
 const tilePercent = (value: number | null): string => percent(value);
@@ -412,12 +414,13 @@ export default function TestAnalyticsPage() {
     };
     /**
      * PRD-66 FR-51: психометрика по умолчанию считает только первую попытку каждого участника —
-     * повторные попытки того же человека не независимы. Условие живёт здесь, а не в общем фильтре
-     * PRD-56: там оно действовало бы и на «Обзор», где считаются все попытки.
+     * повторные попытки того же человека не независимы. Читатель может выбрать иное правило — все,
+     * лучшую, последнюю (дельта 2026-10-07). Условие живёт здесь, а не в общем фильтре PRD-56: там
+     * оно действовало бы и на «Обзор», где считаются все попытки.
      */
-    const [firstAttemptOnly, setFirstAttemptOnly] = useState(true);
-    /** Чип «Только первая попытка» — только там, где он что-то значит: у психометрики. */
-    const showsAttemptChip = firstAttemptOnly && activeTab === "questions";
+    const [attempts, setAttempts] = useState<AttemptPick>(DEFAULT_ATTEMPT_PICK);
+    /** Чип правила попыток — только там, где он что-то значит: у психометрики. */
+    const showsAttemptChip = attempts !== "all" && activeTab === "questions";
     /**
      * Адрес ручки психометрики с условиями экрана (PRD-66 FR-04a, FR-54b).
      *
@@ -431,8 +434,8 @@ export default function TestAnalyticsPage() {
      */
     const psychometricsUrl = (path: string, extra: Record<string, string> = {}): string => {
         const params = new URLSearchParams(filterSearch.replace(/^\?/, ""));
-        // Умолчание сервера — первая попытка; параметр нужен только для отказа от неё.
-        if (!firstAttemptOnly) params.set("firstAttemptOnly", "false");
+        // Умолчание сервера — первая попытка; параметр нужен только для иного правила.
+        if (attempts !== DEFAULT_ATTEMPT_PICK) params.set("attempts", attempts);
         for (const [name, value] of Object.entries(extra)) params.set(name, value);
         const search = params.toString();
         return search ? `${path}?${search}` : path;
@@ -766,7 +769,7 @@ export default function TestAnalyticsPage() {
             qualityLoading={qualityLoading}
             heuristics={reviewHeuristics}
             excluded={excludedFromDelivery}
-            onRestoreFirstAttempt={() => setFirstAttemptOnly(true)}
+            onRestoreFirstAttempt={() => setAttempts("first")}
             // FR-22: измерительным тест считается по ФАКТУ — прохождения есть, а оценённых
             // среди них нет ни одного. Объявленный проходной балл признаком не годится:
             // опросник нередко несёт его по умолчанию, ничего при этом не оценивая, и тест
@@ -898,7 +901,7 @@ export default function TestAnalyticsPage() {
                   { ...dictionaries, ...testDictionary },
                 ),
                 // FR-51: снимается крестиком; путь назад — кнопка в предупреждении вкладки.
-                ...(showsAttemptChip ? [{ id: FIRST_ATTEMPT_CHIP, label: "Только первая попытка" }] : []),
+                ...(showsAttemptChip ? [{ id: ATTEMPTS_CHIP, label: ATTEMPT_PICK_CHIP_LABEL[attempts] }] : []),
             ]}
             savedSets={testLevelFilters(savedFilters.filters).map(item => ({ id: item.id, name: item.name }))}
             {...savedSetState(testLevelFilters(savedFilters.filters).map(item => ({ ...item, conditions: withoutTests(conditionsOf(item)) })), appliedSetId, withoutTests(filter))}
@@ -950,8 +953,8 @@ export default function TestAnalyticsPage() {
             onOpenFilter={() => setFilterOpen(value => !value)}
             onRemove={(id: string) => {
                 const [kind, value] = [id.slice(0, id.indexOf(":")), id.slice(id.indexOf(":") + 1)];
-                if (id === FIRST_ATTEMPT_CHIP) {
-                    setFirstAttemptOnly(false);
+                if (id === ATTEMPTS_CHIP) {
+                    setAttempts("all");
                 } else if (kind === "group") {
                     setFilter({ ...filter, groupIds: filter.groupIds.filter(x => x !== value) });
                 } else if (kind === "source") {
@@ -972,10 +975,10 @@ export default function TestAnalyticsPage() {
                     setFilter({ ...filter, from: undefined, to: undefined });
                 }
             }}
-            // «Сбросить фильтры» снимает ВСЕ условия, и «Только первая попытка» тоже (замечание
+            // «Сбросить фильтры» снимает ВСЕ условия, и правило попыток тоже (замечание
             // владельца 2026-10-04: чип оставался после сброса). Умолчание при открытии
             // страницы — первая попытка (PRD-66 FR-51); вернуть условие можно в окне фильтра.
-            onReset={() => { setFilter(EMPTY_FILTER); setFirstAttemptOnly(false); }}
+            onReset={() => { setFilter(EMPTY_FILTER); setAttempts("all"); }}
             resetLabel="Сбросить фильтры"
         />
     );
@@ -1053,12 +1056,12 @@ export default function TestAnalyticsPage() {
          * Условия страницы для ответов задания — те же, что у разбора над ними (`psychometricsUrl`),
          * с режимом попыток, названным явно: без него ручка ответов отдаёт все попытки.
          */
-        const answersSearch = psychometricsUrl("", { firstAttemptOnly: String(firstAttemptOnly) });
+        const answersSearch = psychometricsUrl("", { attempts });
         // Э5.2: окно выгрузки ответов называет условия страницы теми же словами, что полоса фильтра.
         const answersConditions = [
             ...describeConditions({ ...filter, testIds: [] }, { ...dictionaries, ...testDictionary })
                 .map(condition => String(condition.label)),
-            ...(firstAttemptOnly ? ["Только первая попытка"] : []),
+            ...(attempts !== "all" ? [ATTEMPT_PICK_CHIP_LABEL[attempts]] : []),
         ];
         const distribution = (
             <>
@@ -1289,7 +1292,15 @@ export default function TestAnalyticsPage() {
                 hideTest
                 scopeTestId={testId ?? null}
                 // FR-51: условие психометрики — там, где его чип: на вкладке «Вопросы».
-                firstAttempt={activeTab === "questions" ? { value: firstAttemptOnly, onApply: setFirstAttemptOnly } : undefined}
+                // «Только лучшая» у измерительного теста недоступна: общего балла нет, сравнивать
+                // попытки не по чему.
+                attempts={activeTab === "questions"
+                    ? {
+                        value: attempts,
+                        onApply: setAttempts,
+                        bestUnavailable: summary.completedAttempts > 0 && summary.gradedAttempts === 0,
+                    }
+                    : undefined}
                 onApply={setFilter}
                 onClose={() => setFilterOpen(false)}
             />
@@ -1327,7 +1338,7 @@ export default function TestAnalyticsPage() {
                                 testId={testId!}
                                 adhoc={compareAdhoc?.conditions ?? null}
                                 adhocName={compareAdhoc?.name ?? null}
-                                firstAttemptOnly={firstAttemptOnly}
+                                attempts={attempts}
                                 // FR-07k: тот же признак, что у подзаголовка «измерительный тест».
                                 measurement={summary.completedAttempts > 0 && summary.gradedAttempts === 0}
                                 onOpenPassages={openPassages}

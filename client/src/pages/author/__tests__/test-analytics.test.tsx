@@ -351,7 +351,7 @@ describe("<TestAnalyticsPage />", () => {
       }],
       reliability: "too-few-items", sem: null, cutBand: null,
       sample: { respondents: 40, responses: 40, bySource: { web: 40 }, unknownVersionShare: 0 },
-      firstAttemptOnly: true,
+      attempts: "first",
     };
     await renderLoaded();
     fireEvent.click(screen.getByRole("tab", { name: "Вопросы" }));
@@ -473,7 +473,7 @@ describe("<TestAnalyticsPage />", () => {
         }],
         reliability: "too-few-items", sem: null, cutBand: null,
         sample: { respondents: 40, responses: 40, bySource: { import: 40 }, unknownVersionShare: 0 },
-        firstAttemptOnly: true,
+        attempts: "first",
       };
       // Ответы — по пути БЕЗ условий: сами условия проверяет каждый тест.
       fetchMock.mockImplementation(async (input: string) => {
@@ -515,7 +515,7 @@ describe("<TestAnalyticsPage />", () => {
     });
   });
 
-  describe("«только первая попытка» (PRD-66 FR-51)", () => {
+  describe("правило попыток (PRD-66 FR-51)", () => {
     /** Расчёт психометрики с одним заданием; режим попыток сервер возвращает тем, что спросили. */
     const bodyFor = (url: string) => ({
       items: [{
@@ -527,7 +527,7 @@ describe("<TestAnalyticsPage />", () => {
       }],
       reliability: "too-few-items", sem: null, cutBand: null,
       sample: { respondents: 40, responses: 40, bySource: { web: 40 }, unknownVersionShare: 0 },
-      firstAttemptOnly: !url.includes("firstAttemptOnly=false"),
+      attempts: new URLSearchParams(url.split("?")[1] ?? "").get("attempts") ?? "first",
     });
 
     beforeEach(() => {
@@ -565,7 +565,7 @@ describe("<TestAnalyticsPage />", () => {
       fireEvent.click(removeChip("Только первая попытка"));
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-        "/api/analytics/psychometrics/t1?firstAttemptOnly=false", expect.anything(),
+        "/api/analytics/psychometrics/t1?attempts=all", expect.anything(),
       ));
       expect(await screen.findByText("Посчитано по всем попыткам")).toBeInTheDocument();
       expect(screen.queryByText("Только первая попытка")).toBeNull();
@@ -601,10 +601,53 @@ describe("<TestAnalyticsPage />", () => {
       await waitFor(() => expect(screen.queryByText("Только первая попытка")).toBeNull());
 
       fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
-      fireEvent.click(await screen.findByLabelText("Только первая попытка"));
+      fireEvent.click(await screen.findByLabelText("Только первая"));
       fireEvent.click(screen.getByRole("button", { name: "Применить" }));
 
       expect(await screen.findByText("Только первая попытка")).toBeInTheDocument();
+    });
+
+    it("«Попытки» — одно правило из четырёх, а не флажок (дельта 2026-10-07)", async () => {
+      await renderLoaded();
+      await openPsychometrics();
+      fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+
+      const radios = await screen.findAllByRole("radio");
+      expect(radios.map(radio => radio.closest("label")?.textContent))
+        .toEqual(["Все", "Только первая", "Только лучшая", "Только последняя"]);
+      expect(screen.getByLabelText("Только первая")).toBeChecked();
+    });
+
+    it("«Только лучшая» пересчитывает по лучшей попытке и предупреждает о смещении", async () => {
+      await renderLoaded();
+      await openPsychometrics();
+      fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+      fireEvent.click(await screen.findByLabelText("Только лучшая"));
+      fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        "/api/analytics/psychometrics/t1?attempts=best", expect.anything(),
+      ));
+      expect(await screen.findByText("Только лучшая попытка")).toBeInTheDocument();
+      expect(await screen.findByText("Посчитано по лучшей попытке")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Вернуть: только первая попытка" }));
+      expect(await screen.findByText("Только первая попытка")).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByText("Посчитано по лучшей попытке")).toBeNull());
+    });
+
+    it("«Только последняя» стоит чипом и предупреждения не даёт", async () => {
+      await renderLoaded();
+      await openPsychometrics();
+      fireEvent.click(screen.getByRole("button", { name: /^Фильтр/ }));
+      fireEvent.click(await screen.findByLabelText("Только последняя"));
+      fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        "/api/analytics/psychometrics/t1?attempts=last", expect.anything(),
+      ));
+      expect(await screen.findByText("Только последняя попытка")).toBeInTheDocument();
+      expect(screen.queryByText(/^Посчитано по/)).toBeNull();
     });
   });
 
@@ -630,7 +673,7 @@ describe("<TestAnalyticsPage />", () => {
           : path === "/api/analytics/psychometrics/t1" ? {
             items: [], reliability: "too-few-items", sem: null, cutBand: null,
             sample: { respondents: 40, responses: 40, bySource: { web: 40 }, unknownVersionShare: 0 },
-            firstAttemptOnly: true,
+            attempts: "first",
           }
             : path === "/api/analytics/tests/t1" ? state.analyticsBody : [];
         return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
@@ -693,7 +736,7 @@ describe("<TestAnalyticsPage />", () => {
               dead: false, againstScale: false, alphaIfMirrored: null,
             }],
           }],
-          firstAttemptOnly: true,
+          attempts: "first",
         }
           : path === "/api/analytics/psychometrics/t1" ? {
             items: [{
@@ -705,7 +748,7 @@ describe("<TestAnalyticsPage />", () => {
             }],
             reliability: "too-few-items", sem: null, cutBand: null,
             sample: { respondents: 312, responses: 312, bySource: { web: 312 }, unknownVersionShare: 0 },
-            firstAttemptOnly: true,
+            attempts: "first",
             measurementOnly: true,
           }
             : path === "/api/analytics/tests/t1" ? state.analyticsBody : [];

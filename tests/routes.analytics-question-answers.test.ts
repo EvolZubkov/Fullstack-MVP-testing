@@ -147,6 +147,18 @@ describe("GET /tests/:testId/questions/:questionId/answers — фильтр ст
     expect(res.body.total).toBe(2);
   });
 
+  it("правило attempts=first совпадает с прежним firstAttemptOnly=true", async () => {
+    const res = await answers("source=web&attempts=first");
+
+    expect(res.body.rows.map((r: { attemptId: string }) => r.attemptId)).toEqual(["web-1"]);
+  });
+
+  it("«только последняя попытка» оставляет последнюю попытку участника", async () => {
+    const res = await answers("source=web&attempts=last");
+
+    expect(res.body.rows.map((r: { attemptId: string }) => r.attemptId)).toEqual(["web-2"]);
+  });
+
   it("условия отбора уходят в выборку прохождений теста", async () => {
     await answers("source=web&groupId=g1&from=2026-09-01&to=2026-09-02");
 

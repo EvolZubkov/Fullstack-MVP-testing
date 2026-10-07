@@ -28,6 +28,7 @@ import { useLocation } from "wouter";
 import { questionInTopicHref } from "@/features/content/question-link";
 import { QuestionTypeIcon } from "@/features/tests/editor/sections/question-type-icon";
 import type { QuestionType } from "@shared/questions/question-type";
+import type { AttemptPick } from "@shared/analytics/attempt-pick";
 import { pluralize } from "@/lib/i18n";
 
 import { DeliveryExclusionDialog, type ExclusionTarget } from "./delivery-exclusion-dialog";
@@ -141,7 +142,8 @@ export interface ItemQualityView {
     passagesBySource?: Record<string, number>;
     unknownVersionShare: number;
   };
-  firstAttemptOnly: boolean;
+  /** Какая попытка участника взята в расчёт (FR-51, дельта 2026-10-07). */
+  attempts: AttemptPick;
   /**
    * FR-11: сколько взаимодействий импорта не нашли своего задания — видимая потеря выборки.
    * Может отсутствовать у ответов ручки до этого требования.
@@ -398,6 +400,24 @@ function compareRows(
   }
   return sign * (valueA - valueB);
 }
+
+/**
+ * Предупреждения над числами у смещённых правил попыток (FR-51).
+ *
+ * «Все» учитывает одного человека несколько раз; «лучшая» отобрана по результату самого теста
+ * (дельта 2026-10-07). «Первая» — умолчание, «последняя» сужает выборку, но не по результату:
+ * им предупреждение не нужно, условие называет чип в строке фильтра.
+ */
+const ATTEMPTS_WARNING: Record<"all" | "best", { title: string; description: string }> = {
+  all: {
+    title: "Посчитано по всем попыткам",
+    description: "Повторные попытки одного участника не независимы: он учтён несколько раз, коэффициенты смещаются, а пороги достоверности достигаются раньше, чем на самом деле. Для отбора вопросов считайте по первой попытке.",
+  },
+  best: {
+    title: "Посчитано по лучшей попытке",
+    description: "Лучшая попытка выбрана по результату самого теста, поэтому статистика смещена: вопросы выглядят легче, разброс баллов уже, различающая способность и надёжность искажены. Для отбора вопросов считайте по первой попытке.",
+  },
+};
 
 /** Вкладка «Качество вопросов». */
 export function ItemQualityPanel({
@@ -657,15 +677,15 @@ export function ItemQualityPanel({
     <Stack gap={4}>
       {section !== "table" && (<>
       {/*
-        FR-51: по всем попыткам считать можно, но осознанно. Повторная попытка того же человека —
-        не второй участник, и предупреждение стоит первым, над числами, которые оно касается.
+        FR-51: по всем попыткам и по лучшей считать можно, но осознанно. Повторная попытка того же
+        человека — не второй участник, а лучшая отобрана по результату; предупреждение стоит
+        первым, над числами, которые оно касается.
       */}
-      {view.firstAttemptOnly === false ? (
+      {view.attempts === "all" || view.attempts === "best" ? (
         <Banner
           variant="subtle"
           tone="warning"
-          title="Посчитано по всем попыткам"
-          description="Повторные попытки одного участника не независимы: он учтён несколько раз, коэффициенты смещаются, а пороги достоверности достигаются раньше, чем на самом деле. Для отбора вопросов считайте по первой попытке."
+          {...ATTEMPTS_WARNING[view.attempts]}
           actions={onRestoreFirstAttempt
             // Вне режима `stacked` действие баннера рисуется голым текстом и не читается как
             // кнопка; эскиз ставит сюда вторичную кнопку — её классы и передаются.
@@ -819,7 +839,7 @@ export function ItemQualityPanel({
             ) : null}
             {/* «Только первая попытка» — умолчание, и оно уже стоит чипом в строке фильтра; тег
                 нужен только в обратном случае, как предупреждение (эскиз, дельта FR-51). */}
-            {view.firstAttemptOnly ? null : <Tag tone="warning" size="s">все попытки</Tag>}
+            {view.attempts === "all" ? <Tag tone="warning" size="s">все попытки</Tag> : null}
           </Stack>
         </CardBody>
       </Card>

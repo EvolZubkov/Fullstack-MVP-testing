@@ -33,6 +33,15 @@ import { NoValue } from "./no-value";
 import { COEFFICIENT_MIN, num } from "./psychometrics-format";
 import { QuestionRowMenu } from "./question-row-menu";
 import { TermHint } from "./term-hint";
+import { DEFAULT_ATTEMPT_PICK, type AttemptPick } from "@shared/analytics/attempt-pick";
+
+/** Какие попытки взяты в расчёт трудности — словами для подписи под таблицей (FR-51). */
+const ATTEMPTS_PHRASE: Record<AttemptPick, string> = {
+  all: "во всех попытках участников",
+  first: "в первой попытке участника",
+  best: "в лучшей попытке участника",
+  last: "в последней попытке участника",
+};
 
 /**
  * Толкования терминов в заголовках колонок (FR-14b) — дословно из эскиза prd66-item-quality,
@@ -99,6 +108,8 @@ export interface QuestionTableProps {
   measurement?: boolean;
   /** Порог наблюдений: ниже него разброс не печатается, потому что он шум (FR-06d). */
   minObservations?: number;
+  /** По какой попытке участника посчитана психометрика (FR-51): её называет подпись под таблицей. */
+  attempts?: AttemptPick;
   /** Уйти в реестр к прохождениям, где на этом задании ошиблись (FR-17). */
   onOpenRegistry?: (questionId: string) => void;
   /** Переключить состояние «исключён из выдачи» (FR-17a). Без него действие не предлагается. */
@@ -257,7 +268,7 @@ function notGradedReason(row: QuestionRow): string | undefined {
 }
 
 export function QuestionTable({
-  questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 10,
+  questions, onOpenRegistry, onDeliveryChange, testId, measurement, minObservations = 10, attempts = DEFAULT_ATTEMPT_PICK,
   psychometrics, onOpenQuality, passages, initialView = "all", columnSet = "full", bare = false, flags,
 }: QuestionTableProps) {
   const [view, setView] = useState<View>(initialView);
@@ -601,12 +612,12 @@ export function QuestionTable({
   );
   /*
     PRD-66 FR-04, FR-38a: два порога сосуществуют в одной строке, и экран обязан сказать, какой к
-    какому числу относится. Выборка названа там же: трудность считается по первой попытке
-    участника, а пропуски и время — по всем ответам.
+    какому числу относится. Выборка названа там же: трудность считается по попытке участника,
+    выбранной правилом фильтра (по умолчанию — первой), а пропуски и время — по всем ответам.
   */
   const footnote = !measurement ? (
     <Text variant="body-xs" tone="muted">
-      Трудность и дискриминативность считаются по доле балла в первой попытке участника ·
+      Трудность и дискриминативность считаются по доле балла {ATTEMPTS_PHRASE[attempts]} ·
       доли ответов, пропуски, экспозиция и время — от {minObservations} наблюдений,
       дискриминативность — от {COEFFICIENT_MIN}
     </Text>

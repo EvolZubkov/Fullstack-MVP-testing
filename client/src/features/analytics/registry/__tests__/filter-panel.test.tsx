@@ -129,4 +129,47 @@ describe("RegistryFilterPanel", () => {
 
     expect(onApply).toHaveBeenCalledWith(EMPTY);
   });
+
+  describe("«Попытки» (PRD-66 FR-51, дельта 2026-10-07)", () => {
+    it("без правила попыток группы нет — на «Обзоре» считаются все попытки", async () => {
+      render(<Panel open filter={EMPTY} onApply={() => {}} onClose={() => {}} />);
+
+      await screen.findByLabelText("Веб");
+      expect(screen.queryByRole("radio")).toBeNull();
+    });
+
+    it("выбранное правило уходит одним значением вместе с остальными условиями", async () => {
+      const onAttempts = vi.fn();
+      render(
+        <Panel
+          open
+          filter={EMPTY}
+          onApply={() => {}}
+          onClose={() => {}}
+          attempts={{ value: "first", onApply: onAttempts }}
+        />,
+      );
+
+      await userEvent.click(await screen.findByLabelText("Только последняя"));
+      expect(screen.getByLabelText("Только первая")).not.toBeChecked();
+      await userEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+      expect(onAttempts).toHaveBeenCalledWith("last");
+    });
+
+    it("у измерительного теста «Только лучшая» недоступна: общего балла нет", async () => {
+      render(
+        <Panel
+          open
+          filter={EMPTY}
+          onApply={() => {}}
+          onClose={() => {}}
+          attempts={{ value: "first", onApply: () => {}, bestUnavailable: true }}
+        />,
+      );
+
+      expect(await screen.findByLabelText("Только лучшая")).toBeDisabled();
+      expect(screen.getByLabelText("Только последняя")).toBeEnabled();
+    });
+  });
 });

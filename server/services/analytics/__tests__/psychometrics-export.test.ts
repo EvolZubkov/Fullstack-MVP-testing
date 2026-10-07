@@ -58,7 +58,7 @@ const QUESTIONS = new Map<string, QuestionInfo>([
 const CTX: ExportContext = {
   testTitle: "Сертификация",
   conditions: "группа: Розница",
-  firstAttemptOnly: true,
+  attempts: "first",
   generatedAt: new Date("2026-09-24T09:30:00Z"),
 };
 

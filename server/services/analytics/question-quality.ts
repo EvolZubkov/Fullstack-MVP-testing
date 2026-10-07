@@ -142,7 +142,7 @@ export async function evaluateTestQuality(testId: string): Promise<TestQuality |
   if (!test) return null;
 
   const [{ psychometrics }, heuristics, pool] = await Promise.all([
-    testPsychometrics(test, { testIds: [testId] }, true),
+    testPsychometrics(test, { testIds: [testId] }, "first"),
     reviewHeuristicsOfTest(testId),
     loadDeliveryPool(testId),
   ]);

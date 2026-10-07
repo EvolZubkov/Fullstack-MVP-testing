@@ -11,7 +11,8 @@ import { loadTestScoringContext } from "../effective-scoring";
 import { loadDeliveryPool } from "../delivery-pool";
 import { outcomeFor } from "./answer-outcome";
 import type { ObservationFilter } from "./observations";
-import { computePsychometrics, firstAttemptOnly, type QuestionInfo } from "./psychometrics";
+import { computePsychometrics, pickMatrixResponses, type QuestionInfo } from "./psychometrics";
+import type { AttemptPick } from "@shared/analytics/attempt-pick";
 import { loadResponseMatrix } from "./response-matrix";
 
 /**
@@ -160,20 +161,20 @@ export interface TestPsychometrics {
  * @param batches партии импорта теста: загрузка и откат меняют выборку, не трогая ни теста, ни
  *   его содержания
  * @param filter отбор наблюдений
- * @param onlyFirst только первая попытка участника
+ * @param attempts какая попытка участника берётся (FR-51)
  */
 export function coreKey(
   test: TestRow,
   batches: TestPsychometrics["batches"],
   filter: ObservationFilter,
-  onlyFirst: boolean,
+  attempts: AttemptPick,
 ): string {
   return JSON.stringify({
     testId: test.id,
     version: test.version ?? 1,
     batchIds: batches.map(b => b.id).sort().join(","),
     filter: { ...filter, from: filter.from?.toISOString(), to: filter.to?.toISOString() },
-    onlyFirst,
+    attempts,
   });
 }
 
@@ -188,19 +189,19 @@ export function coreKey(
  *
  * @param test тест
  * @param filter отбор наблюдений; `testIds` — ровно `[test.id]`
- * @param onlyFirst только первая попытка участника (FR-51)
+ * @param attempts какая попытка участника берётся (FR-51)
  */
 export async function testPsychometrics(
   test: TestRow,
   filter: ObservationFilter,
-  onlyFirst: boolean,
+  attempts: AttemptPick,
 ): Promise<TestPsychometrics> {
   const batches = await storage.getLmsImportBatches(test.id);
-  return cached(coreKey(test, batches, filter, onlyFirst), async () => {
+  return cached(coreKey(test, batches, filter, attempts), async () => {
     const { grade, questionById } = await buildGrader(test.id);
     const matrix = await loadResponseMatrix(filter, { all: true, ids: new Set<string>() }, grade);
     const sections = await storage.getTestSections(test.id);
-    const responses = onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses;
+    const responses = pickMatrixResponses(matrix, attempts);
     const psychometrics = computePsychometrics(responses, {
       questionById,
       minObservations: config.analytics.minObservations,

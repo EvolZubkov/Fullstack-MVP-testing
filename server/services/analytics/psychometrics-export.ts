@@ -12,6 +12,15 @@
 
 import type { ResponseFact } from "./response-matrix";
 import type { TestPsychometrics } from "./psychometrics";
+import type { AttemptPick } from "@shared/analytics/attempt-pick";
+
+/** Строка «Попытки» шапки листа: правило словами, как его прочтёт тот, кому переслали файл. */
+const ATTEMPTS_HEADER: Record<AttemptPick, string> = {
+  all: "все попытки",
+  first: "только первая каждого участника",
+  best: "только лучшая каждого участника (отбор по результату, статистика смещена)",
+  last: "только последняя каждого участника",
+};
 
 /** Значение ячейки листа: Excel принимает строки и числа. */
 export type Cell = string | number;
@@ -21,8 +30,8 @@ export interface ExportContext {
   testTitle: string;
   /** Условия отбора словами — те же, что показаны на экране. */
   conditions: string;
-  /** Режим попыток: он меняет числа сильнее любого фильтра. */
-  firstAttemptOnly: boolean;
+  /** Какая попытка участника взята: от правила зависят все числа листа (FR-51). */
+  attempts: AttemptPick;
   generatedAt: Date;
 }
 
@@ -49,7 +58,7 @@ export function sampleHeader(ctx: ExportContext, sample: TestPsychometrics["samp
   return [
     [`Тест: ${ctx.testTitle}`],
     [`Условия отбора: ${ctx.conditions || "без условий"}`],
-    [`Попытки: ${ctx.firstAttemptOnly ? "только первая каждого участника" : "все попытки"}`],
+    [`Попытки: ${ATTEMPTS_HEADER[ctx.attempts]}`],
     [`Выборка: респондентов ${sample.respondents}, наблюдений ${sample.responses}`],
     [`Источники: ${bySource || "нет наблюдений"}`],
     [`Редакция неизвестна: ${(sample.unknownVersionShare * 100).toFixed(1)} % наблюдений`],

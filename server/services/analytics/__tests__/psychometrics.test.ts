@@ -12,7 +12,8 @@ import {
   computeItemBreakdown,
   computePsychometrics,
   defaultVersionOf,
-  firstAttemptOnly,
+  pickAttemptResponses,
+  pickMatrixResponses,
   type QuestionInfo,
 } from "../psychometrics";
 import type { ResponseFact } from "../response-matrix";
@@ -385,7 +386,7 @@ describe("computePsychometrics", () => {
   });
 });
 
-describe("firstAttemptOnly", () => {
+describe("pickAttemptResponses — «первая»", () => {
   it("оставляет ПЕРВУЮ попытку каждого респондента", () => {
     // Повторная попытка не независима: человек помнит задания, и она говорит о памяти не
     // меньше, чем о способности.
@@ -395,13 +396,49 @@ describe("firstAttemptOnly", () => {
       fact({ respondentId: "B", questionId: "q1", observationId: "b-only", occurredAt: new Date("2026-09-03T10:00:00Z") }),
     ];
 
-    const kept = firstAttemptOnly(responses);
+    const kept = pickAttemptResponses(responses, "first", new Map());
 
     expect(kept.map(r => r.observationId)).toEqual(["first", "b-only"]);
   });
 
   it("наблюдения без респондента отбрасывает — их попытки не сосчитать", () => {
-    expect(firstAttemptOnly([fact({ respondentId: null as never, questionId: "q1" })])).toEqual([]);
+    expect(pickAttemptResponses([fact({ respondentId: null as never, questionId: "q1" })], "first", new Map())).toEqual([]);
+  });
+});
+
+describe("pickMatrixResponses", () => {
+  // Три попытки A и одна B; у второй попытки A лучший результат, у третьей — самая поздняя.
+  const responses: ResponseFact[] = [
+    fact({ respondentId: "A", questionId: "q1", observationId: "a1", occurredAt: new Date("2026-09-01T10:00:00Z") }),
+    fact({ respondentId: "A", questionId: "q2", observationId: "a1", occurredAt: new Date("2026-09-01T10:00:00Z") }),
+    fact({ respondentId: "A", questionId: "q1", observationId: "a2", occurredAt: new Date("2026-09-02T10:00:00Z") }),
+    fact({ respondentId: "A", questionId: "q1", observationId: "a3", occurredAt: new Date("2026-09-03T10:00:00Z") }),
+    fact({ respondentId: "B", questionId: "q1", observationId: "b1", occurredAt: new Date("2026-09-02T10:00:00Z") }),
+  ];
+  const observations = [
+    { id: "a1", percent: 40 },
+    { id: "a2", percent: 90 },
+    { id: "a3", percent: 60 },
+    { id: "b1", percent: 75 },
+  ];
+  const kept = (pick: "all" | "first" | "best" | "last") =>
+    [...new Set(pickMatrixResponses({ observations, responses }, pick).map(r => r.observationId))];
+
+  it("«все» оставляет каждую попытку", () => {
+    expect(kept("all")).toEqual(["a1", "a2", "a3", "b1"]);
+  });
+
+  it("«первая» сохраняет все ответы выбранной попытки", () => {
+    expect(kept("first")).toEqual(["a1", "b1"]);
+    expect(pickMatrixResponses({ observations, responses }, "first")).toHaveLength(3);
+  });
+
+  it("«лучшая» берёт попытку с наибольшим процентом результата", () => {
+    expect(kept("best")).toEqual(["a2", "b1"]);
+  });
+
+  it("«последняя» берёт самую позднюю попытку", () => {
+    expect(kept("last")).toEqual(["a3", "b1"]);
   });
 });
 

@@ -38,7 +38,7 @@ const QUALITY = {
   reliability: { alpha: 0.84, items: 42, respondents: 486, totalSd: 4, dichotomous: false },
   sem: 1, semPercent: 4.2, cutBand: null,
   sample: { respondents: 486, responses: 4000, bySource: { web: 486 }, unknownVersionShare: 0 },
-  firstAttemptOnly: true,
+  attempts: "first",
 } as unknown as ItemQualityView;
 
 const QUESTIONS = [

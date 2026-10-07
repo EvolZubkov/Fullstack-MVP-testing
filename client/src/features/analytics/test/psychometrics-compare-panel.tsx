@@ -18,6 +18,7 @@
  * темами» (управляемые снаружи): переключение метрик не сбрасывает выбор — в том числе
  * временный отбор кнопки «Сравнить со срезом», который ручка считает как срез `adhoc`.
  */
+import { DEFAULT_ATTEMPT_PICK, type AttemptPick } from "@shared/analytics/attempt-pick";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Stack, Text } from "@skillum/ui-kit";
@@ -34,7 +35,7 @@ export interface PsychometricsCompareBodyProps {
   /** Конец периода рамки (`ГГГГ-ММ-ДД`), включительно; пусто — без ограничения. */
   to?: string;
   /** Режим попыток: он меняет числа сильнее любого фильтра и едет в запрос как есть. */
-  firstAttemptOnly?: boolean;
+  attempts?: AttemptPick;
   /**
    * Отбор, присланный кнопкой «Сравнить со срезом», — временный срез `adhoc`. Без него
    * переключение на эту метрику оставляло первый слот пустым.
@@ -57,7 +58,7 @@ export interface PsychometricsCompareBodyProps {
  * @returns слоты, переключатель метрик вкладки и таблицы сравнения
  */
 export function PsychometricsCompareBody({
-  testId, from, to, firstAttemptOnly = true, adhoc = null, adhocName = null, slots, onSlotsChange, between,
+  testId, from, to, attempts = DEFAULT_ATTEMPT_PICK, adhoc = null, adhocName = null, slots, onSlotsChange, between,
 }: PsychometricsCompareBodyProps) {
   const [available, setAvailable] = useState<PsychometricsSlice[]>([]);
   const [failed, setFailed] = useState(false);
@@ -69,7 +70,7 @@ export function PsychometricsCompareBody({
   useEffect(() => {
     let alive = true;
     const query = new URLSearchParams({ withWhole: "1" });
-    if (!firstAttemptOnly) query.set("firstAttemptOnly", "false");
+    if (attempts !== DEFAULT_ATTEMPT_PICK) query.set("attempts", attempts);
     // Период рамки — тот же, что у «Результата и тем»: иначе две метрики одного сравнения
     // считались бы по разным прохождениям.
     if (from) query.set("from", from);
@@ -95,7 +96,7 @@ export function PsychometricsCompareBody({
     })();
 
     return () => { alive = false; };
-  }, [testId, from, to, firstAttemptOnly, adhoc, adhocName, reloads]);
+  }, [testId, from, to, attempts, adhoc, adhocName, reloads]);
 
   const selected = useMemo(
     () => slots

@@ -21,6 +21,7 @@
  * Разбивка по полю участника («Разбить по») сюда не входит: это не срез, и она живёт на «Обзоре»
  * («Результаты по группам», {@link module:features/analytics/slices/results-by-axis}).
  */
+import { DEFAULT_ATTEMPT_PICK, type AttemptPick } from "@shared/analytics/attempt-pick";
 import { useEffect, useState } from "react";
 
 import {
@@ -50,7 +51,7 @@ export interface TestSlicesTabProps {
   /** Имя присланного отбора — у строки разбивки оно есть («Розница»), у фильтра нет. */
   adhocName?: string | null;
   /** Режим попыток психометрики — тот же, что у «Качества вопросов». */
-  firstAttemptOnly?: boolean;
+  attempts?: AttemptPick;
   /**
    * Тест без эталона (измерительный): сравнение открывается на «Ответах и шкалах» — сдавших и
    * доли верных у него нет, и два других вида пусты (FR-07k).
@@ -78,7 +79,7 @@ function isoOf(value: DatePickerValue): string | undefined {
  * @returns рамка «период» и карточка «Сохранённые срезы» / «Сравнение срезов»
  */
 export function TestSlicesTab({
-  testId, adhoc = null, adhocName = null, firstAttemptOnly = true, measurement = false, onOpenPassages,
+  testId, adhoc = null, adhocName = null, attempts = DEFAULT_ATTEMPT_PICK, measurement = false, onOpenPassages,
 }: TestSlicesTabProps) {
   /** Вид, с которого открывается сравнение. */
   const firstMetric: Metric = measurement ? "answers" : "result";
@@ -198,7 +199,7 @@ export function TestSlicesTab({
               testId={testId}
               from={fromIso}
               to={toIso}
-              firstAttemptOnly={firstAttemptOnly}
+              attempts={attempts}
               adhoc={compareSlice?.conditions ?? adhoc}
               adhocName={compareSlice?.name ?? adhocName}
               slots={slots}

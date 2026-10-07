@@ -54,6 +54,7 @@ import {
 } from "@shared/psychometrics/timing";
 
 import type { ResponseFact } from "./response-matrix";
+import { pickAttemptIds, type AttemptCandidate, type AttemptPick } from "@shared/analytics/attempt-pick";
 
 /** Что известно о задании помимо наблюдений за ним. */
 export interface QuestionInfo {
@@ -288,23 +289,55 @@ function optionCountOf(question: QuestionInfo | undefined): number {
 }
 
 /**
- * Оставить по одному наблюдению на респондента — первое по времени (FR-51).
+ * Оставить ответы прохождений, выбранных правилом (FR-51, дельта 2026-10-07).
  *
  * Повторные попытки одного человека не независимы: он помнит задания, и вторая попытка говорит
- * о памяти не меньше, чем о способности. Умолчание — «только первая»; выключение переключателя
- * на экране сопровождается предупреждением, и это решение читателя, а не расчёта.
+ * о памяти не меньше, чем о способности. Умолчание — «только первая»; иное правило выбирает
+ * читатель, и экран сопровождает смещённые правила предупреждением.
+ *
+ * Кандидаты — прохождения, в которых есть ответы, как и прежде у «первой»: начатая и брошенная
+ * попытка без ответов не должна заслонять следующую. Процент результата приходит отдельно — у
+ * ответа его нет, он свойство прохождения.
+ *
+ * @param responses ответы выборки
+ * @param pick правило выбора попытки
+ * @param percentByObservation процент результата прохождения; нужен только правилу `best`
+ * @returns ответы оставленных прохождений
  */
-export function firstAttemptOnly(responses: readonly ResponseFact[]): ResponseFact[] {
-  const firstByRespondent = new Map<string, { observationId: string; at: number }>();
+export function pickAttemptResponses(
+  responses: readonly ResponseFact[],
+  pick: AttemptPick,
+  percentByObservation: ReadonlyMap<string, number | null>,
+): ResponseFact[] {
+  const candidates = new Map<string, AttemptCandidate>();
   for (const response of responses) {
-    if (!response.respondentId) continue;
-    const seen = firstByRespondent.get(response.respondentId);
-    const at = response.occurredAt.getTime();
-    if (!seen || at < seen.at) firstByRespondent.set(response.respondentId, { observationId: response.observationId, at });
+    if (candidates.has(response.observationId)) continue;
+    candidates.set(response.observationId, {
+      id: response.observationId,
+      participantId: response.respondentId,
+      at: response.occurredAt.getTime(),
+      percent: percentByObservation.get(response.observationId) ?? null,
+    });
   }
-  return responses.filter(r =>
-    r.respondentId !== null
-    && firstByRespondent.get(r.respondentId)?.observationId === r.observationId);
+  const kept = pickAttemptIds(candidates.values(), pick);
+  return kept === null ? [...responses] : responses.filter(response => kept.has(response.observationId));
+}
+
+/**
+ * Ответы матрицы по правилу выбора попытки — одна точка для всех ручек психометрики.
+ *
+ * @param matrix прохождения и ответы выборки
+ * @param pick правило выбора попытки
+ */
+export function pickMatrixResponses(
+  matrix: { observations: ReadonlyArray<{ id: string; percent: number | null }>; responses: readonly ResponseFact[] },
+  pick: AttemptPick,
+): ResponseFact[] {
+  return pickAttemptResponses(
+    matrix.responses,
+    pick,
+    new Map(matrix.observations.map(observation => [observation.id, observation.percent])),
+  );
 }
 
 /**

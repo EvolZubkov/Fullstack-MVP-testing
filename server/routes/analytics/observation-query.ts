@@ -14,6 +14,7 @@
  * into a filter.
  */
 import type { Request } from "express";
+import { attemptPickFromQuery, type AttemptPick } from "@shared/analytics/attempt-pick";
 
 import type {
   ObservationFilter,
@@ -208,21 +209,18 @@ export function conditionsFromBody(body: unknown): ObservationConditions {
  *
  * @param req request whose query carries the page filter
  * @param testId the test of the route
- * @param onlyFirstByDefault what an absent `firstAttemptOnly` means
- * @returns the filter and whether to keep only the first attempt of each participant
+ * @param attemptsByDefault what an absent `attempts` (and legacy `firstAttemptOnly`) means
+ * @returns the filter and which attempt of each participant to keep (PRD-66 FR-51)
  */
 export function readTestFilterQuery(
   req: Request,
   testId: string,
-  onlyFirstByDefault: boolean,
-): { filter: ObservationFilter; onlyFirst: boolean } {
-  const raw = req.query.firstAttemptOnly;
-  const onlyFirst = raw === undefined
-    ? onlyFirstByDefault
-    : String(raw).toLowerCase() !== "false";
+  attemptsByDefault: AttemptPick,
+): { filter: ObservationFilter; attempts: AttemptPick } {
+  const attempts = attemptPickFromQuery(req.query, attemptsByDefault);
   const conditions = conditionsFromQuery(req.query);
   return {
-    onlyFirst,
+    attempts,
     filter: buildObservationFilter({
       ...conditions,
       testIds: [testId],

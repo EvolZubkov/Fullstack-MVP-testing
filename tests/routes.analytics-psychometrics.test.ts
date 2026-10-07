@@ -280,17 +280,42 @@ describe("GET /analytics/psychometrics/:testId", () => {
     // трудность равна единице; учти ручка обе, вышло бы 0,5.
     const res = await ask();
 
-    expect(res.body.firstAttemptOnly).toBe(true);
+    expect(res.body.attempts).toBe("first");
     expect(res.body.items[0].difficulty).toBe(1);
     expect(res.body.sample.responses).toBe(1);
   });
 
   it("режим со всеми попытками включается явно", async () => {
-    const res = await ask("?firstAttemptOnly=false");
+    const res = await ask("?attempts=all");
 
-    expect(res.body.firstAttemptOnly).toBe(false);
+    expect(res.body.attempts).toBe("all");
     expect(res.body.items[0].difficulty).toBe(0.5);
     expect(res.body.sample.responses).toBe(2);
+  });
+
+  it("прежний параметр firstAttemptOnly=false понимается как «все попытки»", async () => {
+    // Старые ссылки и закладки обязаны давать то же, что давали.
+    const res = await ask("?firstAttemptOnly=false");
+
+    expect(res.body.attempts).toBe("all");
+    expect(res.body.sample.responses).toBe(2);
+  });
+
+  it("«только лучшая» берёт попытку с наибольшим процентом результата", async () => {
+    // Первая попытка — 100 %, вторая — 0 %: лучшая здесь совпадает с первой.
+    const res = await ask("?attempts=best");
+
+    expect(res.body.attempts).toBe("best");
+    expect(res.body.items[0].difficulty).toBe(1);
+    expect(res.body.sample.responses).toBe(1);
+  });
+
+  it("«только последняя» берёт самую позднюю попытку", async () => {
+    const res = await ask("?attempts=last");
+
+    expect(res.body.attempts).toBe("last");
+    expect(res.body.items[0].difficulty).toBe(0);
+    expect(res.body.sample.responses).toBe(1);
   });
 
   it("называет состав выборки по источникам", async () => {
@@ -467,14 +492,14 @@ describe("GET /analytics/psychometrics/:testId", () => {
   it("фоновый расчёт теста берёт расчёт экрана из общего кэша (PRD-70 FR-02)", async () => {
     await ask();
     const callsAfterScreen = storageMock.selectObservations.mock.calls.length;
-    const core = await testPsychometrics(TEST as never, { testIds: ["test1"] }, true);
+    const core = await testPsychometrics(TEST as never, { testIds: ["test1"] }, "first");
 
     expect(core.psychometrics.items).toHaveLength(1);
     expect(storageMock.selectObservations.mock.calls.length).toBe(callsAfterScreen);
   });
 
   it("экран после фонового расчёта тест заново не считает (PRD-70 FR-02)", async () => {
-    await testPsychometrics(TEST as never, { testIds: ["test1"] }, true);
+    await testPsychometrics(TEST as never, { testIds: ["test1"] }, "first");
     const callsAfterCount = storageMock.selectObservations.mock.calls.length;
     const res = await ask();
 

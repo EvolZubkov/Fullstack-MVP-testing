@@ -14,7 +14,7 @@
 import { useEffect, useState, type RefObject } from "react";
 
 import {
-  Checkbox, Combobox, FilterPanel, FilterPanelGroup, FormField, Grid, Input,
+  Checkbox, Combobox, FilterPanel, FilterPanelGroup, FormField, Grid, Input, Radio,
 } from "@skillum/ui-kit";
 
 import {
@@ -24,6 +24,12 @@ import {
   type RegistrySource,
 } from "./filter-state";
 import { NO_GROUP_ID, NO_GROUP_LABEL } from "@shared/analytics/no-group";
+import {
+  ATTEMPT_PICKS,
+  ATTEMPT_PICK_OPTION_LABEL,
+  DEFAULT_ATTEMPT_PICK,
+  type AttemptPick,
+} from "@shared/analytics/attempt-pick";
 import { useRegistryDictionaries, useTestDictionary } from "./use-dictionaries";
 import type { OrgField, OrgValueCount } from "@shared/org-fields";
 
@@ -47,11 +53,15 @@ export interface RegistryFilterPanelProps {
    */
   scopeTestId?: string | null;
   /**
-   * PRD-66 FR-51: «Только первая попытка» — условие психометрики уровня теста. Живёт не в общем
-   * фильтре (на «Обзоре» считаются все попытки), но в окне стоит рядом с остальными условиями:
-   * снятое чипом, оно иначе не возвращалось (замечание владельца 2026-10-04). Нет — раздела нет.
+   * PRD-66 FR-51: правило попыток — условие психометрики уровня теста. Живёт не в общем фильтре
+   * (на «Обзоре» считаются все попытки), но в окне стоит рядом с остальными условиями: снятое
+   * чипом, оно иначе не возвращалось (замечание владельца 2026-10-04). Нет — раздела нет.
+   *
+   * Одно правило из четырёх, а не флажки (дельта 2026-10-07): каждое оставляет участнику одну
+   * попытку, и по «И» они противоречили бы друг другу. `bestUnavailable` — у теста нет общего
+   * балла (измерительный), и «лучшую» выбрать не по чему.
    */
-  firstAttempt?: { value: boolean; onApply: (value: boolean) => void };
+  attempts?: { value: AttemptPick; onApply: (value: AttemptPick) => void; bestUnavailable?: boolean };
 }
 
 const SOURCES: Array<{ value: RegistrySource; label: string }> = [
@@ -100,10 +110,10 @@ function orgOptions(values: readonly OrgValueCount[], selected: readonly string[
 }
 
 export function RegistryFilterPanel({
-  open, anchorRef, filter, onApply, onClose, hideTest, scopeTestId, firstAttempt,
+  open, anchorRef, filter, onApply, onClose, hideTest, scopeTestId, attempts,
 }: RegistryFilterPanelProps) {
   const [draft, setDraft] = useState<RegistryFilter>(filter);
-  const [firstOnly, setFirstOnly] = useState(firstAttempt?.value ?? true);
+  const [attemptsDraft, setAttemptsDraft] = useState<AttemptPick>(attempts?.value ?? DEFAULT_ATTEMPT_PICK);
   // Справочники спрашиваются только у открытого окна и тем же хуком, что зовут чипы: иначе
   // одно и то же условие называлось бы в двух местах по-разному.
   const { tests, groups, orgValues } = useRegistryDictionaries(open);
@@ -119,17 +129,17 @@ export function RegistryFilterPanel({
   useEffect(() => {
     if (open) {
       setDraft(filter);
-      setFirstOnly(firstAttempt?.value ?? true);
+      setAttemptsDraft(attempts?.value ?? DEFAULT_ATTEMPT_PICK);
     }
-  }, [open, filter, firstAttempt?.value]);
+  }, [open, filter, attempts?.value]);
 
   return (
     <FilterPanel
       open={open}
       onClose={onClose}
       anchorRef={anchorRef}
-      onReset={() => { setDraft(EMPTY_FILTER); setFirstOnly(false); }}
-      onApply={() => { onApply(draft); firstAttempt?.onApply(firstOnly); onClose(); }}
+      onReset={() => { setDraft(EMPTY_FILTER); setAttemptsDraft("all"); }}
+      onApply={() => { onApply(draft); attempts?.onApply(attemptsDraft); onClose(); }}
     >
       <FilterPanelGroup title="Источник" inline>
         {SOURCES.map(source => (
@@ -142,13 +152,18 @@ export function RegistryFilterPanel({
         ))}
       </FilterPanelGroup>
 
-      {firstAttempt ? (
+      {attempts ? (
         <FilterPanelGroup title="Попытки" inline>
-          <Checkbox
-            label="Только первая попытка"
-            checked={firstOnly}
-            onChange={() => setFirstOnly(value => !value)}
-          />
+          {ATTEMPT_PICKS.map(pick => (
+            <Radio
+              key={pick}
+              name="registry-filter-attempts"
+              label={ATTEMPT_PICK_OPTION_LABEL[pick]}
+              checked={attemptsDraft === pick}
+              disabled={pick === "best" && attempts.bestUnavailable}
+              onChange={() => setAttemptsDraft(pick)}
+            />
+          ))}
         </FilterPanelGroup>
       ) : null}
 

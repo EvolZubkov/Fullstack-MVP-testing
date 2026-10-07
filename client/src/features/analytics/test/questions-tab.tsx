@@ -233,6 +233,7 @@ export function QuestionsTab(props: QuestionsTabProps) {
                   questions={shown}
                   measurement={measurement}
                   minObservations={minObservations}
+                  attempts={quality?.attempts}
                   testId={testId}
                   psychometrics={psychometrics}
                   flags={quality?.items ? flags : undefined}

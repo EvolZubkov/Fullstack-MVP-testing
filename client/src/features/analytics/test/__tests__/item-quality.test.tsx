@@ -39,7 +39,7 @@ function view(over: Partial<ItemQualityView> = {}): ItemQualityView {
     sem: 2.1,
     cutBand: null,
     sample: { respondents: 486, responses: 4860, bySource: { web: 210, telemetry: 244 }, unknownVersionShare: 0 },
-    firstAttemptOnly: true,
+    attempts: "first",
     ...over,
   };
 }
@@ -174,7 +174,7 @@ describe("ItemQualityPanel", () => {
   });
 
   it("по всем попыткам предупреждает тегом «все попытки»", () => {
-    render(<ItemQualityPanel view={view({ firstAttemptOnly: false })} />);
+    render(<ItemQualityPanel view={view({ attempts: "all" })} />);
     expect(screen.getAllByText(termOrText("все попытки")).length).toBeGreaterThan(0);
   });
 

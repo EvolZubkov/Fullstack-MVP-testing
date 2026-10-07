@@ -126,7 +126,7 @@ export async function bankQuestionStats(
   for (const { quality, item } of entries) {
     const test = await storage.getTest(quality.testId);
     if (!test) continue;
-    const core = await testPsychometrics(test, { testIds: [test.id] }, true);
+    const core = await testPsychometrics(test, { testIds: [test.id] }, "first");
     const ctx = { questionById: core.questionById, minObservations, cutRatio: cutRatioOf(test.overallPassRuleJson) };
     const all = computeItemBreakdown(core.responses, ctx, questionId, correctIndexesOf(question.correctJson), undefined);
     loaded.push({ test, item, core, ctx, all });

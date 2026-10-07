@@ -30,6 +30,7 @@ import {
   type QuestionAnswerRow,
 } from "../../services/analytics/question-answers";
 import { readTestFilterQuery } from "./observation-query";
+import { pickAttemptIds, type AttemptPick } from "@shared/analytics/attempt-pick";
 
 const router = Router();
 
@@ -53,43 +54,49 @@ const RESULT_TITLE: Record<string, string> = {
  *
  * Без единого параметра отбора ответ — прежний: все прохождения теста, все попытки. Так старые
  * ссылки и прежние читатели получают то же, что получали. С параметрами — разбор тот же, что у
- * психометрики (`readTestFilterQuery`), но «только первая попытка» действует, лишь когда её
+ * психометрики (`readTestFilterQuery`), но правило выбора попытки действует, лишь когда его
  * назвали явно: молчаливое умолчание сузило бы прежний ответ.
  *
  * @param req запрос
  * @param testId тест маршрута
  * @returns отбор и режим попыток; `null` — условий нет
  */
-function readSelection(req: Request, testId: string): { filter: ObservationFilter; onlyFirst: boolean } | null {
+function readSelection(req: Request, testId: string): { filter: ObservationFilter; attempts: AttemptPick } | null {
   const paging = new Set(["offset", "limit"]);
   const named = Object.keys(req.query).some(name => !paging.has(name));
-  return named ? readTestFilterQuery(req, testId, false) : null;
+  return named ? readTestFilterQuery(req, testId, "all") : null;
 }
 
 /**
- * Только первая попытка каждого участника — среди тех, где на тест вообще отвечали.
+ * Попытки, выбранные правилом, — среди тех, где на тест вообще отвечали.
  *
- * Правило психометрики (FR-51): первая — по дате начала, участник без опознания (ни учётной
- * записи, ни псевдонима, ни идентификатора LMS) в выборку не входит, потому что «первой» у него
- * не бывает. Отсчёт идёт по прохождениям С ОТВЕТАМИ, как в матрице откликов: начатая и брошенная
- * попытка без ответов не должна заслонять следующую.
+ * Правило психометрики (FR-51): «первая» и «последняя» — по дате начала, «лучшая» — по проценту
+ * результата; участник без опознания (ни учётной записи, ни псевдонима, ни идентификатора LMS) в
+ * выборку не входит, потому что одной его попытки не выбрать. Отсчёт идёт по прохождениям С
+ * ОТВЕТАМИ, как в матрице откликов: начатая и брошенная попытка без ответов не должна заслонять
+ * следующую.
  *
  * @param observations прохождения выборки
  * @param answered идентификаторы прохождений, в которых есть хотя бы один ответ
- * @returns идентификаторы оставленных прохождений
+ * @param attempts правило выбора попытки
+ * @returns идентификаторы оставленных прохождений; `null` — правило «все», отбора нет
  */
-function firstAnsweredOnly(
-  observations: ReadonlyArray<{ id: string; participantId: string | null; startedAt: Date }>,
+function pickAnswered(
+  observations: ReadonlyArray<{ id: string; participantId: string | null; startedAt: Date; percent: number | null }>,
   answered: ReadonlySet<string>,
-): Set<string> {
-  const first = new Map<string, { id: string; at: number }>();
-  for (const observation of observations) {
-    if (!observation.participantId || !answered.has(observation.id)) continue;
-    const at = observation.startedAt.getTime();
-    const seen = first.get(observation.participantId);
-    if (!seen || at < seen.at) first.set(observation.participantId, { id: observation.id, at });
-  }
-  return new Set([...first.values()].map(item => item.id));
+  attempts: AttemptPick,
+): Set<string> | null {
+  return pickAttemptIds(
+    observations
+      .filter(observation => answered.has(observation.id))
+      .map(observation => ({
+        id: observation.id,
+        participantId: observation.participantId,
+        at: observation.startedAt.getTime(),
+        percent: observation.percent,
+      })),
+    attempts,
+  );
 }
 
 /**
@@ -102,7 +109,7 @@ function firstAnsweredOnly(
 async function collect(
   testId: string,
   questionId: string,
-  selection: { filter: ObservationFilter; onlyFirst: boolean } | null,
+  selection: { filter: ObservationFilter; attempts: AttemptPick } | null,
 ): Promise<{
   question: { id: string; type: string; prompt: string };
   rows: QuestionAnswerRow[];
@@ -126,10 +133,8 @@ async function collect(
   // одинаково. Без условий — прежнее поведение: все ответы теста.
   let selected = facts;
   if (selection) {
-    let ids = new Set(observations.rows.map((row) => row.id));
-    if (selection.onlyFirst) {
-      ids = firstAnsweredOnly(observations.rows, new Set(facts.map((fact) => fact.attemptId)));
-    }
+    const ids = pickAnswered(observations.rows, new Set(facts.map((fact) => fact.attemptId)), selection.attempts)
+      ?? new Set(observations.rows.map((row) => row.id));
     selected = facts.filter((fact) => ids.has(fact.attemptId));
   }
 

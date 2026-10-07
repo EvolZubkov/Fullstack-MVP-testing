@@ -28,7 +28,7 @@ import {
   computeItemBreakdown,
   computePsychometrics,
   defaultVersionOf,
-  firstAttemptOnly,
+  pickMatrixResponses,
   type PsychometricsContext,
 } from "../../services/analytics/psychometrics";
 import {
@@ -60,6 +60,7 @@ import {
 export { resetPsychometricsCache, testPsychometrics };
 import { isSuspicious } from "@shared/psychometrics/question-flag";
 import { NO_GROUP_ID } from "@shared/analytics/no-group";
+import { DEFAULT_ATTEMPT_PICK, type AttemptPick } from "@shared/analytics/attempt-pick";
 
 const router = Router();
 
@@ -68,11 +69,11 @@ const router = Router();
  *
  * Экран, отчёт и матрица обязаны отбирать одинаково (FR-54b): выгрузка, собранная по другим
  * условиям, чем показанные на экране, невоспроизводима и неоспорима. Умолчание — «только первая
- * попытка» (FR-51): повторные попытки одного человека не независимы, и выключает это читатель
- * осознанно, с предупреждением на экране.
+ * попытка» (FR-51): повторные попытки одного человека не независимы. Иное правило (все, лучшая,
+ * последняя) читатель выбирает осознанно, а смещённые из них экран сопровождает предупреждением.
  */
-function readQuery(req: Request, testId: string): { filter: ObservationFilter; onlyFirst: boolean } {
-  return readTestFilterQuery(req, testId, true);
+function readQuery(req: Request, testId: string): { filter: ObservationFilter; attempts: AttemptPick } {
+  return readTestFilterQuery(req, testId, DEFAULT_ATTEMPT_PICK);
 }
 
 /**
@@ -136,14 +137,14 @@ router.get(
       const test = await storage.getTest(testId);
       if (!test) return res.status(404).json({ error: "Тест не найден" });
 
-      const { filter, onlyFirst } = readQuery(req, testId);
+      const { filter, attempts } = readQuery(req, testId);
 
       // Состав партий — часть ключа: загрузка и откат меняют выборку, не трогая ни теста, ни его
       // содержания. Ключ экрана — ключ ядра с пометкой: подписи заданий кэшируются поверх общего
       // расчёта, и сброс по тесту снимает оба.
       const batches = await storage.getLmsImportBatches(testId);
-      const result = await cached(coreKey(test, batches, filter, onlyFirst) + "#screen", async () => {
-        const { psychometrics, observations, sections } = await testPsychometrics(test, filter, onlyFirst);
+      const result = await cached(coreKey(test, batches, filter, attempts) + "#screen", async () => {
+        const { psychometrics, observations, sections } = await testPsychometrics(test, filter, attempts);
         const importShare = psychometrics.sample.responses === 0
           ? 0
           : (psychometrics.sample.bySource.import ?? 0) / psychometrics.sample.responses;
@@ -166,7 +167,7 @@ router.get(
           // FR-46: с какого числа наблюдений показывается трудность — порог инстанса (FR-38a).
           // Экран «данных мало» называет его словами, а придумывать его на клиенте нельзя.
           minObservations: config.analytics.minObservations,
-          firstAttemptOnly: onlyFirst,
+          attempts,
           // FR-52: тест, где ВСЕ задания измерительные. Трудности и дискриминации там нет по
           // построению, и таблица с восемью строками «мало данных · 0 из 30» читается как
           // поломка — вскрыто приёмкой на синтетических данных.
@@ -227,7 +228,7 @@ router.get(
         ...saved.filter(slice => requested.length === 0 || requested.includes(slice.id)),
       ];
 
-      const { onlyFirst } = readQuery(req, testId);
+      const { attempts } = readQuery(req, testId);
       // Рамка вкладки «Срезы» — период; пустой означает «за всё время» (PRD-56 FR-07j).
       const from = dateOf(req.query.from, "start");
       const to = dateOf(req.query.to, "end");
@@ -251,7 +252,7 @@ router.get(
           scope,
           grade,
         );
-        const responses = onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses;
+        const responses = pickMatrixResponses(matrix, attempts);
         const psychometrics = computePsychometrics(responses, ctx);
 
         slices.push({
@@ -282,7 +283,7 @@ router.get(
         });
       }
 
-      res.json({ slices, firstAttemptOnly: onlyFirst });
+      res.json({ slices, attempts });
     } catch (error) {
       logger.error("Psychometrics slices error: " + (error as Error).message, "analytics");
       res.status(500).json({ error: "Не удалось посчитать психометрику по срезам" });
@@ -316,11 +317,11 @@ router.get(
       const test = await storage.getTest(testId);
       if (!test) return res.status(404).json({ error: "Тест не найден" });
 
-      const { filter, onlyFirst } = readQuery(req, testId);
+      const { filter, attempts } = readQuery(req, testId);
       const scope = await analyticsScope(req);
       const { grade } = await buildGrader(testId);
       const matrix = await loadResponseMatrix(filter, scope, grade);
-      const responses = onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses;
+      const responses = pickMatrixResponses(matrix, attempts);
 
       const [scales, measurements] = await Promise.all([
         storage.getScales(testId),
@@ -342,7 +343,7 @@ router.get(
         }])),
       });
 
-      res.json({ scales: result, firstAttemptOnly: onlyFirst });
+      res.json({ scales: result, attempts });
     } catch (error) {
       logger.error("Psychometrics scales error: " + (error as Error).message, "analytics");
       res.status(500).json({ error: "Не удалось посчитать психометрику шкал" });
@@ -361,11 +362,11 @@ router.get(
       const test = await storage.getTest(testId);
       if (!test) return res.status(404).json({ error: "Тест не найден" });
 
-      const { filter, onlyFirst } = readQuery(req, testId);
+      const { filter, attempts } = readQuery(req, testId);
       const scope = await analyticsScope(req);
       const { grade, questionById } = await buildGrader(testId);
       const matrix = await loadResponseMatrix(filter, scope, grade);
-      const responses = onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses;
+      const responses = pickMatrixResponses(matrix, attempts);
 
       const [question] = await storage.getQuestionsByIds([questionId]);
       const currentVersion = question?.psychoHash ?? null;
@@ -424,17 +425,17 @@ router.get(
  * повторить, ни сверить с тем, что человек видел, когда его заказывал.
  */
 async function collectForExport(req: Request, testId: string) {
-  const { filter, onlyFirst } = readQuery(req, testId);
+  const { filter, attempts } = readQuery(req, testId);
   const scope = await analyticsScope(req);
   const { grade, questionById } = await buildGrader(testId);
   const matrix = await loadResponseMatrix(filter, scope, grade);
-  const responses = onlyFirst ? firstAttemptOnly(matrix.responses) : matrix.responses;
+  const responses = pickMatrixResponses(matrix, attempts);
   const test = await storage.getTest(testId);
 
   const ctx: ExportContext = {
     testTitle: test?.title ?? testId,
     conditions: describeFilter(filter),
-    firstAttemptOnly: onlyFirst,
+    attempts,
     generatedAt: new Date(),
   };
   const psychometrics = computePsychometrics(responses, {
