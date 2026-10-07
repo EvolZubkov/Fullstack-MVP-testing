@@ -194,7 +194,11 @@ describe("certification manifest stays in parity with the standard one", () => {
   });
 
   it("offers the same design params", () => {
-    const keys = (m: { params: { key: string }[] }) => m.params.map((p) => p.key).sort();
+    // The brand font is not a choice in «Сертификация»: the typeface is embedded and the
+    // «Шрифт» param is dropped, as in «Стандартный Ростелеком». Every other key must match.
+    const BRAND_OWN = new Set(["fontFamily"]);
+    const keys = (m: { params: { key: string }[] }) =>
+      m.params.map((p) => p.key).filter((k) => !BRAND_OWN.has(k)).sort();
     expect(keys(cert)).toEqual(keys(std));
   });
 

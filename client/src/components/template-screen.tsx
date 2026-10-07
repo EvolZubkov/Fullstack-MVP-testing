@@ -32,6 +32,45 @@ const DS_SHADOW_CSS = dsCss
   .replace(/:root((?:\[[^\]]*\]|:not\([^)]*\))+)/g, ":host($1)")
   .replace(/:root/g, ":host");
 
+/** A complete `@font-face` rule. Its body holds no nested braces, data URIs included. */
+const FONT_FACE_RULE = /@font-face\s*\{[^}]*\}/g;
+
+/**
+ * The `@font-face` rules of a template stylesheet, in source order.
+ *
+ * @param css Template CSS as the host receives it.
+ * @returns Every `@font-face` rule verbatim; empty when there is none.
+ */
+export function extractFontFaces(css: string): string[] {
+  return css.match(FONT_FACE_RULE) ?? [];
+}
+
+/** Font-face rules already lifted into the document, so each is added once. */
+const hoistedFontFaces = new Set<string>();
+
+/**
+ * Lift the template's `@font-face` rules into the DOCUMENT head.
+ *
+ * A face declared inside a shadow root is ignored by Chromium: the brand font a template
+ * embeds (Rostelecom Basis in «Сертификация» and «Стандартный Ростелеком») never loaded on
+ * the web host, and the scene fell back to the next family while the SCORM package, where
+ * the same CSS sits in the document, printed it correctly. Faces registered on the document
+ * are visible inside every shadow tree. They stay for the page lifetime: a font is not
+ * scene state, and dropping it on unmount would re-download it on the next screen.
+ *
+ * @param css Template CSS whose faces should become available to the shadow tree.
+ */
+export function hoistFontFaces(css: string): void {
+  for (const rule of extractFontFaces(css)) {
+    if (hoistedFontFaces.has(rule)) continue;
+    hoistedFontFaces.add(rule);
+    const style = document.createElement("style");
+    style.setAttribute("data-tb-font-face", "");
+    style.textContent = rule;
+    document.head.appendChild(style);
+  }
+}
+
 export interface TemplateScreenProps {
   /**
    * Layout HTML from the selected design template. При заданном {@link blocks} это
@@ -242,6 +281,7 @@ export function TemplateScreen({ layout, context, css, slots, content, protectio
       if (!n.hasAttribute("data-tb-ds")) n.remove();
     }
     if (css) {
+      hoistFontFaces(css);
       const style = document.createElement("style");
       // Template CSS targets :root / body (light DOM). Inside the shadow root those
       // selectors don't match, so map them to :host and seed the theme basics — the

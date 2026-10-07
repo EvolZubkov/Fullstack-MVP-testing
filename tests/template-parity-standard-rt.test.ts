@@ -97,9 +97,16 @@ describe("паритет «Стандартный Ростелеком» ↔ «�
     },
   );
 
-  it("несёт те же стили документа отчёта", () => {
-    expect(lf(fs.readFileSync(templateFile(RT_ID, "styles/report.css"), "utf8"))).toBe(
-      lf(fs.readFileSync(templateFile(DEFAULT_ID, "styles/report.css"), "utf8")),
+  it("несёт те же стили документа отчёта, кроме фирменной гарнитуры", () => {
+    // Веб отдаёт отчёту ТОЛЬКО report.css, поэтому гарнитура вшита и сюда: её
+    // `@font-face` с пояснением и запасное семейство в `var(--font-sans, …)` — брендирование.
+    const unbrand = (css: string) =>
+      lf(css)
+        .replace(/\/\* BRAND FONT, EMBEDDED\.[\s\S]*?\*\/\n/, "")
+        .replace(/@font-face\s*\{[^}]*\}\n*/g, "")
+        .replace(/var\(--font-sans, [^)]+\)/g, "var(--font-sans)");
+    expect(unbrand(fs.readFileSync(templateFile(RT_ID, "styles/report.css"), "utf8"))).toBe(
+      unbrand(fs.readFileSync(templateFile(DEFAULT_ID, "styles/report.css"), "utf8")),
     );
   });
 
