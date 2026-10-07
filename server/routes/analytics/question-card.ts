@@ -25,6 +25,7 @@ import { loadTestScoringContext } from "../../services/effective-scoring";
 import { liveDataSource } from "../../services/test-snapshot";
 import { isSimulation } from "@shared/questions/question-type";
 import type { Scenario } from "@shared/sim/contract";
+import { questionLabel } from "@shared/questions/question-label";
 import { loadTestAnswerFacts } from "../../services/analytics/test-answer-facts";
 import { analyticsScope, formatCorrectAnswerText } from "./helpers";
 
@@ -98,7 +99,7 @@ router.get(
           ? (await storage.getQuestionsByTopic(question.topicId)).filter(q => isSimulation(q.type)).length
           : 1;
         scenario = {
-          title: stored?.meta?.title ?? question.prompt,
+          title: questionLabel(question),
           task: stored?.meta?.task ?? question.prompt,
           itemTitle: item?.title?.trim() || topic?.name || "",
           delivery: item?.questionId ? "фиксированный" : `случайный, 1 из ${bankSize}`,

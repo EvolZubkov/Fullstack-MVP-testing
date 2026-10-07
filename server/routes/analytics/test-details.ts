@@ -18,6 +18,7 @@ import { summariseTopics } from "../../services/analytics/topic-stats";
 import { summariseObservations } from "../../services/analytics/test-summary";
 import { declaresPassThreshold, thresholdPercentOfTest } from "./helpers";
 import { plainPromptOf } from "@shared/questions/prompt-format";
+import { questionLabel } from "@shared/questions/question-label";
 import { analyseUnits, type UnitAnalysis } from "@shared/psychometrics/units";
 
 const router = Router();
@@ -238,9 +239,10 @@ router.get("/:testId", requirePermission("analytics.read"), requireTestScope("an
         spread,
         units,
         questionId: stats.questionId,
+        // «Сценарий в ИС» (эскиз Э5б): строку называет название сценария, а не абзац задания.
         questionPrompt: plainPromptOf({
           ...question,
-          prompt: renderBlanksText(question.prompt, { mode: "dash" }),
+          prompt: renderBlanksText(questionLabel(question), { mode: "dash" }),
         }),
         questionType: question.type,
         topicId: question.topicId,
