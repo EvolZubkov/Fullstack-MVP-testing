@@ -396,6 +396,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/render/mainRender.js",
   ]);
 
+  // «Сценарий в ИС» (Э4): экран вопроса-сценария — слой плеера `TBTemplate.mountPlayer`.
+  // Объявлен до mainRender.js, который его вызывает, и до роутера, просящего полный экран.
+  const simulationJs = readOneOf([
+    "app/render/simulation.js",
+  ]);
+
   const timerJs = readOneOf([
     "app/timer/timer.js",
   ]);
@@ -484,6 +490,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     templateCoreJs,
     templateLoaderJs,
     contentFlowJs,
+    simulationJs,
     routerFlowJs,
     renderersJs,
     timerJs,

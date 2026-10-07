@@ -32,7 +32,7 @@ export const ITEM_CONSUMERS: Record<string, ItemDecision> = {
   "server/storage.ts": { decision: "handles", how: "Фасад: `getTestScenarios`, `getTestScenariosByTopic`" },
   "server/storage/tests-repository.ts": { decision: "handles", how: "Чтение пунктов; удаление теста удаляет и пункты" },
   "server/services/media/asset-access.ts": { decision: "handles", how: "Вопрос ведёт к тесту и через пункт-сценарий на теме-банке" },
-  "server/scorm/build-export-data.ts": { decision: "handles", how: "Тест «Сценарий» явно отказывается выгружаться до Э4" },
+  "server/scorm/build-export-data.ts": { decision: "handles", how: "Раздел пункта уходит в пакет темой-банком под ключом и именем пункта, с пулом сценариев; пустой пул — отказ 422 (Э4)" },
   "server/services/effective-scoring.ts": { decision: "handles", how: "Читает разделы через источник выдачи: у раздела пункта нет своей цены, цепочка идёт к тесту" },
   "server/services/scale-composition.ts": { decision: "handles", how: "Читает разделы через источник выдачи; у сценария нет вкладов в шкалы" },
   "server/services/home/assigned.ts": { decision: "handles", how: "У теста «Сценарий» задание одно — счёт по режиму; пункты роутера в число вопросов не входят" },

@@ -45,10 +45,49 @@ var TBRunState = (function () {
     return out;
   }
 
+  // «Сценарий в ИС»: прогон хранится КОМПАКТНО — исход, доля цели и счётчики штрафов, то есть
+  // ровно то, что читает оценка. Ячейка «<исход><доля %>.<промахи>.<запреты>.<значения>.<в сторону>.
+  // <ловушки>.<подсказки>.<секунды>», числа в base36: «s64.0.0.1.0.0.0.2g». Протокол сюда не
+  // идёт — сотни событий съели бы бюджет suspend_data (PRD-36); он уезжает телеметрией.
+  var SIM_OUTCOMES = { success: 's', partial: 'p', fail: 'f', exited: 'e', timeout: 't' };
+  var SIM_OUTCOME_BY_CODE = { s: 'success', p: 'partial', f: 'fail', e: 'exited', t: 'timeout' };
+  var SIM_COUNTS = ['misses', 'blocked', 'wrongValues', 'detours', 'traps', 'hints'];
+
+  function encodeSimAnswer(run) {
+    var code = SIM_OUTCOMES[run && run.outcome];
+    if (!code) return '';
+    var share = run.goal && typeof run.goal.share === 'number' ? Math.round(run.goal.share * 100) : 0;
+    var parts = [code + b36(share)];
+    var counts = run.counts || {};
+    for (var i = 0; i < SIM_COUNTS.length; i++) parts.push(b36(counts[SIM_COUNTS[i]] || 0));
+    parts.push(b36(Math.round((run.durationMs || 0) / 1000)));
+    return parts.join('.');
+  }
+
+  function decodeSimAnswer(cell) {
+    var outcome = SIM_OUTCOME_BY_CODE[cell.charAt(0)];
+    if (!outcome) return undefined;
+    var parts = cell.slice(1).split('.');
+    var share = unb36(parts[0]);
+    var counts = {};
+    for (var i = 0; i < SIM_COUNTS.length; i++) {
+      var n = unb36(parts[i + 1]);
+      counts[SIM_COUNTS[i]] = isNaN(n) ? 0 : n;
+    }
+    var seconds = unb36(parts[SIM_COUNTS.length + 1]);
+    return {
+      outcome: outcome,
+      goal: isNaN(share) ? null : { share: share / 100 },
+      counts: counts,
+      durationMs: isNaN(seconds) ? 0 : seconds * 1000,
+    };
+  }
+
   // ── Answers: one element per delivered question, shape decided by its type ──
   function encodeAnswer(answer, question) {
     var type = (question && question.type) || 'single';
     if (answer === undefined || answer === null) return '';
+    if (type === 'simulation') return encodeSimAnswer(answer);
     if (type === 'allocation') {
       // Amounts are unbounded, so they stay decimal with an explicit separator.
       var keys = Object.keys(answer).sort(function (a, b) { return Number(a) - Number(b); });
@@ -74,6 +113,7 @@ var TBRunState = (function () {
   function decodeAnswer(cell, question) {
     var type = (question && question.type) || 'single';
     if (cell === '' || cell === undefined) return undefined;
+    if (type === 'simulation') return decodeSimAnswer(cell);
     if (type === 'allocation') {
       var amounts = cell.split('.');
       var alloc = {};

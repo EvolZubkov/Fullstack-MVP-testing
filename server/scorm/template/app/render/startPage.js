@@ -145,7 +145,8 @@ function buildScormStartContext() {
       // PRD-59: absent in every package built before the field existed — the shared
       // builder reads that as 'plain', which is those packages' current behaviour.
       descriptionFormat: TEST_DATA.descriptionFormat,
-      questionCount: TEST_DATA.totalQuestions,
+      // «Сценарий в ИС»: у теста «Сценарий» задание одно — число вопросов не показывается, как на вебе.
+      questionCount: TEST_DATA.mode === 'scenario' ? undefined : TEST_DATA.totalQuestions,
       passPercent: TEST_DATA.passPercent,
       // Absent in every package built before the flag existed, and in every package
       // of a test that does grade — `!== false` is what keeps both showing it.
@@ -279,6 +280,10 @@ function startTest() {
     showToast('Попытки закончились', 'warn');
     return;
   }
+
+  // «Сценарий в ИС»: у теста «Сценарий» за «Начать» сразу идёт задание во весь экран, а полный
+  // экран браузер даёт только в самом щелчке — позже, после отрисовки плеера, просьба опоздала бы.
+  if (TEST_DATA.mode === 'scenario' && typeof TBSimRun !== 'undefined') TBSimRun.requestFullscreen();
 
   // ===== СОХРАНЯЕМ ПРЕДЫДУЩУЮ ПОПЫТКУ ЕСЛИ ПОЛЬЗОВАТЕЛЬ РЕАЛЬНО ОТВЕЧАЛ =====
   // Проверяем что:

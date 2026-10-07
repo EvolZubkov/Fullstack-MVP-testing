@@ -98,7 +98,8 @@ var TBQType = (function () {
 
   /**
    * «Сценарий в ИС». Зеркало shared/questions/question-type.ts → isSimulation.
-   * До этапа Э4 пакет сценариев не получает: источник выдачи их отбрасывает (isDeliverable).
+   * Пакет получает сценарии только разделами пунктов-сценариев (Э4); обычный раздел темы их
+   * не выдаёт — источник выдачи отбрасывает (isDeliverable).
    */
   function isSimulation(type) {
     return type === 'simulation';

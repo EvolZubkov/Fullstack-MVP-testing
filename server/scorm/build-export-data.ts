@@ -13,8 +13,10 @@ import { logger } from "../logger";
 import { storage } from "../storage";
 import { drawnScaleKeys, isTestIpsative } from "../services/scale-composition";
 import {
+  deliverySectionName,
   exportSourceForTest,
   ExportVersionUnavailableError,
+  isScenarioSection,
   liveDataSource,
   type ExportVersion,
 } from "../services/test-snapshot";
@@ -85,12 +87,6 @@ export async function buildScormExportData(
     throw new ScormBuildError("Test not found", 404);
   }
 
-  // «Сценарий в ИС»: пакет научится играть сценарий на этапе Э4 (docs/specs/sim-scenario/plan-tests.md).
-  // До того тест «Сценарий» не выгружается — явный отказ лучше пакета без задания.
-  if (test.mode === "scenario") {
-    throw new ScormBuildError("Тест «Сценарий» пока не выгружается в SCORM", 422);
-  }
-
   const sections = await src.getTestSections(test.id);
 
   /**
@@ -110,6 +106,32 @@ export async function buildScormExportData(
 
   const exportSections = await Promise.all(
     sections.map(async (s) => {
+      // «Сценарий в ИС»: раздел пункта-сценария (тест «Сценарий» или пункт роутера). Тема у
+      // него — тема-банк под ИМЕНЕМ пункта и с ключом пункта вместо идентификатора: под этим
+      // ключом раздел живёт в хабе, в правилах разблокировки и в итогах, как на вебе. Пул —
+      // сценарии темы (или один фиксированный); пакет несёт его весь, с весами экспозиции, и
+      // выбирает один тем же отбором, что и раздел темы. Своих текстов и материалов у пункта
+      // нет — тексты темы-банка относятся к ней, а не к заданию.
+      if (isScenarioSection(s)) {
+        const bank = await src.getTopic(s.scenarioItem.topicId);
+        const questions = (await src.getScenarioPool(s.scenarioItem))
+          .filter((question) => !excludedFromDelivery.has(question.id));
+        const name = deliverySectionName(s, () => bank?.name);
+        if (!bank || questions.length === 0) {
+          throw new ScormBuildError(`В пункте «${name}» нет сценариев: пакет без задания не собирается`, 422);
+        }
+        const topic = {
+          ...bank,
+          id: s.topicId,
+          name,
+          code: null,
+          description: null,
+          feedback: null,
+          feedbackJson: null,
+          interpretationJson: null,
+        };
+        return { ...s, topic, questions, courses: [], events: [] };
+      }
       const topic = await src.getTopic(s.topicId);
       const questions = (await src.getQuestionsByTopic(s.topicId))
         .filter((question) => !excludedFromDelivery.has(question.id));

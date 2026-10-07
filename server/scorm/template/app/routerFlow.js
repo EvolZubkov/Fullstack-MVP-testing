@@ -145,7 +145,14 @@
         var action = el.getAttribute("data-action") || "";
         if (action.indexOf("router-select:") === 0) {
           var topicId = action.slice("router-select:".length);
-          el.onclick = function () { selectRouterTopic(topicId); };
+          el.onclick = function () {
+            // «Сценарий в ИС»: полный экран браузер даёт только в самом щелчке — позже,
+            // после отрисовки плеера, просьба опоздала бы. Ключ пункта — `scenario:<id>`.
+            if (topicId.indexOf("scenario:") === 0 && typeof TBSimRun !== "undefined") {
+              TBSimRun.requestFullscreen();
+            }
+            selectRouterTopic(topicId);
+          };
         } else if (action === "router-finish") {
           el.onclick = finishRouter;
         }

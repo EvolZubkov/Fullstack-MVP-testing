@@ -31,6 +31,8 @@ const { storageMock } = vi.hoisted(() => ({
     getAdaptiveLevelsByTest: vi.fn(),
     getAdaptiveLevelLinks: vi.fn(),
     getLatestSnapshot: vi.fn(),
+    // «Сценарий в ИС»: источник выдачи читает пункты-сценарии теста.
+    getTestScenarios: vi.fn(),
   },
 }));
 
@@ -73,6 +75,7 @@ beforeEach(() => {
   storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([] as never);
   storageMock.getAdaptiveLevelsByTest.mockResolvedValue([{ id: "lvl1" }] as never);
   storageMock.getAdaptiveLevelLinks.mockResolvedValue([{ id: "lnk1" }] as never);
+  storageMock.getTestScenarios.mockResolvedValue([] as never);
 });
 
 describe("buildScormExportData", () => {
@@ -356,5 +359,48 @@ describe("buildScormExportData — исключённые задания (PRD-56
     const data = await buildScormExportData("t1", { source: "export" });
 
     expect(data.sections[0].questions.map((q) => q.id)).toEqual(["q1", "q2"]);
+  });
+});
+
+describe("«Сценарий в ИС»: раздел пункта-сценария в пакете (Э4)", () => {
+  const item = { id: "it1", testId: "t1", topicId: "bank", questionId: null, title: "Работа в СЭД", required: true, timeLimitMinutes: null, imageUrl: null, groupKey: null, sortOrder: 0 };
+  const bankQuestions = [
+    { id: "s1", type: "simulation", topicId: "bank" },
+    { id: "x1", type: "single", topicId: "bank" },
+    { id: "s2", type: "simulation", topicId: "bank" },
+  ];
+
+  beforeEach(() => {
+    storageMock.getTest.mockResolvedValue(baseTest({ mode: "scenario" }));
+    storageMock.getTestScenarios.mockResolvedValue([item] as never);
+    storageMock.getTopic.mockImplementation(async (id: string) => (id === "bank" ? { id: "bank", name: "Банк", feedbackJson: { text: "x" } } : undefined) as never);
+    storageMock.getQuestionsByTopic.mockResolvedValue(bankQuestions as never);
+  });
+
+  it("тест «Сценарий» собирается: раздел под ключом пункта и его именем, пул — только сценарии", async () => {
+    const data = await buildScormExportData("t1", { source: "debug" });
+    expect(data.sections).toHaveLength(1);
+    const [section] = data.sections;
+    expect(section.topicId).toBe("scenario:it1");
+    expect(section.topic).toMatchObject({ id: "scenario:it1", name: "Работа в СЭД", feedbackJson: null });
+    expect(section.questions.map((q) => q.id)).toEqual(["s1", "s2"]);
+  });
+
+  it("фиксированный пункт несёт только свой сценарий", async () => {
+    storageMock.getTestScenarios.mockResolvedValue([{ ...item, questionId: "s2" }] as never);
+    const data = await buildScormExportData("t1", { source: "debug" });
+    expect(data.sections[0].questions.map((q) => q.id)).toEqual(["s2"]);
+  });
+
+  it("пункт без сценариев — явный отказ, а не пакет без задания", async () => {
+    storageMock.getQuestionsByTopic.mockResolvedValue([bankQuestions[1]] as never);
+    await expect(buildScormExportData("t1", { source: "debug" })).rejects.toMatchObject({ status: 422 });
+  });
+
+  it("роутер несёт пункт рядом с темой", async () => {
+    storageMock.getTest.mockResolvedValue(baseTest({ flowPolicyJson: { mode: "router_by_topics" } }));
+    storageMock.getTopic.mockImplementation(async (id: string) => ({ id, name: id === "bank" ? "Банк" : "Topic" }) as never);
+    const data = await buildScormExportData("t1", { source: "debug" });
+    expect(data.sections.map((s) => s.topicId)).toEqual(["tp1", "scenario:it1"]);
   });
 });

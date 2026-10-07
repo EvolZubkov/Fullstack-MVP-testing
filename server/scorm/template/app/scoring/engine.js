@@ -198,6 +198,16 @@ var ScoringEngine = (function () {
     var scoring = input.scoring;
     var kind = (scoring && scoring.kind) || 'exact';
 
+    // «Сценарий в ИС»: эталона нет — долю цены даёт исход прогона за вычетом штрафов. Счёт НЕ
+    // повторяется здесь: он приходит из общего бандла (`TBTemplate.simulationRatio`,
+    // `shared/sim/scoring`), как сравнение текстовых ответов, — вторая копия разошлась бы.
+    if (typeof TBQType !== 'undefined' && TBQType.isSimulation(type)) {
+      var simRatio = (typeof TBTemplate !== 'undefined' && TBTemplate.simulationRatio)
+        ? TBTemplate.simulationRatio(answer)
+        : 0;
+      return { score: simRatio, sMax: 1, ratio: simRatio };
+    }
+
     if (kind === 'weighted') {
       var weights = (scoring && Array.isArray(scoring.weights)) ? scoring.weights : [];
       var wMax = (scoring && scoring.sMax) || maxOf(weights);

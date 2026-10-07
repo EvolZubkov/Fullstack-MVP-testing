@@ -920,6 +920,8 @@ function to1(x) {
  * a literal, so a new question type does not silently fall through to `other`.
  */
 function mapScormType(q) {
+  // «Сценарий в ИС»: прогон по шагам — взаимодействие `performance` стандарта.
+  if (TBQType.isSimulation(q.type)) return 'performance';
   if (TBQType.isSingleIndexChoice(q.type)) return 'choice';
   if (q.type === 'multiple') return 'choice';
   if (q.type === 'matching') return 'matching';
@@ -943,6 +945,24 @@ function mapScormType(q) {
  */
 function formatResponse(q, ans) {
   if (ans == null) return '';
+
+  // «Сценарий в ИС»: ответ `performance` — шаги «имя[.]значение» через `[,]`: исход, доля цели
+  // в процентах и счётчики штрафов. Протокол в LMS не уходит — у отчёта на взаимодействие
+  // четыре подколонки, и сотни событий их бы затопили; он едет телеметрией.
+  if (TBQType.isSimulation(q.type)) {
+    var c = ans.counts || {};
+    var share = ans.goal && typeof ans.goal.share === 'number' ? Math.round(ans.goal.share * 100) : 0;
+    return [
+      'outcome[.]' + (ans.outcome || ''),
+      'goal[.]' + share,
+      'misses[.]' + (c.misses || 0),
+      'blocked[.]' + (c.blocked || 0),
+      'wrong[.]' + (c.wrongValues || 0),
+      'detours[.]' + (c.detours || 0),
+      'traps[.]' + (c.traps || 0),
+      'hints[.]' + (c.hints || 0),
+    ].join('[,]');
+  }
 
   // PRD-57 §6.5: ответ уже строка, и в отчёт LMS он уходит РОВНО таким, каким его набрал
   // участник. Нормализация живёт в сравнении: разбирая спор, важно видеть написание.
@@ -1016,6 +1036,8 @@ function getCorrectAnswerFor(q) {
  * Несколько допустимых ответов разделяются `[,]` — запись стандарта для `fill-in`.
  */
 function correctPatternFor(q) {
+  // «Сценарий в ИС»: эталона-ответа у сценария нет — есть цель и проверки внутри сценария.
+  if (TBQType.isSimulation(q.type)) return '';
   // PRD-57 FR-19: у развёрнутого ответа эталона НЕТ — `correct_responses` не пишется
   // вовсе. Пустая рамка в отчёте читалась бы как потерянные данные.
   if (TBQType.isOpenText(q.type)) return '';
@@ -1267,10 +1289,16 @@ function questionLatency(questionId) {
 }
 
 function buildQuestionInteraction(question, answer, fullCorrect) {
+  // «Сценарий в ИС»: прогон с целью и штрафами не делится на «верно / неверно» — достигнутая
+  // цель со штрафом за промах в отчёте LMS читалась бы как провал. SCORM 2004 разрешает в
+  // `result` число, и сценарий пишет долю цены, ту же, что пошла в балл.
+  var result = TBQType.isSimulation(question.type)
+    ? String(Math.round(checkAnswer(question, answer) * 10000) / 10000)
+    : interactionResultFor(question, fullCorrect);
   return {
     id: 'q_' + question.id,
     type: mapScormType(question),
-    result: interactionResultFor(question, fullCorrect),
+    result: result,
     response: formatResponse(question, answer),
     correct: correctPatternFor(question),
     description: authorTextPlain(question.prompt),

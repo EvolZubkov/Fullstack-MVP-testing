@@ -38,7 +38,24 @@ function applySystemScreenStyles(layoutKey) {
     if (main) main.disabled = useFallback;
 }
 
+/**
+ * Отрисовка текущего экрана.
+ *
+ * «Сценарий в ИС»: обрамлена для слоя плеера сценария (`TBSimRun`) — экран, который не объявил
+ * себя сценарием, снимает смонтированный плеер. Без обрамления плеер пережил бы, например,
+ * истечение времени теста и закрыл бы собой итоги.
+ */
 function render() {
+    if (typeof TBSimRun === 'undefined') { renderScreen(); return; }
+    TBSimRun.beginRender();
+    try {
+        renderScreen();
+    } finally {
+        TBSimRun.endRender();
+    }
+}
+
+function renderScreen() {
     // Reset to the active template's stylesheet on every render; fallback system
     // screens (start/results) re-activate the default stylesheet from their own
     // templated renderers below.
@@ -121,6 +138,13 @@ function render() {
     // по возвратам — учащийся, вернувшийся к пропущенному вопросу, думал над ним дважды.
     if (typeof TBQuestionTime !== 'undefined' && qData && qData.question) {
         TBQuestionTime.show(qData.question.id);
+    }
+
+    // «Сценарий в ИС»: вопрос-сценарий играется плеером на месте экрана вопроса.
+    if (qData && qData.question && typeof TBQType !== 'undefined' && TBQType.isSimulation(qData.question.type)
+        && typeof TBSimRun !== 'undefined') {
+        TBSimRun.render(qData);
+        return;
     }
 
     renderStandardQuestion(qData, current, total, progress);

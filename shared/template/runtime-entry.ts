@@ -252,3 +252,8 @@ export { buildReportMeasures } from "../report/report-measures";
 // Переключатель «вводный блок отчёта = текст экрана» (PRD-27 FR-27): пакет решает его
 // тем же правилом, что веб.
 export { resolveReportIntro } from "../report/report-intro";
+
+// «Сценарий в ИС» (этап Э4): плеер сценария и оценка прогона — тот же код, что у веба. Пакет
+// монтирует плеер на месте экрана вопроса и считает долю цены тем же `simulationRatio`.
+export { mountPlayer } from "../sim/player";
+export { simulationRatio } from "../sim/scoring";
