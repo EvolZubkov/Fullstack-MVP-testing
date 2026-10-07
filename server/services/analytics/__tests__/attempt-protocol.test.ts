@@ -168,6 +168,24 @@ describe("протокол попытки — итог и состав книг�
     expect(variables).toContain("да");
   });
 
+  it("names each indicator and prints its level when the detail resolved it (FR-21h)", () => {
+    const sheet = buildAttemptProtocol(webDetail({
+      indicatorViews: [
+        { name: "idx", label: "Индекс", value: 64.256, interpretation: "Сильная сторона" },
+        { name: "flag", label: "Резерв", value: true, interpretation: null },
+        { name: "style", label: "Стиль", value: null, interpretation: null },
+      ],
+    }), "lms").getWorksheet("Показатели")!;
+
+    expect(sheetToArrays(sheet)).toEqual([
+      ["Ключ", "Название", "Значение", "Уровень / исход"],
+      ["idx", "Индекс", "64.26", "Сильная сторона"],
+      ["flag", "Резерв", "да", ""],
+      // Not reported by the LMS: the row stays, the value is the dash, not a recompute.
+      ["style", "Стиль", "—", ""],
+    ]);
+  });
+
   it("не заводит пустые листы шкал и показателей", () => {
     const workbook = buildAttemptProtocol(webDetail({ scaleResults: {}, resultVariables: {} }), "web");
 

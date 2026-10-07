@@ -203,14 +203,38 @@ export function buildAttemptProtocol(detail: Record<string, any>, source: Protoc
     ], [30, 12, 30]);
   }
 
-  // Показатели (PRD-2).
+  // Показатели (PRD-2). The detail of a web attempt and of an LMS run both carry
+  // `indicatorViews` — the author's label and the band or outcome the value falls into
+  // (PRD-56 FR-21h). An indicator the run holds no value of keeps its row with the dash:
+  // the author sees it was not reported, not that it vanished.
+  const formatValue = (value: unknown) =>
+    typeof value === "boolean" ? (value ? "да" : "нет") : typeof value === "number" ? round2(value) : String(value ?? "");
+  const views = Array.isArray(detail.indicatorViews)
+    ? detail.indicatorViews as Array<{ name: string; label: string; value: unknown; interpretation: string | null }>
+    : null;
+  if (views) {
+    if (views.length) {
+      addAoaSheet(workbook, "Показатели", [
+        ["Ключ", "Название", "Значение", "Уровень / исход"],
+        ...views.map(view => [
+          view.name,
+          view.label,
+          view.value === null || view.value === undefined ? "—" : formatValue(view.value),
+          view.interpretation ?? "",
+        ]),
+      ], [24, 30, 16, 30]);
+    }
+    return workbook;
+  }
+
+  // A detail without views (built before FR-21h): the raw record, as before.
   const variables = Object.entries((detail.resultVariables ?? {}) as Record<string, unknown>);
   if (variables.length) {
     addAoaSheet(workbook, "Показатели", [
       ["Показатель", "Значение"],
       ...variables.map(([name, value]) => [
         name,
-        typeof value === "boolean" ? (value ? "да" : "нет") : typeof value === "number" ? round2(value) : String(value ?? ""),
+        formatValue(value),
       ]),
     ], [30, 20]);
   }
