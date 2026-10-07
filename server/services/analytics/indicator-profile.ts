@@ -22,10 +22,10 @@ import {
   parseIndicatorInterpretation,
   type LevelTone,
 } from "@shared/scales/interpretation";
-import { CATEGORICAL_HUES } from "@shared/template/categorical-palette";
 import type { LevelRamp } from "@shared/template/level-ramp";
 import type { IndicatorValuesRow } from "../../storage/analytics-repository";
 import { indicatorValueOf, type IndicatorValue } from "./indicator-values";
+import { categoryColor, OUTCOME_CATEGORY_COLORS, REST_CATEGORY_COLOR } from "./category-colors";
 import { bandShares } from "./scale-profile";
 
 /** An indicator of the test, as the profile reads it (`result_variables` row). */
@@ -88,11 +88,9 @@ const TONE_COLOR: Record<LevelTone, string> = {
   critical: "var(--ou-error-default)",
 };
 
-const REST_COLOR = "var(--ou-border-strong)";
-
 /** Colour of an unordered category at `index`: outcomes have no «worse» or «better». */
 function categoricalColor(index: number): string {
-  return `hsl(${CATEGORICAL_HUES[index % CATEGORICAL_HUES.length]})`;
+  return categoryColor(OUTCOME_CATEGORY_COLORS, index);
 }
 
 const percentOf = (count: number, total: number) => (total > 0 ? (count / total) * 100 : 0);
@@ -100,7 +98,7 @@ const percentOf = (count: number, total: number) => (total > 0 ? (count / total)
 /** The «Прочее» bucket, or nothing when it is empty. */
 function restShare(count: number, total: number): IndicatorShare[] {
   return count > 0
-    ? [{ key: REST_KEY, label: "Прочее", count, share: percentOf(count, total), color: REST_COLOR, tone: null, rest: true }]
+    ? [{ key: REST_KEY, label: "Прочее", count, share: percentOf(count, total), color: REST_CATEGORY_COLOR, tone: null, rest: true }]
     : [];
 }
 

@@ -10,8 +10,9 @@
  * подписи уровня не хранит вовсе, и читать её у одного источника, а считать у другого значит
  * получить два разных распределения на одних и тех же данных.
  *
- * ЦВЕТ НЕ ИЗОБРЕТАЕТСЯ (FR-21a). Порядок один: тон уровня, заданный автором, а где тона нет —
- * рампа уровней теста с учётом валентности шкалы. Раздавать цвет по порядку полос запрещено:
+ * ЦВЕТ НЕ ИЗОБРЕТАЕТСЯ (FR-21a). У шкалы с направлением — рампа уровней теста с учётом
+ * валентности; у шкалы без направления — категориальная палитра утверждённого эскиза
+ * (`category-colors`). Раздавать цвет по порядку полос запрещено:
  * иначе «Риск» окажется красным в итогах участника и другого цвета в аналитике, а «высокий»
  * покрасится одинаково у шкалы, где выше лучше, и у той, где выше хуже.
  */
@@ -25,6 +26,7 @@ import {
 } from "@shared/scales/interpretation";
 import { zoneColors, type LevelRamp } from "@shared/template/level-ramp";
 import type { ScaleValuesRow } from "../../storage/analytics-repository";
+import { categoryColor, LEVEL_CATEGORY_COLORS } from "./category-colors";
 
 /** Шкала теста в том виде, в каком её читает профиль. */
 export interface ProfileScale {
@@ -87,7 +89,12 @@ export function bandShares(
   interpretation: { bands: InterpretationBand[]; valence: Valence },
   ramp: LevelRamp,
 ): ScaleBandShare[] {
-  const colors = zoneColors(ramp, interpretation.bands.length, interpretation.valence);
+  // Without a direction the levels carry no «better» or «worse»: they take the categorical
+  // palette agreed in the approved wireframe, not the ramp (whose neutral form is a grey that
+  // makes the levels indistinguishable). With a direction — the ramp, as in the learner's results.
+  const colors = interpretation.valence === "none"
+    ? interpretation.bands.map((_, index) => categoryColor(LEVEL_CATEGORY_COLORS, index))
+    : zoneColors(ramp, interpretation.bands.length, interpretation.valence).map(triple => `hsl(${triple})`);
   return interpretation.bands.map((band, index) => {
     const count = values.filter(value => findBand(interpretation.bands, value) === band).length;
     return {
@@ -95,7 +102,7 @@ export function bandShares(
       label: band.label ?? band.level,
       count,
       share: values.length > 0 ? (count / values.length) * 100 : 0,
-      color: `hsl(${colors[index]})`,
+      color: colors[index],
       // Тон автора печатается как есть; цвет полосы при этом остаётся из рампы, а тон
       // говорит экрану, что оценка ЗАДАНА, а не выведена из порядка.
       tone: band.tone ?? null,

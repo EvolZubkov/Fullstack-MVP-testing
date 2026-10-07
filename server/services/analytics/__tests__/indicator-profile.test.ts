@@ -4,7 +4,6 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { CATEGORICAL_HUES } from "@shared/template/categorical-palette";
 import { LEVEL_SCHEMES, zoneColors } from "@shared/template/level-ramp";
 import { summariseIndicators } from "../indicator-profile";
 
@@ -129,11 +128,12 @@ describe("summariseIndicators — outcomes", () => {
       { ramp },
     );
 
+    // analytics-indicators.html: outcomes business, bti, digital, leadership; «Прочее» fg-muted.
     const color = (key: string) => profile.shares.find(s => s.key === key)!;
-    expect(color("kom")).toMatchObject({ color: `hsl(${CATEGORICAL_HUES[0]})`, tone: null });
+    expect(color("kom")).toMatchObject({ color: "var(--ou-cat-business)", tone: null });
     expect(color("vdh")).toMatchObject({ color: "var(--ou-success-default)", tone: "favorable" });
-    expect(color("cel")).toMatchObject({ color: `hsl(${CATEGORICAL_HUES[2]})`, tone: null });
-    expect(color("__rest__")).toMatchObject({ color: "var(--ou-border-strong)", rest: true });
+    expect(color("cel")).toMatchObject({ color: "var(--ou-cat-digital)", tone: null });
+    expect(color("__rest__")).toMatchObject({ color: "var(--ou-fg-muted)", rest: true });
   });
 
   it("groups by the value itself when the author defined no outcomes", () => {

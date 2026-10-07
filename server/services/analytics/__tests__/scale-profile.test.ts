@@ -89,6 +89,18 @@ describe("summariseScales — распределение уровней (FR-21a)
       .toEqual(zoneColors(LEVEL_SCHEMES.traffic, 3, "lower_is_better").map(t => `hsl(${t})`));
   });
 
+  it("levels of a scale without direction take the categorical palette of the approved wireframe", () => {
+    // approved/slice-compare-answers.html: «Низкий / Средний / Высокий» of a ЧИЛ scale are
+    // digital, bti, business — not a grey ramp, which made the levels indistinguishable.
+    const typology = { ...BURNOUT, configJson: { ...BURNOUT.configJson, valence: undefined } };
+
+    const [profile] = summariseScales(values({ burnout: 5 }), [typology], { ramp: LEVEL_SCHEMES.traffic });
+
+    expect(profile.bands.map(b => b.color)).toEqual([
+      "var(--ou-cat-digital)", "var(--ou-cat-bti)", "var(--ou-cat-business)",
+    ]);
+  });
+
   it("авторский тон уровня перебивает рампу", () => {
     // Тон задан автором в самой шкале: он и печатается участнику в итогах.
     const authored = {
