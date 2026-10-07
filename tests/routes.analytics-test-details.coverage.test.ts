@@ -32,6 +32,7 @@ const { storageMock } = vi.hoisted(() => ({
     getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     // PRD-56 FR-21: признак «у теста есть шкалы» для вкладки «Шкалы».
     getScales: vi.fn().mockResolvedValue([]),
+    getResultVariables: vi.fn().mockResolvedValue([]),
     // Object-level scope resolution (author owner/grant paths).
     getTestGrantForUser: vi.fn().mockResolvedValue(undefined),
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),

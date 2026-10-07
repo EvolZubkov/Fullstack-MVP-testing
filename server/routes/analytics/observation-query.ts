@@ -229,3 +229,19 @@ export function readTestFilterQuery(
     }),
   };
 }
+
+/**
+ * Does the filter narrow the selection beyond «every run of the test»?
+ *
+ * Without a narrowing condition the selection already equals every run of the test, and
+ * intersecting with it would drop rows whose run is not named (old telemetry). Cut only when the
+ * filter really restricts something — the rule of the «Вопросы» tab, the slice comparison and
+ * the «Шкалы и показатели» tab alike.
+ *
+ * @param filter the observation filter
+ * @returns `true` when some condition other than the test is set
+ */
+export function narrowsSelection(filter: ObservationFilter): boolean {
+  return Object.entries(filter).some(([key, value]) =>
+    key !== "testIds" && value !== undefined && !(Array.isArray(value) && value.length === 0));
+}

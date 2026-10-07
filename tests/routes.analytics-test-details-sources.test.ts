@@ -302,3 +302,20 @@ describe("GET /api/analytics/tests/:testId — блоки экрана", () => {
     expect(question).toMatchObject({ totalAnswers: 2, gradedAnswers: 0, correctPercent: null });
   });
 });
+
+describe("GET /api/analytics/tests/:testId — признаки вкладки «Шкалы и показатели» (FR-21c)", () => {
+  it("reports indicators apart from scales, so a test with indicators only gets the tab", async () => {
+    storageMock.getResultVariables.mockResolvedValueOnce([{ name: "idx", label: "Индекс", type: "number" }]);
+
+    const res = await request(makeApp()).get("/api/analytics/tests/test1").set("x-test-user", "a1");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ hasScales: false, hasIndicators: true });
+  });
+
+  it("a test with neither gets neither", async () => {
+    const res = await request(makeApp()).get("/api/analytics/tests/test1").set("x-test-user", "a1");
+
+    expect(res.body).toMatchObject({ hasScales: false, hasIndicators: false });
+  });
+});

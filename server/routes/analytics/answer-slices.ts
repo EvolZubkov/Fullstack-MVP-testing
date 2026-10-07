@@ -17,28 +17,16 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
 import { questionSpread } from "../../services/analytics/answer-spread";
-import { loadObservations, type ObservationFilter } from "../../services/analytics/observations";
+import { loadObservations } from "../../services/analytics/observations";
 import { loadTestAnswerFacts } from "../../services/analytics/test-answer-facts";
 import { summariseScales } from "../../services/analytics/scale-profile";
 import { scaleRampOf } from "../../services/analytics/scale-ramp";
 import { adhocSource, conditionsOf, dateOf, withinFrame } from "./slices";
-import { listOf } from "./observation-query";
+import { listOf, narrowsSelection } from "./observation-query";
 import { plainPromptOf } from "@shared/questions/prompt-format";
 import { renderBlanksText } from "@shared/questions/blanks-render";
 
 const router = Router();
-
-/**
- * Ограничивает ли отбор выборку — то же правило, что у вкладки «Вопросы».
- *
- * Без ограничений выборка и так равна всем прохождениям теста, а пересечение с ней выбросило бы
- * ответы, у которых прохождение не названо (старые строки телеметрии). Резать — только когда отбор
- * действительно что-то ограничивает, иначе «Тест целиком» здесь разошёлся бы с вкладкой «Вопросы».
- */
-function narrows(filter: ObservationFilter): boolean {
-  return Object.entries(filter).some(([key, value]) =>
-    key !== "testIds" && value !== undefined && !(Array.isArray(value) && value.length === 0));
-}
 
 // GET /api/analytics/tests/:testId/answer-slices — ответы и шкалы по сравниваемым срезам
 router.get(
@@ -91,7 +79,7 @@ router.get(
         const filter = withinFrame(conditionsOf(slice.conditionsJson), testId, from, to);
         const observations = await loadObservations(filter, { all: true, ids: new Set([testId]) });
         const inScope = new Set(observations.rows.map(row => row.id));
-        const narrowed = narrows(filter);
+        const narrowed = narrowsSelection(filter);
         const selects = (attemptId: string) => !narrowed || inScope.has(attemptId);
 
         const answersOf = new Map<string, unknown[]>();
