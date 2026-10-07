@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { indicatorValueOf, indicatorValuesOf } from "../indicator-values";
+import { indicatorValueOf, indicatorValuesOf, matchOutcome } from "../indicator-values";
 
 describe("indicatorValueOf", () => {
   it("reads a number from a native number and from a string with either decimal mark", () => {
@@ -65,5 +65,30 @@ describe("indicatorValuesOf", () => {
     expect(indicatorValuesOf(variables, { other: 1 })).toEqual({});
     expect(indicatorValuesOf(variables, null)).toEqual({});
     expect(indicatorValuesOf(variables, undefined)).toEqual({});
+  });
+});
+
+describe("matchOutcome", () => {
+  const outcomes = [
+    { code: "cel", label: "Сфокусированный" },
+    { code: "cel+kom", label: "Двухвекторный" },
+    { code: "ok", label: "Готово к работе" },
+  ];
+
+  it("finds a set code that the WebTutor report wrote with spaces instead of «+»", () => {
+    // The package reports «cel+kom»; the LMS report export holds «cel kom» (live data, 2026-10-08).
+    expect(matchOutcome(outcomes, "cel kom")?.code).toBe("cel+kom");
+    expect(matchOutcome(outcomes, "kom  cel")?.code).toBe("cel+kom");
+  });
+
+  it("tries the value as it is first", () => {
+    expect(matchOutcome(outcomes, "cel")?.code).toBe("cel");
+    expect(matchOutcome([{ code: "a b", label: "С пробелом" }, { code: "a+b", label: "Набор" }], "a b")?.label)
+      .toBe("С пробелом");
+  });
+
+  it("leaves a text without a matching outcome unmatched", () => {
+    expect(matchOutcome(outcomes, "совсем другое")).toBeNull();
+    expect(matchOutcome(outcomes, null)).toBeNull();
   });
 });

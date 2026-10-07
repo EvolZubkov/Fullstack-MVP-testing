@@ -306,6 +306,16 @@ describe("summariseIndicators — mask values of the PRD-53 transition (ЧИЛ, 
     ]);
   });
 
+  it("a set code from a WebTutor export («cel pro» for «cel+pro») is its outcome, not «Прочее»", () => {
+    const [profile] = summariseIndicators(
+      [{ attemptId: "l1", source: "import" as const, values: { profile: "cel pro" } }],
+      [PROFILE],
+      { ramp },
+    );
+
+    expect(profile.shares.map(s => s.label)).toEqual(["Двухвекторный профиль"]);
+  });
+
   it("a number outside every band is still «Прочее»", () => {
     const [profile] = summariseIndicators(rows({ profile: 42 }, { profile: "cel" }), [PROFILE], { ramp });
 

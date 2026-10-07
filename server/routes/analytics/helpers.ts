@@ -12,7 +12,7 @@ import {
   findOutcome,
 } from "@shared/scales/interpretation";
 import type { AttemptResult } from "@shared/schema";
-import { indicatorValuesOf } from "../../services/analytics/indicator-values";
+import { indicatorValuesOf, matchOutcome } from "../../services/analytics/indicator-values";
 // Разбор строки прохождения переехал в слой наблюдений (PRD-56 FR-33): сервис не может
 // зависеть от маршрутов, а эти помощники нужны обоим. Реэкспорт оставлен, чтобы места
 // чтения не переписывались ради переезда.
@@ -150,7 +150,7 @@ export function buildIndicatorViews(
       // an LMS export or a string-typed indicator carries as TEXT («9», PRD-53 §7.1).
       const outcome = typeof value === "number"
         ? null
-        : findOutcome(interpretation.outcomes, value as string | boolean | null);
+        : matchOutcome(interpretation.outcomes, value as string | boolean | null);
       const numeric = typeof value === "number"
         ? value
         : typeof value === "string" && value.trim() !== "" ? Number(value.trim().replace(",", ".")) : NaN;

@@ -19,13 +19,12 @@
 
 import {
   findBand,
-  findOutcome,
   parseIndicatorInterpretation,
   type LevelTone,
 } from "@shared/scales/interpretation";
 import type { LevelRamp } from "@shared/template/level-ramp";
 import type { IndicatorValuesRow } from "../../storage/analytics-repository";
-import { indicatorValueOf, type IndicatorValue } from "./indicator-values";
+import { indicatorValueOf, matchOutcome, type IndicatorValue } from "./indicator-values";
 import { categoryColor, OUTCOME_CATEGORY_COLORS, REST_CATEGORY_COLOR } from "./category-colors";
 import { bandShares } from "./scale-profile";
 
@@ -271,7 +270,8 @@ function outcomeShares(
     for (const value of values) {
       let label: string | null = null;
       let tone: LevelTone | null = null;
-      const outcome = findOutcome(outcomes, value as string | boolean);
+      // Tolerant to the WebTutor report, which writes «cel+kom» as «cel kom».
+      const outcome = matchOutcome(outcomes, value);
       if (outcome) {
         label = outcomeLabel(outcome);
         tone = outcome.tone ?? null;

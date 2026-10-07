@@ -12,6 +12,8 @@
  * would average only its web runs and silently drop every LMS one.
  */
 
+import { findOutcome, type InterpretationOutcome } from "@shared/scales/interpretation";
+
 /** Indicator types of `result_variables.type`. */
 export type IndicatorType = "number" | "string" | "boolean";
 
@@ -73,4 +75,28 @@ export function indicatorValuesOf(
     if (value !== null) out[variable.name] = value;
   }
   return out;
+}
+
+/**
+ * The outcome a STORED value maps to, tolerant to how an LMS report mangles set codes.
+ *
+ * The package reports a set code as is («cel+kom»), but the WebTutor report export holds it with
+ * spaces instead of «+» («cel kom»): the «+» of `learner_response` comes back form-decoded (live
+ * data, 2026-10-08 — every multi-style code of an imported ЧИЛ batch fell into «Прочее»). So the
+ * value is matched as it is first, and only when that fails and it holds whitespace, once more with
+ * the whitespace read as «+». The repair lives here, on the reading side, not in the import: a
+ * string indicator may legitimately hold a sentence, and rewriting spaces at import would corrupt it.
+ *
+ * @param outcomes the indicator's interpretation outcomes
+ * @param value the stored value
+ * @returns the matched outcome, or `null`
+ */
+export function matchOutcome(
+  outcomes: InterpretationOutcome[],
+  value: string | boolean | number | null | undefined,
+): InterpretationOutcome | null {
+  if (value === null || value === undefined) return null;
+  const direct = findOutcome(outcomes, typeof value === "number" ? String(value) : value);
+  if (direct || typeof value !== "string" || !/\s/.test(value.trim())) return direct;
+  return findOutcome(outcomes, value.trim().split(/\s+/).join("+"));
 }
