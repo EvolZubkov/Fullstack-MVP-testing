@@ -117,7 +117,7 @@ import {
     SpreadCard,
     UnitsCard,
 } from "@/features/analytics/test/question-distribution";
-import { SimulationAnalytics } from "@/features/analytics/test/simulation-analytics";
+import { SimulationAnalytics, type SimulationStatsView } from "@/features/analytics/test/simulation-analytics";
 import { QuestionTypeIcon } from "@/features/tests/editor/sections/question-type-icon";
 import { questionInTopicHref } from "@/features/content/question-link";
 import { ResultsByAxis } from "@/features/analytics/slices/results-by-axis";
@@ -564,6 +564,15 @@ export default function TestAnalyticsPage() {
     const { data: questionCard } = useQuery<QuestionCardView>({
         queryKey: [cardKey],
         enabled: !!testId && !!routeQuestionId,
+    });
+    /**
+     * «Сценарий в ИС» (Э5б): число прогонов в подзаголовке — из того же запроса, что и панель
+     * сценария (ключ совпадает, запрос один). Строка таблицы вопросов режим попыток не учитывает,
+     * и подзаголовок расходился бы с «Исходами».
+     */
+    const { data: simulationStats } = useQuery<SimulationStatsView>({
+        queryKey: [`/api/analytics/tests/${testId}/questions/${routeQuestionId}/simulation${psychometricsUrl("", { firstAttemptOnly: String(firstAttemptOnly) })}`],
+        enabled: !!testId && !!routeQuestionId && questionCard?.questionType === "simulation",
     });
     /**
      * Выбранная редакция вопроса: `undefined` — автор ещё не выбирал, и сервер считает карточку по
@@ -1134,7 +1143,7 @@ export default function TestAnalyticsPage() {
                         ? <><QuestionTypeIcon type="simulation" size={20} />{" "}{questionLabel}</>
                         : breakdown?.item ? <BreakdownTitle view={breakdown} /> : renderBlanksText(questionCard?.prompt ?? "Вопрос", { mode: "dash" })}
                     subtitle={simulation && questionRow
-                        ? [questionRow.topicName, "Сценарий", `${questionRow.totalAnswers} ${pluralize(questionRow.totalAnswers, "прогон", "прогона", "прогонов")}`].join(" · ")
+                        ? [questionRow.topicName, "Сценарий", ...(simulationStats ? [`${simulationStats.runs} ${pluralize(simulationStats.runs, "прогон", "прогона", "прогонов")}`] : [])].join(" · ")
                         : notGraded ? answeredCaption : breakdown?.item ? breakdownSubtitle(breakdown) : answeredCaption}
                     actions={(
                         <>

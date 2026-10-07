@@ -140,7 +140,8 @@ router.get(
         scoringInTest: effective.source.scoring === "override",
         difficulty: scoring.difficultyOf(question),
         difficultyInTest: override?.difficulty !== null && override?.difficulty !== undefined,
-        correctAnswer: OPTION_TYPES.has(question.type)
+        // У сценария эталона-ответа нет: цель сценария — его задание, оно уже в карточке.
+        correctAnswer: OPTION_TYPES.has(question.type) || isSimulation(question.type)
           ? null
           : formatCorrectAnswerText(question.type, question.dataJson, question.correctJson) || null,
         otherTests,
