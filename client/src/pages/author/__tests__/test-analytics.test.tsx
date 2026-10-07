@@ -788,7 +788,7 @@ describe("<TestAnalyticsPage />", () => {
 
     beforeEach(() => {
       state.analyticsBody = { ...standardAnalytics(), hasScales: false, hasIndicators: true };
-      const base = fetchMock.getMockImplementation()!;
+      const base = fetchMock.getMockImplementation() as (input: string) => Promise<unknown>;
       fetchMock.mockImplementation(async (input: string) => {
         const url = String(input);
         if (url.startsWith("/api/analytics/tests/t1/scales")) {
