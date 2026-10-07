@@ -44,6 +44,8 @@
       .wf-slot { min-width: 0; padding: var(--ou-space-6); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-l); }
       .wf-slot-add { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-1); background: transparent; cursor: pointer; color: var(--ou-accent-default); }
       .wf-grid-fixed { table-layout: fixed; width: 100%; }
+      /* В коде — класс в tb-components.css: гистограмма показателя не растягивается на карточку. */
+      .tb-indicator-hist { max-width: 50%; }
       .wf-grid-fixed .ou-grid__th { white-space: normal; }
     </style>
   </head>
@@ -243,75 +245,94 @@
               <div class="ou-card__body">
                 <div class="ou-stack ou-stack--gap-5">
 
-                  <!-- Числовой с уровнями: среднее + распределение уровней. -->
-                  <div class="ou-stack ou-stack--gap-1">
+                  <!-- ДЕЛЬТА 2026-10-08: уровни и исходы — строками, как «Профиль по шкалам»: у каждой
+                       доли своя полоса, доли сравниваются длиной. Составная полоса снята. -->
+
+                  <div class="ou-stack ou-stack--gap-2">
                     <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
                       <span class="ou-text ou-text--body-s ou-text--w-medium">Индекс человекоцентричности</span>
                       <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 64,2 из 100 · 380 прохождений · у 32 не передано</span>
                     </div>
-                    <div class="ou-progress ou-progress--m">
-                      <div class="ou-progress__stack">
-                        <span class="ou-progress__stack-seg" style="width: 9%; background: var(--ou-error-default)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 34%; background: var(--ou-warning-default)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 57%; background: var(--ou-success-default)"></span>
-                      </div>
-                      <div class="ou-progress__legend">
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-error-default)"></span>Зона развития — 9 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-warning-default)"></span>Базовый — 34 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-success-default)"></span>Сильная сторона — 57 %</span>
-                      </div>
+                    <div class="ou-stack ou-stack--gap-2">
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Зона развития</span><span class="ou-progress__val">9 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 9%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Базовый</span><span class="ou-progress__val">34 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 34%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Сильная сторона</span><span class="ou-progress__val">57 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 57%"></div></div></div>
                     </div>
                   </div>
 
-                  <!-- Числовой без уровней: только среднее в домене, полоса акцентом (FR-21b). -->
-                  <div class="ou-stack ou-stack--gap-1">
+                  <!-- Числовой без уровней — компактная гистограмма по 10 интервалам домена, акцентом (FR-21b). -->
+                  <div class="ou-stack ou-stack--gap-2">
                     <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
                       <span class="ou-text ou-text--body-s ou-text--w-medium">Разброс стилей</span>
                       <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 6,8 из 28 · 412 прохождений</span>
                     </div>
-                    <span class="ou-progress ou-progress--s"><span class="ou-progress__track"><span class="ou-progress__fill" style="width: 24%"></span></span></span>
-                    <span class="ou-text ou-text--body-xs ou-text--tone-muted">уровни толкования не заданы</span>
+                    <div class="ou-chart tb-indicator-hist">
+                    <svg class="ou-chart__svg" viewBox="0 0 540 120" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Распределение значений показателя по интервалам">
+                      <line class="ou-chart__grid-strong" x1="44" x2="532" y1="94.0" y2="94.0" />
+                      <line class="ou-chart__grid" x1="44" x2="532" y1="54.0" y2="54.0" />
+                      <line class="ou-chart__grid-strong" x1="44" x2="532" y1="14.0" y2="14.0" />
+                      <line class="ou-chart__axis-line" x1="44" x2="44" y1="14" y2="94" />
+                      <g class="ou-chart__axis-y">
+                        <text x="38" y="94.0" text-anchor="end" dominant-baseline="middle">0 %</text>
+                        <text x="38" y="54.0" text-anchor="end" dominant-baseline="middle">20 %</text>
+                        <text x="38" y="14.0" text-anchor="end" dominant-baseline="middle">40 %</text>
+                      </g>
+                      <g class="ou-chart__axis-x">
+                        <text x="68.4" y="111" text-anchor="middle">0–2</text>
+                        <text x="117.2" y="111" text-anchor="middle">3–5</text>
+                        <text x="166.0" y="111" text-anchor="middle">6–8</text>
+                        <text x="214.8" y="111" text-anchor="middle">9–11</text>
+                        <text x="263.6" y="111" text-anchor="middle">12–14</text>
+                        <text x="312.4" y="111" text-anchor="middle">15–17</text>
+                        <text x="361.2" y="111" text-anchor="middle">18–20</text>
+                        <text x="410.0" y="111" text-anchor="middle">21–23</text>
+                        <text x="458.8" y="111" text-anchor="middle">24–26</text>
+                        <text x="507.6" y="111" text-anchor="middle">27–28</text>
+                      </g>
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="51.3" y="76.0" width="34.2" height="18.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="100.1" y="46.0" width="34.2" height="48.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="148.9" y="32.0" width="34.2" height="62.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="197.7" y="58.0" width="34.2" height="36.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="246.5" y="74.0" width="34.2" height="20.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="295.3" y="84.0" width="34.2" height="10.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="344.1" y="90.0" width="34.2" height="4.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="392.9" y="92.0" width="34.2" height="2.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="441.7" y="94.0" width="34.2" height="0.0" />
+                      <rect class="ou-chart__bar" fill="var(--ou-accent-default)" x="490.5" y="94.0" width="34.2" height="0.0" />
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="68.4" y="72.0" text-anchor="middle">9 %</text>
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="117.2" y="42.0" text-anchor="middle">24 %</text>
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="166.0" y="28.0" text-anchor="middle">31 %</text>
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="214.8" y="54.0" text-anchor="middle">18 %</text>
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="263.6" y="70.0" text-anchor="middle">10 %</text>
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="312.4" y="80.0" text-anchor="middle">5 %</text>
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="361.2" y="86.0" text-anchor="middle">2 %</text>
+                      <text class="ou-chart__bar-label" fill="var(--ou-fg-default)" x="410.0" y="88.0" text-anchor="middle">1 %</text>
+                    </svg>
+                    </div>
                   </div>
 
-                  <!-- Строковый: доли исходов; без тона — категориальные цвета, «Прочее» — нейтральный. -->
-                  <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--gap-2">
                     <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
                       <span class="ou-text ou-text--body-s ou-text--w-medium">Ведущий стиль</span>
                       <span class="ou-text ou-text--body-xs ou-text--tone-muted">412 прохождений · 4 исхода</span>
                     </div>
-                    <div class="ou-progress ou-progress--m">
-                      <div class="ou-progress__stack">
-                        <span class="ou-progress__stack-seg" style="width: 34%; background: var(--ou-cat-business)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 27%; background: var(--ou-cat-bti)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 22%; background: var(--ou-cat-digital)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 12%; background: var(--ou-cat-leadership)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 5%; background: var(--ou-fg-muted)"></span>
-                      </div>
-                      <div class="ou-progress__legend">
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-business)"></span>Командный — 34 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-bti)"></span>Вдохновляющий — 27 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-digital)"></span>Целеустремлённый — 22 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-cat-leadership)"></span>Процессный — 12 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-fg-muted)"></span>Прочее — 5 %</span>
-                      </div>
+                    <div class="ou-stack ou-stack--gap-2">
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Командный</span><span class="ou-progress__val">34 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 34%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Вдохновляющий</span><span class="ou-progress__val">27 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 27%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Целеустремлённый</span><span class="ou-progress__val">22 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 22%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Процессный</span><span class="ou-progress__val">12 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 12%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Прочее</span><span class="ou-progress__val">5 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 5%"></div></div></div>
                     </div>
                   </div>
 
-                  <!-- Логический: исходы «да / нет» с тонами, заданными автором. -->
-                  <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--gap-2">
                     <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
                       <span class="ou-text ou-text--body-s ou-text--w-medium">Рекомендован в кадровый резерв</span>
                       <span class="ou-text ou-text--body-xs ou-text--tone-muted">412 прохождений · 2 исхода</span>
                     </div>
-                    <div class="ou-progress ou-progress--m">
-                      <div class="ou-progress__stack">
-                        <span class="ou-progress__stack-seg" style="width: 61%; background: var(--ou-success-default)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 39%; background: var(--ou-info-default)"></span>
-                      </div>
-                      <div class="ou-progress__legend">
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-success-default)"></span>Да — 61 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-info-default)"></span>Нет — 39 %</span>
-                      </div>
+                    <div class="ou-stack ou-stack--gap-2">
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Да</span><span class="ou-progress__val">61 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 61%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Нет</span><span class="ou-progress__val">39 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 39%"></div></div></div>
                     </div>
                   </div>
 
@@ -345,22 +366,15 @@
               </header>
               <div class="ou-card__body">
                 <div class="ou-stack ou-stack--gap-5">
-                  <div class="ou-stack ou-stack--gap-1">
+                  <div class="ou-stack ou-stack--gap-2">
                     <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-baseline ou-stack--gap-4">
                       <span class="ou-text ou-text--body-s ou-text--w-medium">Индекс человекоцентричности</span>
                       <span class="ou-text ou-text--body-xs ou-text--tone-muted">среднее 61,7 из 100 · 88 прохождений · у 32 не передано</span>
                     </div>
-                    <div class="ou-progress ou-progress--m">
-                      <div class="ou-progress__stack">
-                        <span class="ou-progress__stack-seg" style="width: 11%; background: var(--ou-error-default)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 38%; background: var(--ou-warning-default)"></span>
-                        <span class="ou-progress__stack-seg" style="width: 51%; background: var(--ou-success-default)"></span>
-                      </div>
-                      <div class="ou-progress__legend">
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-error-default)"></span>Зона развития — 11 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-warning-default)"></span>Базовый — 38 %</span>
-                        <span class="ou-progress__legend-item"><span class="ou-progress__dot" style="background: var(--ou-success-default)"></span>Сильная сторона — 51 %</span>
-                      </div>
+                    <div class="ou-stack ou-stack--gap-2">
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Зона развития</span><span class="ou-progress__val">11 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 11%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Базовый</span><span class="ou-progress__val">38 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 38%"></div></div></div>
+                      <div class="ou-progress ou-progress--s"><div class="ou-progress__head"><span class="ou-progress__lbl">Сильная сторона</span><span class="ou-progress__val">51 %</span></div><div class="ou-progress__track"><div class="ou-progress__fill" style="width: 51%"></div></div></div>
                     </div>
                   </div>
 
@@ -499,6 +513,75 @@
                       </div>
                     </div>
                   </div>
+                  <!-- ДЕЛЬТА 2026-10-08: числовой без уровней — доли по интервалам, тот же вид, что уровни.
+                       Интервалы те же, что на вкладке, общие для всех срезов; интервал, пустой во всех срезах, не выводится. -->
+                  <div class="ou-stack ou-stack--gap-2">
+                    <span class="ou-text ou-text--body-s ou-text--w-medium">Разброс стилей · распределение</span>
+                    <div class="ou-grid">
+                      <div class="ou-grid__scroll">
+                        <table class="ou-grid__table wf-grid-fixed"><colgroup><col style="width:36%" /><col style="width:26%" /><col style="width:26%" /><col style="width:12%" /></colgroup>
+                          <thead>
+                            <tr>
+                              <th><div class="ou-grid__th">Интервал</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">HRBP</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Тестовая ДУЗ</div></th>
+                              <th class="is-align-center"><div class="ou-grid__th ou-grid__th--center">Разница</div></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td>0–2</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">8 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:8%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">14 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:14%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−6 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td>3–5</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">22 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:22%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">27 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:27%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−5 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td>6–8</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">34 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:34%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">26 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:26%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+8 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td>9–11</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">19 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:19%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">17 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:17%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+2 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td>12–14</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">11 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:11%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">9 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:9%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">+2 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td>15–17</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">4 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:4%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">4 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:4%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">0 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td>18–20</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">1 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:1%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">2 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:2%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">−1 п.п.</span></td>
+                            </tr>
+                            <tr>
+                              <td>21–23</td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">1 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:1%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td><span class="tb-psy-scale"><span class="tb-psy-scale__value ou-text ou-text--body-s">1 %</span><span class="tb-psy-scale__track"><span class="tb-psy-scale__fill" style="width:1%;background:var(--ou-accent-default)"></span></span></span></td>
+                              <td class="is-numeric is-align-center"><span class="ou-text ou-text--body-s">0 п.п.</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
                   <!-- Строковый — та же таблица, строка — исход. -->
                   <div class="ou-stack ou-stack--gap-2">
                     <span class="ou-text ou-text--body-s ou-text--w-medium">Ведущий стиль · исходы</span>
@@ -570,9 +653,9 @@
               <tr><td>Значение показателя</td><td>веб — <code>result_json.resultVariables</code>; телеметрия и импорт — <code>variables_json</code></td><td>Только сохранённое значение, без пересчёта по ответам (FR-21e, решение владельца 2026-10-07). Строки из пакета и выгрузки приводятся по типу показателя</td></tr>
               <tr><td>«у N не передано»</td><td>прохождения выборки без значения этого показателя</td><td>Не входят в n и в доли. Выводится, только если N &gt; 0</td></tr>
               <tr><td>Показатель без значений вовсе</td><td>n = 0</td><td>Название приглушено, вместо полосы — «не передано ни в одном из N прохождений». Ноль и пустая полоса запрещены (FR-27)</td></tr>
-              <tr><td>Числовой с уровнями</td><td><code>type = number</code>, есть полосы толкования</td><td>Среднее «X из максимума» в строке заголовка и составная полоса уровней. Цвета — с сервера по FR-21a (тон уровня, иначе рампа теста с учётом валентности)</td></tr>
-              <tr><td>Числовой без уровней</td><td><code>type = number</code>, полос нет</td><td>Среднее в домене полосой акцента (FR-21b) и «уровни толкования не заданы». Если домена нет — только «среднее X»</td></tr>
-              <tr><td>Строковый и логический</td><td><code>type = string | boolean</code></td><td>Доли исходов толкования (<code>findOutcome</code>, тот же порядок сопоставления, что в итогах участника). Цвет — тон исхода; исходам без тона — категориальные цвета по порядку исходов в толковании: исходы не упорядочены, рампа уровней к ним неприменима. Значения вне исходов — «Прочее» нейтральным цветом, последним. Исходы без единого прохождения не выводятся</td></tr>
+              <tr><td>Числовой с уровнями</td><td><code>type = number</code>, есть полосы толкования</td><td>Среднее «X из максимума» в строке заголовка, под ней строка на уровень: <code>ProgressBar</code> с подписью и долей, как «Профиль по шкалам» — доли сравниваются длиной полос (владелец 2026-10-08: в составной полосе сравнить нельзя). Уровни без прохождений не выводятся</td></tr>
+              <tr><td>Числовой без уровней</td><td><code>type = number</code>, полос нет; <code>histogram</code></td><td>Компактная гистограмма (половина ширины карточки, высота 120 px — столбики узкие): доля прохождений по 10 равным интервалам домена (владелец 2026-10-08: одно среднее распределения не показывает). Целые значения — целые границы интервалов («0–2»); если различных значений не больше 10 — столбик на значение. Без домена интервалы строятся по наименьшему и наибольшему значению всех прохождений теста, чтобы фильтр и срезы не сдвигали границы. Столбики акцентом (FR-21b). В сравнении срезов — таблица долей по тем же интервалам, вид как у уровней; интервал, пустой во всех срезах, не выводится</td></tr>
+              <tr><td>Строковый и логический</td><td><code>type = string | boolean</code></td><td>Строка на исход, как у уровней (<code>ProgressBar</code> с подписью и долей). Сопоставление — <code>findOutcome</code>, как в итогах участника; исходы с одинаковой подписью сводятся в одну строку; без исходов — строки по самим значениям, ключи шкал печатаются названиями шкал. «Прочее» — последней строкой. Исходы без прохождений не выводятся. Цвета исходов (тон автора, иначе категориальная палитра) действуют в таблицах сравнения срезов</td></tr>
               <tr><td>Скрытый от участника показатель</td><td><code>learner_visibility = hidden</code></td><td>В аналитике виден: автор видит его всегда</td></tr>
               <tr><td>Сравнение срезов: «Показатели»</td><td><code>slices[].indicators</code></td><td>Над блоком «Шкалы». Числовые — средние в одной таблице, «Разница» при двух срезах в единицах показателя. Уровни числового и исходы строкового и логического — таблица на показатель, как уровни шкалы. Третий пункт переключателя метрик переименован: «Ответы и шкалы» → «Ответы, шкалы и показатели» (владелец 2026-10-07)</td></tr>
               <tr><td>Выгрузки (вне холста)</td><td>Excel аналитики, протокол попытки</td><td>FR-21h: лист «Прохождения» книги одного теста — колонки шкал и показателей у всех источников; лист «Измерения» — строки всех источников, «Уровень» показателя — метка уровня или исхода; протокол — лист «Показатели»: Ключ, Название, Значение, Уровень / исход</td></tr>
