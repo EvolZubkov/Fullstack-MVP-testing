@@ -20,6 +20,8 @@ describe.each(TEMPLATE_IDS)("%s — шрифт отчёта", (id) => {
   });
 
   it("задаёт жирному в авторском тексте явный вес", () => {
-    expect(css).toMatch(/\.tb-report b,\s*\.tb-report strong\s*\{\s*font-weight:\s*600;/);
+    // 600 or 700: certification prints Bold (700), because weight 600 of the system
+    // Rostelecom Basis set is the solid-plate MediumHighlight face.
+    expect(css).toMatch(/\.tb-report b,\s*\.tb-report strong\s*\{\s*font-weight:\s*(600|700);/);
   });
 });
