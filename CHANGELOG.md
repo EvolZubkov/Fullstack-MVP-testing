@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.43.1](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.43.0...v2.43.1)
+
+### Features
+
+- **feat**(analytics): показатели — строки как у шкал и гистограмма вместо голого среднего (2026-10-08) [`e5e306426cd412ce3d2008961e2290b0062eb70e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e5e306426cd412ce3d2008961e2290b0062eb70e)
+
+### Fixes
+
+- **fix**(analytics): одинаковые подписи уровней вместе, запас оси гистограммы; FR-21d по приёмке (2026-10-08) [`d4330307cb8a4f7b3ee20448f97130da4ba57490`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d4330307cb8a4f7b3ee20448f97130da4ba57490)
+
+- **fix**(analytics): исходы показателей — нейтральный тон в палитре, одинаковые подписи вместе, ключи шкал названиями (2026-10-08) [`8a78dbc53d7df8b6459982ea4001e33260732c3f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8a78dbc53d7df8b6459982ea4001e33260732c3f)
+
+### Documentation
+
+- **docs**: руководство автора — вид показателей в аналитике (2026-10-08) [`85748d9e078902ab514aef7bd3def176d26a9b2c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/85748d9e078902ab514aef7bd3def176d26a9b2c)
+
+- **docs**(wireframes): показатели — строки вместо составной полосы, компактная гистограмма (2026-10-08) [`a4ee2cf7b1d81f792421a2b3ba980885cd8d45eb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a4ee2cf7b1d81f792421a2b3ba980885cd8d45eb)
+
 ## [2.43.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.42.0...v2.43.0)
 
 ### Features
