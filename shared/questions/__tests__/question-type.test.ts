@@ -20,6 +20,7 @@ import {
   hasOptionList,
   isMeasurementOnly,
   isOpenText,
+  isSimulation,
   isSingleIndexChoice,
   isTextEntry,
 } from "../question-type";
@@ -32,6 +33,7 @@ interface Traits {
   isTextEntry: boolean;
   hasBlanks: boolean;
   isOpenText: boolean;
+  isSimulation: boolean;
 }
 
 /**
@@ -46,42 +48,47 @@ interface Traits {
 const TRAITS: Record<string, Traits> = {
   single: {
     hasOptionList: true, isSingleIndexChoice: true, hasFixedOptionOrder: false, distributesBudget: false,
-    isTextEntry: false, hasBlanks: false, isOpenText: false,
+    isTextEntry: false, hasBlanks: false, isOpenText: false, isSimulation: false,
   },
   multiple: {
     hasOptionList: true, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: false,
-    isTextEntry: false, hasBlanks: false, isOpenText: false,
+    isTextEntry: false, hasBlanks: false, isOpenText: false, isSimulation: false,
   },
   matching: {
     hasOptionList: false, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: false,
-    isTextEntry: false, hasBlanks: false, isOpenText: false,
+    isTextEntry: false, hasBlanks: false, isOpenText: false, isSimulation: false,
   },
   ranking: {
     hasOptionList: false, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: false,
-    isTextEntry: false, hasBlanks: false, isOpenText: false,
+    isTextEntry: false, hasBlanks: false, isOpenText: false, isSimulation: false,
   },
   scale: {
     hasOptionList: true, isSingleIndexChoice: true, hasFixedOptionOrder: true, distributesBudget: false,
-    isTextEntry: false, hasBlanks: false, isOpenText: false,
+    isTextEntry: false, hasBlanks: false, isOpenText: false, isSimulation: false,
   },
   allocation: {
     hasOptionList: true, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: true,
-    isTextEntry: false, hasBlanks: false, isOpenText: false,
+    isTextEntry: false, hasBlanks: false, isOpenText: false, isSimulation: false,
   },
   // PRD-57. The three text types share every choice trait (all false) and differ only
   // in WHICH text trait they carry — see the module doc for why they are three traits
   // and not one: one answer key per task, one per blank, none at all.
   short: {
     hasOptionList: false, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: false,
-    isTextEntry: true, hasBlanks: false, isOpenText: false,
+    isTextEntry: true, hasBlanks: false, isOpenText: false, isSimulation: false,
   },
   blanks: {
     hasOptionList: false, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: false,
-    isTextEntry: false, hasBlanks: true, isOpenText: false,
+    isTextEntry: false, hasBlanks: true, isOpenText: false, isSimulation: false,
   },
   long: {
     hasOptionList: false, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: false,
-    isTextEntry: false, hasBlanks: false, isOpenText: true,
+    isTextEntry: false, hasBlanks: false, isOpenText: true, isSimulation: false,
+  },
+  // «Сценарий в ИС»: ни вариантов, ни текста — прогон в плеере; свой признак, ничего больше.
+  simulation: {
+    hasOptionList: false, isSingleIndexChoice: false, hasFixedOptionOrder: false, distributesBudget: false,
+    isTextEntry: false, hasBlanks: false, isOpenText: false, isSimulation: true,
   },
 };
 
@@ -91,7 +98,7 @@ describe("признаки типа вопроса", () => {
   });
 
   for (const [type, traits] of Object.entries(TRAITS)) {
-    it(`${type}: все семь признаков`, () => {
+    it(`${type}: все восемь признаков`, () => {
       expect(hasOptionList(type)).toBe(traits.hasOptionList);
       expect(isSingleIndexChoice(type)).toBe(traits.isSingleIndexChoice);
       expect(hasFixedOptionOrder(type)).toBe(traits.hasFixedOptionOrder);
@@ -99,6 +106,7 @@ describe("признаки типа вопроса", () => {
       expect(isTextEntry(type)).toBe(traits.isTextEntry);
       expect(hasBlanks(type)).toBe(traits.hasBlanks);
       expect(isOpenText(type)).toBe(traits.isOpenText);
+      expect(isSimulation(type)).toBe(traits.isSimulation);
     });
   }
 
@@ -110,6 +118,7 @@ describe("признаки типа вопроса", () => {
     expect(isTextEntry("nope")).toBe(false);
     expect(hasBlanks("nope")).toBe(false);
     expect(isOpenText("nope")).toBe(false);
+    expect(isSimulation("nope")).toBe(false);
   });
 });
 
