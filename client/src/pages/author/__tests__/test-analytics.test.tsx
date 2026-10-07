@@ -756,12 +756,12 @@ describe("<TestAnalyticsPage />", () => {
       });
     });
 
-    it("качество шкал — на вкладке «Шкалы»; у опросника нет набора «Психометрика»", async () => {
+    it("качество шкал — на вкладке «Шкалы и показатели»; у опросника нет набора «Психометрика»", async () => {
       await renderLoaded();
       fireEvent.click(screen.getByRole("tab", { name: "Вопросы" }));
       await screen.findByRole("button", { name: "Показы и пропуски" });
       expect(screen.queryByRole("button", { name: "Психометрика" })).toBeNull();
-      fireEvent.click(screen.getByRole("tab", { name: "Шкалы" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Шкалы и показатели" }));
 
       expect(await screen.findByText("Шкалы методики")).toBeInTheDocument();
       expect(screen.getByText("Пункты шкалы «Деперсонализация»")).toBeInTheDocument();
@@ -771,6 +771,56 @@ describe("<TestAnalyticsPage />", () => {
       expect(screen.queryByRole("link", { name: /Психометрический отчёт/ })).toBeNull();
       // Почему так — говорит подзаголовок страницы, как в эскизе.
       expect(screen.getByText(/измерительный тест, эталона у вопросов нет/)).toBeInTheDocument();
+    });
+  });
+
+  /** PRD-56 FR-21c, FR-21f, эскиз analytics-indicators.html (состояние «вкладка»). */
+  describe("показатели на вкладке «Шкалы и показатели»", () => {
+    const INDICATORS_BODY = {
+      testId: "t1",
+      observations: 12,
+      scales: [],
+      indicators: [{
+        name: "idx", label: "Индекс человекоцентричности", type: "number", kind: "average",
+        sampleSize: 10, missing: 2, average: 64.24, domainMin: 0, domainMax: 100, shares: [],
+      }],
+    };
+
+    beforeEach(() => {
+      state.analyticsBody = { ...standardAnalytics(), hasScales: false, hasIndicators: true };
+      const base = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (input: string) => {
+        const url = String(input);
+        if (url.startsWith("/api/analytics/tests/t1/scales")) {
+          return { ok: true, status: 200, json: async () => INDICATORS_BODY, text: async () => JSON.stringify(INDICATORS_BODY) };
+        }
+        // Under a page filter the summary is asked with conditions in the address.
+        return base(url.startsWith("/api/analytics/tests/t1?") ? "/api/analytics/tests/t1" : url);
+      });
+    });
+
+    it("a test with indicators only gets the tab with the indicators card and no scale cards", async () => {
+      await renderLoaded();
+      fireEvent.click(screen.getByRole("tab", { name: "Шкалы и показатели" }));
+
+      expect(await screen.findByText("Индекс человекоцентричности")).toBeInTheDocument();
+      expect(screen.getByText("среднее 64,2 из 100 · 10 прохождений · у 2 не передано")).toBeInTheDocument();
+      expect(screen.queryByText("Профиль по шкалам")).toBeNull();
+    });
+
+    it("asks the tab's data under the page filter", async () => {
+      // The page filter lives in the address, read from `window.location` (useRegistryFilter).
+      window.history.replaceState(null, "", "/author/analytics/tests/t1?source=import");
+      try {
+        await renderLoaded();
+        fireEvent.click(screen.getByRole("tab", { name: "Шкалы и показатели" }));
+
+        await screen.findByText("Индекс человекоцентричности");
+      } finally {
+        window.history.replaceState(null, "", "/");
+      }
+      expect(fetchMock.mock.calls.map(call => String(call[0])))
+        .toContain("/api/analytics/tests/t1/scales?source=import");
     });
   });
 

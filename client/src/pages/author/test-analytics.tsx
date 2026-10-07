@@ -26,6 +26,10 @@ import {
     type ScaleProfileView,
 } from "@/features/analytics/test/scale-profile";
 import {
+    IndicatorProfilePanel,
+    type IndicatorProfileView,
+} from "@/features/analytics/test/indicator-profile";
+import {
     countSuspicious,
     reviewHeuristicsOf,
     type ItemQualityView,
@@ -143,8 +147,10 @@ interface TestAnalytics {
     testId: string;
     testTitle: string;
     testMode: "standard" | "adaptive";
-    /** PRD-56 FR-21: у теста есть шкалы — тогда показывается вкладка «Шкалы». */
+    /** PRD-56 FR-21: у теста есть шкалы — вкладка «Шкалы и показатели» и её блок шкал. */
     hasScales?: boolean;
+    /** PRD-56 FR-21c: у теста есть показатели — вкладка «Шкалы и показатели» и её блок показателей. */
+    hasIndicators?: boolean;
     /** Does the test declare an overall pass threshold at all (PRD-29 §6.7)? */
     hasPassThreshold: boolean;
     /** Порог наблюдений инстанса: ниже него разброс ответов не печатается (FR-22). */
@@ -258,10 +264,11 @@ interface TestAnalytics {
     }>;
 }
 
-/** PRD-56 FR-21: ответ вкладки «Шкалы». */
+/** PRD-56 FR-21, FR-21c: ответ вкладки «Шкалы и показатели». */
 interface ScaleAnalytics {
     observations: number;
     scales: ScaleProfileView[];
+    indicators: IndicatorProfileView[];
 }
 
 /** PRD-56 FR-18 - FR-20: ответ вкладки «Выдача». */
@@ -469,9 +476,13 @@ export default function TestAnalyticsPage() {
         enabled: !!testId && activeTab === "delivery",
     });
 
-    /** PRD-56 FR-21: профиль по шкалам — тоже своим запросом и только на своей вкладке. */
+    /**
+     * PRD-56 FR-21, FR-21c: профиль по шкалам и показателям — своим запросом и только на своей
+     * вкладке. Условия экрана — в адресе (FR-21f): вкладка стоит под тем же фильтром, что и
+     * остальные, и считать её по другой выборке значило бы показывать не то, что отобрано.
+     */
     const { data: scaleProfile } = useQuery<ScaleAnalytics>({
-        queryKey: [`/api/analytics/tests/${testId}/scales`],
+        queryKey: [`/api/analytics/tests/${testId}/scales${filterSearch}`],
         enabled: !!testId && activeTab === "scales",
     });
 
@@ -1347,23 +1358,35 @@ export default function TestAnalyticsPage() {
                     },
                     // PRD-56: «Уровни» отдельной вкладкой больше нет — они внутри «Выдачи».
                     { id: "delivery", label: "Выдача", content: underFilter(deliveryPanel) },
-                    // Вкладка есть только у теста со шкалами: оцениваемому тесту без них она
-                    // сказать ничего не может, а пустая вкладка читается как поломка.
-                    ...(analytics.hasScales
+                    // Вкладка есть только у теста со шкалами или показателями (FR-21c):
+                    // оцениваемому тесту без них она сказать ничего не может, а пустая вкладка
+                    // читается как поломка. Id прежний — `scales`: сохранённые ссылки не ломаются.
+                    // Порядок блоков — как в деталях попытки: показатели, затем шкалы.
+                    ...(analytics.hasScales || analytics.hasIndicators
                         ? [{
                             id: "scales",
-                            label: "Шкалы",
+                            label: "Шкалы и показатели",
                             content: underFilter(
                                 <Stack gap={4}>
-                                    <ScaleProfilePanel
-                                        scales={scaleProfile?.scales ?? []}
-                                        observations={scaleProfile?.observations ?? 0}
-                                    />
-                                    {/* Э4б: качество шкал — здесь, при самих шкалах: вкладки «Качество
-                                        вопросов», где оно стояло, больше нет. */}
-                                    {scaleQuality
-                                        ? <ScaleQualityPanel scales={scaleQuality.scales} />
-                                        : <LoadingState message="Считаем качество шкал..." />}
+                                    {analytics.hasIndicators && (
+                                        <IndicatorProfilePanel
+                                            indicators={scaleProfile?.indicators ?? []}
+                                            observations={scaleProfile?.observations ?? 0}
+                                        />
+                                    )}
+                                    {analytics.hasScales && (
+                                        <>
+                                            <ScaleProfilePanel
+                                                scales={scaleProfile?.scales ?? []}
+                                                observations={scaleProfile?.observations ?? 0}
+                                            />
+                                            {/* Э4б: качество шкал — здесь, при самих шкалах: вкладки «Качество
+                                                вопросов», где оно стояло, больше нет. */}
+                                            {scaleQuality
+                                                ? <ScaleQualityPanel scales={scaleQuality.scales} />
+                                                : <LoadingState message="Считаем качество шкал..." />}
+                                        </>
+                                    )}
                                 </Stack>
                             ),
                         }]

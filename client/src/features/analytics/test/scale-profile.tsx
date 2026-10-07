@@ -54,7 +54,8 @@ function fill(scale: ScaleProfileView): number {
 /** Подпись среднего: «27 из 35», а без домена — просто значение. */
 function averageText(scale: ScaleProfileView): string {
   if (scale.average === null) return "значения не считались";
-  const rounded = Math.round(scale.average * 10) / 10;
+  // Russian decimal mark, like the «Показатели» card on the same tab: «27,3», not «27.3».
+  const rounded = String(Math.round(scale.average * 10) / 10).replace(".", ",");
   return scale.domainMax === null
     ? `среднее ${rounded}`
     : `среднее ${rounded} из ${scale.domainMax}`;
