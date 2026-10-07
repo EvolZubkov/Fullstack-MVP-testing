@@ -1,7 +1,7 @@
 /**
  * @module features/analytics/test/answers-compare
  * @description PRD-56 FR-07k - FR-07n, FR-21g: таблицы сравнения срезов «Ответы, шкалы и
- * показатели» (эскизы approved/slice-compare-answers.html, analytics-indicators.html).
+ * показатели» (эскизы approved/slice-compare-answers.html, approved/analytics-indicators.html).
  *
  * Таблицы говорят одним языком — доля числом и полосой в колонке среза, «Разница» в
  * процентных пунктах только при двух срезах:

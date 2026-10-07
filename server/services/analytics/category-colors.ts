@@ -9,7 +9,7 @@
  *    author's tone — approved/slice-compare-answers.html paints «Низкий / Средний / Высокий» of a
  *    typology scale digital, bti, business. A grey ramp, which the code used before, made the
  *    levels of such a scale indistinguishable, while the wireframe had already agreed a palette;
- *  - OUTCOMES of a string or boolean indicator without a tone — analytics-indicators.html paints
+ *  - OUTCOMES of a string or boolean indicator without a tone — approved/analytics-indicators.html paints
  *    them business, bti, digital, leadership.
  *
  * The values are CSS variables, not literals: the screen prints them as they are, and the theme
@@ -26,7 +26,7 @@ export const LEVEL_CATEGORY_COLORS: readonly string[] = [
   "var(--ou-cat-b2o)",
 ];
 
-/** Outcomes without a tone, in outcome order (analytics-indicators.html). */
+/** Outcomes without a tone, in outcome order (approved/analytics-indicators.html). */
 export const OUTCOME_CATEGORY_COLORS: readonly string[] = [
   "var(--ou-cat-business)",
   "var(--ou-cat-bti)",
@@ -36,7 +36,7 @@ export const OUTCOME_CATEGORY_COLORS: readonly string[] = [
   "var(--ou-cat-b2o)",
 ];
 
-/** «Прочее» — values outside the outcomes (analytics-indicators.html). */
+/** «Прочее» — values outside the outcomes (approved/analytics-indicators.html). */
 export const REST_CATEGORY_COLOR = "var(--ou-fg-muted)";
 
 /**

@@ -128,7 +128,7 @@ describe("summariseIndicators — outcomes", () => {
       { ramp },
     );
 
-    // analytics-indicators.html: outcomes business, bti, digital, leadership; «Прочее» fg-muted.
+    // approved/analytics-indicators.html: outcomes business, bti, digital, leadership; «Прочее» fg-muted.
     const color = (key: string) => profile.shares.find(s => s.key === key)!;
     expect(color("kom")).toMatchObject({ color: "var(--ou-cat-business)", tone: null });
     expect(color("vdh")).toMatchObject({ color: "var(--ou-success-default)", tone: "favorable" });

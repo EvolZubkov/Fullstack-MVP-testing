@@ -8,7 +8,7 @@
 выгрузок LMS.
 
 **Контракт.** [PRD-56](../specs/prd-56/analytics-rework.md) FR-07k, FR-07l, FR-21c - FR-21h;
-эскиз [analytics-indicators.html](../wireframes/analytics-indicators.html).
+эскиз [analytics-indicators.html](../wireframes/approved/analytics-indicators.html).
 
 **Архитектура.** Значения показателей уже сохранены у каждого прохождения
 (`attempts.result_json.resultVariables`, `scorm_attempts.variables_json`). Добавляется только

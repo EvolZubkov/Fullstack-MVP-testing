@@ -774,7 +774,7 @@ describe("<TestAnalyticsPage />", () => {
     });
   });
 
-  /** PRD-56 FR-21c, FR-21f, эскиз analytics-indicators.html (состояние «вкладка»). */
+  /** PRD-56 FR-21c, FR-21f, эскиз approved/analytics-indicators.html (состояние «вкладка»). */
   describe("показатели на вкладке «Шкалы и показатели»", () => {
     const INDICATORS_BODY = {
       testId: "t1",
