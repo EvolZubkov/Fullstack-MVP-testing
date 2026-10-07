@@ -274,7 +274,9 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
         <span className="tb-qscoring__default-hint">
           Пусто — системное умолчание: 1 балл за полностью верный ответ.
         </span>
-        {cards.length > 0 && (
+        {/* С блоком штрафов кнопки свёртки уходят под него, к карточкам, которые сворачивают
+            (эскиз sim-e5-answer); без него стоят здесь, как прежде. */}
+        {cards.length > 0 && activeItems.length === 0 && (
           <FoldAllButtons fold={fold} testIdPrefix="scoring" />
         )}
       </div>
@@ -300,6 +302,9 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
             onChange={(countPartial) => setSimDefaults({ countPartial })}
             disabled={readOnly}
           />
+          <div className="tb-fold-toolbar">
+            <FoldAllButtons fold={fold} testIdPrefix="scoring" />
+          </div>
         </>
       )}
 
