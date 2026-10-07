@@ -71,7 +71,11 @@ router.get(
         testId,
         observations: measured.size,
         scales: summariseScales(scaleSelection, scales, { ramp }),
-        indicators: summariseIndicators(indicatorSelection, indicators, { ramp }),
+        indicators: summariseIndicators(indicatorSelection, indicators, {
+          ramp,
+          // A string indicator often stores scale keys: they read as the scales' names.
+          scaleLabels: Object.fromEntries(scales.map(scale => [scale.key, scale.label || scale.key])),
+        }),
       });
     } catch (error) {
       logger.error("Scale analytics error: " + (error as Error).message);

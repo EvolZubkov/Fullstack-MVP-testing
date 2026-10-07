@@ -72,6 +72,12 @@ export interface IndicatorProfile {
 export interface IndicatorProfileOptions {
   /** The test's level ramp: bands of a numeric indicator take it, like bands of a scale. */
   ramp: LevelRamp;
+  /**
+   * Labels of the test's scales by key. A string indicator often stores scale KEYS («kom»,
+   * «pro+cel» — a leading style, a close style); without outcomes those keys would reach the
+   * screen as codes. With this map they read as the scales' names.
+   */
+  scaleLabels?: Readonly<Record<string, string>>;
 }
 
 /** Key of the «Прочее» bucket; cannot clash with an outcome code or a band level. */
@@ -80,10 +86,13 @@ export const REST_KEY = "__rest__";
 /** How many value groups an indicator WITHOUT outcomes shows before folding the tail. */
 const VALUE_GROUPS_MAX = 6;
 
-/** Author's tone -> design-system colour (FR-21a). */
-const TONE_COLOR: Record<LevelTone, string> = {
+/**
+ * Author's EVALUATIVE tone -> design-system colour (FR-21a). The «neutral» tone is absent on
+ * purpose: it judges nothing, and painting it info-blue made every outcome of a typology the same
+ * colour (live ЧИЛ data, 2026-10-08). A neutral outcome takes the categorical palette instead.
+ */
+const TONE_COLOR: Partial<Record<LevelTone, string>> = {
   favorable: "var(--ou-success-default)",
-  neutral: "var(--ou-info-default)",
   attention: "var(--ou-warning-default)",
   critical: "var(--ou-error-default)",
 };
@@ -102,22 +111,53 @@ function restShare(count: number, total: number): IndicatorShare[] {
     : [];
 }
 
-/** How a value reads in a group of its own (no outcomes defined). */
-function valueLabel(value: IndicatorValue): string {
+/**
+ * How a value reads in a group of its own (no outcomes defined): a boolean as «Да» / «Нет», a
+ * scale key or a «+»-set of scale keys by the scales' names, anything else as it is.
+ */
+function valueLabel(value: IndicatorValue, scaleLabels: Readonly<Record<string, string>>): string {
   if (typeof value === "boolean") return value ? "Да" : "Нет";
-  return String(value);
+  const text = String(value);
+  const parts = text.split("+").map(part => part.trim()).filter(Boolean);
+  if (parts.length > 0 && parts.every(part => part in scaleLabels)) {
+    return parts.map(part => scaleLabels[part]).join(", ");
+  }
+  return text;
+}
+
+/**
+ * Fold groups that read the same into one share, in first-seen order.
+ *
+ * The reader tells shares apart by their LABEL only: two outcomes the author named alike
+ * («Сфокусированный» for each single-style code) printed as two identical legend items and two
+ * split shares. Summed, they answer the question the screen asks — how many runs got «Сфокусированный».
+ * The key of a share is its label, so a slice comparison joins the same share across slices.
+ */
+function byLabel(groups: ReadonlyArray<{ label: string; count: number; tone: LevelTone | null }>): Array<{
+  label: string; count: number; tone: LevelTone | null;
+}> {
+  const merged = new Map<string, { label: string; count: number; tone: LevelTone | null }>();
+  for (const group of groups) {
+    const seen = merged.get(group.label);
+    if (seen) seen.count += group.count;
+    else merged.set(group.label, { ...group });
+  }
+  return [...merged.values()];
 }
 
 /**
  * Shares of the outcomes of a string or boolean indicator.
  *
- * With outcomes: the author's order, empty outcomes dropped, unmatched values in «Прочее».
- * Without them: groups of equal values, the most frequent first, at most {@link VALUE_GROUPS_MAX},
- * the tail in «Прочее».
+ * With outcomes: the author's order, empty outcomes dropped, alike labels folded, unmatched values
+ * in «Прочее». The colour of an outcome is fixed by the position of its label among the
+ * interpretation's labels — not by what this selection happened to contain — so the same outcome
+ * keeps its colour in every slice. Without outcomes: groups of equal values, the most frequent
+ * first, at most {@link VALUE_GROUPS_MAX}, the tail in «Прочее».
  */
 function outcomeShares(
   values: readonly IndicatorValue[],
   outcomes: ReturnType<typeof parseIndicatorInterpretation>["outcomes"],
+  scaleLabels: Readonly<Record<string, string>>,
 ): IndicatorShare[] {
   const total = values.length;
 
@@ -129,36 +169,33 @@ function outcomeShares(
       if (outcome) counts.set(outcome.code, (counts.get(outcome.code) ?? 0) + 1);
       else rest += 1;
     }
-    const shares: IndicatorShare[] = [];
-    outcomes.forEach((outcome, index) => {
-      const count = counts.get(outcome.code) ?? 0;
-      if (count === 0) return;
-      shares.push({
-        key: outcome.code,
-        label: outcome.label || outcome.code,
-        count,
-        share: percentOf(count, total),
-        color: outcome.tone ? TONE_COLOR[outcome.tone] : categoricalColor(index),
-        tone: outcome.tone ?? null,
-      });
-    });
+    const labelOf = (outcome: (typeof outcomes)[number]) => outcome.label || outcome.code;
+    const labelOrder = [...new Set(outcomes.map(labelOf))];
+    const shares = byLabel(outcomes.map(outcome => ({
+      label: labelOf(outcome),
+      count: counts.get(outcome.code) ?? 0,
+      tone: outcome.tone ?? null,
+    })))
+      .filter(group => group.count > 0)
+      .map(group => ({
+        key: group.label,
+        label: group.label,
+        count: group.count,
+        share: percentOf(group.count, total),
+        color: (group.tone && TONE_COLOR[group.tone]) || categoricalColor(labelOrder.indexOf(group.label)),
+        tone: group.tone,
+      }));
     return [...shares, ...restShare(rest, total)];
   }
 
-  const groups = new Map<string, { value: IndicatorValue; count: number }>();
-  for (const value of values) {
-    const key = String(value);
-    const group = groups.get(key);
-    if (group) group.count += 1;
-    else groups.set(key, { value, count: 1 });
-  }
-  const ordered = [...groups.entries()].sort((a, b) => b[1].count - a[1].count);
-  const visible = ordered.slice(0, VALUE_GROUPS_MAX);
-  const rest = ordered.slice(VALUE_GROUPS_MAX).reduce((sum, [, group]) => sum + group.count, 0);
+  const groups = byLabel(values.map(value => ({ label: valueLabel(value, scaleLabels), count: 1, tone: null })))
+    .sort((a, b) => b.count - a.count);
+  const visible = groups.slice(0, VALUE_GROUPS_MAX);
+  const rest = groups.slice(VALUE_GROUPS_MAX).reduce((sum, group) => sum + group.count, 0);
   return [
-    ...visible.map(([key, group], index) => ({
-      key,
-      label: valueLabel(group.value),
+    ...visible.map((group, index) => ({
+      key: group.label,
+      label: group.label,
       count: group.count,
       share: percentOf(group.count, total),
       color: categoricalColor(index),
@@ -221,7 +258,7 @@ export function summariseIndicators(
         ...base,
         kind: "outcomes",
         average: null,
-        shares: outcomeShares(values, interpretation.outcomes),
+        shares: outcomeShares(values, interpretation.outcomes, opts.scaleLabels ?? {}),
       } satisfies IndicatorProfile;
     });
 }

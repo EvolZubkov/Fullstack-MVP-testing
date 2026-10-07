@@ -115,8 +115,8 @@ describe("summariseIndicators — outcomes", () => {
 
     expect(profile).toMatchObject({ kind: "outcomes", average: null, sampleSize: 4 });
     expect(profile.shares.map(s => [s.key, s.label, s.count, s.share])).toEqual([
-      ["kom", "Командный", 2, 50],
-      ["vdh", "Вдохновляющий", 1, 25],
+      ["Командный", "Командный", 2, 50],
+      ["Вдохновляющий", "Вдохновляющий", 1, 25],
       ["__rest__", "Прочее", 1, 25],
     ]);
   });
@@ -130,9 +130,9 @@ describe("summariseIndicators — outcomes", () => {
 
     // approved/analytics-indicators.html: outcomes business, bti, digital, leadership; «Прочее» fg-muted.
     const color = (key: string) => profile.shares.find(s => s.key === key)!;
-    expect(color("kom")).toMatchObject({ color: "var(--ou-cat-business)", tone: null });
-    expect(color("vdh")).toMatchObject({ color: "var(--ou-success-default)", tone: "favorable" });
-    expect(color("cel")).toMatchObject({ color: "var(--ou-cat-digital)", tone: null });
+    expect(color("Командный")).toMatchObject({ color: "var(--ou-cat-business)", tone: null });
+    expect(color("Вдохновляющий")).toMatchObject({ color: "var(--ou-success-default)", tone: "favorable" });
+    expect(color("Целеустремлённый")).toMatchObject({ color: "var(--ou-cat-digital)", tone: null });
     expect(color("__rest__")).toMatchObject({ color: "var(--ou-fg-muted)", rest: true });
   });
 
@@ -156,6 +156,56 @@ describe("summariseIndicators — outcomes", () => {
     expect(profile.shares).toHaveLength(7);
     expect(profile.shares[0]).toMatchObject({ label: "a", count: 2 });
     expect(profile.shares[6]).toMatchObject({ label: "Прочее", count: 2, rest: true });
+  });
+});
+
+describe("summariseIndicators — readable outcomes (live ЧИЛ data, 2026-10-08)", () => {
+  it("a «neutral» tone judges nothing and does not paint every outcome the same blue", () => {
+    const neutral = {
+      ...STYLE,
+      configJson: { outcomes: STYLE.configJson.outcomes.map(o => ({ ...o, tone: "neutral" })) },
+    };
+
+    const [profile] = summariseIndicators(rows({ style: "kom" }, { style: "vdh" }, { style: "cel" }), [neutral], { ramp });
+
+    expect(profile.shares.map(s => s.color)).toEqual([
+      "var(--ou-cat-business)", "var(--ou-cat-bti)", "var(--ou-cat-digital)",
+    ]);
+  });
+
+  it("outcomes the author labelled alike become one share", () => {
+    const alike = {
+      ...STYLE,
+      configJson: {
+        outcomes: [
+          { code: "cel", label: "Сфокусированный" },
+          { code: "cel+vdo", label: "Двухвекторный профиль" },
+          { code: "kom", label: "Сфокусированный" },
+        ],
+      },
+    };
+
+    const [profile] = summariseIndicators(
+      rows({ style: "cel" }, { style: "kom" }, { style: "kom" }, { style: "cel+vdo" }),
+      [alike],
+      { ramp },
+    );
+
+    expect(profile.shares.map(s => [s.label, s.count])).toEqual([
+      ["Сфокусированный", 3], ["Двухвекторный профиль", 1],
+    ]);
+  });
+
+  it("values that are scale keys are named by the scales, not printed as codes", () => {
+    const close = { name: "close", label: "Второй близкий стиль", type: "string", sortOrder: 1, configJson: {} };
+
+    const [profile] = summariseIndicators(
+      rows({ close: "kom" }, { close: "kom" }, { close: "pro+cel" }, { close: "zzz" }),
+      [close],
+      { ramp, scaleLabels: { kom: "Командный", pro: "Процессный", cel: "Целеустремлённый" } },
+    );
+
+    expect(profile.shares.map(s => s.label)).toEqual(["Командный", "Процессный, Целеустремлённый", "zzz"]);
   });
 });
 

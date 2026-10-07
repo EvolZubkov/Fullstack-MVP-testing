@@ -116,7 +116,10 @@ router.get(
           questions,
           scales: summariseScales(rows, scales, { ramp }),
           // PRD-56 FR-21g: indicators of the slice, cut by the same runs as its scales.
-          indicators: summariseIndicators(indicatorRows.filter(row => selects(row.attemptId)), indicators, { ramp }),
+          indicators: summariseIndicators(indicatorRows.filter(row => selects(row.attemptId)), indicators, {
+            ramp,
+            scaleLabels: Object.fromEntries(scales.map(scale => [scale.key, scale.label || scale.key])),
+          }),
         });
       }
 
