@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.43.2](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.43.1...v2.43.2)
+
+### Fixes
+
+- **fix**(analytics): показатель читает число диапазонами толкования, как экран итогов — без ложного «Прочее» (2026-10-08) [`0bbd68f8c4ef9634f9f8a6bb6ba1ad338148ae9b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0bbd68f8c4ef9634f9f8a6bb6ba1ad338148ae9b)
+
 ## [2.43.1](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.43.0...v2.43.1)
 
 ### Features
