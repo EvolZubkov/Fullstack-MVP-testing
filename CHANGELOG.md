@@ -1,5 +1,86 @@
 # Changelog
 
+## [2.43.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.42.0...v2.43.0)
+
+### Features
+
+- **feat**(tests): окно удаления называет, что уйдёт вместе с тестом (2026-10-07) [`d0f7b4463006f63d7e352482e700ea20b2cb5d97`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d0f7b4463006f63d7e352482e700ea20b2cb5d97)
+  По согласованному эскизу test-delete-lms-impact (PRD-15 FR-07a): окно
+  удаления показывает, сколько прохождений удалится — в сервисе и из LMS,
+  сколько загрузок выгрузок и что выгруженные пакеты перестанут передавать
+  результаты, а рядом с «Удалить навсегда» — равноценную альтернативу
+  «Архивировать» (только при праве tests.publish). Числа отдаёт
+  GET /api/tests/:id/delete-impact, посчитанные тем же условием, по которому
+  deleteTest потом удаляет.
+  
+  Попутно: стили блока подтверждения были привязаны к .tb-tests-list, а окно
+  монтируется порталом вне его — плашка с названием, подписи и отступы не
+  применялись никогда; плашка к тому же ссылалась на несуществующий токен
+  --ou-bg-subtle. Стили отвязаны, плашка — --ou-bg-muted, как в эскизе.
+
+- **feat**(analytics): показатели в сравнении срезов, вид «Ответы, шкалы и показатели» (2026-10-07) [`8f73478b8d04f075e8d846b2f2ee0341bcbf7f99`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8f73478b8d04f075e8d846b2f2ee0341bcbf7f99)
+
+- **feat**(analytics): вкладка «Шкалы и показатели» — карточка показателей (2026-10-07) [`c10305a56b79e2beaecb7e559594765e0a906616`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c10305a56b79e2beaecb7e559594765e0a906616)
+
+- **feat**(analytics): протокол попытки — показатели с названием и уровнем (2026-10-07) [`a96783eb4236baa3d4b6e16b0982598530e3ba4d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a96783eb4236baa3d4b6e16b0982598530e3ba4d)
+
+- **feat**(analytics): шкалы и показатели прохождений LMS в выгрузке Excel (2026-10-07) [`8bfaedc95c5477c9171b9d5e9c91f67365ffbd5f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8bfaedc95c5477c9171b9d5e9c91f67365ffbd5f)
+
+- **feat**(analytics): показатели в сравнении срезов (2026-10-07) [`09128efe29bf4aaae54faf5c810adb752dd5fcdc`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/09128efe29bf4aaae54faf5c810adb752dd5fcdc)
+
+- **feat**(analytics): вкладка шкал отдаёт показатели и слушает фильтр экрана (2026-10-07) [`f17a96197cea9d03558a26a4a4278aa6b6b3bb1d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f17a96197cea9d03558a26a4a4278aa6b6b3bb1d)
+
+- **feat**(analytics): сводка по показателям — уровни, среднее, исходы (2026-10-07) [`615070c0a79448b3f696f26cee10b311359d7091`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/615070c0a79448b3f696f26cee10b311359d7091)
+
+- **feat**(analytics): выборка сохранённых значений показателей по тесту (2026-10-07) [`0293f07162005a85b9c541f23c94c9b722e79e11`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0293f07162005a85b9c541f23c94c9b722e79e11)
+
+- **feat**(analytics): приведение сохранённого значения показателя по типу (2026-10-07) [`c6361a0c260fb219235a125953bfcd49a8f4e485`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c6361a0c260fb219235a125953bfcd49a8f4e485)
+
+### Fixes
+
+- **fix**(tests): удаление теста стирает его LMS-данные (2026-10-07) [`fac26669043be923c2aaf422de268d1dbc709eb6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fac26669043be923c2aaf422de268d1dbc709eb6)
+  Прохождения удалённого теста из LMS хранились и показывались администратору
+  строкой «Удалённый тест», а веб-прохождения того же теста удалялись. Решение
+  пересмотрено (PRD-15 FR-07a): учёт прохождений ведёт сама LMS, без теста они
+  ничего не объясняют, а хранить персональные данные без цели нельзя;
+  сохранить данные теста — значит перевести его в архив.
+  
+  deleteTest той же транзакцией стирает телеметрию с ответами (в том числе
+  старые строки, где тест известен только через пакет), загрузки выгрузок —
+  каждую правилом кнопки отката BR-54-43, вместе с заведёнными ею участниками,
+  — и выгруженные пакеты; с тестом уходят срезы аналитики, экспозиция вопросов
+  и личные ссылки. Откат партии вынесен в rollbackLmsImportBatch, чтобы правило
+  было одно.
+  
+  Миграция 0052_purge_deleted_test_lms один раз дочищает накопленное раньше
+  тем же правилом.
+
+- **fix**(analytics): вкладка шкал — новая сигнатура правила попыток (2026-10-07) [`d393aaffa02e45ccdfb71a98ce020ddba8a89bae`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d393aaffa02e45ccdfb71a98ce020ddba8a89bae)
+
+- **fix**(analytics): уровни без направления и исходы — палитра утверждённых эскизов (2026-10-07) [`765a690fa33f1fc9cc90b718fb1864eca305b742`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/765a690fa33f1fc9cc90b718fb1864eca305b742)
+
+- **fix**(analytics): среднее показателя без домена — без пустой полосы (2026-10-07) [`327301b4ab787de072e688afe3afa1a8667c9120`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/327301b4ab787de072e688afe3afa1a8667c9120)
+
+- **fix**(analytics): показатели — без пустых уровней и честная пустая выборка (2026-10-07) [`e5e5e3edc308e33207d3192d0651680668809b2f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e5e5e3edc308e33207d3192d0651680668809b2f)
+
+- **fix**(analytics): показатели попытки LMS — из сохранённого значения, без пересчёта (2026-10-07) [`8ff14f7b7e1ab1e5144f8d30be3ccba1d9a4757b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8ff14f7b7e1ab1e5144f8d30be3ccba1d9a4757b)
+
+### Documentation
+
+- **docs**(wireframes): окно удаления теста называет, что уйдёт вместе с ним (2026-10-07) [`1d1fef1c66420b61855c52cc0f40600a9946008d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/1d1fef1c66420b61855c52cc0f40600a9946008d)
+
+- **docs**(wireframes): эскиз показателей в аналитике принят (2026-10-07) [`073869a6c245cbd15c4829b1e0b47fd5911437eb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/073869a6c245cbd15c4829b1e0b47fd5911437eb)
+
+- **docs**: показатели в аналитике — руководство автора и сравнительный анализ (2026-10-07) [`db9aa6e0d1bcb2300ca1270cfb9ea3a6e49e3c66`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/db9aa6e0d1bcb2300ca1270cfb9ea3a6e49e3c66)
+
+- **docs**(analytics): новое имя вида сравнения в комментариях (2026-10-07) [`73751dd8ed2ebc877b5c365faf7708abc3feeb3b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/73751dd8ed2ebc877b5c365faf7708abc3feeb3b)
+
+- **docs**(analytics): план реализации показателей в аналитике (2026-10-07) [`a11cef5194a51182a1d77da8acb762af809036bb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a11cef5194a51182a1d77da8acb762af809036bb)
+
+- **docs**(analytics): третий вид сравнения срезов — «Ответы, шкалы и показатели» (2026-10-07) [`1449196bf152a0457f7fdd572e1641fee296b541`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/1449196bf152a0457f7fdd572e1641fee296b541)
+
+- **docs**(analytics): показатели в аналитике теста — FR-21c..h и эскиз (2026-10-07) [`586e6f96432cd7c02386e2b86c0c3c03bbd7c4ef`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/586e6f96432cd7c02386e2b86c0c3c03bbd7c4ef)
+
 ## [2.42.0](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.41.0...v2.42.0)
 
 ### Features
