@@ -18,6 +18,7 @@ import {
   parseTestVersion,
 } from "./meta";
 import { parseExportSeconds } from "./duration";
+import { joinProtocolChunks, parseProtocolInteractionId } from "../sim/protocol-codec";
 
 /** Ширина блока одного взаимодействия. */
 const BLOCK = 4;
@@ -184,6 +185,12 @@ export interface LmsExportRow {
    * `topic_<id>_course_<n>`) в порядке `n`; пустые ячейки отброшены, пустых списков нет.
    */
   topicCourses: Record<string, string[]>;
+  /**
+   * «Сценарий в ИС»: вопрос -> закодированный протокол прогона, склеенный из блоков
+   * `sim_<questionId>_<n>` (`shared/sim/protocol-codec`). Ключа нет, когда блоков нет или в них
+   * дыра: протокол с пропуском повторить нельзя, а исход и счётчики остаются в блоке вопроса.
+   */
+  simProtocols: Record<string, string>;
 }
 
 export interface LmsExportBook {
@@ -253,6 +260,8 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
     else if (b.id.startsWith(META_PREFIX)) continue;
     // Уровни и рекомендованные курсы тем читаются построчно ниже; прочие `topic_*` неизвестны.
     else if (TOPIC_LEVEL_RE.test(b.id) || TOPIC_COURSE_RE.test(b.id)) continue;
+    // Протокол сценария читается построчно ниже.
+    else if (parseProtocolInteractionId(b.id)) continue;
     else unknownColumns.push(b.id);
   }
 
@@ -286,10 +295,13 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
       registrationMark: "",
       topicLevels: {},
       topicCourses: {},
+      simProtocols: {},
     };
     // Курсы собираются с номером блока: колонки могут стоять не по порядку, а номера — с дырами
     // (пакет пропускает курс без `object_id`, не сдвигая нумерацию).
     const courses: Record<string, Array<{ n: number; id: string }>> = {};
+    // Куски протокола — по номеру: колонки могут стоять не по порядку.
+    const protocolChunks: Record<string, Record<number, string>> = {};
 
     for (const b of blocks) {
       const result = cell(raw, b.at + 2);
@@ -329,12 +341,18 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
       } else {
         const level = TOPIC_LEVEL_RE.exec(b.id);
         const course = level ? null : TOPIC_COURSE_RE.exec(b.id);
+        const chunk = level || course ? null : parseProtocolInteractionId(b.id);
         if (level && value !== "") row.topicLevels[level[1]] = value;
         else if (course && value !== "") (courses[course[1]] ??= []).push({ n: Number(course[2]), id: value });
+        else if (chunk && value !== "") (protocolChunks[chunk.questionId] ??= {})[chunk.n] = value;
       }
     }
     for (const [topicId, list] of Object.entries(courses)) {
       row.topicCourses[topicId] = list.sort((a, b) => a.n - b.n).map((c) => c.id);
+    }
+    for (const [questionId, chunks] of Object.entries(protocolChunks)) {
+      const joined = joinProtocolChunks(chunks);
+      if (joined) row.simProtocols[questionId] = joined;
     }
 
     rows.push(row);

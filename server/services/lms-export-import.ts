@@ -12,7 +12,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { participantKey } from "../utils/crypto";
 import { decodeLearnerResponse } from "@shared/lms-export/response-codec";
-import { hasBlanks, isMeasurementOnly } from "@shared/questions/question-type";
+import { hasBlanks, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
+import type { Scenario } from "@shared/sim/contract";
+import type { InsertScormAnswer } from "@shared/schema";
+import { importedSimAnswer, importedSimRatio } from "./sim/imported-run";
 import { TOPIC_LEVEL_NOT_ACHIEVED, type LmsExportBook, type LmsExportRow } from "@shared/lms-export/parse";
 import type { IStorage } from "../storage";
 import type { ImportedAttemptKeyRow } from "../storage/scorm-repository";
@@ -108,7 +111,11 @@ export interface PlannedRow {
   deliveredQuestionIds: string[];
   scalesJson: Record<string, number>;
   variablesJson: Record<string, string>;
-  answers: Array<{ questionId: string; raw: string; result: string; latencyMs: number | null }>;
+  /**
+   * `protocol` — закодированный протокол прогона сценария из блоков `sim_<id>_<n>`
+   * (`shared/sim/protocol-codec`); `null` — у вопроса его нет (не сценарий или пакет не прислал).
+   */
+  answers: Array<{ questionId: string; raw: string; result: string; latencyMs: number | null; protocol: string | null }>;
   /**
    * Версия формата строк ответа этого прохождения; `null` — пакет её не сообщал.
    *
@@ -244,6 +251,9 @@ export function rowFingerprint(row: LmsExportRow): string {
     formIds: row.formIds,
     topicLevels: row.topicLevels,
     topicCourses: row.topicCourses,
+    // «Сценарий в ИС»: протокол входит в отпечаток, только когда он есть, — отпечатки строк,
+    // загруженных до него, не меняются.
+    ...(Object.keys(row.simProtocols ?? {}).length > 0 ? { simProtocols: row.simProtocols } : {}),
   };
   return createHash("sha256").update(stableJson(content)).digest("hex").slice(0, 16);
 }
@@ -337,6 +347,7 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
         latencyMs: (r.latencySeconds || {})[questionId] != null
           ? (r.latencySeconds || {})[questionId] * 1000
           : null,
+        protocol: (r.simProtocols || {})[questionId] ?? null,
       })),
       responseFormat: r.responseFormat ?? null,
       // PRD-56 FR-19a/FR-18: разрешение версии в снимок и варианта в тему требует базы,
@@ -563,6 +574,8 @@ export async function runImport(
   // PRD-66 FR-10a: сколько взаимодействий пришло без исхода у ОЦЕНИВАЕМОГО задания. Не потеря
   // сопоставления (задание найдено), а пробел в самом файле — и считается отдельно.
   let resultsMissing = 0;
+  // «Сценарий в ИС»: протоколы, не повторившиеся на сценарии вопроса.
+  let simProtocolsRejected = 0;
   // PRD-66 FR-11: сколько взаимодействий не нашли своего задания в тесте. Протокол загрузки
   // живёт один раз, а психометрике доля потерь нужна постоянно — рядом с числом наблюдений.
   let rowsUnmatched = 0;
@@ -713,13 +726,43 @@ export async function runImport(
 
     await storage.replaceImportedAnswers(
       id,
-      row.answers.flatMap((a) => {
+      row.answers.flatMap((a): Array<InsertScormAnswer & { id: string }> => {
         const q = questionById.get(a.questionId);
         // Вопроса нет в базе — записать ответ не во что: `scorm_answers` требует тип и текст
         // вопроса. Такая строка уже названа в предупреждении о чужих вопросах.
         if (!q) {
           rowsUnmatched += 1;
           return [];
+        }
+        // «Сценарий в ИС» (Э5б): в «Результате» — доля цены числом, в ответе — шаги
+        // `performance`, рядом — протокол блоками `sim_<id>_<n>`. Прогон восстанавливается
+        // повтором протокола; доля идёт в баллы, как у телеметрии.
+        if (isSimulation(q.type)) {
+          const ratio = importedSimRatio(a.result);
+          if (ratio === null) {
+            resultsMissing += 1;
+            return [];
+          }
+          const scenario = (q.dataJson as { scenario?: Scenario } | null)?.scenario ?? null;
+          const run = importedSimAnswer(scenario, a.raw, a.protocol);
+          if (run.rejected) simProtocolsRejected += 1;
+          const full = ratio >= 1;
+          return [{
+            id: randomUUID(),
+            attemptId: id,
+            questionId: a.questionId,
+            questionPrompt: q.prompt,
+            questionType: q.type,
+            topicId: q.topicId,
+            userAnswerJson: run.answer as InsertScormAnswer["userAnswerJson"],
+            result: full ? "correct" : "incorrect",
+            isCorrect: full,
+            points: ratio,
+            maxPoints: 1,
+            correctAnswerJson: null,
+            latencyMs: a.latencyMs,
+            answeredAt: row.finishedAt,
+          }];
         }
         // PRD-66 FR-10a: `neutral` остаётся ТОЛЬКО за измерительным заданием — у него эталона
         // нет вовсе, и пустой исход законен. У оцениваемого пустой исход значит, что файл его
@@ -769,6 +812,11 @@ export async function runImport(
   if (resultsMissing > 0) {
     warnings.push(
       `Взаимодействий без исхода у оцениваемых заданий: ${resultsMissing}. Наблюдениями они не стали — выгрузка не сообщила, верен ответ или нет.`,
+    );
+  }
+  if (simProtocolsRejected > 0) {
+    warnings.push(
+      `Протоколов сценариев, не совпавших со сценарием вопроса: ${simProtocolsRejected}. Сценарий изменён после сборки пакета: исход и счётчики загружены, разбора по сценам у этих прогонов нет.`,
     );
   }
   if (unknownForms.size > 0) {

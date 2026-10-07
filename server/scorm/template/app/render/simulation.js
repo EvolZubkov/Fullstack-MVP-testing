@@ -8,8 +8,9 @@
  *
  * Что пишется в попытку. В `state.answers` — КОМПАКТНЫЙ прогон: исход, доля цели и счётчики.
  * Ровно это читает оценка (`TBTemplate.simulationRatio`), и только это помещается в
- * `cmi.suspend_data` (кодек `TBRunState`, бюджет PRD-36). Протокол действий в попытку не идёт —
- * он уезжает телеметрией вместе с полным результатом.
+ * `cmi.suspend_data` (кодек `TBRunState`, бюджет PRD-36). Протокол действий в `suspend_data` не
+ * идёт: он уезжает телеметрией вместе с полным результатом, а в отчёт LMS — сжатым кодеком
+ * `shared/sim/protocol-codec` (поле `protocol` ответа живёт одну сессию SCO).
  *
  * Перерисовки. `render()` пакета вызывается на каждом переходе, в том числе таймером. Плеер,
  * однажды смонтированный, держится, пока текущий экран — тот же вопрос-сценарий: перерисовка не
@@ -103,7 +104,15 @@ var TBSimRun = (function () {
   /** Записать прогон в попытку: компактный ответ, статус, телеметрия, сохранение. */
   function record(fq, result) {
     var q = fq.question;
-    state.answers[q.id] = compact(result);
+    var answer = compact(result);
+    // Протокол для отчёта LMS (`sim_<id>_<n>`, `resultsPage.js`) — только в памяти: кодек
+    // `suspend_data` его не пишет. Поэтому ответ лучшей попытки, восстановленный из
+    // `suspend_data`, протокола не несёт, и чужой протокол к нему не приклеится.
+    try {
+      var encoded = TBTemplate.encodeSimProtocol(result && result.events, result && result.durationMs);
+      if (encoded) answer.protocol = encoded;
+    } catch (e) { /* без протокола уедут исход и счётчики */ }
+    state.answers[q.id] = answer;
     state.questionStatuses[q.id] = 'answered';
     if (typeof TBQuestionTime !== 'undefined') TBQuestionTime.leave();
     // Полный результат — с протоколом — только телеметрии: в попытку он не помещается.

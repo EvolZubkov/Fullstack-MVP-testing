@@ -257,3 +257,6 @@ export { resolveReportIntro } from "../report/report-intro";
 // монтирует плеер на месте экрана вопроса и считает долю цены тем же `simulationRatio`.
 export { mountPlayer } from "../sim/player";
 export { simulationRatio } from "../sim/scoring";
+// Протокол прогона в отчёт LMS — псевдо-взаимодействия `sim_<questionId>_<n>` (Э5б, требование
+// владельца: всё, что аналитика берёт из телеметрии, приходит и выгрузкой отчёта).
+export { encodeProtocol as encodeSimProtocol, protocolChunks as simProtocolChunks } from "../sim/protocol-codec";

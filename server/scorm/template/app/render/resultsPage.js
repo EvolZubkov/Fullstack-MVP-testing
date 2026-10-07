@@ -1288,6 +1288,40 @@ function questionLatency(questionId) {
   return out;
 }
 
+/**
+ * «Сценарий в ИС»: протокол прогона для отчёта LMS — псевдо-взаимодействия `sim_<id>_<n>`.
+ *
+ * Требование владельца 2026-10-08: всё, что аналитика берёт из телеметрии и веба, приходит и
+ * выгрузкой отчёта. Сцены, типичные ошибки и карта промахов строятся по протоколу, поэтому он
+ * едет здесь — сжатый до входных событий (`shared/sim/protocol-codec`, зеркало разбора в
+ * `shared/lms-export/parse.ts`); остальное импорт восстановит повтором прогона.
+ *
+ * Протокол есть только у ответа, сыгранного в этой сессии SCO (поле `protocol`, см.
+ * `simulation.js`): у восстановленного из `suspend_data` — нет, и блоков тогда нет тоже.
+ * `neutral`, как и прочие служебные блоки.
+ */
+function buildSimProtocolInteractions() {
+  var out = [];
+  state.flatQuestions.forEach(function (fq) {
+    var q = fq.question;
+    if (!TBQType.isSimulation(q.type)) return;
+    var answer = state.answers[q.id];
+    if (!answer || !answer.protocol) return;
+    var chunks = TBTemplate.simProtocolChunks(answer.protocol);
+    for (var i = 0; i < chunks.length; i++) {
+      out.push({
+        id: 'sim_' + q.id + '_' + (i + 1),
+        type: 'other',
+        result: 'neutral',
+        response: chunks[i],
+        correct: '',
+        description: 'Протокол сценария, часть ' + (i + 1)
+      });
+    }
+  });
+  return out;
+}
+
 function buildQuestionInteraction(question, answer, fullCorrect) {
   // «Сценарий в ИС»: прогон с целью и штрафами не делится на «верно / неверно» — достигнутая
   // цель со штрафом за промах в отчёте LMS читалась бы как провал. SCORM 2004 разрешает в
@@ -1326,6 +1360,9 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
 
     interactions.push(buildQuestionInteraction(q, ans, fullCorrect));
   });
+
+  // «Сценарий в ИС»: протокол прогона — следом за вопросами, кусками `sim_<id>_<n>`.
+  pushAll(interactions, buildSimProtocolInteractions());
 
   // --- Рекомендации для проваленных тем: передаём object_id курса ---
   results.topicResults.forEach(function (tr) {

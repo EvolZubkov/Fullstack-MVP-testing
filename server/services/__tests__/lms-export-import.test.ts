@@ -108,9 +108,9 @@ describe("buildImportPlan", () => {
     const row = buildImportPlan(book as never, ON).rows[0];
     expect(row.scalesJson).toEqual({ cel: 29 });
     expect(row.variablesJson).toEqual({ lead_margin: "6" });
-    // `latencyMs: null` — выгрузка этого пакета времени на задании не несла.
+    // `latencyMs: null` — выгрузка этого пакета времени на задании не несла; `protocol: null` — не сценарий.
     expect(row.answers).toEqual([
-      { questionId: "q1", raw: "0[.]7,1[.]0", result: "neutral", latencyMs: null },
+      { questionId: "q1", raw: "0[.]7,1[.]0", result: "neutral", latencyMs: null, protocol: null },
     ]);
   });
 });
@@ -811,5 +811,63 @@ describe("PRD-54 раздел 8.1: попытки одного участник�
     const s = storageStub();
     await runImport({ ...book, rows: [marked("lx1a2b3c")] } as never, ON, ctx, s as never);
     expect((s.attempts[0] as { attemptKey: string }).attemptKey).toBe("r:lx1a2b3c");
+  });
+});
+
+describe("runImport — «Сценарий в ИС» (Э5б)", () => {
+  /** Шаги `performance` и доля цены числом — как их пишет пакет (Э4). */
+  const steps = "outcome[.]exited[,]goal[.]0[,]misses[.]0[,]blocked[.]0[,]wrong[.]0[,]detours[.]1[,]traps[.]0[,]hints[.]0";
+  const simBook = (result: string, protocol?: string) => ({
+    ...book,
+    rows: [{ ...book.rows[0], answers: { q1: steps }, results: { q1: result }, simProtocols: protocol ? { q1: protocol } : {} }],
+  });
+  /** Сценарий из одной сцены с одним шагом в сторону: щелчок по нему и выход. */
+  const scenario = {
+    meta: { title: "Мини" },
+    settings: {},
+    media: [{ id: "bg", file: "media/bg.png", w: 100, h: 100 }],
+    fields: [],
+    start: "home",
+    scenes: [
+      { id: "home", title: "Стол", elements: [{ id: "bg", media: "bg", x: 0, y: 0 }], zones: [
+        { id: "side", x: 0, y: 0, w: 10, h: 10, role: "detour", effects: [{ goto: "away" }] },
+      ] },
+      { id: "away", title: "В стороне", elements: [{ id: "bg", media: "bg", x: 0, y: 0 }], zones: [] },
+    ],
+  };
+  const withSim = () => ({
+    ...storageStub(),
+    getQuestionsByIds: async () => [{ id: "q1", type: "simulation", prompt: "Задание", topicId: "t1", dataJson: { scenario } }],
+  });
+
+  it("доля цены — в баллы, прогон — повтором протокола", async () => {
+    const s = withSim();
+    const res = await runImport(simBook("0.75", "1;aside@3e8;x@3e8;z@0") as never, ON, ctx, s as never);
+    const row = (s as unknown as { answers: Array<Array<Record<string, unknown>>> }).answers[0][0];
+    expect(row).toMatchObject({ questionType: "simulation", result: "incorrect", isCorrect: false, points: 0.75, maxPoints: 1 });
+    const run = row.userAnswerJson as { outcome: string; durationMs: number; events: Array<{ type: string }> };
+    expect(run.outcome).toBe("exited");
+    // Конец прогона — по маркеру `z`: повтор сам знает лишь время последнего ввода.
+    expect(run.durationMs).toBe(2 * parseInt("3e8", 36));
+    expect(run.events.map((e) => e.type)).toContain("enter");
+    expect(res.warnings.join(" ")).not.toContain("Протоколов сценариев");
+  });
+
+  it("без протокола остаются шаги; несовпавший протокол — шаги и предупреждение", async () => {
+    const plain = withSim();
+    await runImport(simBook("1") as never, ON, ctx, plain as never);
+    const first = (plain as unknown as { answers: Array<Array<Record<string, unknown>>> }).answers[0][0];
+    expect(first).toMatchObject({ userAnswerJson: steps, result: "correct", points: 1 });
+
+    const foreign = withSim();
+    const res = await runImport(simBook("0", "1;anope@0") as never, ON, ctx, foreign as never);
+    expect((foreign as unknown as { answers: Array<Array<Record<string, unknown>>> }).answers[0][0]).toMatchObject({ userAnswerJson: steps });
+    expect(res.warnings.join(" ")).toContain("Протоколов сценариев, не совпавших со сценарием вопроса: 1");
+  });
+
+  it("исход без доли цены — пробел, а не «неверно»", async () => {
+    const s = withSim();
+    await runImport(simBook("") as never, ON, ctx, s as never);
+    expect((s as unknown as { answers: unknown[][] }).answers[0]).toEqual([]);
   });
 });
