@@ -24,7 +24,13 @@ import {
   assignmentAccessTokens, analyticsSlices, questionExposure,
   type Test, type InsertTest, type TestSection, type TestSnapshot,
 } from "@shared/schema";
-import { purgeTestLmsData } from "./scorm-repository";
+import { countTestLmsTrail, purgeTestLmsData, type TestLmsTrailCounts } from "./scorm-repository";
+
+/** What deleting a test takes with it (PRD-15 FR-07a): web attempts plus the LMS trail. */
+export interface TestDeleteImpact extends TestLmsTrailCounts {
+  /** Attempts taken in the service itself. */
+  webAttempts: number;
+}
 
 /**
  * Minimal projection of a test that depends on a topic/question (PRD-15
@@ -276,6 +282,19 @@ export class TestsRepository {
       const result = await tx.delete(tests).where(eq(tests.id, id)).returning();
       return result.length > 0;
     });
+  }
+
+  /**
+   * What {@link deleteTest} would take with the test — the numbers the delete
+   * dialog names (PRD-15 FR-07a). Read-only; counts every attempt, finished or
+   * abandoned, since all of them go.
+   */
+  async getTestDeleteImpact(id: string): Promise<TestDeleteImpact> {
+    const [[web], lms] = await Promise.all([
+      db.select({ n: sql<number>`count(*)::int` }).from(attempts).where(eq(attempts.testId, id)),
+      countTestLmsTrail(id),
+    ]);
+    return { webAttempts: Number(web?.n ?? 0), ...lms };
   }
 
   async getTestSections(testId: string): Promise<TestSection[]> {

@@ -391,6 +391,55 @@ describe("<TestsListPage /> — delete confirm (FR-30)", () => {
     });
     expect(confirmBtn).not.toBeDisabled();
   });
+
+  // PRD-15 FR-07a, approved wireframe test-delete-lms-impact.
+  it("names what goes with the test and offers archiving as the alternative", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+      "/api/tests/t-1/delete-impact": { webAttempts: 12, lmsAttempts: 125, importBatches: 2, packages: 3 },
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    fireEvent.click(screen.getByTestId("menu-delete-t-1"));
+
+    const banner = await screen.findByTestId("delete-test-impact");
+    expect(banner).toHaveTextContent("Будут удалены 137 прохождений");
+    expect(banner).toHaveTextContent("125 — из LMS, в том числе 2 загруженные выгрузки");
+    expect(screen.getByText(/будет удалён безвозвратно/)).toBeInTheDocument();
+
+    // Archiving needs no typed title: it is the reversible alternative.
+    fireEvent.click(screen.getByTestId("delete-test-archive"));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/tests/t-1/status",
+        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "archived" }) }),
+      ),
+    );
+    expect(screen.queryByTestId("delete-test-confirm")).toBeNull();
+  });
+
+  it("has no banner without attempts and no archive button without the right to archive", async () => {
+    authMock.can = (cap) => cap !== "tests.publish";
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+      "/api/tests/t-1/delete-impact": { webAttempts: 0, lmsAttempts: 0, importBatches: 0, packages: 0 },
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    fireEvent.click(screen.getByTestId("menu-delete-t-1"));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith("/api/tests/t-1/delete-impact", expect.anything()),
+    );
+    expect(screen.queryByTestId("delete-test-impact")).toBeNull();
+    expect(screen.queryByTestId("delete-test-archive")).toBeNull();
+  });
 });
 
 describe("<TestsListPage /> — FAB", () => {

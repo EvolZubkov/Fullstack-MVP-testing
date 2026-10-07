@@ -173,6 +173,12 @@ describe("deleteTest — the LMS trail of the test goes with it (PRD-15 FR-07a)"
       id: randomUUID(), userId, testId, tokenHash: randomUUID(), expiresAt: new Date("2030-01-01"),
     } as never);
 
+    // The delete dialog's numbers are exactly what goes: both telemetry rows of this test (own
+    // test_id and legacy via package) plus the imported one; nothing of the other test.
+    expect(await storage.getTestDeleteImpact(testId)).toEqual({
+      webAttempts: 0, lmsAttempts: 3, importBatches: 1, packages: 1,
+    });
+
     expect(await storage.deleteTest(testId)).toBe(true);
 
     const left = await db.select({ id: scormAttempts.id }).from(scormAttempts);

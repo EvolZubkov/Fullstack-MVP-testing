@@ -34,7 +34,7 @@ import { SlicesRepository } from "./storage/slices-repository";
 import { SavedFiltersRepository } from "./storage/saved-filters-repository";
 import { AttemptsRepository } from "./storage/attempts-repository";
 import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
-import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
+import { TestsRepository, type TestUsageRef, type TestDeleteImpact } from "./storage/tests-repository";
 import { ContentPagesRepository, type ContentPageBinding } from "./storage/content-pages-repository";
 import { AssignmentsRepository } from "./storage/assignments-repository";
 import { FoldersRepository } from "./storage/folders-repository";
@@ -304,6 +304,8 @@ export interface IStorage {
   /** Updates only the status field without bumping the version counter (PRD-7 §9). */
   patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined>;
   deleteTest(id: string): Promise<boolean>;
+  /** PRD-15 FR-07a: what `deleteTest` would take with the test — numbers for the delete dialog. */
+  getTestDeleteImpact(id: string): Promise<TestDeleteImpact>;
   getTestSections(testId: string): Promise<TestSection[]>;
   /** PRD-54: разделы сразу по нескольким темам — определение теста по вопросам выгрузки. */
   getTestSectionsByTopicIds(topicIds: string[]): Promise<TestSection[]>;
@@ -1102,6 +1104,10 @@ export class DatabaseStorage implements IStorage {
 
   deleteTest(id: string): Promise<boolean> {
     return this.testsRepo.deleteTest(id);
+  }
+
+  getTestDeleteImpact(id: string): Promise<TestDeleteImpact> {
+    return this.testsRepo.getTestDeleteImpact(id);
   }
 
   getTestSections(testId: string): Promise<TestSection[]> {

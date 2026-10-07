@@ -24,6 +24,7 @@ const { storageMock, serviceMock, dbRows } = vi.hoisted(() => ({
     getTests: vi.fn(),
     updateTest: vi.fn(),
     deleteTest: vi.fn(),
+    getTestDeleteImpact: vi.fn(),
     patchTestStatus: vi.fn(),
     getMigrationHealth: vi.fn(),
     // PRD-51: маршрут читает документ отчёта. Здесь он не предмет проверки —
@@ -448,6 +449,39 @@ describe("DELETE /api/tests/:id — confirmTitle", () => {
       request(app).delete("/api/tests/x").send({ confirmTitle: "anything" }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+// ─── GET /:id/delete-impact (PRD-15 FR-07a) ──────────────────────────────────
+describe("GET /api/tests/:id/delete-impact", () => {
+  let app: express.Express;
+  const impact = { webAttempts: 12, lmsAttempts: 125, importBatches: 2, packages: 3 };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTestDeleteImpact.mockResolvedValue(impact);
+    app = makeApp();
+  });
+
+  it("200 — names what the deletion takes and deletes nothing", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    const res = await asAuthor(request(app).get("/api/tests/test1/delete-impact"));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(impact);
+    expect(storageMock.getTestDeleteImpact).toHaveBeenCalledWith("test1");
+    expect(storageMock.deleteTest).not.toHaveBeenCalled();
+  });
+
+  it("404 — test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await asAuthor(request(app).get("/api/tests/x/delete-impact"));
+    expect(res.status).toBe(404);
+  });
+
+  it("401 — anonymous", async () => {
+    const res = await request(app).get("/api/tests/test1/delete-impact");
+    expect(res.status).toBe(401);
   });
 });
 

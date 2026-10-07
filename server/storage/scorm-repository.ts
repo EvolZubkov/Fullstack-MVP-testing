@@ -514,15 +514,7 @@ export async function rollbackLmsImportBatch(tx: DbTx, id: string): Promise<void
  * @param testId удаляемый тест
  */
 export async function purgeTestLmsData(tx: DbTx, testId: string): Promise<void> {
-  // Телеметрия: у старых строк тест известен только через пакет — тот же порядок, что в аналитике.
-  const packageIds = (await tx.select({ id: scormPackages.id }).from(scormPackages)
-    .where(eq(scormPackages.testId, testId))).map((p) => p.id);
-  const ofTest = packageIds.length > 0
-    ? or(
-      eq(scormAttempts.testId, testId),
-      and(isNull(scormAttempts.testId), inArray(scormAttempts.packageId, packageIds)),
-    )
-    : eq(scormAttempts.testId, testId);
+  const { packageIds, ofTest } = await lmsScopeOfTest(tx, testId);
   // Строки загрузок уходят ниже, откатом своей партии: он же решает судьбу заведённых участников.
   const telemetry = and(ofTest, isNull(scormAttempts.batchId));
   const telemetryIds = (await tx.select({ id: scormAttempts.id }).from(scormAttempts).where(telemetry))
@@ -540,4 +532,52 @@ export async function purgeTestLmsData(tx: DbTx, testId: string): Promise<void> 
   for (const b of batches) await rollbackLmsImportBatch(tx, b.id);
 
   if (packageIds.length > 0) await tx.delete(scormPackages).where(inArray(scormPackages.id, packageIds));
+}
+
+/** {@link db} itself or a transaction on it — both read the same way. */
+type DbLike = typeof db | DbTx;
+
+/**
+ * Пакеты теста и условие «прохождение LMS относится к тесту»: свой `test_id`, а у старой
+ * телеметрии без него — тест пакета (тот же порядок, что в аналитике). Одно на удаление и на подсчёт
+ * перед ним, чтобы окно удаления называло ровно то, что удалится.
+ */
+async function lmsScopeOfTest(conn: DbLike, testId: string) {
+  const packageIds = (await conn.select({ id: scormPackages.id }).from(scormPackages)
+    .where(eq(scormPackages.testId, testId))).map((p) => p.id);
+  const ofTest = packageIds.length > 0
+    ? or(
+      eq(scormAttempts.testId, testId),
+      and(isNull(scormAttempts.testId), inArray(scormAttempts.packageId, packageIds)),
+    )
+    : eq(scormAttempts.testId, testId);
+  return { packageIds, ofTest };
+}
+
+/** Что {@link purgeTestLmsData} удалит у теста — числа для окна удаления (PRD-15 FR-07a). */
+export interface TestLmsTrailCounts {
+  /** Прохождения LMS: телеметрия и загруженные выгрузки вместе. */
+  lmsAttempts: number;
+  /** Загрузки выгрузок отчёта LMS (PRD-54). */
+  importBatches: number;
+  /** Выгруженные пакеты: после удаления их телеметрия получает 404. */
+  packages: number;
+}
+
+/**
+ * Посчитать LMS-след теста, ничего не трогая.
+ *
+ * @param testId тест, который собираются удалить
+ */
+export async function countTestLmsTrail(testId: string): Promise<TestLmsTrailCounts> {
+  const { packageIds, ofTest } = await lmsScopeOfTest(db, testId);
+  const [[attemptsRow], [batchesRow]] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(scormAttempts).where(ofTest),
+    db.select({ n: sql<number>`count(*)::int` }).from(lmsImportBatches).where(eq(lmsImportBatches.testId, testId)),
+  ]);
+  return {
+    lmsAttempts: Number(attemptsRow?.n ?? 0),
+    importBatches: Number(batchesRow?.n ?? 0),
+    packages: packageIds.length,
+  };
 }

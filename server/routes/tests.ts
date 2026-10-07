@@ -1503,6 +1503,20 @@ router.post("/:id/restore", requirePermission("tests.publish"), requireTestScope
   }
 });
 
+// GET /api/tests/:id/delete-impact - Что удалится вместе с тестом (PRD-15 FR-07a): числа для
+// окна удаления. Тот же гейт, что у самого удаления: спрашивать о последствиях имеет смысл тому,
+// кто может удалить.
+router.get("/:id/delete-impact", requirePermission("tests.delete"), requireTestScope("delete"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    res.json(await storage.getTestDeleteImpact(req.params.id));
+  } catch (error) {
+    logger.error("Delete impact error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to count what the deletion takes" });
+  }
+});
+
 // DELETE /api/tests/:id - Удалить тест (требует подтверждения точного названия, PRD-7 §5.2)
 router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delete"), async (req, res) => {
   try {

@@ -422,23 +422,30 @@
 }
 
 /* ─── Typed-confirm (FR-30, prd7-tests-delete-confirm) ───────────────────── */
-.tb-tests-list .typed-confirm__label {
-  display: block; font: var(--ou-text-body-s); margin-bottom: var(--ou-space-2);
+/* PRD-15 FR-07a (test-delete-lms-impact): lead paragraph, impact banner, then the
+   typed confirmation — each block one 4x step below the previous. */
+.typed-confirm__lead { margin: 0; }
+.typed-confirm__impact,
+.typed-confirm { margin-top: var(--ou-space-4); }
+.typed-confirm__label {
+  display: block; font: var(--ou-text-body-s); font-weight: 500; margin-bottom: var(--ou-space-2);
   color: var(--ou-fg-default);
 }
-.tb-tests-list .typed-confirm__name-block {
+/* `--ou-bg-muted`, as the approved wireframe: `--ou-bg-subtle` is not a DS token,
+   so the block used to render with no background at all. */
+.typed-confirm__name-block {
   display: block; font: var(--ou-text-body-s); font-weight: 600;
   color: var(--ou-fg-default);
-  background: var(--ou-bg-subtle); border: 1px solid var(--ou-border-default);
+  background: var(--ou-bg-muted);
   border-radius: var(--ou-radius-s); padding: var(--ou-space-2) var(--ou-space-3);
   margin-bottom: var(--ou-space-2); -webkit-user-select: text; user-select: text; cursor: text;
 }
-.tb-tests-list .typed-confirm__hint {
+.typed-confirm__hint {
   display: block; font: var(--ou-text-body-xs);
   color: var(--ou-fg-muted); margin-top: var(--ou-space-1);
 }
-.tb-tests-list .typed-confirm__hint strong { color: var(--ou-fg-default); }
-.tb-tests-list .typed-confirm__error {
+.typed-confirm__hint strong { color: var(--ou-fg-default); }
+.typed-confirm__error {
   display: block; font: var(--ou-text-body-xs);
   color: var(--ou-error-default); margin-top: var(--ou-space-1);
 }

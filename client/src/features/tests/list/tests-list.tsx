@@ -98,6 +98,7 @@ import type {
 } from "@/features/content-protection/types";
 import { describeBreakdownWarning } from "@/features/content-protection/issue-text";
 import { TestEditor } from "@/features/tests/editor/test-editor";
+import { describeDeleteImpact, type TestDeleteImpact } from "./delete-impact";
 import { SaveAsDialog } from "@/features/tests/export/save-as-dialog";
 import type { EditorTabKey } from "@/features/tests/editor/use-test-editor";
 import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
@@ -791,6 +792,14 @@ export function TestsListPage(): React.JSX.Element {
             )
           }
           onCancel={() => setDeleteTestState(null)}
+          onArchive={
+            can("tests.publish")
+              ? () => {
+                  statusMutation.mutate({ id: deleteTestState.id, status: "archived" });
+                  setDeleteTestState(null);
+                }
+              : undefined
+          }
           onDelete={async () => {
             if (!deleteTestState) return;
             try {
@@ -1841,15 +1850,34 @@ function FabSpeedDial(props: {
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
+/**
+ * Test delete confirmation (FR-30, approved wireframes prd7-tests-delete-confirm and
+ * test-delete-lms-impact). PRD-15 FR-07a: the dialog names what goes with the test —
+ * web and LMS attempts, uploaded exports, packages that stop reporting — and offers
+ * archiving as the equal alternative right next to «Удалить навсегда».
+ *
+ * While the counts load, or when the request fails, there is no banner: the dialog
+ * works exactly as before, the counts only inform the choice.
+ */
 function DeleteTestModal(props: {
   state: { id: string; title: string; input: string; error: string | null };
   onChange: (input: string) => void;
   onCancel: () => void;
   onDelete: () => void | Promise<void>;
+  /** Absent when the user may not archive (`tests.publish`): then there is no button. */
+  onArchive?: () => void;
 }) {
   const match = props.state.input === props.state.title;
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
+  const { data: impact } = useQuery<TestDeleteImpact>({
+    // Not under ["/api/tests"]: the delete mutation invalidates that prefix while the dialog is
+    // still mounted, and the refetch would ask about a test that no longer exists (404).
+    queryKey: ["test-delete-impact", props.state.id],
+    queryFn: () => fetchJson(`/api/tests/${props.state.id}/delete-impact`),
+    staleTime: 0,
+  });
+  const warning = impact ? describeDeleteImpact(impact) : null;
   return (
     <ModalDialog
       open
@@ -1866,6 +1894,16 @@ function DeleteTestModal(props: {
           >
             Отмена
           </Button>
+          {props.onArchive && (
+            <Button
+              variant="secondary"
+              size="s"
+              onClick={props.onArchive}
+              data-testid="delete-test-archive"
+            >
+              Архивировать
+            </Button>
+          )}
           <Button
             variant="destructive"
             size="s"
@@ -1878,27 +1916,44 @@ function DeleteTestModal(props: {
         </>
       }
     >
-      <label className="typed-confirm__label" htmlFor="del-test-input">
-        Введите точное название теста для подтверждения:
-      </label>
-      <div className="typed-confirm__name-block" aria-hidden="true">
-        {props.state.title}
+      <p className="typed-confirm__lead">
+        Тест <strong>«{props.state.title}»</strong> будет удалён безвозвратно вместе со всеми
+        назначениями и результатами попыток. Это действие невозможно отменить.
+      </p>
+      {warning && (
+        <Banner
+          className="typed-confirm__impact"
+          tone="warning"
+          variant="subtle"
+          icon={<TriangleAlert size={20} />}
+          title={warning.title}
+          description={warning.description}
+          data-testid="delete-test-impact"
+        />
+      )}
+      <div className="typed-confirm">
+        <label className="typed-confirm__label" htmlFor="del-test-input">
+          Введите точное название теста для подтверждения:
+        </label>
+        <div className="typed-confirm__name-block" aria-hidden="true">
+          {props.state.title}
+        </div>
+        <Input
+          ref={inputRef}
+          id="del-test-input"
+          size="m"
+          fullWidth
+          type="text"
+          placeholder="Введите название…"
+          value={props.state.input}
+          onChange={(e) => props.onChange(e.target.value)}
+          autoComplete="off"
+          tone={props.state.error ? "error" : match ? "success" : undefined}
+          error={props.state.error ?? undefined}
+          data-testid="delete-test-input"
+        />
+        <p className="typed-confirm__hint">Регистр символов учитывается.</p>
       </div>
-      <Input
-        ref={inputRef}
-        id="del-test-input"
-        size="m"
-        fullWidth
-        type="text"
-        placeholder="Введите название…"
-        value={props.state.input}
-        onChange={(e) => props.onChange(e.target.value)}
-        autoComplete="off"
-        tone={props.state.error ? "error" : match ? "success" : undefined}
-        error={props.state.error ?? undefined}
-        data-testid="delete-test-input"
-      />
-      <p className="typed-confirm__hint">Регистр символов учитывается.</p>
     </ModalDialog>
   );
 }
