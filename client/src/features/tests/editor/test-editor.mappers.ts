@@ -145,17 +145,22 @@ function isTestMode(value: unknown): value is TestMode {
   return value === "standard" || value === "adaptive" || value === "scenario";
 }
 
-/** «Сценарий в ИС»: первый пункт-сценарий ответа — пункт теста режима `scenario`. */
-function readScenarioItemFromApi(src: ApiTestResponse): ScenarioItemDraft | null {
+/** «Сценарий в ИС»: пункты-сценарии ответа в порядке автора. */
+function readScenarioItemsFromApi(src: ApiTestResponse): ScenarioItemDraft[] {
   const items = (src as { scenarios?: unknown }).scenarios;
-  if (!Array.isArray(items) || items.length === 0) return null;
-  const first = items[0] as { topicId?: unknown; topicName?: unknown; questionId?: unknown };
-  if (typeof first.topicId !== "string") return null;
-  return {
-    topicId: first.topicId,
-    topicName: typeof first.topicName === "string" ? first.topicName : "",
-    questionId: typeof first.questionId === "string" ? first.questionId : null,
-  };
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((raw): ScenarioItemDraft[] => {
+    const item = raw as { id?: unknown; topicId?: unknown; topicName?: unknown; questionId?: unknown; title?: unknown; required?: unknown };
+    if (typeof item.topicId !== "string") return [];
+    return [{
+      ...(typeof item.id === "string" ? { id: item.id } : {}),
+      topicId: item.topicId,
+      topicName: typeof item.topicName === "string" ? item.topicName : "",
+      questionId: typeof item.questionId === "string" ? item.questionId : null,
+      title: typeof item.title === "string" ? item.title : null,
+      required: item.required !== false,
+    }];
+  });
 }
 
 function isFlowMode(value: unknown): value is FlowMode {
@@ -1333,7 +1338,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     id: typeof src.id === "string" ? src.id : undefined,
     version: typeof src.version === "number" ? src.version : 1,
     mode,
-    scenario: readScenarioItemFromApi(src),
+    scenarioItems: readScenarioItemsFromApi(src),
     flowMode,
     // PRD-30 FR-16: only the three known values; anything else (including a test
     // saved before the column existed) is the default «перемешивание».

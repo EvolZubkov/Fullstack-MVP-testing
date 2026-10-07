@@ -1402,14 +1402,14 @@ describe("validateTestEditor — профиль по группе шкал (PRD-
 
 describe("тест «Сценарий»", () => {
   it("без банка сценариев не сохраняется, и ошибка не про темы", () => {
-    const result = validateTestEditor(baseModel({ mode: "scenario", sections: [], scenario: null }));
+    const result = validateTestEditor(baseModel({ mode: "scenario", sections: [], scenarioItems: [] }));
     expect(result.errors).toContainEqual(expect.objectContaining({ field: "scenario", code: "required" }));
     expect(result.errors.some((e) => e.field === "sections")).toBe(false);
   });
 
   it("с банком — ошибок состава нет, даже без тем", () => {
     const result = validateTestEditor(
-      baseModel({ mode: "scenario", sections: [], scenario: { topicId: "bank", topicName: "Работа в СЭД", questionId: null } }),
+      baseModel({ mode: "scenario", sections: [], scenarioItems: [{ topicId: "bank", topicName: "Работа в СЭД", questionId: null }] }),
     );
     expect(result.errors.some((e) => e.field === "scenario" || e.field === "sections")).toBe(false);
   });

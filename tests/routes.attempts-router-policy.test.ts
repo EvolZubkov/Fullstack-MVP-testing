@@ -19,7 +19,7 @@ import session from "express-session";
 
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
-    getTest: vi.fn(), getTestSections: vi.fn(),
+    getTest: vi.fn(), getTestScenarios: vi.fn(async () => []), getTestScenariosByTopic: vi.fn(async () => []), getTestSections: vi.fn(),
     getAttemptsByUserAndTest: vi.fn().mockResolvedValue([]),
     getCurrentAssignmentId: vi.fn().mockResolvedValue(null),
     createAttempt: vi.fn(),

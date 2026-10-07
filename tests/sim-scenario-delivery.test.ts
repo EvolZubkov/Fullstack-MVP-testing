@@ -21,7 +21,8 @@ const bankQuestions = [q("s1", "simulation"), q("x1", "single"), q("s2", "simula
 describe("пункт-сценарий в выдаче", () => {
   it("становится разделом темы-банка с выдачей одного вопроса и помнит свой пункт", () => {
     const section = scenarioSection(item as never);
-    expect(section).toMatchObject({ topicId: "bank", drawCount: 1, drawAll: false, formSetJson: null, required: true, timeLimitMinutes: 10 });
+    // Ключ раздела — ключ пункта: пункт на той же теме, что обычный раздел, с ним не схлопнется.
+    expect(section).toMatchObject({ topicId: "scenario:item-1", drawCount: 1, drawAll: false, formSetJson: null, required: true, timeLimitMinutes: 10 });
     expect(isScenarioSection(section)).toBe(true);
     expect(isScenarioSection({ ...section, scenarioItem: undefined } as never)).toBe(false);
   });
@@ -40,7 +41,7 @@ describe("пункт-сценарий в выдаче", () => {
     } as never);
     const sections = await src.getTestSections("t");
     expect(sections).toHaveLength(1);
-    expect(sections[0].topicId).toBe("bank");
+    expect(sections[0].topicId).toBe("scenario:item-1");
     expect((await src.getScenarioPool(item as never)).map((x) => x.id)).toEqual(["s1", "s2"]);
     // Обычный путь чтения темы сценарии по-прежнему не выдаёт.
     expect((await src.getQuestionsByTopic("bank")).map((x) => x.id)).toEqual(["x1", "x2"]);

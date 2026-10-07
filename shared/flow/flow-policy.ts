@@ -37,6 +37,12 @@ export interface ResolvedFlowPolicy {
   mode: ResolvedFlowMode;
   routerCompletionPolicy?: RouterCompletionPolicy;
   sectionUnlockRules?: Record<string, SectionUnlockRule>;
+  /**
+   * «Сценарий в ИС»: порядок пунктов хаба — ключи `topic:<id>` / `scenario:<id>`
+   * (`shared/test-items`). Только когда автор его задал: без него темы идут в своём порядке,
+   * затем сценарии, и пакет теста без сценариев не меняется ни на байт.
+   */
+  itemOrder?: string[];
 }
 
 /**
@@ -81,7 +87,7 @@ export function resolveFlowPolicy(raw: unknown): ResolvedFlowPolicy {
   if (mode !== "router_by_topics") return { mode };
 
   // The authored object first, the flat keys as the fallback — see {@link RawFlowPolicy}.
-  const router = (src.router ?? {}) as { completionPolicy?: unknown; sectionUnlockRules?: unknown };
+  const router = (src.router ?? {}) as { completionPolicy?: unknown; sectionUnlockRules?: unknown; itemOrder?: unknown };
   const completionPolicy = router.completionPolicy ?? src.routerCompletionPolicy;
   const unlockRules = router.sectionUnlockRules ?? src.sectionUnlockRules;
 
@@ -92,6 +98,9 @@ export function resolveFlowPolicy(raw: unknown): ResolvedFlowPolicy {
   };
   if (unlockRules && typeof unlockRules === "object" && Object.keys(unlockRules).length > 0) {
     resolved.sectionUnlockRules = unlockRules as Record<string, SectionUnlockRule>;
+  }
+  if (Array.isArray(router.itemOrder) && router.itemOrder.length > 0) {
+    resolved.itemOrder = router.itemOrder.filter((key): key is string => typeof key === "string");
   }
   return resolved;
 }

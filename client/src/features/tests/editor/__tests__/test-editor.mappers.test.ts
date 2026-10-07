@@ -1209,13 +1209,13 @@ describe("apiToEditorModel — тест «Сценарий»", () => {
       scenarios: [{ id: "i1", topicId: "bank", topicName: "Работа в СЭД", questionId: "q-fixed" }],
     });
     expect(model.mode).toBe("scenario");
-    expect(model.scenario).toEqual({ topicId: "bank", topicName: "Работа в СЭД", questionId: "q-fixed" });
+    expect(model.scenarioItems).toEqual([{ id: "i1", topicId: "bank", topicName: "Работа в СЭД", questionId: "q-fixed", title: null, required: true }]);
     expect(model.sections.map((s) => s.topicId)).toEqual(["old-topic"]);
   });
 
   it("тест без пунктов — пункта нет; случайная выдача читается как questionId = null", () => {
-    expect(apiToEditorModel({ id: "t", version: 1, title: "x", mode: "standard", sections: [] }).scenario).toBeNull();
+    expect(apiToEditorModel({ id: "t", version: 1, title: "x", mode: "standard", sections: [] }).scenarioItems).toEqual([]);
     const random = apiToEditorModel({ id: "t", version: 1, title: "x", mode: "scenario", sections: [], scenarios: [{ topicId: "bank", questionId: null }] });
-    expect(random.scenario).toEqual({ topicId: "bank", topicName: "", questionId: null });
+    expect(random.scenarioItems).toEqual([{ topicId: "bank", topicName: "", questionId: null, title: null, required: true }]);
   });
 });

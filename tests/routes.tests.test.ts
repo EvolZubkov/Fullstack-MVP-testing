@@ -32,6 +32,9 @@ const { storageMock, serviceMock, dbRows } = vi.hoisted(() => ({
     listReportBlocks: vi.fn().mockResolvedValue([]),
     // PRD-52: счётчик открытых комментариев считается на весь список сразу.
     countOpenReviewCommentsByTests: vi.fn().mockResolvedValue({}),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
+    getTestScenariosByTopic: vi.fn(async () => []),
     getTestSections: vi.fn(),
     getTopics: vi.fn(),
     getUsers: vi.fn().mockResolvedValue([]),

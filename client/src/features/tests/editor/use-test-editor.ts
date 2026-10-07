@@ -294,7 +294,7 @@ function diffDirtyTabs(
     dirty.add("rules");
   }
   // «Сценарий в ИС»: банк и выдача теста «Сценарий» — на вкладке «Задание» (ключ «Состава»).
-  if (!shallowEqualJson(draft.scenario ?? null, snapshot.scenario ?? null)) {
+  if (!shallowEqualJson(draft.scenarioItems ?? [], snapshot.scenarioItems ?? [])) {
     dirty.add("composition");
   }
   // «Состав и сценарий»: лестница адаптивного режима и сценарий прохождения.
@@ -425,12 +425,16 @@ function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
   const sections = mapEditorSectionsToPayload(draft);
   const adaptive = mapEditorAdaptiveToPayload(draft);
   const payload: Record<string, unknown> = { ...test, sections };
-  // «Сценарий в ИС»: пункт-сценарий уходит только в своём режиме — как разделы у стандартного.
-  if (draft.mode === "scenario") {
-    payload.scenarios = draft.scenario
-      ? [{ topicId: draft.scenario.topicId, questionId: draft.scenario.questionId }]
-      : [];
-  }
+  // «Сценарий в ИС»: пункты-сценарии уходят всегда и целиком — тест «Сценарий» берёт первый,
+  // роутер все, а смена режима не должна терять ни одного (FR-40).
+  payload.scenarios = (draft.scenarioItems ?? []).map((item) => ({
+    // Стабильный id: на нём держится ключ пункта `scenario:<id>` в порядке и правилах роутера.
+    ...(item.id ? { id: item.id } : {}),
+    topicId: item.topicId,
+    questionId: item.questionId,
+    title: item.title?.trim() || null,
+    required: item.required !== false,
+  }));
   if (adaptive) {
     payload.showDifficultyLevel = adaptive.showDifficultyLevel;
     payload.adaptiveSettings = adaptive.topics;

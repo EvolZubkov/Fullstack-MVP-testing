@@ -30,9 +30,14 @@ export type TestMode = "standard" | "adaptive" | "scenario";
  * случайный сценарий темы с поправкой на экспозицию; задан — фиксированный.
  */
 export type ScenarioItemDraft = {
+  /** Идентификатор строки `test_scenarios`; у пункта, добавленного в этом черновике, нет. */
+  id?: string;
   topicId: string;
   topicName: string;
   questionId: string | null;
+  /** Название в меню участника (роутер); пусто — название темы. */
+  title?: string | null;
+  required?: boolean;
 };
 
 export type TestStatus = "draft" | "published" | "archived";
@@ -594,11 +599,11 @@ export type TestEditorModel = {
   version: number;
   mode: TestMode;
   /**
-   * «Сценарий в ИС»: пункт теста режима `scenario`. Хранится и в других режимах — смена режима
-   * его не стирает, как и темы (FR-40), — а сохраняется только в своём. Необязательное: черновик,
-   * сохранённый до этой работы, его не несёт.
+   * «Сценарий в ИС»: пункты-сценарии теста в порядке автора. Тест «Сценарий» использует первый,
+   * роутер — все. Список хранится и сохраняется целиком в ЛЮБОМ режиме: смена режима его не
+   * стирает, как и темы (FR-40). Необязательное: черновик, сохранённый до этой работы, его не несёт.
    */
-  scenario?: ScenarioItemDraft | null;
+  scenarioItems?: ScenarioItemDraft[];
   flowMode: FlowMode;
   /**
    * PRD-30 FR-16: the test-wide delivery order and the default every topic

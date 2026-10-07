@@ -11,7 +11,7 @@ import {
   type ReportDocumentMode,
 } from "../storage/report-blocks-repository";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   tests,
@@ -223,6 +223,8 @@ export interface TestPayload {
  * массиве, как у разделов.
  */
 export interface ScenarioPayload {
+  /** Идентификатор существующего пункта — сохраняется: на нём держится ключ `scenario:<id>`. */
+  id?: string;
   /** Тема-банк сценариев. */
   topicId: string;
   /** Фиксированный сценарий темы; `null`/отсутствие — случайный сценарий темы. */
@@ -859,10 +861,22 @@ export class TestSettingsService {
     testId: string,
     scenarios: ScenarioPayload[],
   ): Promise<void> {
+    // Присланный id принимается, только если он не занят пунктом ДРУГОГО теста: свой пункт
+    // уже удалён перед вставкой, а чужой не должен ни перезаписываться, ни ронять сохранение.
+    const claimed = scenarios.map((s) => s.id).filter((id): id is string => !!id);
+    const foreign = claimed.length
+      ? new Set(
+          (await tx
+            .select({ id: testScenarios.id })
+            .from(testScenarios)
+            .where(and(inArray(testScenarios.id, claimed), ne(testScenarios.testId, testId))))
+            .map((row) => row.id),
+        )
+      : new Set<string>();
     for (let i = 0; i < scenarios.length; i += 1) {
       const s = scenarios[i];
       await tx.insert(testScenarios).values({
-        id: randomUUID(),
+        id: s.id && !foreign.has(s.id) ? s.id : randomUUID(),
         testId,
         topicId: s.topicId,
         questionId: s.questionId ?? null,

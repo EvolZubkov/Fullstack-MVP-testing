@@ -11,7 +11,7 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getQuestions: vi.fn(), getQuestion: vi.fn(), createQuestion: vi.fn(),
     updateQuestion: vi.fn(), deleteQuestion: vi.fn(), deleteQuestionsBulk: vi.fn(),
-    getQuestionsByTopic: vi.fn(), getTestSections: vi.fn(), getTest: vi.fn(),
+    getQuestionsByTopic: vi.fn(), getTestScenarios: vi.fn(async () => []), getTestScenariosByTopic: vi.fn(async () => []), getTestSections: vi.fn(), getTest: vi.fn(),
     getTopics: vi.fn(),
     // referential protection (PRD-15 FR-03..FR-05)
     getTestsUsingTopic: vi.fn(), getTestSectionsByTopic: vi.fn(),

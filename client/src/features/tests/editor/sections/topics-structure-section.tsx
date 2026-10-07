@@ -72,6 +72,7 @@ import {
 } from "@skillum/ui-kit";
 import { effectiveSectionOrder, type TestQuestionOrder } from "@shared/draw/assemble-delivery";
 import { VariantsEditor } from "./variants-editor";
+import { RouterScenariosBlock } from "./router-scenarios-block";
 import { FoldAllButtons, useSectionFold, type SectionFold } from "./section-fold";
 import type {
   EditorSection,
@@ -278,6 +279,9 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
    * потому что кнопок «Добавить тему» теперь несколько, и каждая отвечает за своё место.
    */
   const [pickerGroup, setPickerGroup] = useState<string | null>(null);
+  /** «Сценарий в ИС»: окно «Добавить сценарий» — только у теста с роутером. */
+  const [scenarioPickerOpen, setScenarioPickerOpen] = useState(false);
+  const routerScenarios = model.mode === "standard" && model.flowMode === "router_by_topics";
   const [search, setSearch] = useState("");
   /**
    * Решение владельца 2026-10-01: недостающую тему создают из ящика теста. Это тот же
@@ -606,6 +610,19 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
                 Добавить тему
               </Button>
             )}
+            {/* «Сценарий в ИС»: пункт-сценарий живёт рядом с темами только в тесте с роутером —
+                в линейном потоке его некуда поставить (согласованный эскиз, «роутер: сценарий в составе»). */}
+            {routerScenarios && (
+              <Button
+                variant="ghost"
+                size="s"
+                leadingIcon={<Plus size={16} aria-hidden="true" />}
+                onClick={() => setScenarioPickerOpen(true)}
+                data-testid="composition-add-scenario"
+              >
+                Добавить сценарий
+              </Button>
+            )}
             <Button
               variant={groups.length === 0 ? "ghost" : "secondary"}
               size="s"
@@ -690,6 +707,16 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           </SortableContext>
         )}
       </DndContext>
+
+      {routerScenarios && (
+        <RouterScenariosBlock
+          model={model}
+          updateModel={updateModel}
+          startNumber={model.sections.length + 1}
+          pickerOpen={scenarioPickerOpen}
+          onPickerClose={() => setScenarioPickerOpen(false)}
+        />
+      )}
 
       <TopicPickerModal
         open={pickerOpen}

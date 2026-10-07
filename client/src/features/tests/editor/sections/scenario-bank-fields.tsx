@@ -1,0 +1,206 @@
+/**
+ * @module features/tests/editor/sections/scenario-bank-fields
+ * @description Поля пункта-сценария: тема-банк, выдача (случайный сценарий темы или
+ * фиксированный), сводка банка или сценария, ожидаемая экспозиция, «Сыграть», «Открыть банк» —
+ * согласованный эскиз `docs/wireframes/sim-scenario-test-editor.html`.
+ *
+ * Одни и те же поля стоят во вкладке «Задание» теста «Сценарий» и в карточке пункта-сценария
+ * роутера: два разных набора полей для одного пункта однажды разошлись бы.
+ */
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Play } from "lucide-react";
+import { Banner, Button, Cluster, SegmentedControl, Select, Tag } from "@skillum/ui-kit";
+import { expectedExposure, type ExpectedExposure } from "@shared/draw/expected-exposure";
+import type { Scenario } from "@shared/sim/contract";
+import type { ScenarioSummary } from "@shared/sim/validate";
+import { megabytes, plural, summaryTags } from "@/features/questions/scenario/scenario-summary";
+import { ScenarioRun, requestScenarioFullscreen } from "@/features/questions/scenario/scenario-run";
+import type { ScenarioItemDraft } from "../test-editor.types";
+
+/** One scenario of a bank, as `GET /api/questions/scenario-banks` lists it. */
+export interface BankScenario {
+  questionId: string;
+  summary: ScenarioSummary;
+  mediaBytes: number;
+  scenario: Scenario;
+}
+
+/** A topic that holds scenarios. */
+export interface ScenarioBank {
+  topicId: string;
+  topicName: string;
+  scenarios: BankScenario[];
+}
+
+/** Темы со сценариями, видимые автору. */
+export function useScenarioBanks() {
+  const { data = [], isLoading } = useQuery<ScenarioBank[]>({ queryKey: ["/api/questions/scenario-banks"] });
+  return { banks: data, isLoading };
+}
+
+/** Что известно о выдаче пункта: его банк, фиксированный сценарий, ожидаемая экспозиция. */
+export interface ScenarioItemFacts {
+  bank: ScenarioBank | null;
+  fixed: BankScenario | null;
+  exposure: ExpectedExposure | null;
+}
+
+/** Сведения о выдаче пункта по списку банков. */
+export function scenarioItemFacts(item: ScenarioItemDraft | null, banks: ScenarioBank[]): ScenarioItemFacts {
+  const bank = item ? banks.find((b) => b.topicId === item.topicId) ?? null : null;
+  const fixed = item?.questionId ? bank?.scenarios.find((s) => s.questionId === item.questionId) ?? null : null;
+  const exposure = bank && !item?.questionId ? expectedExposure({ drawCount: 1, poolSize: bank.scenarios.length }) : null;
+  return { bank, fixed, exposure };
+}
+
+/** Range of scene counts of a bank: «7–14 сцен» or «11 сцен». */
+function scenesRange(scenarios: BankScenario[]): string {
+  const counts = scenarios.map((s) => s.summary.scenes);
+  const min = Math.min(...counts);
+  const max = Math.max(...counts);
+  return min === max ? plural(min, ["сцена", "сцены", "сцен"]) : `${min}–${plural(max, ["сцена", "сцены", "сцен"])}`;
+}
+
+type PickMode = "random" | "fixed";
+
+export interface ScenarioBankFieldsProps {
+  item: ScenarioItemDraft | null;
+  /** Новое состояние пункта; `null` — банк убран. */
+  onChange: (next: ScenarioItemDraft | null) => void;
+  banks: ScenarioBank[];
+  isLoading: boolean;
+}
+
+/** Поля пункта-сценария. */
+export function ScenarioBankFields({ item, onChange, banks, isLoading }: ScenarioBankFieldsProps) {
+  const [playing, setPlaying] = useState<Scenario | null>(null);
+  const { bank, fixed, exposure } = scenarioItemFacts(item, banks);
+  const mode: PickMode = item?.questionId ? "fixed" : "random";
+  const bankOptions = useMemo(() => banks.map((b) => ({ value: b.topicId, label: b.topicName })), [banks]);
+
+  return (
+    <>
+      <Select
+        label="Банк сценариев"
+        value={item?.topicId ?? ""}
+        onChange={(topicId) => {
+          const picked = banks.find((b) => b.topicId === topicId);
+          onChange(picked ? { ...(item ?? {}), topicId, topicName: picked.topicName, questionId: null } : null);
+        }}
+        onClear={() => onChange(null)}
+        clearLabel="Убрать банк"
+        placeholder={isLoading ? "Загрузка…" : banks.length ? "Выберите тему со сценариями" : "В доступных темах нет сценариев"}
+        fullWidth
+        searchable
+        searchPlaceholder="Название темы"
+        emptyMessage="Нет тем со сценариями"
+        options={bankOptions}
+        data-testid="scenario-bank-select"
+      />
+
+      {item && (
+        <div className="ou-formfield">
+          <label className="ou-formfield__lbl">Выдача</label>
+          <SegmentedControl<PickMode>
+            size="m"
+            value={mode}
+            aria-label="Выдача"
+            items={[
+              { value: "random", label: "Случайный сценарий темы" },
+              { value: "fixed", label: "Фиксированный сценарий" },
+            ]}
+            onChange={(next) => onChange({ ...item, questionId: next === "fixed" ? bank?.scenarios[0]?.questionId ?? null : null })}
+            data-testid="scenario-pick-mode"
+          />
+        </div>
+      )}
+
+      {item && bank && mode === "random" && (
+        <>
+          <Cluster gap={1} wrap data-testid="scenario-bank-summary">
+            <Tag size="s">{plural(bank.scenarios.length, ["сценарий", "сценария", "сценариев"])}</Tag>
+            <Tag size="s">{scenesRange(bank.scenarios)}</Tag>
+            <Tag size="s">изображения: {megabytes(bank.scenarios.reduce((n, s) => n + s.mediaBytes, 0))}</Tag>
+          </Cluster>
+          {exposure && (
+            <Banner
+              tone={exposure.tone}
+              variant="subtle"
+              title={`Каждый сценарий темы увидят около ${exposure.percent}% участников`}
+              description={
+                exposure.tone === "warning"
+                  ? `Выдача 1 из ${bank.scenarios.length} — сценарий быстро станет известен. Добавьте сценарии в тему.`
+                  : `Выдача 1 из ${bank.scenarios.length} — участник получает случайный сценарий, реже выдававшиеся выпадают чаще.`
+              }
+              data-testid="scenario-exposure-banner"
+            />
+          )}
+        </>
+      )}
+
+      {item && bank && mode === "fixed" && (
+        <>
+          <Select
+            label="Сценарий"
+            value={item.questionId ?? ""}
+            onChange={(questionId) => onChange({ ...item, questionId })}
+            fullWidth
+            options={bank.scenarios.map((s) => ({ value: s.questionId, label: s.summary.title }))}
+            data-testid="scenario-fixed-select"
+          />
+          {fixed && (
+            <Cluster gap={1} wrap data-testid="scenario-fixed-summary">
+              {summaryTags(fixed.summary).map((tag) => <Tag key={tag} size="s">{tag}</Tag>)}
+              <Tag size="s">изображения: {megabytes(fixed.mediaBytes)}</Tag>
+            </Cluster>
+          )}
+        </>
+      )}
+
+      {item && !bank && !isLoading && (
+        <Banner
+          tone="error"
+          variant="subtle"
+          title="В теме больше нет сценариев"
+          description="Выберите другой банк или добавьте сценарии в эту тему."
+          data-testid="scenario-bank-empty"
+        />
+      )}
+
+      <Cluster gap={1}>
+        {fixed && (
+          <Button
+            variant="secondary"
+            size="s"
+            leadingIcon={<Play size={14} aria-hidden="true" />}
+            onClick={() => {
+              requestScenarioFullscreen();
+              setPlaying(fixed.scenario);
+            }}
+            data-testid="scenario-fixed-play"
+          >
+            Сыграть
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="s"
+          onClick={() => window.open("/author/content?type=simulation", "_blank", "noopener")}
+          data-testid="scenario-open-bank"
+        >
+          Открыть банк
+        </Button>
+      </Cluster>
+
+      {playing && (
+        <ScenarioRun
+          scenario={playing}
+          caption="Проверка сценария · результат не сохраняется"
+          onClose={() => setPlaying(null)}
+          closeOnFullscreenExit
+        />
+      )}
+    </>
+  );
+}

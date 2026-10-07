@@ -110,6 +110,9 @@ const sectionBodySchema = z
  * тип проверяет {@link scenarioItemsError} — схеме для этого нужна база.
  */
 const scenarioBodySchema = z.object({
+  // Идентификатор существующего пункта: ключ `scenario:<id>` живёт в порядке пунктов, правилах
+  // разблокировки и попытках, и пересоздание строки с новым id оборвало бы все эти ссылки.
+  id: z.string().uuid().optional(),
   topicId: z.string().min(1),
   questionId: z.string().min(1).nullable().optional(),
   title: z.string().max(200).nullable().optional(),
@@ -120,16 +123,16 @@ const scenarioBodySchema = z.object({
 
 /**
  * Пункты-сценарии, которые нельзя сохранить: фиксированный сценарий не из своей темы или не
- * сценарий; в тесте «Сценарий» — больше одного пункта.
+ * сценарий. Число пунктов не ограничивается: тест «Сценарий» выдаёт первый, а остальные — пункты
+ * роутера, которые смена режима обязана сохранить (FR-40).
  *
  * @returns Текст ошибки или `null`.
  */
 async function scenarioItemsError(
-  mode: string | undefined,
+  _mode: string | undefined,
   scenarios: Array<z.infer<typeof scenarioBodySchema>> | undefined,
 ): Promise<string | null> {
   if (!scenarios) return null;
-  if (mode === "scenario" && scenarios.length > 1) return "В тесте «Сценарий» один пункт-сценарий";
   for (const item of scenarios) {
     if (!item.questionId) continue;
     const question = await storage.getQuestion(item.questionId);
@@ -1290,7 +1293,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
 
     const referencedTopics = [
       ...(mode === "standard" ? (sections ?? []).map((s) => s.topicId) : []),
-      ...(mode === "scenario" ? (scenarios ?? []).map((s) => s.topicId) : []),
+      ...(scenarios ?? []).map((s) => s.topicId),
       ...(mode === "adaptive"
         ? ((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId)
         : []),
@@ -1375,9 +1378,9 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       // sections come from the adaptive levels instead.
       sections: mode === "standard" ? (sections as SectionPayload[] | undefined) : undefined,
       adaptiveSettings: mode === "adaptive" ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined) : undefined,
-      // «Сценарий в ИС»: пункт живёт с режимом «Сценарий»; разделы при этом не трогаются и
-      // вернутся при возврате к стандартному режиму (FR-40).
-      scenarios: mode === "scenario" ? (scenarios as ScenarioPayload[] | undefined) : undefined,
+      // «Сценарий в ИС»: пункты-сценарии сохраняются в ЛЮБОМ режиме, как пришли: тест «Сценарий»
+      // выдаёт первый, роутер — все, и смена режима не теряет ни одного (FR-40).
+      scenarios: scenarios as ScenarioPayload[] | undefined,
       expectedVersion,
     });
 

@@ -114,6 +114,9 @@ export type FeasibilityIssue =
   | { kind: "measurement_loss"; questionIds: string[] }
   | { kind: "variant_incomplete"; questionIds: string[] }
   | { kind: "content_pages_loss"; pageCount: number }
+  // «Сценарий в ИС»: пункт-сценарий теста остаётся без сценария — тема-банк опустела или удалён
+  // его фиксированный сценарий. Участник получил бы карточку, которую нечем пройти.
+  | { kind: "scenario_item_empty"; itemTitle: string }
   | { kind: "formula_loss"; variableNames: string[] }
   | { kind: "draw_all_shrink"; removed: number; remaining: number; advisory: true };
 

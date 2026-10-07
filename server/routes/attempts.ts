@@ -64,6 +64,7 @@ import {
   snapshotDataSource,
   dataSourceForAttempt,
   isScenarioSection,
+  deliverySectionName,
   type TestDataSource,
   type TestSnapshotContent,
 } from "../services/test-snapshot";
@@ -674,7 +675,7 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
         const sections = await liveDataSource().getTestSections(test.id);
         const sectionsWithNames = sections.map((s) => ({
           ...s,
-          topicName: topicMap.get(s.topicId) || "Unknown",
+          topicName: deliverySectionName(s, (id) => topicMap.get(id)),
         }));
 
         const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
@@ -977,6 +978,10 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
 
     for (const [sectionIndex, section] of sections.entries()) {
       const questions = sectionBanks[sectionIndex];
+      // «Сценарий в ИС»: пункт без единого сценария (тема-банк опустела, фиксированный удалён в
+      // черновике) не выдаётся вовсе — иначе хаб показал бы карточку, которую нечем пройти.
+      // Публикацию такого изменения охрана содержимого блокирует; это страховка для черновика.
+      if (isScenarioSection(section) && questions.length === 0) continue;
       const byId = new Map(questions.map((q) => [q.id, q]));
       let qIds: string[];
       let formId: string | undefined;
@@ -1017,7 +1022,7 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
 
       variant.sections.push({
         topicId: section.topicId,
-        topicName: topicMap.get(section.topicId) || "Unknown",
+        topicName: deliverySectionName(section, (id) => topicMap.get(id)),
         questionIds: qIds,
         // PRD-17 (FR-08): pin the chosen variant id for rotation history (omitted
         // for non-variant sections).

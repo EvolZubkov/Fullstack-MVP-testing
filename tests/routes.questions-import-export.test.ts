@@ -49,6 +49,9 @@ const { storageMock } = vi.hoisted(() => ({
     getTopics: vi.fn(),
     getTopic: vi.fn(),
     createTopic: vi.fn(),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
+    getTestScenariosByTopic: vi.fn(async () => []),
     getTestSections: vi.fn(),
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),

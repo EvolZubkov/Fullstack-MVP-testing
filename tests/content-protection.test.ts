@@ -40,6 +40,9 @@ const { storageMock } = vi.hoisted(() => ({
     getTopicEvents: vi.fn(),
     // referential protection (PRD-15 FR-03..FR-05)
     getTestsUsingTopic: vi.fn(),
+    // «Сценарий в ИС»: пунктов-сценариев у этих тестов нет.
+    getTestScenarios: vi.fn(async () => []),
+    getTestScenariosByTopic: vi.fn(async () => []),
     getTestSectionsByTopic: vi.fn(),
     getMeasurementsForQuestions: vi.fn(),
     getTopicPageRefs: vi.fn(),

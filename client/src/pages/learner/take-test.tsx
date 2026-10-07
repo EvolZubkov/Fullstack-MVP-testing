@@ -70,6 +70,7 @@ import { useAuth } from "@/lib/auth";
 import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
 import type { Scenario } from "@shared/sim/contract";
 import { ScenarioRun, requestScenarioFullscreen } from "@/features/questions/scenario/scenario-run";
+import { isScenarioItemKey } from "@shared/test-items";
 import type { ResolvedRule } from "@shared/scoring/pass-rule";
 
 /**
@@ -2890,7 +2891,11 @@ export default function TakeTestPage() {
         bodyHtml={buildRouterHubHtml(hubSections, hubHubState)}
         onBodyAction={(action) => {
           if (action.startsWith("router-select:")) {
-            selectRouterTopic(action.slice("router-select:".length));
+            const key = action.slice("router-select:".length);
+            // «Сценарий в ИС»: пункт-сценарий играется на весь экран, а браузер даёт его только
+            // жесту — просим здесь, в самом щелчке по карточке.
+            if (isScenarioItemKey(key)) requestScenarioFullscreen();
+            selectRouterTopic(key);
           }
         }}
         // «Завершить» is the standard footer nav button, inert until every required
@@ -3428,12 +3433,18 @@ export default function TakeTestPage() {
     );
   }
 
-  // «Сценарий в ИС»: задание теста «Сценарий» — плеер на весь экран вместо экрана вопроса.
-  // Результат прогона — ответ на вопрос: сохраняется, как только прогон окончен, и попытка
-  // уходит, когда участник закрывает окно результата. Дальше — обычный путь: страницы
-  // «После теста» и экран итогов.
-  if (scenarioTest && attempt && phase === "question" && flatQuestions.length > 0) {
-    const task = flatQuestions[0].question;
+  // «Сценарий в ИС»: задание-сценарий играется плеером на весь экран вместо экрана вопроса —
+  // и в тесте «Сценарий», и пунктом роутера. Результат прогона — ответ на вопрос: сохраняется,
+  // как только прогон окончен. Закрытие окна результата в тесте «Сценарий» отправляет попытку
+  // (дальше — страницы «После теста» и экран итогов), а в роутере возвращает в хаб.
+  const scenarioTaskIndex = scenarioTest
+    ? 0
+    : flatQuestions[currentIndex] && isScenarioItemKey(flatQuestions[currentIndex].topicId)
+      ? currentIndex
+      : -1;
+  if (attempt && phase === "question" && scenarioTaskIndex >= 0 && flatQuestions[scenarioTaskIndex]) {
+    const task = flatQuestions[scenarioTaskIndex].question;
+    const itemKey = flatQuestions[scenarioTaskIndex].topicId;
     const scenario = (task.dataJson as { scenario?: Scenario } | null)?.scenario;
     if (scenario && !scenarioDone) {
       return (
@@ -3441,20 +3452,25 @@ export default function TakeTestPage() {
           scenario={scenario}
           caption={testInfo?.title}
           showDetails={showCorrectAnswers}
-          closeLabel="Перейти к итогам"
+          closeLabel={scenarioTest ? "Перейти к итогам" : "Вернуться к разделам"}
           remainingSeconds={remainingSeconds}
           onFinish={(result) => {
             const nextAnswers = { ...answers, [task.id]: result };
             const nextStatus = { ...questionStatus, [task.id]: "answered" as const };
             setAnswers(nextAnswers);
             setQuestionStatus(nextStatus);
-            saveProgress(nextAnswers, 0, nextStatus);
+            saveProgress(nextAnswers, scenarioTaskIndex, nextStatus);
           }}
           onClose={(result) => {
-            setScenarioDone(true);
             const nextAnswers = result ? { ...answers, [task.id]: result } : answers;
             const nextStatus = result ? { ...questionStatus, [task.id]: "answered" as const } : questionStatus;
-            void handleSubmit({ answers: nextAnswers, status: nextStatus });
+            if (scenarioTest) {
+              setScenarioDone(true);
+              void handleSubmit({ answers: nextAnswers, status: nextStatus });
+              return;
+            }
+            // Роутер: пункт закрыт — как раздел темы после его последнего вопроса.
+            returnToHub(itemKey);
           }}
           data-testid="scenario-task"
         />

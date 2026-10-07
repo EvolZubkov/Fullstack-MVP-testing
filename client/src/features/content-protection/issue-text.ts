@@ -29,6 +29,8 @@ export function describeIssue(issue: FeasibilityIssue): string {
       return `Затрагиваются показатели результата: ${issue.variableNames.join(", ")}`;
     case "draw_all_shrink":
       return `Тест выдаёт все вопросы темы — выдача сократится на ${issue.removed}`;
+    case "scenario_item_empty":
+      return `Пункт-сценарий «${issue.itemTitle}» останется без сценария`;
     default:
       return "Затрагивается выдача или оценивание теста";
   }

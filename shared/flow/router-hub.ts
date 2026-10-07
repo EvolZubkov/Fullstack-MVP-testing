@@ -13,6 +13,7 @@
  *
  * Framework-free and browser-safe: bundled verbatim into the SCORM package.
  */
+import { matchTestItem, parseItemKey } from "../test-items";
 
 /** Per-section state as the run progresses. */
 export type RouterTopicStatus = "notStarted" | "inProgress" | "completed";
@@ -125,6 +126,29 @@ export function statusLabel(status: RouterTopicStatus): string {
   return "Не начата";
 }
 
+/**
+ * Подписи карточки по виду пункта (`shared/test-items`). У сценария — мужской род: «сценарий
+ * завершён», а не «завершена» (согласованный эскиз sim-scenario-learner.html, экран 4).
+ */
+interface CardWords {
+  status: (s: RouterTopicStatus) => string;
+  locked: string;
+  optional: string;
+  isScenario: boolean;
+}
+
+function cardWords(section: RouterSection): CardWords {
+  return matchTestItem<CardWords>(parseItemKey(section.topicId), {
+    topic: () => ({ status: statusLabel, locked: "Недоступна", optional: "(необязательная)", isScenario: false }),
+    scenario: () => ({
+      status: (st: RouterTopicStatus) => (st === "completed" ? "Завершён" : st === "inProgress" ? "В процессе" : "Не начат"),
+      locked: "Недоступен",
+      optional: "(необязательный)",
+      isScenario: true,
+    }),
+  });
+}
+
 /** The mark a completed card carries — «closed», not «passed»; colour comes from the
  *  card's state class in the scene layer, not the markup. */
 const CARD_CHECK =
@@ -199,8 +223,11 @@ export function buildRouterHubHtml(
     // prerequisites are not met yet.
     const disabled = status === "completed" || !unlocked;
 
+    const words = cardWords(section);
     const meta: string[] = [];
-    if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
+    // «Сценарий в ИС»: у пункта-сценария вместо числа вопросов — метка вида; задание одно.
+    if (words.isScenario) meta.push("Сценарий");
+    else if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions(section.drawCount));
     if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " мин");
     const metaHtml = meta.length
       ? '<span class="router-topic-card__meta">' +
@@ -221,6 +248,7 @@ export function buildRouterHubHtml(
     cards +=
       '<button type="button" role="listitem"' +
       ' class="router-topic-card router-topic-card--' + status +
+      (words.isScenario ? " router-topic-card--scenario" : "") +
       (locked ? " router-topic-card--locked" : "") + '"' +
       ' data-topic-id="' + escHtml(section.topicId) + '"' +
       ' data-router-status="' + status + '"' +
@@ -231,7 +259,7 @@ export function buildRouterHubHtml(
       '<span class="router-topic-card__name">' +
       escHtml(section.topicName || section.topicId) +
       (section.required === false
-        ? ' <span class="router-topic-card__optional">(необязательная)</span>'
+        ? ' <span class="router-topic-card__optional">' + words.optional + "</span>"
         : "") +
       "</span>" +
       imgHtml +
@@ -242,7 +270,7 @@ export function buildRouterHubHtml(
       // A completed card carries a ✓ so it reads as clearly finished, distinct from a
       // fresh «Не начата» card at a glance. The mark says «closed», not «passed».
       (status === "completed" ? CARD_CHECK : "") +
-      escHtml(unlocked ? statusLabel(status) : "Недоступна") +
+      escHtml(unlocked ? words.status(status) : words.locked) +
       "</span>" +
       goHtml +
       "</span>" +

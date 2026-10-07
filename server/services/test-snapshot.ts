@@ -25,6 +25,8 @@
  */
 
 import { isDeliverable, isSimulation } from "@shared/questions/question-type";
+import { orderTestItems, scenarioItemKey } from "@shared/test-items";
+import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 import { storage } from "../storage";
 import { materializeScaleDomains } from "./scale-domain";
 import { syncEntityUsages } from "./media/usage-index";
@@ -111,12 +113,18 @@ export function isScenarioSection(section: TestSection): section is ScenarioSect
   return (section as Partial<ScenarioSection>).scenarioItem !== undefined;
 }
 
-/** Пункт-сценарий как раздел выдачи: один вопрос из темы-банка. */
+/**
+ * Пункт-сценарий как раздел выдачи: один вопрос из темы-банка.
+ *
+ * `topicId` раздела — КЛЮЧ ПУНКТА `scenario:<id>`, а не тема-банк: разделы попытки, правила
+ * разблокировки и состояние хаба ключуются этим полем, и пункт на той же теме, что обычный раздел
+ * теста, не должен с ним схлопнуться (`shared/test-items`). Тема-банк — в `scenarioItem.topicId`.
+ */
 export function scenarioSection(item: TestScenario): ScenarioSection {
   return {
     id: item.id,
     testId: item.testId,
-    topicId: item.topicId,
+    topicId: scenarioItemKey(item.id),
     drawCount: 1,
     drawAll: false,
     topicPassRuleJson: null,
@@ -134,6 +142,39 @@ export function scenarioSection(item: TestScenario): ScenarioSection {
     sortOrder: item.sortOrder,
     scenarioItem: item,
   };
+}
+
+/**
+ * Имя раздела выдачи, которое видит участник: у темы — её название, у пункта-сценария —
+ * название, заданное автором, иначе название темы-банка.
+ *
+ * @param topicName Название темы по идентификатору.
+ */
+export function deliverySectionName(section: TestSection, topicName: (topicId: string) => string | undefined): string {
+  if (isScenarioSection(section)) {
+    return section.scenarioItem.title?.trim() || topicName(section.scenarioItem.topicId) || "Сценарий";
+  }
+  return topicName(section.topicId) || "Unknown";
+}
+
+/**
+ * Разделы выдачи теста — то, что видят старт, завершение и итоги.
+ *
+ * - тест «Сценарий» — его пункт;
+ * - тест с роутером — разделы тем и пункты-сценарии, в порядке `router.itemOrder`;
+ * - прочие — разделы тем. Пункты-сценарии в линейном потоке не выдаются: их место — хаб.
+ */
+export function deliverySections(test: Test, sections: TestSection[], scenarios: TestScenario[]): TestSection[] {
+  // Тест «Сценарий» — один пункт: первый в порядке автора; остальные — пункты роутера, которые
+  // ждут возврата теста к нему (FR-40).
+  if (test.mode === "scenario") return scenarios.slice(0, 1).map(scenarioSection);
+  const policy = resolveFlowPolicy(test.flowPolicyJson);
+  if (policy.mode !== "router_by_topics" || scenarios.length === 0) return sections;
+  const items = [
+    ...sections.map((section) => ({ key: section.topicId, section })),
+    ...scenarios.map((item) => ({ key: scenarioItemKey(item.id), section: scenarioSection(item) as TestSection })),
+  ];
+  return orderTestItems(items, policy.itemOrder).map((entry) => entry.section);
 }
 
 /**
@@ -352,9 +393,11 @@ export function liveDataSource(): TestDataSource {
     getTest: (id) => storage.getTest(id),
     getTestSections: async (id) => {
       const test = await storage.getTest(id);
-      return test?.mode === "scenario"
-        ? (await storage.getTestScenarios(id)).map(scenarioSection)
-        : storage.getTestSections(id);
+      const sections = await storage.getTestSections(id);
+      if (!test) return sections;
+      // Пункты читаются только там, где они выдаются: в тесте «Сценарий» и в роутере.
+      const usesItems = test.mode === "scenario" || resolveFlowPolicy(test.flowPolicyJson).mode === "router_by_topics";
+      return deliverySections(test, sections, usesItems ? await storage.getTestScenarios(id) : []);
     },
     getTestScenarios: (id) => storage.getTestScenarios(id),
     getScenarioPool: async (item) => scenarioPool(item, await storage.getQuestionsByTopic(item.topicId)),
@@ -390,9 +433,7 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
       return content.test;
     },
     async getTestSections() {
-      return content.test.mode === "scenario"
-        ? (content.scenarios ?? []).map(scenarioSection)
-        : content.sections;
+      return deliverySections(content.test, content.sections, content.scenarios ?? []);
     },
     async getTestScenarios() {
       return content.scenarios ?? [];

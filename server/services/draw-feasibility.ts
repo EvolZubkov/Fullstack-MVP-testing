@@ -32,6 +32,8 @@ import { tagKey } from "@shared/tags";
 import { storage, type TestUsageRef } from "../storage";
 import { availableOf, excludedFromDelivery } from "./delivery-pool";
 import type { Question, TestSection } from "@shared/schema";
+import { isSimulation } from "@shared/questions/question-type";
+import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 
 /** Describes the proposed change for the formula-loss pass (E-6). */
 interface TagMutation {
@@ -268,14 +270,53 @@ async function difficultyOverridesOf(testId: string): Promise<Record<string, num
   return Object.keys(map).length > 0 ? map : null;
 }
 
+/**
+ * «Сценарий в ИС»: пункты-сценарии на теме, которые после изменения останутся без сценария.
+ *
+ * Пункт выдаёт сценарий своей темы-банка: случайный — из всех её сценариев, фиксированный —
+ * свой. Опустевшая тема или удалённый фиксированный сценарий оставляют участнику карточку хаба,
+ * которую нечем пройти. Находки идут той же политикой, что остальные: опубликованный тест
+ * блокирует изменение, черновик предупреждает.
+ *
+ * @param topicId Тема, которую меняют.
+ * @param removed Вопросы темы, которые уйдут.
+ */
+async function scenarioItemFindings(topicId: string, removed: ReadonlySet<string>): Promise<TestFeasibility[]> {
+  const items = await storage.getTestScenariosByTopic(topicId);
+  if (items.length === 0) return [];
+  const remaining = (await storage.getQuestionsByTopic(topicId))
+    .filter((q) => isSimulation(q.type) && !removed.has(q.id))
+    .map((q) => q.id);
+  const findings: TestFeasibility[] = [];
+  for (const item of items) {
+    const empty = item.questionId ? !remaining.includes(item.questionId) : remaining.length === 0;
+    if (!empty) continue;
+    const test = await storage.getTest(item.testId);
+    if (!test) continue;
+    const topic = await storage.getTopic(topicId);
+    findings.push({
+      testId: test.id,
+      title: test.title,
+      status: test.status ?? undefined,
+      ownerId: test.ownerId,
+      issues: [{ kind: "scenario_item_empty", itemTitle: item.title?.trim() || topic?.name || "Сценарий" }],
+    });
+  }
+  return findings;
+}
+
 /** Feasibility of deleting a whole topic: the pool empties, all questions go. */
 export async function assessTopicDeletion(topicId: string): Promise<FeasibilityAssessment> {
   const questions = await storage.getQuestionsByTopic(topicId);
   const removedIds = questions.map((q) => q.id);
   const tests = await buildRequirements(topicId, removedIds, { includeTopicPages: true });
-  if (tests.length === 0) return EMPTY_ASSESSMENT;
+  const scenarioFindings = await scenarioItemFindings(topicId, new Set(removedIds));
+  if (tests.length === 0 && scenarioFindings.length === 0) return EMPTY_ASSESSMENT;
   await attachFormulaLoss(tests, { deletedTopicIds: new Set([topicId]) });
-  return applyPolicy(checkDrawFeasibility({ pool: [], removedQuestionIds: removedIds, tests }));
+  return applyPolicy(mergeByTest([
+    ...(tests.length ? checkDrawFeasibility({ pool: [], removedQuestionIds: removedIds, tests }) : []),
+    ...scenarioFindings,
+  ]));
 }
 
 /**
@@ -301,6 +342,7 @@ export async function assessQuestionsRemoval(
     const pool = (await storage.getQuestionsByTopic(topicId))
       .filter((q) => !removed.has(q.id))
       .map(toPoolQuestion);
+    results.push(...(await scenarioItemFindings(topicId, removed)));
     const tests = await buildRequirements(topicId, removedInTopic);
     if (tests.length === 0) continue;
     await attachFormulaLoss(tests, { removedQuestionIds: removed });
@@ -390,6 +432,21 @@ export async function assessTestPublish(
         issues: hardIssues,
       });
     }
+  }
+  // «Сценарий в ИС»: пункт, которому выдать нечего, — тест «Сценарий» или пункт роутера. Пул тот
+  // же, что берёт старт попытки: сценарии темы-банка (или фиксированный) без снятых с выдачи.
+  const scenarioRelevant = test.mode === "scenario" || resolveFlowPolicy(test.flowPolicyJson).mode === "router_by_topics";
+  const items = scenarioRelevant ? await storage.getTestScenarios(testId) : [];
+  for (const item of test.mode === "scenario" ? items.slice(0, 1) : items) {
+    const pool = availableOf(await storage.getQuestionsByTopic(item.topicId), excluded)
+      .filter((q) => isSimulation(q.type) && (!item.questionId || q.id === item.questionId));
+    if (pool.length > 0) continue;
+    const topic = await storage.getTopic(item.topicId);
+    findings.push({
+      topicId: item.topicId,
+      topicName: topic?.name ?? "Unknown",
+      issues: [{ kind: "scenario_item_empty", itemTitle: item.title?.trim() || topic?.name || "Сценарий" }],
+    });
   }
   return findings;
 }

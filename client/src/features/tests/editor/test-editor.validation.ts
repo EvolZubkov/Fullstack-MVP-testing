@@ -164,7 +164,7 @@ export function validateTestEditor(
   }
 
   // «Сценарий в ИС»: у теста «Сценарий» вместо тем — банк сценариев.
-  if (model.mode === "scenario" && !model.scenario) {
+  if (model.mode === "scenario" && !(model.scenarioItems ?? [])[0]) {
     errors.push({
       field: "scenario",
       code: "required",
