@@ -112,8 +112,9 @@ function IndicatorRow({ indicator }: { indicator: IndicatorProfileView }) {
       </Stack>
       {indicator.kind === "average" ? (
         <>
-          {/* Accent, not a tone: without bands the value is not judged. */}
-          <ProgressBar value={fill(indicator)} size="s" hideHeader />
+          {/* Accent, not a tone: without bands the value is not judged. Without a domain there
+              is nothing to fill the bar against — the number alone says it. */}
+          {indicator.domainMax !== null && <ProgressBar value={fill(indicator)} size="s" hideHeader />}
           <Text variant="body-xs" tone="muted">уровни толкования не заданы</Text>
         </>
       ) : (

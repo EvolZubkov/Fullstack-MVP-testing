@@ -102,4 +102,13 @@ describe("IndicatorProfilePanel", () => {
     expect(screen.getByText("в выборке нет прохождений")).toBeTruthy();
     expect(screen.queryByText(/не передано/)).toBeNull();
   });
+
+  it("an average without a domain is a number only: no bar to fill", () => {
+    const { container } = render(
+      <IndicatorProfilePanel indicators={[{ ...SPREAD, domainMin: null, domainMax: null }]} observations={412} />,
+    );
+
+    expect(screen.getByText("среднее 6,8 · 412 прохождений")).toBeTruthy();
+    expect(container.querySelector(".ou-progress")).toBeNull();
+  });
 });
