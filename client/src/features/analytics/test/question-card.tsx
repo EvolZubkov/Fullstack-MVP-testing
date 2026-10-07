@@ -37,6 +37,10 @@ export interface QuestionCardView {
   difficultyInTest: boolean;
   correctAnswer: string | null;
   otherTests: OtherTestView[];
+  /**
+   * «Сценарий в ИС» (Э5б): задание, название, пункт теста и выдача. Нет — вопрос не сценарий.
+   */
+  scenario?: { title: string; task: string; itemTitle: string; delivery: string } | null;
   /** Окно экспозиции инстанса в месяцах. */
   windowMonths: number;
 }
@@ -55,6 +59,7 @@ const KIND_LABEL: Record<string, string> = {
   exact: "Точное",
   weighted: "Веса",
   tiered: "Ступени",
+  simulation: "Штрафы",
 };
 
 /** Подпись поля и его значение — родственные элементы, 1x сетки. */
@@ -100,11 +105,24 @@ export function QuestionInTestCard({ card, currentSince, onOpenInTopic, measurem
       <CardBody>
         <Stack gap={4}>
           {/* Э4а: маркеры пропусков ({{kind}}) — прочерком, как их видит участник. */}
-          <Text variant="body-m">{renderBlanksText(card.prompt, { mode: "dash" })}</Text>
+          {/* «Сценарий в ИС» (Э5б): у сценария текст — его задание. */}
+          <Text variant="body-m">{card.scenario ? card.scenario.task : renderBlanksText(card.prompt, { mode: "dash" })}</Text>
           {card.media?.type === "image" ? (
             <img src={card.media.url} alt="Изображение вопроса" className="tb-question-card__media" />
           ) : null}
           <Grid cols={3} gap={4}>
+            {card.scenario ? (
+              <>
+                <Field label="Тема-банк"><Text variant="body-s">{card.topicName ?? "—"}</Text></Field>
+                <Field label="Пункт теста"><Text variant="body-s">{card.scenario.itemTitle}</Text></Field>
+                <Field label="Выдача">
+                  {card.excluded
+                    ? <Tag tone="warning" size="s">Исключён из выдачи</Tag>
+                    : <Text variant="body-s">{card.scenario.delivery}</Text>}
+                </Field>
+              </>
+            ) : (
+            <>
             <Field label="Тема"><Text variant="body-s">{card.topicName ?? "—"}</Text></Field>
             <Field label="Подтемы">
               {(card.tags ?? []).length > 0
@@ -120,6 +138,8 @@ export function QuestionInTestCard({ card, currentSince, onOpenInTopic, measurem
                 ? <Tag tone="warning" size="s">Исключён из выдачи</Tag>
                 : <Text variant="body-s">выдаётся</Text>}
             </Field>
+            </>
+            )}
             {measurement ? null : (
               <>
                 <Field label="Балл" note={card.pointsInTest ? "настроено в тесте" : undefined}>

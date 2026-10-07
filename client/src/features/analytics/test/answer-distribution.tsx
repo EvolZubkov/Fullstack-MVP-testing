@@ -41,6 +41,8 @@ export interface SpreadOptionView {
   share: number;
   /** Верен по эталону либо засчитан правилами; нет поля — оценки у ответа нет. */
   correct?: boolean;
+  /** «Сценарий в ИС» (Э5б): исход прогона, которым назван вариант. */
+  key?: string;
 }
 
 /** Разброс ответов вопроса (`spread`). */
@@ -211,6 +213,34 @@ function spreadModel(source: CompactSource, spread: SpreadView, measurement: boo
   };
 }
 
+/**
+ * «Сценарий в ИС» (Э5б, эскиз sim-scenario-analytics.html): исходы прогонов. Цвет — по смыслу
+ * исхода, а не по палитре; полосы — три первых исхода в их порядке, все пять — в подсказке.
+ */
+const OUTCOME_COLOR: Record<string, string> = {
+  success: CORRECT,
+  partial: "var(--ou-warning-default)",
+  fail: "var(--ou-error-default)",
+  exited: "var(--ou-cat-digital)",
+  timeout: "var(--ou-cat-bti)",
+};
+const OUTCOME_BARS = 3;
+
+function simulationModel(spread: SpreadView): CompactModel {
+  const options: ColoredOption[] = spread.options.map(o => ({
+    label: o.label,
+    share: o.share,
+    color: OUTCOME_COLOR[o.key ?? ""] ?? REST,
+  }));
+  const rows = options.slice(0, OUTCOME_BARS);
+  return {
+    kind: "bar",
+    options,
+    summary: options.map(o => said(o, false)).join(" · "),
+    rows,
+  };
+}
+
 function unitsModel(units: UnitsView): CompactModel {
   const okShare = units.share * 100;
   const labels = units.type === "matching"
@@ -252,6 +282,9 @@ export function compactModel(source: CompactSource, measurement = false): Compac
     };
   }
   if (source.units) return unitsModel(source.units);
+  if (source.questionType === "simulation" && source.spread && source.spread.options.length > 0) {
+    return simulationModel(source.spread);
+  }
   if (source.spread && source.spread.options.length > 0) return spreadModel(source, source.spread, measurement);
   return null;
 }

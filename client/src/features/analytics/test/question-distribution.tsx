@@ -35,7 +35,7 @@ function observations(n: number): string {
 }
 
 /** Доля со шкалой; цвет — у ответа, без цвета — акцент. */
-function Scale({ share, color }: { share: number | null; color?: string }) {
+export function Scale({ share, color }: { share: number | null; color?: string }) {
   if (share === null) return <Text variant="body-s" tone="muted">—</Text>;
   return (
     <span className="tb-psy-scale">
@@ -48,7 +48,7 @@ function Scale({ share, color }: { share: number | null; color?: string }) {
 }
 
 /** Подпись строки с цветной меткой ответа — той же, что в легенде полосы таблицы. */
-function Labelled({ label, color, sub }: { label: string; color?: string; sub?: string }) {
+export function Labelled({ label, color, sub }: { label: string; color?: string; sub?: string }) {
   return (
     <Stack gap={1}>
       <span className="tb-psy-prompt">

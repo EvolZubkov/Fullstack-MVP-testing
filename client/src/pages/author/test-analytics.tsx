@@ -117,6 +117,8 @@ import {
     SpreadCard,
     UnitsCard,
 } from "@/features/analytics/test/question-distribution";
+import { SimulationAnalytics } from "@/features/analytics/test/simulation-analytics";
+import { QuestionTypeIcon } from "@/features/tests/editor/sections/question-type-icon";
 import { questionInTopicHref } from "@/features/content/question-link";
 import { ResultsByAxis } from "@/features/analytics/slices/results-by-axis";
 import { SaveSliceDialog } from "@/features/analytics/slices/save-slice-dialog";
@@ -1100,7 +1102,12 @@ export default function TestAnalyticsPage() {
                 ) : null}
             </>
         );
-        const questionLabel = renderBlanksText(breakdown?.prompt ?? questionCard?.prompt ?? "Вопрос", { mode: "dash" });
+        // «Сценарий в ИС» (Э5б): сценарий называется своим названием, а не текстом задания.
+        const simulation = questionType === "simulation";
+        const scenarioTitle = questionCard?.scenario?.title ?? null;
+        const questionLabel = simulation && scenarioTitle
+            ? scenarioTitle
+            : renderBlanksText(breakdown?.prompt ?? questionCard?.prompt ?? "Вопрос", { mode: "dash" });
         const testCrumb: TrailCrumb = {
             label: analytics.testTitle,
             // Э3.3: крошка теста возвращает на вкладку, с которой пришли.
@@ -1123,8 +1130,12 @@ export default function TestAnalyticsPage() {
             <Stack gap={6}>
                 <AnalyticsHeader
                     crumbs={[...pathCrumbs, { label: questionLabel }]}
-                    title={breakdown?.item ? <BreakdownTitle view={breakdown} /> : renderBlanksText(questionCard?.prompt ?? "Вопрос", { mode: "dash" })}
-                    subtitle={notGraded ? answeredCaption : breakdown?.item ? breakdownSubtitle(breakdown) : answeredCaption}
+                    title={simulation
+                        ? <><QuestionTypeIcon type="simulation" size={20} />{" "}{questionLabel}</>
+                        : breakdown?.item ? <BreakdownTitle view={breakdown} /> : renderBlanksText(questionCard?.prompt ?? "Вопрос", { mode: "dash" })}
+                    subtitle={simulation && questionRow
+                        ? [questionRow.topicName, "Сценарий", `${questionRow.totalAnswers} ${pluralize(questionRow.totalAnswers, "прогон", "прогона", "прогонов")}`].join(" · ")
+                        : notGraded ? answeredCaption : breakdown?.item ? breakdownSubtitle(breakdown) : answeredCaption}
                     actions={(
                         <>
                             {/* PRD-70 FR-51: выбор редакции — в шапке; версии содержания целиком — на
@@ -1206,7 +1217,19 @@ export default function TestAnalyticsPage() {
                         onOpenInTopic={() => navigate(questionInTopicHref(routeQuestionId))}
                     />
                 ) : null}
-                {notGraded
+                {simulation
+                    ? (
+                        // «Сценарий в ИС» (Э5б, эскиз sim-scenario-analytics.html): вместо разбора
+                        // вариантов — плитки, исходы, сцены, ошибки и карта промахов.
+                        <SimulationAnalytics
+                            testId={testId!}
+                            questionId={routeQuestionId}
+                            search={answersSearch}
+                            itemRest={breakdown?.item?.itemRest ?? null}
+                            observations={breakdown?.item?.observations ?? 0}
+                        />
+                    )
+                    : notGraded
                     ? (
                         <Stack gap={4}>
                             {questionType === "long" && questionRow ? (

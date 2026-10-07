@@ -31,13 +31,29 @@ export interface ReplayVerdict {
   consistent: boolean;
 }
 
+/** A miss as the participant saw it: where, and which layers of the scene were open then. */
+export interface ObservedMiss {
+  scene: string;
+  x: number;
+  y: number;
+  /** Elements of the scene visible at the moment of the miss, in scene order. */
+  visible: string[];
+}
+
+/** Optional observers of a replay — the analytics reads the screen state at each miss. */
+export interface ReplayObserver {
+  onMiss?: (miss: ObservedMiss) => void;
+}
+
 /**
  * Replay a posted run against the stored scenario.
  *
  * @param scenario The scenario of the question, as stored.
  * @param posted The result the browser posted (anything — it is not trusted).
+ * @param observe Optional observers: the analytics needs the open layers at each miss, which only
+ *   the engine knows — the protocol records the click, not the screen.
  */
-export function replayRun(scenario: Scenario, posted: unknown): ReplayVerdict {
+export function replayRun(scenario: Scenario, posted: unknown, observe?: ReplayObserver): ReplayVerdict {
   let clock = 0;
   const run = createRun(scenario, { now: () => clock });
   const claimed = posted as Partial<SimResult> | null;
@@ -66,6 +82,15 @@ export function replayRun(scenario: Scenario, posted: unknown): ReplayVerdict {
         break;
       }
       case "miss":
+        if (observe?.onMiss) {
+          const scene = run.scene();
+          observe.onMiss({
+            scene: scene.id,
+            x: event.x,
+            y: event.y,
+            visible: scene.elements.filter((el) => run.isVisible(el.id)).map((el) => el.id),
+          });
+        }
         run.missAt(event.x, event.y);
         break;
       case "value":

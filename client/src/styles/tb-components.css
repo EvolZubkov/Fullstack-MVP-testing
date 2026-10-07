@@ -3458,3 +3458,11 @@
    2026-10-08): на всю ширину десять столбиков становились плитами. BarChart
    меряет ширину контейнера, поэтому узкий контейнер даёт и узкие столбики. */
 .tb-indicator-hist { max-width: 50%; }
+
+/* «Сценарий в ИС» (Э5б): карта промахов — слои сцены и точки промахов в процентах от размера
+   сцены (эскиз sim-scenario-analytics.html). Своего компонента в ДС нет. */
+.tb-miss-map { position: relative; width: 100%; border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); overflow: hidden; background: var(--ou-bg-muted); }
+.tb-miss-map__layer { position: absolute; display: block; }
+.tb-miss-dot { position: absolute; width: var(--ou-space-3); height: var(--ou-space-3); margin: calc(var(--ou-space-3) / -2) 0 0 calc(var(--ou-space-3) / -2); border-radius: 50%; background: var(--ou-error-default); opacity: 0.55; box-shadow: 0 0 0 1px var(--ou-bg-page); pointer-events: none; }
+.tb-miss-body { display: flex; align-items: flex-start; gap: var(--ou-space-4); }
+.tb-miss-body > .tb-miss-map { flex: 1; min-width: 0; }

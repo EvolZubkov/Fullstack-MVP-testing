@@ -20,6 +20,8 @@ const { storageMock, factsMock } = vi.hoisted(() => ({
     getTestGrantForUser: vi.fn().mockResolvedValue(undefined),
     getTest: vi.fn(), getTopic: vi.fn(), getQuestion: vi.fn(),
     getTestSections: vi.fn(), getTestQuestionScoring: vi.fn(),
+    // «Сценарий в ИС»: пункты-сценарии теста — карточка ищет тему вопроса и среди тем-банков.
+    getTestScenarios: vi.fn().mockResolvedValue([]),
     getOtherTests: vi.fn(), selectObservations: vi.fn(),
   },
   factsMock: vi.fn(),

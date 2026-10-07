@@ -22,6 +22,9 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { storage } from "../../storage";
 import { loadTestScoringContext } from "../../services/effective-scoring";
+import { liveDataSource } from "../../services/test-snapshot";
+import { isSimulation } from "@shared/questions/question-type";
+import type { Scenario } from "@shared/sim/contract";
 import { loadTestAnswerFacts } from "../../services/analytics/test-answer-facts";
 import { analyticsScope, formatCorrectAnswerText } from "./helpers";
 
@@ -75,14 +78,32 @@ router.get(
       const question = await storage.getQuestion(questionId);
       if (!question) return res.status(404).json({ error: "Вопрос не найден" });
       const sections = await storage.getTestSections(testId);
-      if (!sections.some(section => section.topicId === question.topicId)) {
+      // «Сценарий в ИС» (Э5б): сценарий входит в тест пунктом, тема которого — банк, а не раздел.
+      const items = (await storage.getTestScenarios(testId)).filter(item => item.topicId === question.topicId);
+      if (!sections.some(section => section.topicId === question.topicId) && items.length === 0) {
         return res.status(404).json({ error: "Вопрос не входит в этот тест" });
       }
 
       const [topic, scoring] = await Promise.all([
         storage.getTopic(question.topicId),
-        loadTestScoringContext(testId, storage),
+        // Разделы — из источника выдачи: балл пункта-сценария отвечает за его сценарии.
+        loadTestScoringContext(testId, liveDataSource()),
       ]);
+      // Сценарий: задание, название, пункт и выдача — как в «Составе» (эскиз Э5б).
+      let scenario: { title: string; task: string; itemTitle: string; delivery: string } | null = null;
+      if (isSimulation(question.type)) {
+        const stored = (question.dataJson as { scenario?: Scenario } | null)?.scenario;
+        const item = items.find(i => i.questionId === question.id) ?? items.find(i => !i.questionId) ?? items[0];
+        const bankSize = item && !item.questionId
+          ? (await storage.getQuestionsByTopic(question.topicId)).filter(q => isSimulation(q.type)).length
+          : 1;
+        scenario = {
+          title: stored?.meta?.title ?? question.prompt,
+          task: stored?.meta?.task ?? question.prompt,
+          itemTitle: item?.title?.trim() || topic?.name || "",
+          delivery: item?.questionId ? "фиксированный" : `случайный, 1 из ${bankSize}`,
+        };
+      }
       const effective = scoring.resolve(question);
       const override = scoring.overrideFor(questionId);
 
@@ -123,6 +144,7 @@ router.get(
           ? null
           : formatCorrectAnswerText(question.type, question.dataJson, question.correctJson) || null,
         otherTests,
+        scenario,
         // Окно экспозиции — для подписи «за последние N мес.»: клиент инстанса его не знает.
         windowMonths: config.delivery.exposureWindowMonths,
       });

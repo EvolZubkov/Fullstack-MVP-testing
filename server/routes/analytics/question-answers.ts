@@ -31,6 +31,9 @@ import {
 } from "../../services/analytics/question-answers";
 import { readTestFilterQuery } from "./observation-query";
 import { pickAttemptIds, type AttemptPick } from "@shared/analytics/attempt-pick";
+import { buildSimulationStats } from "../../services/analytics/simulation-stats";
+import { isSimulation } from "@shared/questions/question-type";
+import type { Scenario } from "@shared/sim/contract";
 
 const router = Router();
 
@@ -106,14 +109,11 @@ function pickAnswered(
  * @param questionId задание
  * @param selection условия страницы; `null` — все прохождения теста
  */
-async function collect(
+async function selectFacts(
   testId: string,
   questionId: string,
   selection: { filter: ObservationFilter; attempts: AttemptPick } | null,
-): Promise<{
-  question: { id: string; type: string; prompt: string };
-  rows: QuestionAnswerRow[];
-} | null> {
+) {
   // Область видимости уже проверена гейтом маршрута, поэтому здесь она открыта — ровно как
   // на странице теста.
   const observations = await loadObservations(
@@ -138,6 +138,23 @@ async function collect(
     selected = facts.filter((fact) => ids.has(fact.attemptId));
   }
 
+  return { question, selected: selected.filter((fact) => fact.questionId === questionId), observations };
+}
+
+/**
+ * Ответы задания строками — для списка и выгрузки.
+ */
+async function collect(
+  testId: string,
+  questionId: string,
+  selection: { filter: ObservationFilter; attempts: AttemptPick } | null,
+): Promise<{
+  question: { id: string; type: string; prompt: string };
+  rows: QuestionAnswerRow[];
+} | null> {
+  const found = await selectFacts(testId, questionId, selection);
+  if (!found) return null;
+  const { question, selected, observations } = found;
   const byAttempt = new Map<string, AnswerObservation>(
     observations.rows.map((row) => [row.id, {
       participant: row.participant,
@@ -154,6 +171,29 @@ async function collect(
 }
 
 // GET /api/analytics/tests/:testId/questions/:questionId/answers — ответы задания списком
+// «Сценарий в ИС» (Э5б): аналитика вопроса-сценария — исходы, разбор по сценам, типичные ошибки,
+// карта промахов. Те же условия страницы и та же выборка фактов, что у ответов задания.
+router.get(
+  "/tests/:testId/questions/:questionId/simulation",
+  requirePermission("analytics.read"),
+  requireTestScope("analytics", "testId"),
+  async (req: Request, res: Response) => {
+    try {
+      const { testId, questionId } = req.params;
+      const found = await selectFacts(testId, questionId, readSelection(req, testId));
+      if (!found) return res.status(404).json({ error: "Задание не входит в этот тест" });
+      const scenario = (found.question.dataJson as { scenario?: Scenario } | null)?.scenario;
+      if (!isSimulation(found.question.type) || !scenario) {
+        return res.status(422).json({ error: "Задание не сценарий" });
+      }
+      res.json(buildSimulationStats(scenario, found.selected));
+    } catch (error) {
+      logger.error("GET question simulation error: " + (error as Error).message);
+      res.status(500).json({ error: "Не удалось собрать аналитику сценария" });
+    }
+  },
+);
+
 router.get(
   "/tests/:testId/questions/:questionId/answers",
   requirePermission("analytics.read"),

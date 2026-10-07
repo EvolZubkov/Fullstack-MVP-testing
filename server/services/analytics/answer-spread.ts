@@ -23,7 +23,8 @@
  * эталона, относительно которого это оценивать, у опросника не существует.
  */
 import { checkRuleSet, normalizeForCompare, parseNumericAnswer, type AnswerRuleSet } from "@shared/answer-check";
-import { isTextEntry } from "@shared/questions/question-type";
+import { isSimulation, isTextEntry } from "@shared/questions/question-type";
+import { simulationSpread } from "./simulation-stats";
 
 /** Доля одного варианта в разбросе. */
 export interface SpreadOption {
@@ -39,6 +40,8 @@ export interface SpreadOption {
    * Э4а). У шкалы и распределения эталона нет, и поля нет.
    */
   correct?: boolean;
+  /** «Сценарий в ИС» (Э5б): исход прогона, которым назван вариант, — по нему клиент красит полосу. */
+  key?: string;
 }
 
 /** Разброс ответов одного задания. */
@@ -405,6 +408,8 @@ export interface SpreadQuestion {
  */
 export function questionSpread(question: SpreadQuestion, answers: readonly unknown[]): AnswerSpread | null {
   const type = question.type;
+  // «Сценарий в ИС» (Э5б): у сценария варианты — исходы прогонов, доля — доля прогонов.
+  if (isSimulation(type)) return simulationSpread(answers);
   // У шкалы и распределения — вместо доли верных, у короткого ответа (PRD-57 FR-28x) — в
   // дополнение к ней, у выбора — доли выбранных вариантов с пометкой верного.
   const spreadType =

@@ -20,6 +20,7 @@ import { resolveOverallRule, resolveTopicRule, type ResolvedRule } from "@shared
 import { storage } from "../../storage";
 import { outcomeFor } from "./answer-outcome";
 import { loadTestScoringContext } from "../effective-scoring";
+import { liveDataSource } from "../test-snapshot";
 import { loadAnswerFacts, type AnswerFact } from "./answers";
 
 /** Состав выданной формы прохождения — задания, которые человек ВИДЕЛ. */
@@ -87,7 +88,9 @@ export async function loadTestAnswerFacts(
     storage.getTopics(),
     storage.getTest(testId),
     storage.getTestSections(testId),
-    loadTestScoringContext(testId, storage),
+    // «Сценарий в ИС»: разделы — из источника выдачи, с разделами пунктов-сценариев, чтобы балл
+    // пункта по умолчанию отвечал за его сценарии, как при оценке попытки.
+    loadTestScoringContext(testId, liveDataSource()),
   ]);
 
   const questionById = new Map(questions.map(q => [q.id, q]));
