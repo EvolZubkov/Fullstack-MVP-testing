@@ -18,6 +18,7 @@ import { reportFileName } from "./report-html";
 import { renderScreenInto } from "../template/render-screen";
 import { renderReportInto, type ReportBlockToRender } from "./render-report";
 import { buildReportPages, PAGE_HEIGHT_PX, PAGE_WIDTH_PX } from "./paginate-dom";
+import { syncCloneFonts } from "./clone-fonts";
 
 /** Minimal surface this module uses from jsPDF. */
 export interface JsPdfLike {
@@ -255,6 +256,9 @@ export async function exportReportPdf(page: ReportPage, testName: string, deps: 
         allowTaint: true,
         backgroundColor: null,
         logging: false,
+        // Слова меряются в КЛОНЕ, а рисуются холстом этого документа: клон обязан видеть те
+        // же начертания, иначе слова ложатся друг на друга и пробелы пропадают (clone-fonts).
+        onclone: (clonedDoc: Document) => syncCloneFonts(doc, clonedDoc),
       });
       if (index > 0) pdf.addPage?.();
       // Страница и лист — одно и то же, поэтому снимок ложится на всю бумагу: ни белой
