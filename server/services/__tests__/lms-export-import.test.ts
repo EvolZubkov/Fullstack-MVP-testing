@@ -902,3 +902,31 @@ describe("runImport — частичный балл (PRD-54, решение 13)"
     expect(res.warnings.join(" ")).toContain("Взаимодействий без исхода");
   });
 });
+
+describe("номер и длительность попытки (PRD-54, решение 13)", () => {
+  const withMeta = (attemptNumber: number | null, durationSeconds: number | null) => ({
+    ...book,
+    rows: [{ ...book.rows[0], attemptNumber, durationSeconds }],
+  });
+
+  it("конец прохождения — начало плюс длительность; номер — из блока", () => {
+    const plan = buildImportPlan(withMeta(3, 1240) as never, ON);
+    const row = plan.rows[0];
+    expect(row.finishedAt.getTime() - row.startedAt.getTime()).toBe(1_240_000);
+    expect(row.attemptNumber).toBe(3);
+  });
+
+  it("не сообщено — конец равен началу, номер в записи — 1, как прежде", async () => {
+    const plan = buildImportPlan(withMeta(null, null) as never, ON);
+    expect(plan.rows[0].finishedAt.getTime()).toBe(plan.rows[0].startedAt.getTime());
+    const s = storageStub();
+    await runImport(withMeta(null, null) as never, ON, ctx, s as never);
+    expect((s as unknown as { attempts: Array<Record<string, unknown>> }).attempts[0]).toMatchObject({ attemptNumber: 1 });
+  });
+
+  it("номер доезжает до записи прохождения", async () => {
+    const s = storageStub();
+    await runImport(withMeta(2, 60) as never, ON, ctx, s as never);
+    expect((s as unknown as { attempts: Array<Record<string, unknown>> }).attempts[0]).toMatchObject({ attemptNumber: 2 });
+  });
+});

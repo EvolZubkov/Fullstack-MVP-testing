@@ -180,9 +180,44 @@ function hasAttemptsLeft() {
   return getAttemptsUsed() < TEST_DATA.maxAttempts;
 }
 
+/**
+ * PRD-54, решение 13: номер и начало попытки — для блоков `meta_attempt` и `meta_duration`
+ * отчёта LMS.
+ *
+ * Отдельно от `attemptsUsed`: тот растёт только при лимите попыток, а `attemptsUsed > 0`
+ * служит признаком «попытка уже была» на стартовой странице и в проверке допуска — считать его
+ * всегда значило бы поменять поведение тестов без лимита. `an` нумерует попытки регистрации
+ * SCO всегда, `as` — время старта по часам машины (нужна только разность).
+ */
+function markAttemptStart() {
+  try {
+    var s = readSuspendObj();
+    s.an = (typeof s.an === 'number' ? s.an : 0) + 1;
+    s.as = Date.now();
+    writeSuspendObj(s);
+  } catch (e) { /* без номера отчёт уйдёт без блока — «не сообщено» */ }
+}
+
+/**
+ * Номер и длительность ТЕКУЩЕЙ попытки (секунды); `null` — неизвестно.
+ *
+ * @returns {{ number: (number|null), seconds: (number|null) }}
+ */
+function currentAttemptMeta() {
+  try {
+    var s = readSuspendObj();
+    var number = typeof s.an === 'number' && s.an > 0 ? s.an : null;
+    var seconds = typeof s.as === 'number' && s.as > 0 ? Math.max(0, Math.round((Date.now() - s.as) / 1000)) : null;
+    return { number: number, seconds: seconds };
+  } catch (e) {
+    return { number: null, seconds: null };
+  }
+}
+
 // Увеличиваем попытку 1 раз на запуск теста
 function registerAttemptStart() {
   console.log('🔵 registerAttemptStart вызван, maxAttempts:', TEST_DATA.maxAttempts);
+  markAttemptStart();
   
   if (!TEST_DATA.maxAttempts) {
     console.log('🔵 maxAttempts не задан, лимит не применяется');
@@ -241,8 +276,12 @@ function registrationMark() {
  */
 function saveAttemptResult(resultData) {
   var s = readSuspendObj();
+  var current = currentAttemptMeta();
   var summary = TBRunState.buildSummary(resultData, TEST_DATA, {
-    attemptNumber: s.attemptsUsed,
+    // Номер регистрации SCO, если пакет его ведёт (`an`); у состояния до этой работы — прежний
+    // счётчик лимита.
+    attemptNumber: current.number !== null ? current.number : s.attemptsUsed,
+    durationSeconds: current.seconds,
     // PRD-31: the portal clock, not the machine's — this mark is what barrier B
     // measures the next attempt against.
     completedAt: nowIso(),

@@ -114,6 +114,21 @@ describe("splitByAxis", () => {
     expect(buckets[2].observations.map(o => o.id)).toEqual(["third"]);
   });
 
+  it("номер попытки из выгрузки не даёт назвать первой ту, перед которой были другие (PRD-54, решение 13)", () => {
+    // Из регистрации в LMS ушла вторая попытка; порядок по времени назвал бы её первой.
+    const buckets = splitByAxis(
+      [
+        observation({ id: "imported", participantId: "u1", source: "import", reportedAttempt: 2, startedAt: new Date("2026-09-01T10:00:00Z") }),
+        observation({ id: "later", participantId: "u1", startedAt: new Date("2026-09-05T10:00:00Z") }),
+      ],
+      "attempt",
+      context,
+    );
+
+    expect(buckets.map(b => b.label)).toEqual(["Вторая попытка", "Третья и далее"]);
+    expect(buckets[0].observations.map(o => o.id)).toEqual(["imported"]);
+  });
+
   it("разбивает по версии публикации и называет прохождения без неё", () => {
     const buckets = splitByAxis(
       [

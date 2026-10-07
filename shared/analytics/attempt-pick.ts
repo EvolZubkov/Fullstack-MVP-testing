@@ -79,6 +79,12 @@ export interface AttemptCandidate {
   at: number;
   /** Процент результата; `null` — результата нет (не завершено, нечего оценивать). */
   percent: number | null;
+  /**
+   * Номер попытки, который сообщил пакет в выгрузке LMS (PRD-54, решение 13); только у импорта.
+   * Из регистрации SCO в LMS уходит одна попытка, и самая ранняя строка участника может оказаться
+   * его третьей. `null`/нет — не сообщён.
+   */
+  reportedAttempt?: number | null;
 }
 
 /**
@@ -91,6 +97,11 @@ export interface AttemptCandidate {
  *   «лучшей» у него нет.
  *
  * Участник без опознания при любом правиле, кроме `all`, не входит: одной его попытки не выбрать.
+ *
+ * У `first` — ещё одно условие (PRD-54, решение 13): если о самом раннем прохождении участника
+ * пакет сообщил номер попытки больше 1, первой попытки участника в данных НЕТ, и он не входит —
+ * повторная не подменяет первую. `best` и `last` номер не трогает: строка выгрузки и есть та
+ * попытка, которую пакет отдал в LMS по своему правилу.
  *
  * @param candidates прохождения выборки
  * @param pick правило
@@ -108,7 +119,9 @@ export function pickAttemptIds(
     const seen = chosen.get(candidate.participantId);
     if (!seen || beats(candidate, seen, pick)) chosen.set(candidate.participantId, candidate);
   }
-  return new Set([...chosen.values()].map(candidate => candidate.id));
+  const kept = [...chosen.values()].filter(candidate =>
+    pick !== "first" || candidate.reportedAttempt == null || candidate.reportedAttempt <= 1);
+  return new Set(kept.map(candidate => candidate.id));
 }
 
 /** Вытесняет ли новый кандидат уже выбранного. */

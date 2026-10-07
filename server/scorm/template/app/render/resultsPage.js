@@ -531,6 +531,8 @@ function finishScormAdaptive(results, passedForLms, resultComputation, scaleComp
   interactions.push(buildResponseFormatInteraction());
   // PRD-56 FR-19a: версия публикации и выданные варианты — о самом прохождении, а не о ответах.
   pushAll(interactions, buildRunMetaInteractions());
+  // PRD-54, решение 13: номер и длительность попытки, уходящей в LMS.
+  pushAll(interactions, buildAttemptMetaInteractions(results));
   // PRD-54 BR-54-35: метка регистрации — по ней импорт различает попытки одного дня.
   pushAll(interactions, buildRegistrationInteraction());
 
@@ -1254,6 +1256,55 @@ function buildRunMetaInteractions() {
 }
 
 /**
+ * Номер и длительность попытки, которая уходит в LMS (PRD-54, решение 13): блоки
+ * `meta_attempt` и `meta_duration`. Зеркало `ATTEMPT_INTERACTION_ID` и
+ * `DURATION_INTERACTION_ID` из `shared/lms-export/meta.ts`.
+ *
+ * Выгрузка отчёта не несёт ни даты завершения, ни номера попытки, а в LMS уходит ОДНА попытка
+ * регистрации — лучшая или последняя. Без номера импорт считал бы первой попыткой участника и
+ * третью, если первые две в отчёт не попали.
+ *
+ * Сохранённая попытка (`stored`, из сводки) несёт номер и длительность в себе (`attemptNumber`,
+ * `durationSeconds`); текущий прогон — в учёте попыток (`currentAttemptMeta`). Нет значения — нет
+ * блока: пустая ячейка и отсутствующая колонка для разбора означают одно «не сообщено».
+ * `neutral`, как и прочие служебные блоки.
+ *
+ * @param results Результат, который уходит в LMS.
+ */
+function buildAttemptMetaInteractions(results) {
+  // Сохранённая попытка говорит за себя, даже когда сказать нечего: у сводки, записанной до
+  // этой работы, номер 0 и длительности нет — и данные ТЕКУЩЕЙ попытки ей не подходят.
+  var stored = !!(results && results.stored);
+  var current = (!stored && typeof currentAttemptMeta === 'function') ? currentAttemptMeta() : { number: null, seconds: null };
+  var number = stored ? results.attemptNumber : current.number;
+  var seconds = stored
+    ? (typeof results.durationSeconds === 'number' ? results.durationSeconds : null)
+    : current.seconds;
+  var out = [];
+  if (typeof number === 'number' && number > 0) {
+    out.push({
+      id: 'meta_attempt',
+      type: 'other',
+      result: 'neutral',
+      response: String(number),
+      correct: '',
+      description: 'Номер попытки'
+    });
+  }
+  if (typeof seconds === 'number' && seconds >= 0) {
+    out.push({
+      id: 'meta_duration',
+      type: 'other',
+      result: 'neutral',
+      response: String(seconds),
+      correct: '',
+      description: 'Длительность попытки, секунды'
+    });
+  }
+  return out;
+}
+
+/**
  * Метка регистрации SCO (PRD-54 раздел 7.1b, BR-54-35): по ней импорт выгрузки различает две
  * строки одного участника за одну дату. Зеркало `REGISTRATION_INTERACTION_ID` из
  * `shared/lms-export/meta.ts`, парность держит `tests/scorm-meta-blocks`.
@@ -1410,6 +1461,8 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
   interactions.push(buildResponseFormatInteraction());
   // PRD-56 FR-19a: версия публикации и выданные варианты — тем же блоком, что и там.
   pushAll(interactions, buildRunMetaInteractions());
+  // PRD-54, решение 13: номер и длительность попытки, уходящей в LMS.
+  pushAll(interactions, buildAttemptMetaInteractions(results));
   // PRD-54 BR-54-35: метка регистрации — тем же блоком, что и в адаптивном пути.
   pushAll(interactions, buildRegistrationInteraction());
 

@@ -114,10 +114,17 @@ function attemptNumbers(observations: readonly Observation[]): Map<string, numbe
 
   const numbers = new Map<string, number>();
   for (const list of byParticipant.values()) {
+    // PRD-54, решение 13: номер, сообщённый пакетом в выгрузке, не даёт порядку по времени
+    // назвать первой попытку, перед которой были другие, в отчёт LMS не попавшие.
+    let previous = 0;
     list
       .slice()
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
-      .forEach((observation, index) => numbers.set(observation.id, index + 1));
+      .forEach((observation) => {
+        const number = Math.max(previous + 1, observation.reportedAttempt ?? 0);
+        numbers.set(observation.id, number);
+        previous = number;
+      });
   }
   return numbers;
 }

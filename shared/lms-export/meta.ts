@@ -1,7 +1,8 @@
 /**
  * @module shared/lms-export/meta
  * @description PRD-56 FR-19a: служебные блоки выгрузки, которыми пакет сообщает о САМОМ
- * прохождении — версию публикации и выданные варианты; PRD-54 BR-54-35 — метку регистрации.
+ * прохождении — версию публикации и выданные варианты; PRD-54 BR-54-35 — метку регистрации;
+ * PRD-54, решение 13 — номер и длительность попытки.
  *
  * Сегодня версия публикации есть только у веб-попытки (`attempts.snapshot_id`): в пакет она не
  * уезжала, в отчёте LMS её не было, и разрез по версиям был слеп ровно к тем прохождениям, ради
@@ -42,6 +43,23 @@ export const VARIANT_INTERACTION_ID = "meta_variant";
  */
 export const REGISTRATION_INTERACTION_ID = "meta_registration";
 
+/**
+ * Идентификатор служебного блока с номером попытки внутри регистрации SCO (PRD-54, решение 13).
+ *
+ * В LMS из регистрации уходит ОДНА попытка — лучшая или последняя. Номер говорит, первая ли она:
+ * без него импорт считал бы первой попыткой участника и третью, если первые две в отчёт не
+ * попали, и правило психометрики «только первая попытка» брало бы повторную.
+ */
+export const ATTEMPT_INTERACTION_ID = "meta_attempt";
+
+/**
+ * Идентификатор служебного блока с длительностью попытки в целых секундах (PRD-54, решение 13).
+ *
+ * Выгрузка не несёт даты завершения; конец прохождения импорт вычисляет как начало плюс
+ * длительность. Время — по часам машины участника, поэтому едет разностью, а не отметкой.
+ */
+export const DURATION_INTERACTION_ID = "meta_duration";
+
 /** Разделитель списка вариантов. Идентификаторы формы — uuid, поэтому не встречается в них. */
 const SEPARATOR = ";";
 
@@ -73,4 +91,23 @@ export function parseTestVersion(raw: string | null | undefined): number | null 
   if (value === "") return null;
   const n = Number(value);
   return Number.isInteger(n) && n >= 1 ? n : null;
+}
+
+/**
+ * Номер попытки из ячейки выгрузки; `null` — не сообщён (пусто, мусор, ноль или дробь).
+ */
+export function parseAttemptNumber(raw: string | null | undefined): number | null {
+  return parseTestVersion(raw);
+}
+
+/**
+ * Длительность попытки в секундах из ячейки выгрузки; `null` — не сообщена.
+ *
+ * Ноль законен — попытку закрыли сразу; отрицательное, дробь и мусор — нет.
+ */
+export function parseDurationSeconds(raw: string | null | undefined): number | null {
+  const value = String(raw ?? "").trim();
+  if (value === "") return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : null;
 }

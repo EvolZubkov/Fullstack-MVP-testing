@@ -79,13 +79,17 @@ function readSelection(req: Request, testId: string): { filter: ObservationFilte
  * ОТВЕТАМИ, как в матрице откликов: начатая и брошенная попытка без ответов не должна заслонять
  * следующую.
  *
+ * Как и в психометрике (PRD-54, решение 13): самая ранняя строка участника, о которой пакет
+ * сообщил номер попытки больше 1, — не первая; первой у такого участника в данных нет
+ * (`reportedAttempt` кандидата).
+ *
  * @param observations прохождения выборки
  * @param answered идентификаторы прохождений, в которых есть хотя бы один ответ
  * @param attempts правило выбора попытки
  * @returns идентификаторы оставленных прохождений; `null` — правило «все», отбора нет
  */
 function pickAnswered(
-  observations: ReadonlyArray<{ id: string; participantId: string | null; startedAt: Date; percent: number | null }>,
+  observations: ReadonlyArray<{ id: string; participantId: string | null; startedAt: Date; percent: number | null; reportedAttempt?: number | null }>,
   answered: ReadonlySet<string>,
   attempts: AttemptPick,
 ): Set<string> | null {
@@ -97,6 +101,7 @@ function pickAnswered(
         participantId: observation.participantId,
         at: observation.startedAt.getTime(),
         percent: observation.percent,
+        reportedAttempt: observation.reportedAttempt ?? null,
       })),
     attempts,
   );

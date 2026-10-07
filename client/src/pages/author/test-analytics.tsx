@@ -571,7 +571,7 @@ export default function TestAnalyticsPage() {
      * и подзаголовок расходился бы с «Исходами».
      */
     const { data: simulationStats } = useQuery<SimulationStatsView>({
-        queryKey: [`/api/analytics/tests/${testId}/questions/${routeQuestionId}/simulation${psychometricsUrl("", { firstAttemptOnly: String(firstAttemptOnly) })}`],
+        queryKey: [`/api/analytics/tests/${testId}/questions/${routeQuestionId}/simulation${psychometricsUrl("", { attempts })}`],
         enabled: !!testId && !!routeQuestionId && questionCard?.questionType === "simulation",
     });
     /**

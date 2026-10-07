@@ -11,10 +11,14 @@
  */
 import { RESPONSE_FORMAT_INTERACTION_ID } from "./response-codec";
 import {
+  ATTEMPT_INTERACTION_ID,
+  DURATION_INTERACTION_ID,
   REGISTRATION_INTERACTION_ID,
   TEST_VERSION_INTERACTION_ID,
   VARIANT_INTERACTION_ID,
   decodeVariantForms,
+  parseAttemptNumber,
+  parseDurationSeconds,
   parseTestVersion,
 } from "./meta";
 import { parseExportSeconds } from "./duration";
@@ -174,6 +178,13 @@ export interface LmsExportRow {
    */
   registrationMark: string;
   /**
+   * Номер попытки внутри регистрации SCO из блока `meta_attempt` (PRD-54, решение 13); `null` —
+   * пакет его не сообщил.
+   */
+  attemptNumber: number | null;
+  /** Длительность попытки в секундах из блока `meta_duration`; `null` — не сообщена. */
+  durationSeconds: number | null;
+  /**
    * Идентификатор темы -> достигнутый уровень, как его записал пакет (блок `topic_<id>_level`).
    *
    * Строка {@link TOPIC_LEVEL_NOT_ACHIEVED} значит «уровень не достигнут»; ключа нет — блок
@@ -293,6 +304,8 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
       testVersion: null,
       formIds: [],
       registrationMark: "",
+      attemptNumber: null,
+      durationSeconds: null,
       topicLevels: {},
       topicCourses: {},
       simProtocols: {},
@@ -338,6 +351,10 @@ export function parseLmsExport(input: string[][]): LmsExportBook {
         row.formIds = decodeVariantForms(value);
       } else if (b.id === REGISTRATION_INTERACTION_ID) {
         row.registrationMark = value;
+      } else if (b.id === ATTEMPT_INTERACTION_ID) {
+        row.attemptNumber = parseAttemptNumber(value);
+      } else if (b.id === DURATION_INTERACTION_ID) {
+        row.durationSeconds = parseDurationSeconds(value);
       } else {
         const level = TOPIC_LEVEL_RE.exec(b.id);
         const course = level ? null : TOPIC_COURSE_RE.exec(b.id);

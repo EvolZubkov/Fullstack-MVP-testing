@@ -297,7 +297,8 @@ function optionCountOf(question: QuestionInfo | undefined): number {
  *
  * Кандидаты — прохождения, в которых есть ответы, как и прежде у «первой»: начатая и брошенная
  * попытка без ответов не должна заслонять следующую. Процент результата приходит отдельно — у
- * ответа его нет, он свойство прохождения.
+ * ответа его нет, он свойство прохождения. Сообщённый пакетом номер попытки (импорт выгрузки,
+ * PRD-54 решение 13) тоже идёт в кандидата: по нему «первая» не берёт повторную.
  *
  * @param responses ответы выборки
  * @param pick правило выбора попытки
@@ -317,6 +318,7 @@ export function pickAttemptResponses(
       participantId: response.respondentId,
       at: response.occurredAt.getTime(),
       percent: percentByObservation.get(response.observationId) ?? null,
+      reportedAttempt: response.reportedAttempt ?? null,
     });
   }
   const kept = pickAttemptIds(candidates.values(), pick);

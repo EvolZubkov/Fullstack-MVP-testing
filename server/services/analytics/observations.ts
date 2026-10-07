@@ -78,6 +78,12 @@ export interface Observation {
    */
   forms: Record<string, string>;
   /**
+   * Номер попытки, который СООБЩИЛ пакет в выгрузке (`meta_attempt`, PRD-54 решение 13); только у
+   * импорта. Из регистрации SCO в LMS уходит одна попытка, и самая ранняя строка участника может
+   * оказаться его третьей попыткой — порядок по времени тут лжёт. `null`/нет — не сообщён.
+   */
+  reportedAttempt?: number | null;
+  /**
    * Оргструктура участника (PRD-56 FR-06b, OQ-04): значение самого прохождения, иначе профиль
    * связанного пользователя. Веб своих значений не пишет — у него всегда профиль, и значит
    * ТЕКУЩИЙ: переведённый человек переезжает в новый отдел вместе со всеми попытками. У импорта
@@ -135,6 +141,8 @@ interface LmsAttemptRow {
   maxPoints: number | null;
   startedAt: Date;
   finishedAt: Date | null;
+  /** Номер попытки: у импорта — из `meta_attempt` (1, если не сообщён), у телеметрии — свой. */
+  attemptNumber?: number | null;
   /** PRD-56 FR-19a: версия публикации и выданные варианты, сообщённые пакетом. */
   snapshotId?: string | null;
   formsJson?: Record<string, string> | null;
@@ -309,6 +317,9 @@ export const toObservation = {
       // прохождение идёт в разрез «версия не указана», а не приписывается текущей версии.
       snapshotId: row.snapshotId ?? null,
       forms: row.formsJson ?? {},
+      // Номер телеметрии нумерует попытки внутри сессии пакета, и все её попытки приходят
+      // строками — порядок по времени у неё верен. Верить номеру стоит только у импорта.
+      reportedAttempt: row.origin === "import" ? row.attemptNumber ?? null : null,
       ...orgOf(
         { organization: row.lmsUserOrg, unit: row.lmsUserUnit, position: row.lmsUserPosition },
         row.userId ? ctx.users.get(row.userId) : undefined,

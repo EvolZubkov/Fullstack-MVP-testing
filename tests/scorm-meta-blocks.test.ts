@@ -14,6 +14,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
+  ATTEMPT_INTERACTION_ID,
+  DURATION_INTERACTION_ID,
   REGISTRATION_INTERACTION_ID,
   TEST_VERSION_INTERACTION_ID,
   VARIANT_INTERACTION_ID,
@@ -205,5 +207,60 @@ describe("метка регистрации в отчёте LMS (PRD-54 BR-54-35
     );
     const blocks = fn(() => { throw new Error("LMS недоступна"); }, () => {}) as Interaction[];
     expect(blocks).toEqual([]);
+  });
+});
+
+/**
+ * Номер и длительность попытки (PRD-54, решение 13) поверх поддельного `suspend_data` и часов:
+ * настоящие `markAttemptStart`, `currentAttemptMeta` и `buildAttemptMetaInteractions`.
+ */
+function attemptRuntime(initial: Record<string, unknown>) {
+  const store = { state: { ...initial } as Record<string, unknown> };
+  const clock = { t: 1_000_000 };
+  const fn = new Function(
+    "readSuspendObj",
+    "writeSuspendObj",
+    "Date",
+    `${extractTopLevel(suspendSrc, "markAttemptStart")}
+     ${extractTopLevel(suspendSrc, "currentAttemptMeta")}
+     ${extractTopLevel(resultsSrc, "buildAttemptMetaInteractions")}
+     return { start: markAttemptStart, build: buildAttemptMetaInteractions };`,
+  );
+  const api = fn(
+    () => JSON.parse(JSON.stringify(store.state)),
+    (s: Record<string, unknown>) => { store.state = s; },
+    { now: () => clock.t },
+  ) as { start: () => void; build: (results: unknown) => Interaction[] };
+  return { store, clock, ...api };
+}
+
+describe("номер и длительность попытки в отчёте LMS (PRD-54, решение 13)", () => {
+  it("текущая попытка: номер растёт на каждом старте, длительность — от старта, без лимита попыток", () => {
+    const rt = attemptRuntime({ v: 2, attemptsUsed: 0 });
+    rt.start();
+    rt.start();
+    rt.clock.t += 95_400;
+    const blocks = rt.build({ percent: 50 });
+    expect(blocks).toEqual([
+      expect.objectContaining({ id: ATTEMPT_INTERACTION_ID, type: "other", result: "neutral", response: "2" }),
+      expect.objectContaining({ id: DURATION_INTERACTION_ID, type: "other", result: "neutral", response: "95" }),
+    ]);
+    // Счётчик лимита не тронут: «попытка уже была» он сообщает только при лимите.
+    expect(rt.store.state.attemptsUsed).toBe(0);
+  });
+
+  it("сохранённая лучшая попытка говорит своим номером и длительностью", () => {
+    const rt = attemptRuntime({ v: 2, an: 4, as: 1 });
+    const blocks = rt.build({ stored: true, attemptNumber: 1, durationSeconds: 300 });
+    expect(blocks.map((b) => b.response)).toEqual(["1", "300"]);
+  });
+
+  it("сводка до этой работы — номер 0 без длительности: блоков нет, данные текущей не подставляются", () => {
+    const rt = attemptRuntime({ v: 2, an: 4, as: 1 });
+    expect(rt.build({ stored: true, attemptNumber: 0, durationSeconds: null })).toEqual([]);
+  });
+
+  it("пакет без учёта номера (состояние до этой работы) блоков не шлёт", () => {
+    expect(attemptRuntime({ v: 2, attemptsUsed: 1 }).build({ percent: 10 })).toEqual([]);
   });
 });

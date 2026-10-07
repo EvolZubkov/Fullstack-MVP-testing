@@ -76,6 +76,19 @@ describe("pickAttemptIds", () => {
     expect(pickAttemptIds(unscored, "best")).toEqual(new Set(["done"]));
   });
 
+  it("«first» drops a participant whose earliest passage the package reported as a repeat (PRD-54, decision 13)", () => {
+    const rows: AttemptCandidate[] = [
+      { id: "a3", participantId: "A", at: 1, percent: 40, reportedAttempt: 3 },
+      { id: "a-web", participantId: "A", at: 5, percent: 90 },
+      { id: "b1", participantId: "B", at: 2, percent: 70, reportedAttempt: 1 },
+    ];
+    expect(pickAttemptIds(rows, "first")).toEqual(new Set(["b1"]));
+    // The report row IS the attempt the package handed to the LMS — «best» and «last» keep it.
+    expect(pickAttemptIds(rows, "best")).toEqual(new Set(["a-web", "b1"]));
+    expect(pickAttemptIds(rows, "last")).toEqual(new Set(["a-web", "b1"]));
+    expect(pickAttemptIds([{ id: "a3", participantId: "A", at: 1, percent: 40, reportedAttempt: 3 }], "best")).toEqual(new Set(["a3"]));
+  });
+
   it("drops an unidentified participant under every narrowing rule", () => {
     for (const pick of ["first", "best", "last"] as const) {
       expect(pickAttemptIds(candidates, pick)?.has("x1")).toBe(false);

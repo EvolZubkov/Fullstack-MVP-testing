@@ -46,6 +46,8 @@ export interface ImportedAttemptInput {
   startedAt: Date;
   finishedAt: Date;
   lastActivityAt: Date;
+  /** Номер попытки внутри регистрации SCO (`meta_attempt`, PRD-54 решение 13); 1 — не сообщён. */
+  attemptNumber: number;
   resultPassed: boolean | null;
   totalPoints: number | null;
   /** Процент из корневого балла выгрузки; `null` — балла нет (измерительный тест). */
@@ -272,6 +274,7 @@ export class ScormRepository {
           lmsUserOrg: data.lmsUserOrg,
           finishedAt: data.finishedAt,
           lastActivityAt: data.lastActivityAt,
+          attemptNumber: data.attemptNumber,
           resultPassed: data.resultPassed,
           totalPoints: data.totalPoints,
           resultPercent: data.resultPercent,

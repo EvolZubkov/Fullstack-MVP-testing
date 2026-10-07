@@ -401,6 +401,18 @@ describe("pickAttemptResponses — «первая»", () => {
     expect(kept.map(r => r.observationId)).toEqual(["first", "b-only"]);
   });
 
+  it("ранняя строка выгрузки с номером попытки больше 1 — первой у участника нет (PRD-54, решение 13)", () => {
+    // Из регистрации в LMS ушла третья попытка: первые две в отчёт не попали, и подставлять
+    // повторную на место первой нельзя. У B номер 1 — он остаётся.
+    const responses: ResponseFact[] = [
+      fact({ respondentId: "A", questionId: "q1", observationId: "a-third", source: "import", reportedAttempt: 3, occurredAt: new Date("2026-09-01T10:00:00Z") }),
+      fact({ respondentId: "A", questionId: "q1", observationId: "a-later", occurredAt: new Date("2026-09-05T10:00:00Z") }),
+      fact({ respondentId: "B", questionId: "q1", observationId: "b-first", source: "import", reportedAttempt: 1 }),
+    ];
+
+    expect(pickAttemptResponses(responses, "first", new Map()).map(r => r.observationId)).toEqual(["b-first"]);
+  });
+
   it("наблюдения без респондента отбрасывает — их попытки не сосчитать", () => {
     expect(pickAttemptResponses([fact({ respondentId: null as never, questionId: "q1" })], "first", new Map())).toEqual([]);
   });

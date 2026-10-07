@@ -83,6 +83,11 @@ export interface ResponseFact {
   groupKeys: readonly string[];
   /** Когда наблюдение состоялось: по нему отбирается «первая попытка». */
   occurredAt: Date;
+  /**
+   * Номер попытки, сообщённый пакетом в выгрузке LMS (PRD-54, решение 13); только у импорта.
+   * Больше 1 — наблюдение заведомо не первая попытка участника, как бы рано оно ни было.
+   */
+  reportedAttempt?: number | null;
 }
 
 /** Оценка ответа веб-попытки — та же, что у PRD-56: правило «что такое верно» живёт в одном месте. */
@@ -136,6 +141,8 @@ export interface LmsResponseContext {
   groupKeys: readonly string[];
   /** Выданные варианты картой «тема -> вариант» — та же, что у наблюдения PRD-56. */
   forms: Record<string, string>;
+  /** Номер попытки, сообщённый пакетом (только импорт, PRD-54 решение 13); нет — не сообщён. */
+  reportedAttempt?: number | null;
   /**
    * Редакция задания у ЭТОГО прохождения.
    *
@@ -276,6 +283,7 @@ export const toResponses = {
         formKey: row.topicId ? ctx.forms[row.topicId] ?? null : null,
         groupKeys: ctx.groupKeys,
         occurredAt: ctx.occurredAt,
+        reportedAttempt: ctx.reportedAttempt ?? null,
       };
     });
 
@@ -302,6 +310,7 @@ export const toResponses = {
           formKey: topicId ? ctx.forms[topicId] ?? null : null,
           groupKeys: ctx.groupKeys,
           occurredAt: ctx.occurredAt,
+          reportedAttempt: ctx.reportedAttempt ?? null,
         });
       }
     }
@@ -388,6 +397,7 @@ export async function loadResponseMatrix(
       occurredAt: observation.startedAt,
       groupKeys,
       forms: observation.forms,
+      reportedAttempt: observation.reportedAttempt ?? null,
       psychoHashOf: questionId => snapshot?.stamps.get(questionId) ?? null,
       skippable: skippableOf(observation, snapshot, deliveredByAttempt.get(observation.id)),
     }));

@@ -318,6 +318,9 @@ var TBRunState = (function () {
     for (var j = 0; j < all.length; j++) if (all[j].scope === 'test') testScope.push(all[j]);
     return {
       n: meta.attemptNumber,
+      // PRD-54, решение 13: длительность попытки в секундах — для `meta_duration`, когда в LMS
+      // уезжает эта попытка как лучшая. Нет замера — поля нет.
+      du: typeof meta.durationSeconds === 'number' ? meta.durationSeconds : undefined,
       at: meta.completedAt,
       src: meta.source,
       pc: results.percent, c: results.correct, q: results.totalQuestions,
@@ -379,6 +382,10 @@ var TBRunState = (function () {
     }
     return {
       attemptNumber: summary.n, completedAt: summary.at, completedAtSource: summary.src,
+      durationSeconds: typeof summary.du === 'number' ? summary.du : null,
+      // Результат СОХРАНЁННОЙ попытки, а не текущего прогона: номер и длительность у него свои,
+      // и подставлять туда данные текущей попытки нельзя (блоки `meta_attempt`/`meta_duration`).
+      stored: true,
       percent: summary.pc, correct: summary.c, totalCorrect: summary.c,
       totalQuestions: summary.q,
       earnedPoints: summary.e, possiblePoints: summary.p, passed: !!summary.ok,

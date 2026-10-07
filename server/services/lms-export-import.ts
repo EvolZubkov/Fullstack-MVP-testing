@@ -90,6 +90,11 @@ export interface PlannedRow {
   lmsUserPosition: string | null;
   startedAt: Date;
   finishedAt: Date;
+  /**
+   * Номер попытки внутри регистрации SCO из блока `meta_attempt` (PRD-54, решение 13); `null` —
+   * пакет его не сообщил.
+   */
+  attemptNumber: number | null;
   resultPassed: boolean | null;
   totalPoints: number | null;
   /**
@@ -254,6 +259,9 @@ export function rowFingerprint(row: LmsExportRow): string {
     // «Сценарий в ИС»: протокол входит в отпечаток, только когда он есть, — отпечатки строк,
     // загруженных до него, не меняются.
     ...(Object.keys(row.simProtocols ?? {}).length > 0 ? { simProtocols: row.simProtocols } : {}),
+    // PRD-54, решение 13: номер и длительность попытки — тоже только при наличии.
+    ...(row.attemptNumber != null ? { attemptNumber: row.attemptNumber } : {}),
+    ...(row.durationSeconds != null ? { durationSeconds: row.durationSeconds } : {}),
   };
   return createHash("sha256").update(stableJson(content)).digest("hex").slice(0, 16);
 }
@@ -319,11 +327,13 @@ export function buildImportPlan(book: LmsExportBook, opts: ImportOptions): Impor
       // опознают.
       lmsUserUnit: r.unit || null,
       lmsUserPosition: r.position || null,
-      // Дата активации модуля идёт и в начало, и в конец: других дат о самом прохождении файл не
-      // даёт, а без `finishedAt` строка выпала бы из аналитики, которая отбирает завершённые
-      // попытки. Цена — неизвестная длительность, и разбор попытки подписывает источник явно.
+      // Дата активации модуля — начало: других дат о самом прохождении файл не даёт. Конец —
+      // начало плюс длительность из блока `meta_duration` (PRD-54, решение 13); пакет, который её
+      // не сообщает, получает конец, равный началу: без `finishedAt` строка выпала бы из
+      // аналитики, которая отбирает завершённые попытки.
       startedAt: at,
-      finishedAt: at,
+      finishedAt: r.durationSeconds != null ? new Date(at.getTime() + r.durationSeconds * 1000) : at,
+      attemptNumber: r.attemptNumber ?? null,
       resultPassed: r.passed,
       totalPoints: r.points,
       resultPercent: percent,
@@ -706,6 +716,9 @@ export async function runImport(
       startedAt: row.startedAt,
       finishedAt: row.finishedAt,
       lastActivityAt: row.finishedAt,
+      // Не сообщён — 1, как и прежде: колонка обязательна, и «первая» — то, чем считался любой
+      // импорт до этой работы.
+      attemptNumber: row.attemptNumber ?? 1,
       resultPassed: row.resultPassed,
       totalPoints: row.totalPoints,
       resultPercent: row.resultPercent,

@@ -413,3 +413,33 @@ describe("метка регистрации (PRD-54 BR-54-35)", () => {
     expect(parseLmsExport(withRegistration("lx1a2b3cq9zk")).unknownColumns).toEqual([]);
   });
 });
+
+describe("номер и длительность попытки (PRD-54, решение 13)", () => {
+  /** Та же выгрузка плюс блоки `meta_attempt` и `meta_duration`. */
+  function withAttemptMeta(number: string, seconds: string): string[][] {
+    const sheet = SHEET.map((r) => [...r]);
+    sheet[0].push("meta_attempt", "", "", "", "meta_duration", "", "", "");
+    sheet[1].push(
+      "Тип", "Продолжительность (сек.)", "Результат", "Полученный ответ",
+      "Тип", "Продолжительность (сек.)", "Результат", "Полученный ответ",
+    );
+    sheet[2].push("другое", "", "neutral", number, "другое", "", "neutral", seconds);
+    return sheet;
+  }
+
+  it("читаются числами", () => {
+    const [row] = parseLmsExport(withAttemptMeta("3", "1240")).rows;
+    expect(row.attemptNumber).toBe(3);
+    expect(row.durationSeconds).toBe(1240);
+  });
+
+  it("пусто, мусор и дробь — не сообщено; нулевая длительность законна", () => {
+    expect(parseLmsExport(SHEET).rows[0]).toMatchObject({ attemptNumber: null, durationSeconds: null });
+    expect(parseLmsExport(withAttemptMeta("0", "-5")).rows[0]).toMatchObject({ attemptNumber: null, durationSeconds: null });
+    expect(parseLmsExport(withAttemptMeta("1.5", "0")).rows[0]).toMatchObject({ attemptNumber: null, durationSeconds: 0 });
+  });
+
+  it("блоки не попадают в неопознанные колонки", () => {
+    expect(parseLmsExport(withAttemptMeta("2", "60")).unknownColumns).toEqual([]);
+  });
+});
