@@ -15,6 +15,7 @@ import { createRun } from "@shared/sim/engine";
 import type { Scenario, SimResult } from "@shared/sim/contract";
 import {
   CHUNK_SIZE,
+  MAX_CHUNKS,
   decodeProtocol,
   encodeProtocol,
   joinProtocolChunks,
@@ -111,7 +112,10 @@ describe("кодек протокола", () => {
     expect(joinProtocolChunks({ 1: chunks[0], 3: chunks[2] })).toBeNull();
     expect(joinProtocolChunks({ 1: "без метки" })).toBeNull();
     // Протокол длиннее предела не пишется вовсе: обрезанный повторить нельзя.
-    expect(protocolChunks("x".repeat(CHUNK_SIZE * 41))).toEqual([]);
+    expect(protocolChunks("x".repeat(CHUNK_SIZE * MAX_CHUNKS))).toHaveLength(MAX_CHUNKS);
+    expect(protocolChunks("x".repeat(CHUNK_SIZE * MAX_CHUNKS + 1))).toEqual([]);
+    // Кусок с меткой укладывается в SPM ответа взаимодействия SCORM 2004 — 4000 знаков.
+    expect(chunks[0].length).toBe(4000);
     expect(parseProtocolInteractionId("sim_abc-1_12")).toEqual({ questionId: "abc-1", n: 12 });
     expect(parseProtocolInteractionId("scale_x")).toBeNull();
   });

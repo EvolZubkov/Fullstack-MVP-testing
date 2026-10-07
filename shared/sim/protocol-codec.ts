@@ -38,10 +38,22 @@ import type { SimEvent } from "./contract";
 
 /** Format version, the first field of the encoded string. */
 export const PROTOCOL_CODEC_VERSION = 1;
-/** Characters of protocol per pseudo-interaction, without the `~` marker. */
-export const CHUNK_SIZE = 250;
-/** The most chunks one run may take; a longer protocol is not written. */
-export const MAX_CHUNKS = 40;
+/**
+ * Characters of protocol per pseudo-interaction, without the `~` marker.
+ *
+ * SCORM 2004 4th Edition, RTE 4.2.9: `cmi.interactions.n.learner_response` of type `other` is a
+ * `characterstring` with a smallest permitted maximum (SPM) of 4000 characters — the length every
+ * conformant LMS must keep. The `~` marker is part of the response, so the payload is one less.
+ */
+export const CHUNK_SIZE = 3999;
+/**
+ * The most chunks one run may take; a longer protocol is not written.
+ *
+ * `cmi.interactions` has an SPM of 250 entries for the WHOLE attempt — questions, scales,
+ * indicators and service blocks share it. Ten chunks (about 40 000 characters, thousands of input
+ * events) leave that budget to the rest of the test.
+ */
+export const MAX_CHUNKS = 10;
 /** Prefix of the pseudo-interaction ids: `sim_<questionId>_<n>`, `n` from 1. */
 export const SIM_PROTOCOL_PREFIX = "sim_";
 
