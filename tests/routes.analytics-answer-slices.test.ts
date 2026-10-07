@@ -25,6 +25,8 @@ const { storageMock, loadObservations, loadTestAnswerFacts } = vi.hoisted(() => 
     getTestSections: vi.fn(),
     getScales: vi.fn(),
     selectScaleValuesForTest: vi.fn(),
+    getResultVariables: vi.fn(),
+    selectIndicatorValuesForTest: vi.fn(),
   },
   loadObservations: vi.fn(),
   loadTestAnswerFacts: vi.fn(),
@@ -83,6 +85,13 @@ beforeEach(() => {
     { attemptId: "a1", source: "web", values: { focus: 30 } },
     { attemptId: "a3", source: "web", values: { focus: 10 } },
   ]);
+  storageMock.getResultVariables.mockResolvedValue([
+    { name: "idx", label: "Индекс", type: "number", configJson: {}, sortOrder: 0 },
+  ]);
+  storageMock.selectIndicatorValuesForTest.mockResolvedValue([
+    { attemptId: "a1", source: "web", values: { idx: 70 } },
+    { attemptId: "a3", source: "import", values: { idx: "30" } },
+  ]);
   loadTestAnswerFacts.mockResolvedValue({
     facts: FACTS,
     questionById: new Map(QUESTIONS.map(q => [q.id, q])),
@@ -120,6 +129,14 @@ describe("GET /analytics/tests/:testId/answer-slices", () => {
     const [whole, hrbp] = res.body.slices;
     expect(whole.scales[0]).toMatchObject({ key: "focus", average: 20, sampleSize: 2 });
     expect(hrbp.scales[0]).toMatchObject({ key: "focus", average: 30, sampleSize: 1 });
+  });
+
+  it("indicators are cut by the same runs of the slice", async () => {
+    const res = await ask("?withWhole=1&sliceId=s-hrbp");
+
+    const [whole, hrbp] = res.body.slices;
+    expect(whole.indicators[0]).toMatchObject({ name: "idx", average: 50, sampleSize: 2 });
+    expect(hrbp.indicators[0]).toMatchObject({ name: "idx", average: 70, sampleSize: 1 });
   });
 
   it("временный отбор приходит срезом `adhoc` со своим именем", async () => {

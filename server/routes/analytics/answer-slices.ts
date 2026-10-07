@@ -1,6 +1,6 @@
 /**
  * @module server/routes/analytics/answer-slices
- * @description PRD-56 FR-07k - FR-07n: сравнение срезов «Ответы и шкалы».
+ * @description PRD-56 FR-07k - FR-07n, FR-21g: сравнение срезов «Ответы, шкалы и показатели».
  *
  * Свой механизм сравнения ручка не заводит: срезы («Тест целиком», временный отбор, сохранённые
  * срезы теста), рамка периода и пересечение периодов — те же, что у «Результата и тем» и
@@ -19,6 +19,7 @@ import { storage } from "../../storage";
 import { questionSpread } from "../../services/analytics/answer-spread";
 import { loadObservations } from "../../services/analytics/observations";
 import { loadTestAnswerFacts } from "../../services/analytics/test-answer-facts";
+import { summariseIndicators } from "../../services/analytics/indicator-profile";
 import { summariseScales } from "../../services/analytics/scale-profile";
 import { scaleRampOf } from "../../services/analytics/scale-ramp";
 import { adhocSource, conditionsOf, dateOf, withinFrame } from "./slices";
@@ -28,7 +29,7 @@ import { renderBlanksText } from "@shared/questions/blanks-render";
 
 const router = Router();
 
-// GET /api/analytics/tests/:testId/answer-slices — ответы и шкалы по сравниваемым срезам
+// GET /api/analytics/tests/:testId/answer-slices — ответы, шкалы и показатели по сравниваемым срезам
 router.get(
   "/tests/:testId/answer-slices",
   requirePermission("analytics.read"),
@@ -56,11 +57,15 @@ router.get(
       // прохождениям каждого среза — повторять сбор на каждый срез незачем.
       const testAttempts = await storage.getAttemptsByTests([testId]);
       const completed = testAttempts.filter(attempt => attempt.resultJson !== null);
-      const [{ facts, questionById, topicNameById }, sections, scales, scaleRows, ramp] = await Promise.all([
+      const [
+        { facts, questionById, topicNameById }, sections, scales, scaleRows, indicators, indicatorRows, ramp,
+      ] = await Promise.all([
         loadTestAnswerFacts(testId, completed),
         storage.getTestSections(testId),
         storage.getScales(testId),
         storage.selectScaleValuesForTest(testId),
+        storage.getResultVariables(testId),
+        storage.selectIndicatorValuesForTest(testId),
         scaleRampOf(test),
       ]);
 
@@ -110,6 +115,8 @@ router.get(
           respondents: observations.rows.length,
           questions,
           scales: summariseScales(rows, scales, { ramp }),
+          // PRD-56 FR-21g: indicators of the slice, cut by the same runs as its scales.
+          indicators: summariseIndicators(indicatorRows.filter(row => selects(row.attemptId)), indicators, { ramp }),
         });
       }
 
