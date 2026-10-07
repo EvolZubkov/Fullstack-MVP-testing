@@ -28,6 +28,7 @@ import {
   type ObservationRows,
   type TestAnswerRow,
   type ScaleValuesRow,
+  type IndicatorValuesRow,
 } from "./storage/analytics-repository";
 import { SlicesRepository } from "./storage/slices-repository";
 import { SavedFiltersRepository } from "./storage/saved-filters-repository";
@@ -381,6 +382,8 @@ export interface IStorage {
   selectAttemptOrder(testIds: string[], userIds: string[], participantKeys: string[]): Promise<Array<{ id: string; testId: string | null; participantId: string; startedAt: Date | null }>>;
   /** PRD-56 FR-21: значения шкал прохождений теста — оба источника одной выборкой. */
   selectScaleValuesForTest(testId: string): Promise<ScaleValuesRow[]>;
+  /** PRD-56 FR-21c: stored indicator values of a test's runs, both sources, as stored. */
+  selectIndicatorValuesForTest(testId: string): Promise<IndicatorValuesRow[]>;
   /** PRD-56 FR-07b: срезы — сохранённые наборы условий отбора. */
   /** Записи владельца одной роли; `testId` — только срезы этого теста (Э3). */
   getSlices(ownerId: string, kind?: "slice" | "filter", testId?: string): Promise<AnalyticsSlice[]>;
@@ -1283,6 +1286,10 @@ export class DatabaseStorage implements IStorage {
 
   selectScaleValuesForTest(testId: string): Promise<ScaleValuesRow[]> {
     return this.analyticsRepo.selectScaleValuesForTest(testId);
+  }
+
+  selectIndicatorValuesForTest(testId: string): Promise<IndicatorValuesRow[]> {
+    return this.analyticsRepo.selectIndicatorValuesForTest(testId);
   }
 
   selectAnswersForTest(testId: string): Promise<TestAnswerRow[]> {

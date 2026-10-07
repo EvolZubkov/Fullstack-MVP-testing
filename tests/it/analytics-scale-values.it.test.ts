@@ -160,3 +160,70 @@ describe("selectScaleValuesForTest", () => {
     expect(rows[0].values).toEqual({ burnout: 31 });
   });
 });
+
+describe("selectIndicatorValuesForTest", () => {
+  it("reads the web record and the LMS record as they were stored", async () => {
+    // Normalisation by the indicator type belongs to the summary: the repository does not know
+    // the types and must not guess them.
+    const webId = await webAttempt(undefined, {
+      resultJson: { overallPercent: 70, resultVariables: { idx: 64, style: "kom" } },
+    });
+    const lmsId = await lmsAttempt(null, { variablesJson: { idx: "58" } });
+
+    const rows = await repo.selectIndicatorValuesForTest(testId);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.find(r => r.attemptId === webId)).toEqual({
+      attemptId: webId, source: "web", values: { idx: 64, style: "kom" },
+    });
+    expect(rows.find(r => r.attemptId === lmsId)).toEqual({
+      attemptId: lmsId, source: "telemetry", values: { idx: "58" },
+    });
+  });
+
+  it("an imported row keeps its origin", async () => {
+    await lmsAttempt(null, { origin: "import", variablesJson: { idx: "61" } });
+
+    const rows = await repo.selectIndicatorValuesForTest(testId);
+
+    expect(rows.map(r => r.source)).toEqual(["import"]);
+  });
+
+  it("takes neither another test's runs nor unfinished ones", async () => {
+    await webAttempt(undefined, { testId: otherTestId, resultJson: { resultVariables: { idx: 1 } } });
+    await lmsAttempt(null, { testId: otherTestId, variablesJson: { idx: "1" } });
+    await webAttempt(undefined, { resultJson: null, finishedAt: null });
+    await lmsAttempt(null, { variablesJson: { idx: "1" }, finishedAt: null });
+
+    expect(await repo.selectIndicatorValuesForTest(testId)).toEqual([]);
+  });
+
+  it("a run without indicators stays in the selection with an empty record", async () => {
+    // The row is still a run of the selection: the screen counts it as «не передано».
+    await webAttempt(undefined);
+    await lmsAttempt(null);
+
+    const rows = await repo.selectIndicatorValuesForTest(testId);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.every(r => Object.keys(r.values).length === 0)).toBe(true);
+  });
+
+  it("finds the test of an old telemetry row through its package", async () => {
+    const packageId = randomUUID();
+    await h.current!.db.insert(scormPackages).values({
+      id: packageId,
+      testId,
+      testTitle: "Тест",
+      secretKey: "s",
+      apiBaseUrl: "http://localhost:8135",
+      exportedAt: new Date("2026-09-01T00:00:00Z"),
+      createdBy: userId,
+    } as never);
+    await lmsAttempt(null, { testId: null, packageId, sessionId: "sess-2", variablesJson: { idx: "70" } });
+
+    const rows = await repo.selectIndicatorValuesForTest(testId);
+
+    expect(rows.map(r => r.values)).toEqual([{ idx: "70" }]);
+  });
+});

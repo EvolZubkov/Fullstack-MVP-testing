@@ -803,6 +803,67 @@ export class AnalyticsRepository {
     }
     return out;
   }
+
+  /**
+   * PRD-56 FR-21c, FR-21e: stored indicator values of a test's runs — both sources at once.
+   *
+   * The web keeps them native in `result_json.resultVariables`; telemetry and an imported LMS
+   * export keep them as strings in `variables_json`. The record is returned AS STORED: only the
+   * summary knows each indicator's type, so normalisation happens there
+   * (`services/analytics/indicator-values`). Nothing is recomputed from the answers.
+   *
+   * A finished run without indicators stays in the result with an empty record: it is still a
+   * run of the selection, and the screen reports it as «не передано».
+   */
+  async selectIndicatorValuesForTest(testId: string): Promise<IndicatorValuesRow[]> {
+    const [webRows, lmsRows] = await Promise.all([
+      db
+        .select({ id: attempts.id, resultJson: attempts.resultJson })
+        .from(attempts)
+        .where(and(eq(attempts.testId, testId), sql`${attempts.resultJson} is not null`)),
+      db
+        .select({
+          id: scormAttempts.id,
+          origin: scormAttempts.origin,
+          variablesJson: scormAttempts.variablesJson,
+        })
+        .from(scormAttempts)
+        .leftJoin(scormPackages, eq(scormPackages.id, scormAttempts.packageId))
+        .where(and(
+          eq(sql`coalesce(${scormAttempts.testId}, ${scormPackages.testId})`, testId),
+          sql`${scormAttempts.finishedAt} is not null`,
+        )),
+    ]);
+
+    const out: IndicatorValuesRow[] = [];
+    for (const row of webRows) {
+      const stored = (row.resultJson as { resultVariables?: unknown } | null)?.resultVariables;
+      out.push({ attemptId: row.id, source: "web", values: recordOf(stored) });
+    }
+    for (const row of lmsRows) {
+      out.push({
+        attemptId: row.id,
+        source: (row.origin ?? "telemetry") as ObservationSourceName,
+        values: recordOf(row.variablesJson),
+      });
+    }
+    return out;
+  }
+}
+
+/** Stored indicator values of ONE run, as found in its record. */
+export interface IndicatorValuesRow {
+  attemptId: string;
+  source: ObservationSourceName;
+  /** Raw record «indicator name -> value»; normalised by the indicator type in the summary. */
+  values: Record<string, unknown>;
+}
+
+/** A JSON object as a record; anything else (null, array, scalar) as an empty one. */
+function recordOf(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 /** Ответ на вопрос, записанный прохождением из LMS. */
