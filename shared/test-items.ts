@@ -123,3 +123,32 @@ export function remapItemKey(key: string, idMap: ReadonlyMap<string, string>): s
   }
   return null;
 }
+
+/**
+ * Перестроить общий порядок пунктов под НОВЫЙ порядок тем, сохранив места сценариев.
+ *
+ * Книга Excel задаёт порядок тем, но о пунктах-сценариях не знает. Старый `itemOrder` после неё
+ * продолжал бы диктовать прежний порядок тем — перестановка из книги молча не действовала бы. Здесь
+ * места тем в списке заполняются темами книги по порядку, сценарии остаются на своих местах, лишние
+ * темы книги встают в конец, исчезнувшие — выпадают.
+ *
+ * @param itemOrder Текущий порядок пунктов.
+ * @param topicIds Темы в новом порядке.
+ */
+export function reflowItemOrder(itemOrder: readonly string[], topicIds: readonly string[]): string[] {
+  const queue = [...topicIds];
+  const out: string[] = [];
+  for (const key of itemOrder) {
+    matchTestItem(parseItemKey(key), {
+      topic: () => {
+        const next = queue.shift();
+        if (next) out.push(topicItemKey(next));
+      },
+      scenario: (id) => {
+        out.push(scenarioItemKey(id));
+      },
+    });
+  }
+  for (const rest of queue) out.push(topicItemKey(rest));
+  return out;
+}

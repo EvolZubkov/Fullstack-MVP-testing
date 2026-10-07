@@ -69,6 +69,7 @@ import {
   type ContentPage,
   type TemplateManifest,
 } from "@shared/schema";
+import { isScenarioItemKey, reflowItemOrder } from "@shared/test-items";
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
@@ -435,6 +436,53 @@ export function resolveSectionGroups(
     out.push({ key, label, order: index });
   });
   return out;
+}
+
+/**
+ * «Сценарий в ИС»: не дать книге тихо испортить пункты-сценарии роутера.
+ *
+ * Книга сценарии не переносит (они едут архивом, тест целиком — пакетом `.tbtest`), а значит и
+ * не вправе их трогать. Два места, где она трогала бы молча:
+ *
+ * - правила разблокировки книга пишет объектом ЦЕЛИКОМ — правила пунктов `scenario:<id>`, которых
+ *   она выразить не может, сохраняются из теста;
+ * - порядок тем книга задаёт разделами, а общий порядок пунктов `router.itemOrder` остался бы
+ *   прежним и перекрыл бы его — порядок перестраивается под темы книги, места сценариев те же.
+ *
+ * @param currentFlow `flow_policy_json` теста до загрузки.
+ * @param patch Изменения теста из книги; правится на месте.
+ * @param topicIds Темы книги по порядку; `null` — книга разделов не задавала.
+ *
+ * @public Экспортируется ради тестов.
+ */
+export function keepRouterItemsFromBook(
+  currentFlow: unknown,
+  patch: Record<string, unknown>,
+  topicIds: string[] | null,
+): void {
+  const cur = (currentFlow ?? {}) as { mode?: unknown; router?: Record<string, unknown> | null };
+  const curRouter = cur.router && typeof cur.router === "object" ? cur.router : {};
+  const scenarioRules = Object.entries((curRouter.sectionUnlockRules ?? {}) as Record<string, unknown>)
+    .filter(([key]) => isScenarioItemKey(key));
+  const itemOrder = Array.isArray(curRouter.itemOrder) ? (curRouter.itemOrder as string[]) : [];
+  if (scenarioRules.length === 0 && itemOrder.length === 0) return;
+
+  const next = (patch.flowPolicyJson ?? currentFlow ?? {}) as { mode?: unknown; router?: Record<string, unknown> | null };
+  if (next.mode !== "router_by_topics" || !next.router) return;
+  const router: Record<string, unknown> = { ...next.router };
+  let changed = false;
+
+  if (patch.flowPolicyJson && scenarioRules.length > 0) {
+    const rules = { ...((router.sectionUnlockRules ?? {}) as Record<string, unknown>) };
+    for (const [key, rule] of scenarioRules) if (!(key in rules)) rules[key] = rule;
+    router.sectionUnlockRules = rules;
+    changed = true;
+  }
+  if (topicIds && itemOrder.length > 0) {
+    router.itemOrder = reflowItemOrder(itemOrder, topicIds);
+    changed = true;
+  }
+  if (changed) patch.flowPolicyJson = { ...next, router };
 }
 
 /**
@@ -2357,6 +2405,11 @@ export async function importWorkbook(
     }
   }
 
+  keepRouterItemsFromBook(
+    currentTest?.flowPolicyJson,
+    patch,
+    sections.length > 0 ? sections.map((s) => s.topicId) : null,
+  );
   const saves = sections.length > 0 || Object.keys(patch).length > 0;
   const payload = {
     test: {

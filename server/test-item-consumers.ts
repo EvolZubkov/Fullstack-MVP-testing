@@ -55,8 +55,8 @@ export const ITEM_CONSUMERS: Record<string, ItemDecision> = {
   "server/services/analytics/test-psychometrics.ts": { decision: "gap", stage: "Э5", what: "Психометрия теста с пунктами-сценариями" },
   "server/services/lms-export-import.ts": { decision: "gap", stage: "Э5", what: "Импорт выгрузки LMS не сопоставляет ответы пунктам-сценариям" },
   "server/services/lms-test-resolver.ts": { decision: "gap", stage: "Э5", what: "Опознание теста по выгрузке не видит тем-банков пунктов" },
-  "server/routes/tests-workbook.ts": { decision: "gap", stage: "Э3", what: "Книга Excel теста не несёт пункты-сценарии" },
-  "server/services/workbook-import.ts": { decision: "gap", stage: "Э3", what: "Импорт книги не знает пунктов-сценариев" },
+  "server/routes/tests-workbook.ts": { decision: "not-applicable", why: "Книга — формат содержимого: сценарии в ней не переносятся (вопрос — архивом, тест целиком — пакетом `.tbtest`); режим «Сценарий» книга называет" },
+  "server/services/workbook-import.ts": { decision: "handles", how: "Пункты не трогает: правила разблокировки `scenario:<id>` и места сценариев в `router.itemOrder` переживают книгу (`keepRouterItemsFromBook`)" },
   "server/services/test-transfer/target.ts": { decision: "handles", how: "Пакет — снимок теста целиком, с `scenarios`; цель читает пункты, diff ведёт их по id, ключи `scenario:<id>` перенумеровываются (`remapItemKey`)" },
   "server/storage/test-transfer-repository.ts": { decision: "handles", how: "Пишет пункты-сценарии и при копии целиком, и при выборочном импорте" },
 };

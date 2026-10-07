@@ -386,6 +386,13 @@ function branch(value: unknown, ...path: string[]): Record<string, unknown> {
  */
 export const MODE_LABELS = { standard: "Стандартный", adaptive: "Адаптивный" };
 
+/**
+ * Значения параметра «Режим теста». Отдельно от {@link MODE_LABELS}: тот же словарь называет
+ * ветви отчёта, а у режима «Сценарий» своей ветви нет. «Сценарий в ИС»: режим книга называет, но
+ * пункт-сценарий не переносит — он едет архивом сценария, а тест целиком — пакетом `.tbtest`.
+ */
+export const TEST_MODE_LABELS = { ...MODE_LABELS, scenario: "Сценарий" };
+
 const FLOW_LABELS = {
   linear_flat: "Линейный",
   linear_by_topics: "Линейный по темам",
@@ -536,7 +543,7 @@ export const SETTING_PARAMS: SettingParam[] = [
     read: (s) => String(s.folderPath ?? ""),
     write: (raw, draft) => { draft.folderPath = raw; return; },
   },
-  enumParam("Режим теста", MODE_LABELS, (s) => s.mode, "test", "mode"),
+  enumParam("Режим теста", TEST_MODE_LABELS, (s) => s.mode, "test", "mode"),
   {
     // The editor's field keeps the full «Сценарий прохождения» label (audit decision 26);
     // outside its panel — the workbook, validation, the guides — the parameter is named by

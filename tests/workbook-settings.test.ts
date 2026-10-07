@@ -489,3 +489,14 @@ describe("реестр листа «Настройки»", () => {
     expect(draft.test.maxAttempts).toBe(5);
   });
 });
+
+describe("«Сценарий в ИС»: режим «Сценарий» в книге", () => {
+  it("ходит по кругу и не ломает перечисление прежних режимов", () => {
+    const rows = serializeSettingsRows({ mode: "scenario" });
+    const cell = rows.find((r) => r["Параметр"] === "Режим теста");
+    expect(cell?.["Значение"]).toBe("Сценарий");
+    const { draft, errors } = parseSettingsSheet([cell as Record<string, unknown>]);
+    expect(errors).toEqual([]);
+    expect(draft.test.mode).toBe("scenario");
+  });
+});
