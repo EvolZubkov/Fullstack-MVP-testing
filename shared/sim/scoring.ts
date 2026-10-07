@@ -11,8 +11,9 @@
  * occurrence, not points: the same scenario then costs the same in a test priced at 1 and in
  * one priced at 10.
  *
- * The values here are the system defaults. Their chain «система → тест → вопрос» and the editor
- * for it come at stage Э5; until then every test grades with these.
+ * The values here are the system defaults. The chain «система → тест → вопрос» is
+ * {@link resolveSimScoring}: each penalty, and the partial-credit switch, is taken from the
+ * nearest level that sets it (stage Э5а).
  *
  * Pure and framework-free: the web grader runs it now, the SCORM runtime gets its twin at Э4.
  */
@@ -93,4 +94,52 @@ export function simulationRatio(
   const share = goalShare(run, countPartial);
   if (share === 0) return 0;
   return Math.max(0, Math.min(1, share - penaltyShare(run, penalties)));
+}
+
+/** The six penalties, in the order the editor shows them. */
+export const SIM_PENALTY_KEYS: readonly (keyof SimPenalties)[] = ["miss", "blocked", "wrongValue", "detour", "trap", "hint"];
+
+/** One level of the chain: any penalty, and the switch, may be absent. */
+export interface SimScoringLevel {
+  penalties?: Partial<SimPenalties> | null;
+  countPartial?: boolean | null;
+}
+
+/** The fully resolved scoring of one scenario question in one test. */
+export interface ResolvedSimScoring {
+  kind: "simulation";
+  penalties: SimPenalties;
+  countPartial: boolean;
+}
+
+/** A penalty a level may legitimately set: a finite share of the price in [0, 1]. */
+function isShare(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+/**
+ * Resolve the chain «система → тест → вопрос в тесте». Each penalty is taken on its own from the
+ * nearest level that sets it, so a question may raise one penalty and inherit the rest.
+ *
+ * @param testLevel The test's defaults (`tests.sim_scoring_json`).
+ * @param questionLevel The question's override in this test (`test_question_scoring.scoring_json`).
+ */
+export function resolveSimScoring(
+  testLevel?: SimScoringLevel | null,
+  questionLevel?: SimScoringLevel | null,
+): ResolvedSimScoring {
+  const penalties = { ...DEFAULT_SIM_PENALTIES } as SimPenalties;
+  for (const key of SIM_PENALTY_KEYS) {
+    const fromQuestion = questionLevel?.penalties?.[key];
+    const fromTest = testLevel?.penalties?.[key];
+    if (isShare(fromQuestion)) penalties[key] = fromQuestion;
+    else if (isShare(fromTest)) penalties[key] = fromTest;
+  }
+  const countPartial =
+    typeof questionLevel?.countPartial === "boolean"
+      ? questionLevel.countPartial
+      : typeof testLevel?.countPartial === "boolean"
+        ? testLevel.countPartial
+        : true;
+  return { kind: "simulation", penalties, countPartial };
 }

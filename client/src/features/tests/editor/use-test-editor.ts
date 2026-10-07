@@ -435,6 +435,7 @@ function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
     title: item.title?.trim() || null,
     required: item.required !== false,
     groupKey: item.groupKey ?? null,
+    defaultPoints: item.defaultPoints ?? null,
   }));
   if (adaptive) {
     payload.showDifficultyLevel = adaptive.showDifficultyLevel;

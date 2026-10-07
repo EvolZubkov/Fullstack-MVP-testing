@@ -18,7 +18,8 @@
  *   - §6.8  empty `description`/`webhookUrl` normalised to `null`
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
-import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy, SectionGroup } from "@shared/schema";
+import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy, SectionGroup, SimScoringSettings } from "@shared/schema";
+import { simScoringSettingsSchema } from "@shared/schema";
 import type { ReportSettings, TestIntro, IntroText, BreakdownDisplaySetting } from "@shared/schema";
 import type { LearnerVisibility, LevelTone } from "@shared/scales/interpretation";
 import {
@@ -151,7 +152,7 @@ function readScenarioItemsFromApi(src: ApiTestResponse): ScenarioItemDraft[] {
   const items = (src as { scenarios?: unknown }).scenarios;
   if (!Array.isArray(items)) return [];
   return items.flatMap((raw): ScenarioItemDraft[] => {
-    const item = raw as { id?: unknown; topicId?: unknown; topicName?: unknown; questionId?: unknown; title?: unknown; required?: unknown; groupKey?: unknown };
+    const item = raw as { id?: unknown; topicId?: unknown; topicName?: unknown; questionId?: unknown; title?: unknown; required?: unknown; groupKey?: unknown; defaultPoints?: unknown };
     if (typeof item.topicId !== "string") return [];
     return [{
       ...(typeof item.id === "string" ? { id: item.id } : {}),
@@ -161,8 +162,24 @@ function readScenarioItemsFromApi(src: ApiTestResponse): ScenarioItemDraft[] {
       title: typeof item.title === "string" ? item.title : null,
       required: item.required !== false,
       ...(typeof item.groupKey === "string" ? { groupKey: item.groupKey } : {}),
+      ...(typeof item.defaultPoints === "number" ? { defaultPoints: item.defaultPoints } : {}),
     }];
   });
+}
+
+/** «Сценарий в ИС» (Э5а): штрафы сценариев теста из ответа; чужая форма читается как «нет». */
+function readSimScoringFromApi(src: ApiTestResponse): SimScoringSettings | null {
+  const parsed = simScoringSettingsSchema.safeParse((src as { simScoringJson?: unknown }).simScoringJson);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Штрафы теста для сохранения: ни одного заданного значения — `null`. */
+function simScoringForSave(value: SimScoringSettings | null | undefined): SimScoringSettings | null {
+  if (!value) return null;
+  const penalties = value.penalties && Object.keys(value.penalties).length > 0 ? value.penalties : undefined;
+  const countPartial = typeof value.countPartial === "boolean" ? value.countPartial : undefined;
+  if (!penalties && countPartial === undefined) return null;
+  return { ...(penalties ? { penalties } : {}), ...(countPartial !== undefined ? { countPartial } : {}) };
 }
 
 function isFlowMode(value: unknown): value is FlowMode {
@@ -1438,6 +1455,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       defaultQuestionPoints:
         typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
       questionOverrides: buildQuestionOverridesFromApi(src),
+      simDefaults: readSimScoringFromApi(src),
     },
     deliveryExcludedQuestionIds: readDeliveryExcludedFromApi(src),
   };
@@ -1535,6 +1553,8 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     // PRD-15 block D (FR-31): test-wide default price (null = system default).
     // Defensive `?.` — drafts persisted before block D have no scoring slice.
     defaultQuestionPoints: model.scoring?.defaultQuestionPoints ?? null,
+    // «Сценарий в ИС» (Э5а): штрафы теста; пустой набор уходит `null` — системные умолчания.
+    simScoringJson: simScoringForSave(model.scoring?.simDefaults),
     // PRD-51: документ уходит на сервер ТОЛЬКО если автор его правил. Отсутствие поля
     // означает «не трогать», и это не то же, что пустой список: пустой список стёр бы
     // документ теста, документа не собиравшего, — сохранением с чужой вкладки.

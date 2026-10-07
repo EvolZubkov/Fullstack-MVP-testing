@@ -202,8 +202,13 @@ var ScoringEngine = (function () {
     // повторяется здесь: он приходит из общего бандла (`TBTemplate.simulationRatio`,
     // `shared/sim/scoring`), как сравнение текстовых ответов, — вторая копия разошлась бы.
     if (typeof TBQType !== 'undefined' && TBQType.isSimulation(type)) {
+      // Штрафы и «засчитывать частичное» запечены в вопрос уже разрешёнными по цепочке
+      // система → тест → вопрос (`scoring.kind === 'simulation'`); без них — системные умолчания.
+      var sim = scoring && scoring.kind === 'simulation' ? scoring : null;
       var simRatio = (typeof TBTemplate !== 'undefined' && TBTemplate.simulationRatio)
-        ? TBTemplate.simulationRatio(answer)
+        ? (sim
+          ? TBTemplate.simulationRatio(answer, sim.penalties, sim.countPartial !== false)
+          : TBTemplate.simulationRatio(answer))
         : 0;
       return { score: simRatio, sMax: 1, ratio: simRatio };
     }

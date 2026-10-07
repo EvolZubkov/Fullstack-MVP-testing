@@ -432,6 +432,7 @@ CREATE TABLE "test_scenarios" (
 	"time_limit_minutes" integer,
 	"image_url" text,
 	"group_key" text,
+	"default_points" integer,
 	"sort_order" integer DEFAULT 0 NOT NULL
 );
 
@@ -493,6 +494,7 @@ CREATE TABLE "tests" (
 	"design_settings_json" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"retake_policy_json" jsonb,
 	"default_question_points" integer,
+	"sim_scoring_json" jsonb,
 	"question_order" text DEFAULT 'random' NOT NULL,
 	"allow_return_to_unanswered" boolean DEFAULT true NOT NULL,
 	"allow_answer_change" boolean DEFAULT false NOT NULL,

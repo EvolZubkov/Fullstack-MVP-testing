@@ -47,10 +47,12 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   simulation: "Сценарий",
 };
 
-const METHOD_LABEL: Record<"exact" | "weighted" | "tiered", string> = {
+const METHOD_LABEL: Record<"exact" | "weighted" | "tiered" | "simulation", string> = {
   exact: "точное совпадение",
   weighted: "веса опций",
   tiered: "ступенчато",
+  // «Сценарий в ИС»: доля цели минус штрафы.
+  simulation: "штрафы сценария",
 };
 
 /** «Москва, Тула (T = 2)» — what the key says, in the terms the tiers use. */

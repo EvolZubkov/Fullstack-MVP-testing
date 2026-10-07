@@ -15,6 +15,7 @@ import ExcelJS from "exceljs";
 import { logger } from "../logger";
 import { addAoaSheet, addJsonSheet, readWorkbookFromBuffer, workbookToBuffer } from "../utils/excel";
 import { storage } from "../storage";
+import { isSimulation } from "@shared/questions/question-type";
 import { requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { respondWorkbookReadError, workbookUploadSingle } from "../middleware/upload";
@@ -194,7 +195,10 @@ router.get(
       // «Вопросы» = вопросы тем теста ∪ вопросы, измеряемые в тесте (round-trip).
       const measuredIds = new Set(measurements.map((m) => m.questionId));
       const allQuestions = await storage.getQuestions();
+      // «Сценарий в ИС»: вопрос-сценарий книга не переносит (он едет архивом `.scenario.zip`) —
+      // ровно как экспорт банка вопросов; иначе сценарий обычной темы ушёл бы строкой без смысла.
       const questions = allQuestions
+        .filter((q) => !isSimulation(q.type))
         .filter((q) => topicIds.has(q.topicId) || measuredIds.has(q.id))
         .sort((a, b) => (topicName.get(a.topicId) || "").localeCompare(topicName.get(b.topicId) || "", "ru"));
 

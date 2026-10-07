@@ -23,7 +23,7 @@ import {
   contentPages,
   templates,
 } from "@shared/schema";
-import type { Test, ContentPage, TemplateManifest, DrawBlueprint, FormSet, BreakdownDisplaySetting, SectionGroup } from "@shared/schema";
+import type { Test, ContentPage, TemplateManifest, DrawBlueprint, FormSet, BreakdownDisplaySetting, SectionGroup, SimScoringSettings } from "@shared/schema";
 import type { RichTextFormat } from "@shared/template/rich-text";
 import { sanitizeDescription } from "./description-format";
 import {
@@ -209,6 +209,8 @@ export interface TestPayload {
   folderId?: string | null;
   /** PRD-15 block D (FR-31): test-wide default price; null = system default. */
   defaultQuestionPoints?: number | null;
+  /** «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию; null — системные. */
+  simScoringJson?: SimScoringSettings | null;
   /**
    * PRD-13: test owner (= creator/importer). Written INSIDE the create INSERT so
    * ownership is atomic with the row — not a fragile post-insert `setTestOwner`
@@ -235,6 +237,8 @@ export interface ScenarioPayload {
   imageUrl?: string | null;
   /** Группа тем, в которой стоит пункт; `null`/отсутствие — «вне групп». */
   groupKey?: string | null;
+  /** Балл по умолчанию для сценариев пункта; `null`/отсутствие — по тесту. */
+  defaultPoints?: number | null;
 }
 
 export interface CreatePayload {
@@ -379,6 +383,7 @@ export class TestSettingsService {
         designSettingsJson: (payload.test.designSettingsJson as Record<string, unknown>) ?? {},
         folderId: payload.test.folderId ?? null,
         defaultQuestionPoints: payload.test.defaultQuestionPoints ?? null,
+        simScoringJson: payload.test.simScoringJson ?? null,
       }).returning();
 
       await this._insertSections(tx, id, payload.sections);
@@ -887,6 +892,7 @@ export class TestSettingsService {
         timeLimitMinutes: s.timeLimitMinutes ?? null,
         imageUrl: s.imageUrl ?? null,
         groupKey: s.groupKey ?? null,
+        defaultPoints: s.defaultPoints ?? null,
         sortOrder: i,
       });
     }

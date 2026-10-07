@@ -46,6 +46,9 @@ export type ParseScoringResult =
  */
 export function serializeScoring(scoring: QuestionScoring | null | undefined): string {
   if (!scoring || scoring.kind === "exact") return "";
+  // «Сценарий в ИС»: книга сценарии не переносит — их строки отсеиваются ещё на листе «Вопросы»,
+  // поэтому до «Оценки» их штрафы не доходят. Пустая ячейка здесь — не потеря, а неприменимость.
+  if (scoring.kind === "simulation") return "";
 
   if (scoring.kind === "weighted") {
     const base = `веса: ${scoring.weights.join(" # ")}`;

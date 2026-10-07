@@ -283,6 +283,27 @@ export const scoringTierSchema = z.object({
  *                (non-additive step table over the answer counters).
  * `sMax` is optional and otherwise derived: max(weights) | max(tier.score).
  */
+/**
+ * «Сценарий в ИС» (этап Э5а): штрафы прогона — доли цены вопроса за каждый случай. Любой штраф
+ * может отсутствовать: тогда он берётся уровнем выше (вопрос → тест → система,
+ * `shared/sim/scoring.resolveSimScoring`).
+ */
+export const simPenaltiesSchema = z.object({
+  miss: z.number().min(0).max(1).optional(),
+  blocked: z.number().min(0).max(1).optional(),
+  wrongValue: z.number().min(0).max(1).optional(),
+  detour: z.number().min(0).max(1).optional(),
+  trap: z.number().min(0).max(1).optional(),
+  hint: z.number().min(0).max(1).optional(),
+});
+
+/** Настройки оценки сценариев одного уровня: штрафы и «засчитывать частичное выполнение». */
+export const simScoringSettingsSchema = z.object({
+  penalties: simPenaltiesSchema.optional(),
+  countPartial: z.boolean().optional(),
+});
+export type SimScoringSettings = z.infer<typeof simScoringSettingsSchema>;
+
 export const questionScoringSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("exact") }),
   z.object({
@@ -295,6 +316,10 @@ export const questionScoringSchema = z.discriminatedUnion("kind", [
     tiers: z.array(scoringTierSchema).min(1),
     sMax: z.number().positive().optional(),
   }),
+  // «Сценарий в ИС»: штрафы вопроса-сценария в этом тесте. Хранится в переопределении вопроса
+  // (`test_question_scoring.scoring_json`); полностью разрешённое значение того же вида кладёт в
+  // вопрос контекст оценки — его читают подсчёт веба и пакет.
+  simScoringSettingsSchema.extend({ kind: z.literal("simulation") }),
 ]);
 
 export type ScoringCondition = z.infer<typeof scoringConditionSchema>;
@@ -672,6 +697,11 @@ export const tests = pgTable("tests", {
   // default — the effective chain falls through to the system default (1 point).
   defaultQuestionPoints: integer("default_question_points"),
   /**
+   * «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию и «засчитывать частичное
+   * выполнение». NULL или отсутствующий штраф — системное умолчание.
+   */
+  simScoringJson: jsonb("sim_scoring_json").$type<SimScoringSettings>(),
+  /**
    * PRD-30 FR-16: the test-wide delivery order, and the default every topic
    * inherits unless it overrides it (`test_sections.question_order`).
    *
@@ -975,6 +1005,8 @@ export const testScenarios = pgTable("test_scenarios", {
    * `test_sections.group_key`. NULL или ключ, которого тест не объявлял, — «вне групп».
    */
   groupKey: text("group_key"),
+  /** Балл по умолчанию для сценариев пункта (как `test_sections.default_points`); NULL — по тесту. */
+  defaultPoints: integer("default_points"),
   /** Порядок пунктов теста (в роутере — общий с темами, этап Э3). */
   sortOrder: integer("sort_order").notNull().default(0),
 }, (table) => ({

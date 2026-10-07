@@ -19,9 +19,16 @@
 
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
-import { Banner, Box, Button, Input, ModalDialog } from "@skillum/ui-kit";
+import { Banner, Box, Button, Input, ModalDialog, Tag } from "@skillum/ui-kit";
 
-import { distributesBudget } from "@shared/questions/question-type";
+import { distributesBudget, isSimulation } from "@shared/questions/question-type";
+import { questionLabel } from "@shared/questions/question-label";
+import { resolveSimScoring, type ResolvedSimScoring } from "@shared/sim/scoring";
+import { summarizeScenario } from "@shared/sim/validate";
+import type { Scenario } from "@shared/sim/contract";
+import type { SimScoringSettings } from "@shared/schema";
+import { plural } from "@/features/questions/scenario/scenario-summary";
+import { SimPartialChoice, SimPenaltiesTable } from "./sim-penalties";
 import type { CorrectData } from "@shared/scoring/engine";
 import type { Question, QuestionScoring } from "@shared/schema";
 import type { QuestionScoringOverride, QuestionScoringPatch } from "../scoring-api";
@@ -38,6 +45,16 @@ export type QuestionScoringModalProps = {
   question: Question;
   /** Topic name shown in the modal subtitle. */
   sectionName: string;
+  /**
+   * «Сценарий в ИС»: вопрос открыт из карточки пункта-сценария — подзаголовок называет пункт, а не
+   * тему. Нет — тема.
+   */
+  sectionKind?: "topic" | "scenario";
+  /**
+   * «Сценарий в ИС» (Э5а): штрафы и частичное выполнение уровнем выше (тест → система) — подсказки
+   * пустых полей окна сценария.
+   */
+  simInherited?: ResolvedSimScoring;
   override: QuestionScoringOverride | null;
   sectionDefaultPoints: number | null;
   testDefaultPoints: number | null;
@@ -66,11 +83,48 @@ function parseOverrideNumber(raw: string, max?: number): number | null | undefin
   return n;
 }
 
+/** Без цепочки уровнем выше окно сценария подсказывает системные умолчания. */
+const FALLBACK_SIM: ResolvedSimScoring = resolveSimScoring(null, null);
+
+/** Штрафы вопроса для сохранения: ничего не задано — переопределения нет. */
+function simulationScoring(
+  penalties: NonNullable<SimScoringSettings["penalties"]>,
+  countPartial: boolean | null,
+): QuestionScoring | null {
+  const hasPenalties = Object.keys(penalties).length > 0;
+  if (!hasPenalties && countPartial === null) return null;
+  return {
+    kind: "simulation",
+    ...(hasPenalties ? { penalties } : {}),
+    ...(countPartial !== null ? { countPartial } : {}),
+  };
+}
+
+/** «Сценарий: 11 сцен, 1 ловушка, 4 проверки цели. » — из сводки хранимого сценария. */
+function scenarioFacts(question: Question): string {
+  const scenario = (question.dataJson as { scenario?: Scenario } | null)?.scenario;
+  if (!scenario?.scenes) return "";
+  try {
+    const s = summarizeScenario(scenario);
+    return `Сценарий: ${plural(s.scenes, ["сцена", "сцены", "сцен"])}, ${plural(s.traps, ["ловушка", "ловушки", "ловушек"])}, ${plural(s.checks, ["проверка", "проверки", "проверок"])} цели. `;
+  } catch {
+    return "";
+  }
+}
+
 export function QuestionScoringModal(props: QuestionScoringModalProps) {
   const {
-    question, sectionName, override,
+    question, sectionName, sectionKind = "topic", simInherited, override,
     sectionDefaultPoints, testDefaultPoints, readOnly, onApply, onReset, onClose,
   } = props;
+
+  // «Сценарий в ИС» (Э5а): у сценария вместо способа оценки — штрафы прогона по цепочке.
+  const simulation = isSimulation(question.type);
+  const ownSim = override?.scoringJson?.kind === "simulation" ? override.scoringJson : null;
+  const [simPenalties, setSimPenalties] = useState<NonNullable<SimScoringSettings["penalties"]>>(ownSim?.penalties ?? {});
+  const [simPartial, setSimPartial] = useState<boolean | null>(
+    typeof ownSim?.countPartial === "boolean" ? ownSim.countPartial : null,
+  );
 
   const type = question.type as BuilderQuestionType;
   const options = questionOptions(question);
@@ -112,7 +166,9 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
     // The constructor result is the override config. T-40: the question has no
     // own graded config to shadow, so exact mode with no built config = null
     // (no scoring override; the chain falls through to the system exact default).
-    const built = buildScoringJson(type, options, mode, weights, tiers) as QuestionScoring | null;
+    const built = simulation
+      ? simulationScoring(simPenalties, simPartial)
+      : (buildScoringJson(type, options, mode, weights, tiers) as QuestionScoring | null);
     // Deferred: hand the patch to the editor draft. The section pins the
     // question's current contentHash and persists on «Сохранить».
     onApply({ points: parsedPoints, scoringJson: built ?? null, difficulty: parsedDifficulty });
@@ -126,7 +182,7 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
       title="Оценка вопроса в тесте"
       // Тема, а не «секция»: так этот же объект назван в «Составе» и в «Оценке ответа», а
       // два имени у одного места заставляют автора гадать, одно ли это.
-      description={`Тема «${sectionName}»`}
+      description={sectionKind === "scenario" ? `Пункт «${sectionName}»` : `Тема «${sectionName}»`}
       footer={
         <>
           {/* Левая зона футера (эскиз: ou-modal__foot--between). */}
@@ -143,7 +199,7 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
           <Button variant="ghost" onClick={onClose} data-testid="qscoring-cancel">
             Отмена
           </Button>
-          {gradable && (
+          {gradable && !simulation && (
             <Button
               variant="secondary"
               onClick={() => setPreviewOpen(true)}
@@ -176,12 +232,21 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
 
       {error && <Banner tone="error" size="sm" description={error} />}
 
+      {simulation ? (
+        <div className="tb-qscoring__recap" data-testid="qscoring-sim-recap">
+          <b>{questionLabel(question)}</b>
+          <br />
+          {scenarioFacts(question)}Базовая сложность вопроса: {question.difficulty ?? "не задана"}. Сцены,
+          действия и проверки правятся в архиве сценария; здесь — только оценка для этого теста.
+        </div>
+      ) : (
       <div className="tb-qscoring__recap">
         <b>{question.prompt}</b>
         <br />
         Базовая сложность вопроса: {question.difficulty}. Текст и варианты правятся в банке
         вопросов; здесь — только оценка для этого теста.
       </div>
+      )}
 
       <div className="tb-qscoring__modal-grid">
         <Input
@@ -224,7 +289,28 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
         />
       )}
 
-      {distributesBudget(type) ? (
+      {simulation ? (
+        <>
+          <div className="tb-qscoring__price">
+            <span className="tb-qscoring__price-lbl">Цена ответа · штрафы</span>
+            <Tag tone="neutral" variant="outline">% цены вопроса за каждый случай</Tag>
+          </div>
+          <SimPenaltiesTable
+            value={simPenalties}
+            inherited={(simInherited ?? FALLBACK_SIM).penalties}
+            onChange={setSimPenalties}
+            disabled={readOnly}
+            label="Штрафы сценария в этом тесте"
+            testIdPrefix="qscoring-sim"
+          />
+          <SimPartialChoice
+            value={simPartial}
+            inherited={(simInherited ?? FALLBACK_SIM).countPartial}
+            onChange={setSimPartial}
+            disabled={readOnly}
+          />
+        </>
+      ) : distributesBudget(type) ? (
         <Box border="dashed" radius="m" pad={4} style={{ color: "var(--ou-fg-muted)" }} data-testid="qscoring-allocation-note">
           Распределение баллов не проверяется и баллов не приносит: его результат — вклад в шкалы,
           который задаётся на вкладке «Вклады вопросов». Цена ответа к типу неприменима.

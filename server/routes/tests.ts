@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, breakdownDisplaySchema, breakdownFeedbackSchema, breakdownInterpretationSchema, interpretationSchema, sectionGroupsSchema, questionScoringSchema, designSettingsSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, reportSettingsSchema, testIntroSchema, breakdownDisplaySchema, breakdownFeedbackSchema, breakdownInterpretationSchema, interpretationSchema, sectionGroupsSchema, questionScoringSchema, designSettingsSchema, simScoringSettingsSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate, readManifestContentTemplates, readVariantLayouts } from "../services/template-render";
 import { withTemplateAssetBase } from "@shared/template/asset-base";
@@ -121,6 +121,8 @@ const scenarioBodySchema = z.object({
   imageUrl: z.string().nullable().optional(),
   // Группа тем, в которой стоит пункт роутера (как `group_key` раздела).
   groupKey: z.string().min(1).nullable().optional(),
+  // Балл по умолчанию для сценариев пункта (как у раздела темы); null — по тесту.
+  defaultPoints: z.number().int().min(0).nullable().optional(),
 });
 
 /**
@@ -218,6 +220,8 @@ const testBodyBaseSchema = z.object({
   sectionGroupsJson: sectionGroupsSchema.nullish(),
   // PRD-15 block D (FR-31): test-wide default price; null = system default (1).
   defaultQuestionPoints: z.number().int().min(0).nullable().optional(),
+  // «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию; null — системные умолчания.
+  simScoringJson: simScoringSettingsSchema.nullable().optional(),
 
   /** Destination folder for create (PRD-7 §5.5 — FAB folder-pick modal). */
   folderId: z.string().nullable().optional(),
@@ -789,6 +793,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       breakdownGateEnabled,
       sectionGroupsJson,
       defaultQuestionPoints,
+      simScoringJson,
       designSettingsJson,
       folderId,
     } = parsed.data;
@@ -882,6 +887,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         breakdownGateEnabled,
         sectionGroupsJson: sectionGroupsJson ?? null,
         defaultQuestionPoints: defaultQuestionPoints ?? null,
+        simScoringJson: simScoringJson ?? null,
         designSettingsJson: designSettings,
         folderId: folderId ?? null,
         // PRD-13: creator owns the test atomically in the INSERT (the post-insert
@@ -1281,6 +1287,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       breakdownGateEnabled,
       sectionGroupsJson,
       defaultQuestionPoints,
+      simScoringJson,
     } = parsed.data;
 
     const expectedVersion = typeof (req.body as { expectedVersion?: unknown })?.expectedVersion === "number"
@@ -1372,6 +1379,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         breakdownGateEnabled,
         sectionGroupsJson,
         defaultQuestionPoints,
+        simScoringJson,
       },
       // PRD-51: документ отчёта уходит службе как есть — она заменит его в той же
       // транзакции, что и остальной ящик, и сама выведет порядок из позиции.
@@ -1782,10 +1790,22 @@ router.put(
       const question = await storage.getQuestion(req.params.questionId);
       if (!question) return res.status(404).json({ error: "Question not found" });
 
-      // The override only makes sense for a question of the test's own topics.
+      // The override only makes sense for a question of the test's own topics — or, for a
+      // scenario, of the bank topic of one of the test's scenario items.
       const sections = await storage.getTestSections(req.params.id);
-      if (!sections.some((s) => s.topicId === question.topicId)) {
+      const items = await storage.getTestScenarios(req.params.id);
+      if (!sections.some((s) => s.topicId === question.topicId) && !items.some((i) => i.topicId === question.topicId)) {
         return res.status(422).json({ error: "question_not_in_test", message: "Вопрос не входит в темы теста" });
+      }
+      // «Сценарий в ИС»: у сценария своя оценка — штрафы; способы PRD-10 к нему не применяются,
+      // а штрафы — ни к чему, кроме сценария.
+      if (scoringJson && (scoringJson.kind === "simulation") !== isSimulation(question.type)) {
+        return res.status(422).json({
+          error: "scoring_kind_mismatch",
+          message: isSimulation(question.type)
+            ? "Сценарий оценивается штрафами"
+            : "Штрафы сценария применяются только к сценарию",
+        });
       }
 
       if (points == null && scoringJson == null && difficulty == null) {

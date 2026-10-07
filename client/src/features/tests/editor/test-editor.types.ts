@@ -7,7 +7,7 @@
  * 6.2 and 6.3. Any change here must be reflected in decisions.md first.
  */
 
-import type { DrawBlueprint, FormSet, RetakePolicy, SectionGroup } from "@shared/schema";
+import type { DrawBlueprint, FormSet, RetakePolicy, SectionGroup, SimScoringSettings } from "@shared/schema";
 import type { DraftBlock } from "./use-report-document";
 import type { ReportSettings, TestIntro, BreakdownDisplaySetting } from "@shared/schema";
 import type { LearnerVisibility, LevelTone, Valence } from "@shared/scales/interpretation";
@@ -40,6 +40,8 @@ export type ScenarioItemDraft = {
   required?: boolean;
   /** Группа тем, в которой стоит пункт роутера (как `EditorSection.groupKey`); нет — вне групп. */
   groupKey?: string | null;
+  /** Балл по умолчанию для сценариев пункта (вкладка «Оценка ответа»); нет — по тесту. */
+  defaultPoints?: number | null;
 };
 
 export type TestStatus = "draft" | "published" | "archived";
@@ -753,6 +755,11 @@ export type TestEditorModel = {
   scoring: {
     defaultQuestionPoints: number | null;
     questionOverrides: QuestionScoringOverride[];
+    /**
+     * «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию и «засчитывать частичное
+     * выполнение» (`tests.sim_scoring_json`). Отсутствие или `null` — системные умолчания.
+     */
+    simDefaults?: SimScoringSettings | null;
   };
   /**
    * PRD-56: вопросы, исключённые из выдачи в этом тесте. Только для чтения: признак
@@ -840,6 +847,8 @@ export type TestSettingsPayload = {
   sectionGroupsJson?: SectionGroup[] | null;
   /** PRD-15 block D (FR-31): test-wide default price; `null` = system (1). */
   defaultQuestionPoints: number | null;
+  /** «Сценарий в ИС» (Э5а): штрафы сценариев теста по умолчанию; `null` — системные. */
+  simScoringJson?: SimScoringSettings | null;
   /**
    * PRD-51: документ отчёта ветви ТЕКУЩЕГО режима, в порядке печати. ОТСУТСТВИЕ поля =
    * «не трогать»: сохранение с другой вкладки не должно стирать документ. Пустой массив —

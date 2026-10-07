@@ -23,7 +23,7 @@
 
 import type { QuestionScoring, ScoringPredicate } from "../schema";
 import { hasBlanks, isSimulation, isSingleIndexChoice, isTextEntry } from "../questions/question-type";
-import { simulationRatio, type GradedRun } from "../sim/scoring";
+import { DEFAULT_SIM_PENALTIES, simulationRatio, type GradedRun } from "../sim/scoring";
 import { checkRuleSet, type AnswerRuleSet, type RuleVerdicts } from "../answer-check/rules";
 
 /**
@@ -98,7 +98,7 @@ export interface ScoreResult {
  */
 export interface ScoreExplain extends ScoreResult {
   /** The scoring method that was applied. */
-  kind: "exact" | "weighted" | "tiered";
+  kind: "exact" | "weighted" | "tiered" | "simulation";
   /** Whether the learner gave a non-empty answer (an empty answer always scores 0). */
   answered: boolean;
   /** Correctly-selected units (`c`). */
@@ -316,7 +316,14 @@ export function scoreAnswer(input: ScoreInput): ScoreResult {
   // «Сценарий в ИС»: эталона нет — долю цены даёт исход прогона за вычетом штрафов
   // (`shared/sim/scoring`). Градуированные способы оценки (PRD-10) к сценарию не применяются.
   if (isSimulation(type)) {
-    const ratio = simulationRatio(answer);
+    // Штрафы и «засчитывать частичное» уже разрешены по цепочке (контекст оценки теста кладёт в
+    // вопрос `{ kind: "simulation", … }`); без них — системные умолчания.
+    const sim = scoring?.kind === "simulation" ? scoring : null;
+    const ratio = simulationRatio(
+      answer,
+      sim?.penalties ? { ...DEFAULT_SIM_PENALTIES, ...sim.penalties } : DEFAULT_SIM_PENALTIES,
+      sim?.countPartial ?? true,
+    );
     return { score: ratio, sMax: 1, ratio };
   }
   const kind = scoring?.kind ?? "exact";

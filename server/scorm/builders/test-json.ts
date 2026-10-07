@@ -222,7 +222,10 @@ export function buildTestJson(data: ExportData): string {
       difficulty: scoringCtx.difficultyOf(q) || 50,
       // PRD-10: included only when authored (override or legacy) so packages
       // for unscored questions stay byte-identical (FR-02).
-      ...(eff.source.scoring !== "system" ? { scoring: eff.scoring } : {}),
+      // «Сценарий в ИС»: штрафы сценария печатаются ВСЕГДА — их задаёт и уровень теста, которого
+      // в источнике оценки вопроса не видно (`source` остаётся «system»), а без них пакет считал бы
+      // по системным умолчаниям. Пакетов со сценариями до Э5а не было, байт-идентичности беречь нечего.
+      ...(eff.source.scoring !== "system" || eff.scoring.kind === "simulation" ? { scoring: eff.scoring } : {}),
     };
   };
   // Effective per-topic draw count. `drawAll` (or adaptive mode, which always
