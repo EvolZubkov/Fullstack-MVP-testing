@@ -38,7 +38,8 @@ router.get(
       const test = await storage.getTest(testId);
       if (!test) return res.status(404).json({ error: "Test not found" });
 
-      const { filter } = readTestFilterQuery(req, testId, false);
+      // Every attempt counts here: the attempt rule (PRD-66 FR-51) belongs to psychometrics.
+      const { filter } = readTestFilterQuery(req, testId, "all");
       const [scales, indicators, scaleRows, indicatorRows] = await Promise.all([
         storage.getScales(testId),
         storage.getResultVariables(testId),
