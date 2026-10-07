@@ -7,9 +7,11 @@
     Wireframe: PRD-66 — психометрическая аналитика качества заданий.
     Контракт: docs/specs/prd-66/psychometric-analytics.md.
 
-    Состояния (7):
+    Состояния (9):
       quality       — данных достаточно;
       quality-thin  — данных мало;
+      filter-attempts — окно фильтра, группа «Попытки» (дельта 2026-10-07);
+      best-attempt  — посчитано по лучшей попытке (дельта 2026-10-07);
       compare       — сравнение срезов;
       item          — разбор задания;
       items         — вкладка «Вопросы» после FR-02 и FR-03;
@@ -31,6 +33,16 @@
       .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
 
 
+      /* Окно фильтра: копия правил .ou-filterpanel из vendor/ui-kit/css/skillum-ds.css — в
+         эскизной копии DS их нет. Положение окна в продукте считает Popover; здесь оно
+         прибито под кнопкой «Фильтр». */
+      .ou-filterpanel { display: flex; flex-direction: column; }
+      .ou-filterpanel .ou-popover__body { display: flex; flex-direction: column; gap: var(--ou-space-4); padding: var(--ou-space-6); }
+      .ou-filterpanel .ou-popover__footer { padding: var(--ou-space-3) var(--ou-space-6); }
+      .ou-filterpanel__group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+      .ou-filterpanel__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+      .wf-filter-anchor { position: relative; }
+      .wf-filterpanel { position: absolute; top: calc(var(--ou-space-10) + var(--ou-space-1)); left: 0; z-index: 30; }
       .wf-th-end { justify-content: flex-end; }
       .wf-rowmenu-cell { position: relative; text-align: right; }
       .wf-rowmenu { position: absolute; right: 0; top: 100%; z-index: 20; min-width: var(--wf-size-240); text-align: left; }
@@ -247,6 +259,8 @@
       <button type="button" class="active" onclick="showState(this, 'quality')">данных достаточно</button>
       <button type="button" onclick="showState(this, 'quality-thin')">данных мало</button>
       <button type="button" onclick="showState(this, 'all-attempts')">все попытки</button>
+      <button type="button" onclick="showState(this, 'filter-attempts')">фильтр: попытки</button>
+      <button type="button" onclick="showState(this, 'best-attempt')">лучшая попытка</button>
       <button type="button" onclick="showState(this, 'item')">карточка вопроса</button>
       <button type="button" onclick="showState(this, 'compare')">сравнение срезов</button>
       <button type="button" onclick="showState(this, 'glossary')">глоссарий</button>
@@ -492,6 +506,104 @@
                 <span class="ou-tag ou-tag--neutral ou-tag--s">телеметрия LMS — 301</span>
                 <span class="ou-tag ou-tag--neutral ou-tag--s">импорт выгрузок — 32</span>
                 <span class="ou-tag ou-tag--warning ou-tag--s">все попытки</span>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Качество вопросов: окно фильтра, группа «Попытки» ════════════════ -->
+    <!-- ДЕЛЬТА 2026-10-07: «Попытки» — выбор ОДНОГО правила, а не флажок. Все правила оставляют
+         участнику одну попытку и различаются только тем, какую; по «И» они противоречили бы друг
+         другу. Умолчание — «Только первая». У измерительного теста (общего балла нет) «Только
+         лучшая» недоступна: сравнивать попытки не по чему. Группа есть только на «Вопросах» и
+         «Качестве вопросов» — как и прежний флажок. -->
+    <div id="wf-filter-attempts" class="wf-state" data-tab="quality">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <div class="wf-filter-anchor">
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span><span class="ou-chip__count">2</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'compare')"><span>Сравнить срезы</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button>
+            </div>
+            <div class="ou-filterbar__applied">
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Только первая попытка</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button>
+            </div>
+          </div>
+            <div class="ou-popover ou-popover--xl ou-popover--no-arrow ou-filterpanel wf-filterpanel" role="dialog" aria-label="Фильтр">
+              <div class="ou-popover__body">
+                <div role="group" class="ou-filterpanel__group">
+                  <span class="ou-text ou-text--body-s ou-text--w-medium">Источник</span>
+                  <div class="ou-filterpanel__row"><label class="ou-check"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Веб</span></span></label><label class="ou-check"><input type="checkbox" class="ou-check__input" checked /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Телеметрия LMS</span></span></label><label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Импорт выгрузок</span></span></label></div>
+                </div>
+                <div role="group" class="ou-filterpanel__group">
+                  <span class="ou-text ou-text--body-s ou-text--w-medium">Попытки</span>
+                  <div class="ou-filterpanel__row"><label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="wf-attempts" class="ou-radio__input" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Все</span></span></label><label class="ou-radio-field"><span class="ou-radio ou-radio--m is-on"><input type="radio" name="wf-attempts" class="ou-radio__input" checked /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Только первая</span></span></label><label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="wf-attempts" class="ou-radio__input" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Только лучшая</span></span></label><label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="wf-attempts" class="ou-radio__input" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Только последняя</span></span></label></div>
+                </div>
+                <div role="group" class="ou-filterpanel__group">
+                  <span class="ou-text ou-text--body-s ou-text--w-medium">Исход</span>
+                  <div class="ou-filterpanel__row"><label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Сдал</span></span></label><label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Не сдал</span></span></label><label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Завершено без оценки</span></span></label><label class="ou-check"><input type="checkbox" class="ou-check__input" /><span class="ou-check__box"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.2l2 2 4-5" /></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Не завершено</span></span></label></div>
+                </div>
+              </div>
+              <div class="ou-popover__footer ou-popover__footer--between">
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Сбросить</span></button>
+                <button type="button" class="ou-btn ou-btn--primary ou-btn--s" onclick="showState(null, 'best-attempt')"><span>Применить</span></button>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ Качество вопросов: только лучшая попытка ════════════════ -->
+    <!-- ДЕЛЬТА 2026-10-07: «Только лучшая» отбирает попытку по результату самого теста, поэтому
+         статистика смещена — предупреждение над числами, как у «всех попыток». «Только
+         последняя» предупреждения не получает: чип в строке фильтра называет условие. -->
+    <div id="wf-best-attempt" class="wf-state" data-tab="quality">
+      <div class="ou-shell">
+        <div class="ou-shell__side" data-wf-side></div>
+        <header class="ou-shell__header" data-wf-header></header>
+        <main class="ou-shell__main">
+          <div class="ou-stack ou-stack--row ou-stack--jc-between ou-stack--ai-start ou-stack--gap-4" data-wf-head></div>
+          <div class="ou-tabs ou-tabs--underline ou-tabs--m" data-wf-tabs></div>
+          <div class="ou-filterbar">
+            <div class="ou-filterbar__row">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" aria-haspopup="dialog"><span>Фильтр</span><span class="ou-chip__count">2</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__saved"><span>Сохранённые</span></button>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'compare')"><span>Сравнить срезы</span><span class="ou-btn__ico"><svg width="14" height="14"><use href="#i-chevron-right" /></svg></span></button>
+            </div>
+            <div class="ou-filterbar__applied">
+              <span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Источник: веб и телеметрия LMS</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span><span class="ou-chip ou-chip--s ou-chip--removable"><button type="button" class="ou-chip__action" aria-pressed="false">Только лучшая попытка</button><button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button></span>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s ou-filterbar__reset"><span>Сбросить фильтры</span></button>
+            </div>
+          </div>
+
+          <div class="ou-banner ou-banner--warning ou-banner--subtle" role="status">
+            <span class="ou-banner__ico"><svg width="18" height="18"><use href="#i-warn" /></svg></span>
+            <div class="ou-banner__body">
+              <p class="ou-banner__title">Посчитано по лучшей попытке</p>
+              <p class="ou-banner__desc">Лучшая попытка выбрана по результату самого теста, поэтому статистика смещена: вопросы выглядят легче, разброс баллов уже, различающая способность и надёжность искажены. Для отбора вопросов считайте по первой попытке.</p>
+            </div>
+            <div class="ou-banner__actions">
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(null, 'quality')"><span>Вернуть: только первая попытка</span></button>
+            </div>
+          </div>
+
+          <section class="ou-card ou-card--outlined">
+            <div class="ou-card__body ou-stack ou-stack--gap-4">
+              <div class="ou-stack ou-stack--row ou-stack--gap-1 ou-stack--ai-center">
+                <span class="ou-text ou-text--body-s ou-text--w-semibold">Выборка:</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">веб — 210</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">телеметрия LMS — 244</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--s">импорт выгрузок — 32</span>
               </div>
             </div>
           </section>
@@ -1326,6 +1438,11 @@
                   <td>Толкование разницы срезов</td>
                   <td>на экране предупреждения НЕТ</td>
                   <td>FR-04c. Решение владельца 2026-09-23: объяснений методики на экране не будет. Колонка «Разница» даёт число и не называет его причину; вывода о справедливости вопроса к группе экран не делает. Разница срезов смешивает разную подготовку групп и разное поведение вопроса — это знание нужно тому, кто пишет тексты и обучает заказчика, и живёт оно в спецификации, а не в интерфейсе</td>
+                </tr>
+                <tr>
+                  <td>Попытки участника</td>
+                  <td><code>attempts</code>: <code>all</code> / <code>first</code> / <code>best</code> / <code>last</code>; группа «Попытки» окна фильтра</td>
+                  <td>FR-51, дельта 2026-10-07. Одно правило из четырёх, а не флажки по «И»: каждое оставляет участнику одну попытку. Умолчание — «Только первая». «Лучшая» — наибольший процент результата, при равенстве — более ранняя; попытки без результата в выбор не входят. У измерительного теста «Только лучшая» недоступна. Предупреждение над числами — у «Все» и «Только лучшая»; прежний параметр <code>firstAttemptOnly</code> понимается как синоним</td>
                 </tr>
                 <tr>
                   <td>Место вкладки</td>
