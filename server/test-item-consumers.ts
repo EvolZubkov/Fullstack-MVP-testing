@@ -57,6 +57,6 @@ export const ITEM_CONSUMERS: Record<string, ItemDecision> = {
   "server/services/lms-test-resolver.ts": { decision: "gap", stage: "Э5", what: "Опознание теста по выгрузке не видит тем-банков пунктов" },
   "server/routes/tests-workbook.ts": { decision: "gap", stage: "Э3", what: "Книга Excel теста не несёт пункты-сценарии" },
   "server/services/workbook-import.ts": { decision: "gap", stage: "Э3", what: "Импорт книги не знает пунктов-сценариев" },
-  "server/services/test-transfer/target.ts": { decision: "gap", stage: "Э3", what: "Перенос теста между установками не несёт пункты-сценарии" },
-  "server/storage/test-transfer-repository.ts": { decision: "gap", stage: "Э3", what: "Запись перенесённого теста без пунктов-сценариев" },
+  "server/services/test-transfer/target.ts": { decision: "handles", how: "Пакет — снимок теста целиком, с `scenarios`; цель читает пункты, diff ведёт их по id, ключи `scenario:<id>` перенумеровываются (`remapItemKey`)" },
+  "server/storage/test-transfer-repository.ts": { decision: "handles", how: "Пишет пункты-сценарии и при копии целиком, и при выборочном импорте" },
 };

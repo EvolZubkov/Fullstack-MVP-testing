@@ -31,6 +31,7 @@
  */
 import { collectMediaRefs, mediaAddressPattern } from "../media/media-refs";
 import type { TestSnapshotContent } from "../test-snapshot";
+import { remapItemKey } from "@shared/test-items";
 import { TRANSFER_FORMAT_VERSION, type TestTransferPackage } from "./package";
 
 /** Thrown when the package cannot be read by this version of the application. */
@@ -73,6 +74,8 @@ export function collectSourceIds(content: TestSnapshotContent): string[] {
   push(content.test?.id);
   for (const topic of content.topics ?? []) push(topic.id);
   for (const section of content.sections ?? []) push(section.id);
+  // «Сценарий в ИС»: пункт-сценарий — строка теста со своим id (ключ `scenario:<id>`).
+  for (const item of content.scenarios ?? []) push(item.id);
   for (const list of Object.values(content.questionsByTopic ?? {})) {
     for (const question of list ?? []) push(question.id);
   }
@@ -113,7 +116,9 @@ function substitute(
   mediaAddressMap: Map<string, string>,
 ): unknown {
   if (typeof node === "string") {
-    const renamed = idMap.get(node);
+    // Ключ пункта роутера (`topic:<id>` / `scenario:<id>`) — составная строка: точное
+    // совпадение его не узнаёт, а порядок пунктов и правила разблокировки держатся на нём.
+    const renamed = idMap.get(node) ?? remapItemKey(node, idMap);
     if (renamed) return renamed;
     return mediaAddressMap.size ? rewriteAddresses(node, mediaAddressMap) : node;
   }
@@ -121,7 +126,7 @@ function substitute(
   if (node && typeof node === "object") {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
-      out[idMap.get(key) ?? key] = substitute(value, idMap, mediaAddressMap);
+      out[idMap.get(key) ?? remapItemKey(key, idMap) ?? key] = substitute(value, idMap, mediaAddressMap);
     }
     return out;
   }

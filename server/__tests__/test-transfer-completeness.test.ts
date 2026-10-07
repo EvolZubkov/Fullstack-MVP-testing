@@ -26,6 +26,7 @@ import * as schema from "@shared/schema";
 const CARRIED = [
   "tests",
   "test_sections",
+  "test_scenarios",
   "scales",
   "question_measurements",
   "result_variables",

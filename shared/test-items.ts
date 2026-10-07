@@ -104,3 +104,22 @@ export function orderTestItems<T extends { key: string }>(items: T[], itemOrder?
     })
     .map((entry) => entry.item);
 }
+
+/**
+ * Перенумеровать ПРЕФИКСНЫЙ ключ пункта (`topic:<id>` / `scenario:<id>`) по карте идентификаторов.
+ *
+ * Перенос теста между установками меняет идентификаторы точным совпадением строки, а ключ пункта —
+ * составная строка: без этого шага порядок пунктов и правила разблокировки роутера после копии
+ * указывали бы на идентификаторы, которых здесь нет. Голый идентификатор темы — не префиксный ключ:
+ * его перенумерует обычная подстановка.
+ *
+ * @returns Новый ключ или `null`, если строка не префиксный ключ или её идентификатор не меняется.
+ */
+export function remapItemKey(key: string, idMap: ReadonlyMap<string, string>): string | null {
+  for (const prefix of [TOPIC_KEY_PREFIX, SCENARIO_KEY_PREFIX]) {
+    if (!key.startsWith(prefix)) continue;
+    const next = idMap.get(key.slice(prefix.length));
+    return next ? prefix + next : null;
+  }
+  return null;
+}

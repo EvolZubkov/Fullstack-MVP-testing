@@ -23,6 +23,7 @@ import {
   topics,
   questions,
   testSections,
+  testScenarios,
   scales,
   resultVariables,
   questionMeasurements,
@@ -73,6 +74,7 @@ const TABLES = [
   ["test", tests],
   ["question", questions],
   ["section", testSections],
+  ["scenario", testScenarios],
   ["scale", scales],
   ["measurement", questionMeasurements],
   ["resultVariable", resultVariables],
@@ -154,6 +156,10 @@ export class TestTransferRepository {
       const sectionRows = (content.sections ?? []).map((s) => insertable(s as unknown as Record<string, unknown>));
       if (sectionRows.length) await tx.insert(testSections).values(sectionRows as never);
 
+      // «Сценарий в ИС»: пункты-сценарии — после вопросов: фиксированный пункт ссылается на вопрос.
+      const scenarioRows = (content.scenarios ?? []).map((s) => insertable(s as unknown as Record<string, unknown>));
+      if (scenarioRows.length) await tx.insert(testScenarios).values(scenarioRows as never);
+
       const scaleRows = (content.scales ?? []).map((s) => insertable(s as unknown as Record<string, unknown>));
       if (scaleRows.length) await tx.insert(scales).values(scaleRows as never);
 
@@ -195,6 +201,7 @@ export class TestTransferRepository {
           topics: topicRows.length,
           questions: questionRows.length,
           sections: sectionRows.length,
+          scenarios: scenarioRows.length,
           scales: scaleRows.length,
           measurements: measurementRows.length,
           resultVariables: variableRows.length,
