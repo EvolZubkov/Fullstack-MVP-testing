@@ -125,6 +125,8 @@ const legacyState = JSON.stringify({
   sectionBudgets: { t1: { remainingMs: 420000 } },
   sectionGate: { open: null, closed: ["t1"] },
   rk: "lx1a2b3cq9zk",
+  an: 2,
+  as: 1_759_900_000_000,
 });
 
 describe("учёт попыток (maxAttempts)", () => {
@@ -265,7 +267,8 @@ describe("страж: приведение формата не теряет по
    */
   // PRD-67: `sectionGate` — разделы, закрытые выходом; потеря открыла бы их снова.
   // PRD-54 BR-54-35: `rk` — метка регистрации; потеря развела бы строку отчёта LMS на две записи.
-  const CARRIED = ["attemptsUsed", "timer", "retake", "sectionBudgets", "sectionGate", "rk"];
+  // PRD-54, решение 13: `an`, `as` — номер и старт попытки; потеря начала бы нумерацию заново.
+  const CARRIED = ["attemptsUsed", "timer", "retake", "sectionBudgets", "sectionGate", "rk", "an", "as"];
 
   it("каждое поле старого состояния доезжает до нового", () => {
     const migrated = RS.migrate(JSON.parse(legacyState), TEST_DATA_BASE);

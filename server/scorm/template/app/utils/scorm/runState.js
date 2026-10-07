@@ -482,6 +482,10 @@ var TBRunState = (function () {
     // PRD-54 BR-54-35: метка регистрации — одна на строку отчёта LMS. Потеря при приведении
     // формата развела бы одну строку отчёта на две записи импорта.
     if (s.rk) out.rk = s.rk;
+    // PRD-54, решение 13: номер и старт попытки регистрации — для `meta_attempt` и
+    // `meta_duration`. Потеря при приведении формата начала бы нумерацию заново.
+    if (typeof s.an === 'number') out.an = s.an;
+    if (typeof s.as === 'number') out.as = s.as;
     return out;
   }
 
