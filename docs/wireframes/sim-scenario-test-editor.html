@@ -211,10 +211,13 @@
       .tb-level-card__summary { display: flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
       /* Уровни шкалы по образцу: границы по краям, лента покрытия между ними. */
       .tb-levels__cover { display: flex; align-items: flex-end; gap: var(--ou-space-4); margin: 0; }
+      /* Поля строки стоят рядом: отступ соседних полей формы здесь не нужен. */
+      .tb-levels__cover > .ou-formfield { margin-top: 0; }
       .tb-levels__bound { flex: 0 0 auto; width: var(--tb-input-w-sm); }
       .tb-levels__ribbonwrap { flex: 1 1 auto; min-width: 0; }
-      .tb-levels__ribbon { display: flex; gap: var(--ou-space-1); }
-      .tb-levels__seg { flex: 1; padding: var(--ou-space-2); text-align: center; border-radius: var(--ou-radius-s); background: var(--ou-bg-surface-2); font: var(--ou-text-body-s); }
+      /* Лента той же высоты, что поля границ размера s, — как в коде. */
+      .tb-levels__ribbon { display: flex; gap: var(--ou-space-1); height: var(--ou-size-control-s); }
+      .tb-levels__seg { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 var(--ou-space-2); border-radius: var(--ou-radius-s); background: var(--ou-bg-surface-2); font: var(--ou-text-body-s); }
       /* Цвет уровня: пара фон/текст ленты и сплошной акцент линейки — TONE_CHIPS. */
       .tb-levels__seg--good { background: var(--ou-success-default); color: var(--ou-neutral-900); }
       .tb-levels__seg--neutral { background: var(--ou-neutral-600); color: var(--ou-neutral-0); }
@@ -5204,7 +5207,7 @@
                         <div class="tb-levels__cover">
                           <div class="ou-formfield tb-levels__bound">
                             <label class="ou-formfield__lbl">Начало</label>
-                            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Начало шкалы" /></div></div>
+                            <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Начало шкалы" /></div></div>
                           </div>
                           <div class="ou-formfield tb-levels__ribbonwrap">
                             <label class="ou-formfield__lbl">Покрытие шкалы</label>
@@ -5216,7 +5219,7 @@
                           </div>
                           <div class="ou-formfield tb-levels__bound">
                             <label class="ou-formfield__lbl tb-levels__lbl--end">Конец</label>
-                            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="100" aria-label="Конец шкалы" /></div></div>
+                            <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="100" aria-label="Конец шкалы" /></div></div>
                           </div>
                         </div>
                         <div class="tb-levels__coverstat">Шкала разобрана целиком, 3 уровня</div>
@@ -5238,14 +5241,8 @@
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-expanded="true" aria-label="Свернуть уровень «basic»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
                           </header>
                           <div class="tb-levels__grid">
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Название для обучающегося</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Базовый" /></div></div>
-                            </div>
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Код уровня</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="basic" /></div></div>
-                            </div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Название для обучающегося</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="Базовый" /></div></div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Код уровня</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="basic" /></div></div>
                           </div>
                           <div class="ou-formfield">
                             <label class="ou-formfield__lbl">Как трактовать</label>
@@ -5273,14 +5270,8 @@
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-expanded="true" aria-label="Свернуть уровень «confident»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
                           </header>
                           <div class="tb-levels__grid">
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Название для обучающегося</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Уверенный" /></div></div>
-                            </div>
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Код уровня</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="confident" /></div></div>
-                            </div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Название для обучающегося</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="Уверенный" /></div></div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Код уровня</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="confident" /></div></div>
                           </div>
                           <div class="ou-formfield">
                             <label class="ou-formfield__lbl">Как трактовать</label>
@@ -5308,14 +5299,8 @@
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-expanded="true" aria-label="Свернуть уровень «advanced»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
                           </header>
                           <div class="tb-levels__grid">
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Название для обучающегося</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Продвинутый" /></div></div>
-                            </div>
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Код уровня</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="advanced" /></div></div>
-                            </div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Название для обучающегося</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="Продвинутый" /></div></div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Код уровня</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="advanced" /></div></div>
                           </div>
                           <div class="ou-formfield">
                             <label class="ou-formfield__lbl">Как трактовать</label>
@@ -6280,16 +6265,8 @@
             </div>
 
             <div class="tb-qscoring__modal-grid">
-              <div class="ou-formfield">
-                <label class="ou-formfield__lbl" for="qs-points">Балл за вопрос в этом тесте</label>
-                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="qs-points" type="text" inputmode="numeric" value="1" /></div></div>
-                <div class="ou-formfield__desc">Пусто — балл по цепочке умолчаний. 0 — вопрос без баллов в этом тесте.</div>
-              </div>
-              <div class="ou-formfield">
-                <label class="ou-formfield__lbl" for="qs-difficulty">Сложность в этом тесте</label>
-                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="qs-difficulty" type="text" inputmode="numeric" value="" placeholder="50" /></div></div>
-                <div class="ou-formfield__desc">Используется адаптивной выдачей. Пусто — базовая сложность вопроса.</div>
-              </div>
+              <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl" for="qs-points">Балл за вопрос в этом тесте</label><div class="ou-field__box"><input class="ou-field__input" id="qs-points" type="text" inputmode="numeric" value="1" /></div><div class="ou-field__msg ou-field__msg--default">Пусто — балл по цепочке умолчаний. 0 — вопрос без баллов в этом тесте.</div></div>
+              <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl" for="qs-difficulty">Сложность в этом тесте</label><div class="ou-field__box"><input class="ou-field__input" id="qs-difficulty" type="text" inputmode="numeric" value="" placeholder="50" /></div><div class="ou-field__msg ou-field__msg--default">Используется адаптивной выдачей. Пусто — базовая сложность вопроса.</div></div>
             </div>
 
             <div class="tb-qscoring__price">
@@ -6578,16 +6555,8 @@
             </div>
 
             <div class="tb-qscoring__modal-grid">
-              <div class="ou-formfield">
-                <label class="ou-formfield__lbl" for="qst-points">Балл за ответ в этом тесте</label>
-                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="qst-points" type="text" inputmode="numeric" value="3" /></div></div>
-                <div class="ou-formfield__desc">Пусто — цена по правилу раздела. 0 — вопрос без баллов в этом тесте.</div>
-              </div>
-              <div class="ou-formfield">
-                <label class="ou-formfield__lbl" for="qst-difficulty">Сложность в этом тесте</label>
-                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="qst-difficulty" type="text" inputmode="numeric" value="40" /></div></div>
-                <div class="ou-formfield__desc">Используется адаптивной лестницей. Пусто — берётся сложность вопроса.</div>
-              </div>
+              <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl" for="qst-points">Балл за ответ в этом тесте</label><div class="ou-field__box"><input class="ou-field__input" id="qst-points" type="text" inputmode="numeric" value="3" /></div><div class="ou-field__msg ou-field__msg--default">Пусто — цена по правилу раздела. 0 — вопрос без баллов в этом тесте.</div></div>
+              <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl" for="qst-difficulty">Сложность в этом тесте</label><div class="ou-field__box"><input class="ou-field__input" id="qst-difficulty" type="text" inputmode="numeric" value="40" /></div><div class="ou-field__msg ou-field__msg--default">Используется адаптивной лестницей. Пусто — берётся сложность вопроса.</div></div>
             </div>
 
             <div class="tb-qscoring__price">
@@ -6964,7 +6933,7 @@
                           <div class="tb-levels__cover">
                             <div class="ou-formfield tb-levels__bound">
                               <label class="ou-formfield__lbl">Начало</label>
-                              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Начало шкалы показателя" /></div></div>
+                              <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Начало шкалы показателя" /></div></div>
                             </div>
                             <div class="ou-formfield tb-levels__ribbonwrap">
                               <label class="ou-formfield__lbl">Покрытие</label>
@@ -6976,7 +6945,7 @@
                             </div>
                             <div class="ou-formfield tb-levels__bound">
                               <label class="ou-formfield__lbl tb-levels__lbl--end">Конец</label>
-                              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="100" aria-label="Конец шкалы показателя" /></div></div>
+                              <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="100" aria-label="Конец шкалы показателя" /></div></div>
                             </div>
                           </div>
                           <div class="tb-levels__coverstat">Шкала разобрана целиком, 3 уровня</div>
@@ -6995,14 +6964,8 @@
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-expanded="true" aria-label="Свернуть уровень «norm»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
                           </header>
                           <div class="tb-levels__grid">
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Название для обучающегося</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Норма" /></div></div>
-                            </div>
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Код уровня</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="norm" /></div></div>
-                            </div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Название для обучающегося</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="Норма" /></div></div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Код уровня</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="norm" /></div></div>
                           </div>
                           <div class="ou-formfield">
                             <label class="ou-formfield__lbl">Как трактовать</label>
@@ -7030,14 +6993,8 @@
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-expanded="true" aria-label="Свернуть уровень «attention»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
                           </header>
                           <div class="tb-levels__grid">
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Название для обучающегося</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Внимание" /></div></div>
-                            </div>
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Код уровня</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="attention" /></div></div>
-                            </div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Название для обучающегося</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="Внимание" /></div></div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Код уровня</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="attention" /></div></div>
                           </div>
                           <div class="ou-formfield">
                             <label class="ou-formfield__lbl">Как трактовать</label>
@@ -7065,14 +7022,8 @@
                             <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-expanded="true" aria-label="Свернуть уровень «risk»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
                           </header>
                           <div class="tb-levels__grid">
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Название для обучающегося</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Риск" /></div></div>
-                            </div>
-                            <div class="ou-formfield">
-                              <label class="ou-formfield__lbl">Код уровня</label>
-                              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="risk" /></div></div>
-                            </div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Название для обучающегося</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="Риск" /></div></div>
+                            <div class="ou-field ou-field--m ou-field--full"><label class="ou-field__lbl">Код уровня</label><div class="ou-field__box"><input class="ou-field__input" type="text" value="risk" /></div></div>
                           </div>
                           <div class="ou-formfield">
                             <label class="ou-formfield__lbl">Как трактовать</label>
