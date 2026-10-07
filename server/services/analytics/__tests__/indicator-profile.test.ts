@@ -276,6 +276,43 @@ describe("summariseIndicators — readable outcomes (live ЧИЛ data, 2026-10-0
   });
 });
 
+describe("summariseIndicators — mask values of the PRD-53 transition (ЧИЛ, 2026-10-08)", () => {
+  // PRD-53 §7.1: one interpretation answers codes with outcomes and old mask NUMBERS with bands;
+  // the learner's screen reads both. Analytics folded the numbers into «Прочее» — 48 % on live data.
+  const PROFILE = {
+    name: "profile", label: "Резюме профиля", type: "string", sortOrder: 1,
+    configJson: {
+      outcomes: [
+        { code: "cel", label: "Сфокусированный" },
+        { code: "cel+pro", label: "Двухвекторный профиль" },
+      ],
+      bands: [
+        { min: 1, max: 1, level: "m1", label: "Сфокусированный" },
+        { min: 9, max: 9, level: "m9", label: "Двухвекторный профиль" },
+      ],
+    },
+  };
+
+  it("reads a number by the bands when no outcome matches, as the results screen does", () => {
+    const [profile] = summariseIndicators(
+      [...rows({ profile: "cel" }, { profile: 9 }, { profile: "cel+pro" }),
+        { attemptId: "l1", source: "import" as const, values: { profile: "1" } }],
+      [PROFILE],
+      { ramp },
+    );
+
+    expect(profile.shares.map(s => [s.label, s.count])).toEqual([
+      ["Сфокусированный", 2], ["Двухвекторный профиль", 2],
+    ]);
+  });
+
+  it("a number outside every band is still «Прочее»", () => {
+    const [profile] = summariseIndicators(rows({ profile: 42 }, { profile: "cel" }), [PROFILE], { ramp });
+
+    expect(profile.shares.map(s => s.label)).toEqual(["Сфокусированный", "Прочее"]);
+  });
+});
+
 describe("summariseIndicators — order", () => {
   it("follows the author's order of indicators", () => {
     const profiles = summariseIndicators([], [RESERVE, STYLE, INDEX, SPREAD], { ramp });

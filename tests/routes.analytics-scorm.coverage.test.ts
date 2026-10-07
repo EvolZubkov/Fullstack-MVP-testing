@@ -415,6 +415,22 @@ describe("GET /scorm-attempts/:attemptId — показатели из сохр�
     ]);
   });
 
+  it("a mask number reported as text reads by the bands of a string indicator (PRD-53 §7.1)", async () => {
+    storageMock.getResultVariables.mockResolvedValue([{
+      name: "profile", label: "Резюме профиля", type: "string", formula: "x", sortOrder: 0,
+      learnerVisibility: "level", scormTarget: "both", controlsStatus: "none",
+      configJson: {
+        outcomes: [{ code: "cel+pro", label: "Двухвекторный профиль" }],
+        bands: [{ min: 9, max: 9, level: "m9", label: "Двухвекторный профиль" }],
+      },
+    }]);
+    storageMock.getScormAttempt.mockResolvedValue({ ...baseAttempt, variablesJson: { profile: "9" } });
+
+    const res = await asAuthor(request(app).get("/api/analytics/scorm-attempts/sa1"));
+
+    expect(res.body.indicatorViews[0]).toMatchObject({ value: "9", interpretation: "Двухвекторный профиль" });
+  });
+
   it("does not recompute an indicator the LMS did not report", async () => {
     storageMock.getScormAttempt.mockResolvedValue({ ...baseAttempt, variablesJson: null });
 

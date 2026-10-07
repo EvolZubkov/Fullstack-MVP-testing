@@ -18,6 +18,7 @@
  */
 
 import {
+  findBand,
   findOutcome,
   parseIndicatorInterpretation,
   type LevelTone,
@@ -251,27 +252,47 @@ function byLabel(groups: ReadonlyArray<{ label: string; count: number; tone: Lev
  */
 function outcomeShares(
   values: readonly IndicatorValue[],
-  outcomes: ReturnType<typeof parseIndicatorInterpretation>["outcomes"],
+  interpretation: Pick<ReturnType<typeof parseIndicatorInterpretation>, "outcomes" | "bands">,
   scaleLabels: Readonly<Record<string, string>>,
 ): IndicatorShare[] {
   const total = values.length;
+  const { outcomes, bands } = interpretation;
 
-  if (outcomes.length > 0) {
-    const counts = new Map<string, number>();
+  if (outcomes.length > 0 || bands.length > 0) {
+    // PRD-53 §7.1: one interpretation answers codes with OUTCOMES and old mask NUMBERS with BANDS
+    // (ЧИЛ stored the style set as `9` before it stored `cel+pro`). The learner's screen reads both;
+    // so does analytics — outcome first, then a band for a number. Before, every mask value fell
+    // into «Прочее»: 48 % of a live test.
+    const outcomeLabel = (outcome: (typeof outcomes)[number]) => outcome.label || outcome.code;
+    const bandLabel = (band: (typeof bands)[number]) => band.label || band.level;
+    const labelOrder = [...new Set([...outcomes.map(outcomeLabel), ...bands.map(bandLabel)])];
+    const groups = new Map<string, { label: string; count: number; tone: LevelTone | null }>();
     let rest = 0;
     for (const value of values) {
+      let label: string | null = null;
+      let tone: LevelTone | null = null;
       const outcome = findOutcome(outcomes, value as string | boolean);
-      if (outcome) counts.set(outcome.code, (counts.get(outcome.code) ?? 0) + 1);
-      else rest += 1;
+      if (outcome) {
+        label = outcomeLabel(outcome);
+        tone = outcome.tone ?? null;
+      } else if (typeof value === "number" || (typeof value === "string" && value.trim() !== "")) {
+        const n = typeof value === "number" ? value : Number(value.trim().replace(",", "."));
+        const band = Number.isFinite(n) ? findBand(bands, n) : null;
+        if (band) {
+          label = bandLabel(band);
+          tone = band.tone ?? null;
+        }
+      }
+      if (label === null) {
+        rest += 1;
+        continue;
+      }
+      const group = groups.get(label);
+      if (group) group.count += 1;
+      else groups.set(label, { label, count: 1, tone });
     }
-    const labelOf = (outcome: (typeof outcomes)[number]) => outcome.label || outcome.code;
-    const labelOrder = [...new Set(outcomes.map(labelOf))];
-    const shares = byLabel(outcomes.map(outcome => ({
-      label: labelOf(outcome),
-      count: counts.get(outcome.code) ?? 0,
-      tone: outcome.tone ?? null,
-    })))
-      .filter(group => group.count > 0)
+    const shares = [...groups.values()]
+      .sort((x, y) => labelOrder.indexOf(x.label) - labelOrder.indexOf(y.label))
       .map(group => ({
         key: group.label,
         label: group.label,
@@ -381,7 +402,7 @@ export function summariseIndicators(
         ...base,
         kind: "outcomes",
         average: null,
-        shares: outcomeShares(values, interpretation.outcomes, opts.scaleLabels ?? {}),
+        shares: outcomeShares(values, interpretation, opts.scaleLabels ?? {}),
         histogram: [],
       } satisfies IndicatorProfile;
     });

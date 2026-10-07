@@ -146,10 +146,15 @@ export function buildIndicatorViews(
       // turned one table cell into an essay that pushed every other row off screen.
       // A table cell answers «что это значит» in two words; the leaflet belongs to the
       // learner's results screen, where PRD-29 already prints it.
-      const band = typeof value === "number" ? findBand(interpretation.bands, value) : null;
+      // Outcome first for text, then a band for anything numeric — including a mask number that
+      // an LMS export or a string-typed indicator carries as TEXT («9», PRD-53 §7.1).
       const outcome = typeof value === "number"
         ? null
         : findOutcome(interpretation.outcomes, value as string | boolean | null);
+      const numeric = typeof value === "number"
+        ? value
+        : typeof value === "string" && value.trim() !== "" ? Number(value.trim().replace(",", ".")) : NaN;
+      const band = !outcome && Number.isFinite(numeric) ? findBand(interpretation.bands, numeric) : null;
       return {
         name: rv.name,
         label: rv.label || rv.name,
