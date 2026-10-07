@@ -33,7 +33,8 @@ export const NOT_APPLICABLE = "—";
  * PRD-15 FR-08 (audit F-5): cross-test analytics aggregates and exports are
  * limited to the tests the actor may read (ownership, grants, admin). Wraps
  * {@link readableTestScope} into a predicate; `has(null)` is true only for
- * administrators, so LMS attempts of deleted tests stay admin-visible only.
+ * administrators. Attempts of deleted tests no longer exist (PRD-15 FR-07a:
+ * `deleteTest` purges them), so a test-less row is a defect seen only by admins.
  */
 export async function analyticsScope(
   req: Request,

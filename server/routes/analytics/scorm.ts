@@ -61,8 +61,8 @@ router.get("/scorm-attempts", requirePermission("analytics.read"), async (req: R
 
     const packageMap = new Map(packages.map(p => [p.id, p]));
 
-    // PRD-15 FR-08 (audit F-5): only attempts of readable tests; packages of
-    // deleted tests remain visible to administrators only.
+    // PRD-15 FR-08 (audit F-5): only attempts of readable tests. A test-less row
+    // (none should remain after FR-07a) stays visible to administrators only.
     const scope = await analyticsScope(req);
     const scopedAttempts = attempts.filter((a) =>
       scope.has(attemptPackage(a, packageMap)?.testId ?? null),

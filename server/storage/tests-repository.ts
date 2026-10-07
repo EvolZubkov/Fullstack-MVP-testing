@@ -6,10 +6,11 @@
  * the referential-integrity lookups that answer "which tests use this
  * topic/question" (PRD-15 FR-03). `deleteTest` is the single owner of test
  * deletion: it removes every row that has no meaning without the test
- * (adaptive config, sections, assignments, access grants, attempts, snapshots)
- * in one transaction; content_pages/scales/result_variables/question_measurements/
- * test_question_scoring go via FK ON DELETE CASCADE, and SCORM telemetry is
- * deliberately kept (nullable `testId`). Section WRITES live in
+ * (adaptive config, sections, assignments and their access links, access grants,
+ * attempts, snapshots, saved analytics slices, delivery exposure, and the whole
+ * LMS trail — telemetry, import batches, packages) in one transaction;
+ * content_pages/scales/result_variables/question_measurements/
+ * test_question_scoring go via FK ON DELETE CASCADE. Section WRITES live in
  * `TestSettingsService`, not here. Exposed through the `IStorage` facade, never
  * imported by routes.
  */
@@ -20,8 +21,10 @@ import {
   tests, testSections, testSnapshots, attempts,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
   testAssignments, testAccessGrants, questions, questionMeasurements, contentPages,
+  assignmentAccessTokens, analyticsSlices, questionExposure,
   type Test, type InsertTest, type TestSection, type TestSnapshot,
 } from "@shared/schema";
+import { purgeTestLmsData } from "./scorm-repository";
 
 /**
  * Minimal projection of a test that depends on a topic/question (PRD-15
@@ -236,9 +239,10 @@ export class TestsRepository {
    * the single owner of test deletion (callers no longer clean up adaptive rows
    * themselves). FK ON DELETE CASCADE removes content_pages, scales,
    * result_variables, question_measurements and test_question_scoring when the
-   * test row goes. SCORM packages/attempts/answers are deliberately KEPT:
-   * `scorm_packages.testId` is nullable by design — the exported package outlives
-   * the test in the LMS, so its telemetry is retained.
+   * test row goes. The LMS trail (telemetry, import batches with the participants
+   * they created, packages) goes too — PRD-15 FR-07a, revised 2026-10-07: it used
+   * to be kept "for administrators", but without the test it explains nothing,
+   * the LMS keeps its own record, and archive is the retention path.
    */
   async deleteTest(id: string): Promise<boolean> {
     return db.transaction(async (tx) => {
@@ -252,13 +256,22 @@ export class TestsRepository {
       // Structural dependents.
       await tx.delete(testSections).where(eq(testSections.testId, id));
       await tx.delete(testAssignments).where(eq(testAssignments.testId, id));
+      // Personal access links (attempt and review) lead nowhere without the test.
+      await tx.delete(assignmentAccessTokens).where(eq(assignmentAccessTokens.testId, id));
       await tx.delete(testAccessGrants).where(eq(testAccessGrants.testId, id));
+      // Saved analytics slices are bound to exactly one test (PRD-56); filters carry none.
+      await tx.delete(analyticsSlices).where(eq(analyticsSlices.testId, id));
 
       // Delivery history. A hard delete is not restorable (archive is the
       // retention path), so attempts and snapshots go too. Attempts pin
       // snapshots, so drop attempts first.
       await tx.delete(attempts).where(eq(attempts.testId, id));
       await tx.delete(testSnapshots).where(eq(testSnapshots.testId, id));
+      await tx.delete(questionExposure).where(eq(questionExposure.testId, id));
+
+      // LMS trail. AFTER assignments and web attempts: the batch rollback keeps a
+      // participant it created while anything still refers to them.
+      await purgeTestLmsData(tx, id);
 
       const result = await tx.delete(tests).where(eq(tests.id, id)).returning();
       return result.length > 0;

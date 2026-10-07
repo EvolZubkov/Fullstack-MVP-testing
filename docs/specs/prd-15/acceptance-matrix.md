@@ -59,6 +59,7 @@
 | FR-05 | Сервис выполнимости во всех путях; `409` со списком, dry-run импорта | Авто: `content-protection.test.ts`, `routes.questions-import-export.test.ts` |
 | FR-06 | Publish-валидация выполнимости (`flow-policy-validator`) | Авто: `routes.tests.test.ts`, `draw-blueprint.test.ts` |
 | FR-07 | `deleteTopic` дочищает зависимые `test_sections` | Авто: `storage.test.ts`, `routes.topics-folders-groups.test.ts` |
+| FR-07a | `deleteTest` стирает LMS-данные теста: телеметрию, загрузки (откатом BR-54-43), пакеты, срезы, экспозицию, личные ссылки | Авто: `tests/it/delete-test-deep.it.test.ts` (`npm run test:it`) |
 | FR-08 | Scope аналитики по области видимости (`readableTestScope`/`canReadTestAnalytics`) | Авто: `access/test-access.test.ts` (`readableTestScope`); реализация - `analyticsScope` в `server/routes/analytics/helpers.ts` |
 | FR-09 | `canReadTest` + ветвь «назначен пользователю»; `/design` и `/screen-template` объектная проверка | Авто: `access/test-access.test.ts`, `routes.design-settings.test.ts` |
 

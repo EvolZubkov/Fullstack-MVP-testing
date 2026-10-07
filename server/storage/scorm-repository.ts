@@ -4,10 +4,11 @@
  * (`scorm_packages`), attempts (`scorm_attempts`) and per-question answers
  * (`scorm_answers`). Attempts are keyed by (packageId, sessionId, attemptNumber);
  * `getNextAttemptNumber` computes the next sequence number. Packages carry a
- * nullable `testId` and survive test deletion by design, so this domain is
- * self-contained. Exposed through the `IStorage` facade, never imported by routes.
+ * nullable `testId` (no FK: legacy packages may still point nowhere); test
+ * deletion purges the whole LMS trail through {@link purgeTestLmsData}.
+ * Exposed through the `IStorage` facade, never imported by routes.
  */
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, or, isNull, desc, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../db";
 import {
@@ -419,65 +420,124 @@ export class ScormRepository {
    * импортом» переходит к другой партии участника.
    */
   async deleteLmsImportBatch(id: string): Promise<void> {
-    await db.transaction(async (tx) => {
-      const [batch] = await tx.select().from(lmsImportBatches).where(eq(lmsImportBatches.id, id));
-      const touched = await tx.select().from(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
-
-      const attemptRows = await tx.select({ id: scormAttempts.id }).from(scormAttempts)
-        .where(eq(scormAttempts.batchId, id));
-      const ids = attemptRows.map((a) => a.id);
-      if (ids.length > 0) await tx.delete(scormAnswers).where(inArray(scormAnswers.attemptId, ids));
-      await tx.delete(scormAttempts).where(eq(scormAttempts.batchId, id));
-      await tx.delete(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
-
-      /** Другая партия участника, которой можно передать отметку; с группой — только этой группы. */
-      const heirBatch = async (userId: string, groupId: string | null) => {
-        const [row] = await tx
-          .select({ batchId: lmsImportBatchUsers.batchId })
-          .from(lmsImportBatchUsers)
-          .innerJoin(lmsImportBatches, eq(lmsImportBatches.id, lmsImportBatchUsers.batchId))
-          .where(and(
-            eq(lmsImportBatchUsers.userId, userId),
-            groupId ? eq(lmsImportBatches.groupId, groupId) : sql`true`,
-          ))
-          .orderBy(lmsImportBatches.importedAt)
-          .limit(1);
-        return row?.batchId ?? null;
-      };
-
-      for (const t of touched) {
-        if (t.addedToGroup && batch?.groupId) {
-          const heir = await heirBatch(t.userId, batch.groupId);
-          if (heir) {
-            await tx.update(lmsImportBatchUsers).set({ addedToGroup: true })
-              .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
-          } else {
-            await tx.delete(userGroups)
-              .where(and(eq(userGroups.userId, t.userId), eq(userGroups.groupId, batch.groupId)));
-          }
-        }
-      }
-
-      for (const t of touched) {
-        if (!t.createdUser) continue;
-        const heir = await heirBatch(t.userId, null);
-        if (heir) {
-          await tx.update(lmsImportBatchUsers).set({ createdUser: true })
-            .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
-          continue;
-        }
-        const busy = await Promise.all([
-          tx.select({ id: scormAttempts.id }).from(scormAttempts).where(eq(scormAttempts.userId, t.userId)).limit(1),
-          tx.select({ id: attempts.id }).from(attempts).where(eq(attempts.userId, t.userId)).limit(1),
-          tx.select({ id: userGroups.id }).from(userGroups).where(eq(userGroups.userId, t.userId)).limit(1),
-          tx.select({ id: testAssignments.id }).from(testAssignments).where(eq(testAssignments.userId, t.userId)).limit(1),
-        ]);
-        if (busy.some((rows) => rows.length > 0)) continue;
-        await tx.delete(userRoles).where(eq(userRoles.userId, t.userId));
-        await tx.delete(users).where(and(eq(users.id, t.userId), eq(users.isExternal, true)));
-      }
-
-      await tx.delete(lmsImportBatches).where(eq(lmsImportBatches.id, id));
-    });
+    await db.transaction((tx) => rollbackLmsImportBatch(tx, id));
   }
+}
+
+/** A transaction handle of {@link db} — what the in-transaction helpers below run on. */
+export type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Откат партии внутри ЧУЖОЙ транзакции — тело {@link ScormRepository.deleteLmsImportBatch}.
+ * Вынесено, чтобы удаление теста откатывало его партии той же транзакцией и тем же правилом:
+ * второе правило «кого из заведённых импортом участников удалять» разошлось бы с первым.
+ *
+ * @param tx транзакция вызывающего
+ * @param id партия
+ */
+export async function rollbackLmsImportBatch(tx: DbTx, id: string): Promise<void> {
+  const [batch] = await tx.select().from(lmsImportBatches).where(eq(lmsImportBatches.id, id));
+  const touched = await tx.select().from(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
+
+  const attemptRows = await tx.select({ id: scormAttempts.id }).from(scormAttempts)
+    .where(eq(scormAttempts.batchId, id));
+  const ids = attemptRows.map((a) => a.id);
+  if (ids.length > 0) await tx.delete(scormAnswers).where(inArray(scormAnswers.attemptId, ids));
+  await tx.delete(scormAttempts).where(eq(scormAttempts.batchId, id));
+  await tx.delete(lmsImportBatchUsers).where(eq(lmsImportBatchUsers.batchId, id));
+
+  /** Другая партия участника, которой можно передать отметку; с группой — только этой группы. */
+  const heirBatch = async (userId: string, groupId: string | null) => {
+    const [row] = await tx
+      .select({ batchId: lmsImportBatchUsers.batchId })
+      .from(lmsImportBatchUsers)
+      .innerJoin(lmsImportBatches, eq(lmsImportBatches.id, lmsImportBatchUsers.batchId))
+      .where(and(
+        eq(lmsImportBatchUsers.userId, userId),
+        groupId ? eq(lmsImportBatches.groupId, groupId) : sql`true`,
+      ))
+      .orderBy(lmsImportBatches.importedAt)
+      .limit(1);
+    return row?.batchId ?? null;
+  };
+
+  for (const t of touched) {
+    if (t.addedToGroup && batch?.groupId) {
+      const heir = await heirBatch(t.userId, batch.groupId);
+      if (heir) {
+        await tx.update(lmsImportBatchUsers).set({ addedToGroup: true })
+          .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
+      } else {
+        await tx.delete(userGroups)
+          .where(and(eq(userGroups.userId, t.userId), eq(userGroups.groupId, batch.groupId)));
+      }
+    }
+  }
+
+  for (const t of touched) {
+    if (!t.createdUser) continue;
+    const heir = await heirBatch(t.userId, null);
+    if (heir) {
+      await tx.update(lmsImportBatchUsers).set({ createdUser: true })
+        .where(and(eq(lmsImportBatchUsers.batchId, heir), eq(lmsImportBatchUsers.userId, t.userId)));
+      continue;
+    }
+    const busy = await Promise.all([
+      tx.select({ id: scormAttempts.id }).from(scormAttempts).where(eq(scormAttempts.userId, t.userId)).limit(1),
+      tx.select({ id: attempts.id }).from(attempts).where(eq(attempts.userId, t.userId)).limit(1),
+      tx.select({ id: userGroups.id }).from(userGroups).where(eq(userGroups.userId, t.userId)).limit(1),
+      tx.select({ id: testAssignments.id }).from(testAssignments).where(eq(testAssignments.userId, t.userId)).limit(1),
+    ]);
+    if (busy.some((rows) => rows.length > 0)) continue;
+    await tx.delete(userRoles).where(eq(userRoles.userId, t.userId));
+    await tx.delete(users).where(and(eq(users.id, t.userId), eq(users.isExternal, true)));
+  }
+
+  await tx.delete(lmsImportBatches).where(eq(lmsImportBatches.id, id));
+}
+
+/**
+ * Стереть всё, что LMS знает об удаляемом тесте: прохождения телеметрии с ответами, загрузки
+ * выгрузок (каждая — тем же откатом, что кнопка, вместе с заведёнными ею участниками) и выгруженные
+ * пакеты. Без пакета телеметрия копии, оставшейся в LMS, получает 404 — как у отключённого пакета —
+ * и строк о несуществующем тесте больше не пишет.
+ *
+ * Прохождения удалённого теста раньше хранились «для администратора». Решение пересмотрено
+ * 2026-10-07 (PRD-15 FR-07a): учёт прохождений ведёт сама LMS, у нас без теста они ничего не
+ * объясняют — ни разбора по вопросам, ни оценки, — а хранить персональные данные без цели нельзя.
+ * Сохранить данные теста — значит перевести его в архив, а не удалить.
+ *
+ * Вызывающий отвечает за порядок: назначения и веб-прохождения теста должны быть удалены ДО
+ * вызова, иначе откат сочтёт участника занятым ими и оставит его запись.
+ *
+ * @param tx транзакция удаления теста
+ * @param testId удаляемый тест
+ */
+export async function purgeTestLmsData(tx: DbTx, testId: string): Promise<void> {
+  // Телеметрия: у старых строк тест известен только через пакет — тот же порядок, что в аналитике.
+  const packageIds = (await tx.select({ id: scormPackages.id }).from(scormPackages)
+    .where(eq(scormPackages.testId, testId))).map((p) => p.id);
+  const ofTest = packageIds.length > 0
+    ? or(
+      eq(scormAttempts.testId, testId),
+      and(isNull(scormAttempts.testId), inArray(scormAttempts.packageId, packageIds)),
+    )
+    : eq(scormAttempts.testId, testId);
+  // Строки загрузок уходят ниже, откатом своей партии: он же решает судьбу заведённых участников.
+  const telemetry = and(ofTest, isNull(scormAttempts.batchId));
+  const telemetryIds = (await tx.select({ id: scormAttempts.id }).from(scormAttempts).where(telemetry))
+    .map((a) => a.id);
+  if (telemetryIds.length > 0) {
+    await tx.delete(scormAnswers).where(inArray(scormAnswers.attemptId, telemetryIds));
+    await tx.delete(scormAttempts).where(inArray(scormAttempts.id, telemetryIds));
+  }
+
+  // Загрузки — по одной, старые первыми: отметка «заведён импортом» переходит к более поздней
+  // партии того же теста, и её откат доводит дело до конца.
+  const batches = await tx.select({ id: lmsImportBatches.id }).from(lmsImportBatches)
+    .where(eq(lmsImportBatches.testId, testId))
+    .orderBy(lmsImportBatches.importedAt);
+  for (const b of batches) await rollbackLmsImportBatch(tx, b.id);
+
+  if (packageIds.length > 0) await tx.delete(scormPackages).where(inArray(scormPackages.id, packageIds));
 }

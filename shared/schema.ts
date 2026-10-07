@@ -2381,7 +2381,8 @@ export type InsertQuestionExposure = typeof questionExposure.$inferInsert;
 
 export const scormPackages = pgTable("scorm_packages", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  testId: varchar("test_id", { length: 36 }), // nullable - тест может быть удалён
+  // Без FK, nullable исторически. Пакет удаляется вместе с тестом (PRD-15 FR-07a, `purgeTestLmsData`).
+  testId: varchar("test_id", { length: 36 }),
   testTitle: text("test_title").notNull(),
   testMode: text("test_mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
   secretKey: text("secret_key").notNull(),
