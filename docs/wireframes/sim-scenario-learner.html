@@ -41,6 +41,7 @@
       <button type="button" class="active" onclick="showState(this, 'hub-fresh')">хаб: сценарий не начат</button>
       <button type="button" class="" onclick="showState(this, 'hub-locked')">хаб: сценарий закрыт правилом</button>
       <button type="button" class="" onclick="showState(this, 'hub-done')">хаб: сценарий завершён</button>
+      <button type="button" class="" onclick="showState(this, 'hub-retake')">хаб: завершён, менять ответ можно</button>
       <button type="button" class="" onclick="showState(this, 'start')">тест «Сценарий»: старт</button>
       <button type="button" class="" onclick="showState(this, 'section-fresh')">раздел: сценарий не начат</button>
       <button type="button" class="" onclick="showState(this, 'section-rules')">раздел: правила</button>
@@ -187,6 +188,63 @@
 
   <main class="tb-scene__body tb-content-body">
     <div class="tb-content" data-slot="page-content"><div class="content-page content-page--router" data-template-key="router.menu"><div class="content-placeholder content-placeholder--title" data-placeholder="title">Выберите раздел</div><div class="content-placeholder content-placeholder--instruction" data-placeholder="instruction">Пройдите все разделы в любом порядке. Задание в информационной системе откроется на весь экран.</div></div><div class="router-progress" role="group" aria-label="Прогресс по разделам"><div class="router-progress__head"><span class="router-progress__label">Разделы</span><span class="router-progress__count">3 / 3</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:100%"></div></div></div><div class="router-topic-cards" role="list" aria-label="Доступные темы"><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t1" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Делопроизводство: основы</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">12 вопросов</span><span class="router-topic-card__chip">15 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t2" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Защита информации</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">8 вопросов</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed router-topic-card--scenario" data-router-status="completed" disabled="" data-item-key="scenario:sed"><span class="router-topic-card__top"><span class="router-topic-card__name">Работа с документами в СЭД</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">Сценарий</span><span class="router-topic-card__chip">5 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершён</span></span></button></div></div>
+  </main>
+  <footer class="tb-scene__foot">
+    
+    <div class="tb-scene__foot-spacer"></div>
+    <button type="button" class="ou-btn ou-btn--primary ou-btn--l" data-nav="next">Завершить</button>
+  </footer>
+</div>
+<style data-tb-protection="">
+@media print { [data-tb-protected] { display: none !important; } }
+/* The DS toast stack already positions itself; the only deviation is that our notice has no
+   close button and fades on its own, so it must not intercept clicks. */
+.ou-toast-stack { pointer-events: none; }
+/* FR-16: fixed minimal type — NOT the fitted --tb-question-fs/--tb-answer-fs tokens, so the
+   mark never competes with the content for space and never changes size between screens. No
+   margin and no padding: it shares the hint row the layout already has, so it costs the fixed
+   stage no height of its own. Pushed to the right edge in both a flex row and a flex column. */
+.tb-protection-mark { flex: 0 0 auto; margin: 0; margin-inline-start: auto;
+  align-self: flex-end; padding: 0; white-space: nowrap;
+  font-size: 10px; line-height: 1.2; letter-spacing: .02em;
+  color: var(--ou-fg-muted); opacity: .35;
+  pointer-events: none; user-select: none; -webkit-user-select: none; }
+.tb-protection-veil { position: absolute; inset: 0; z-index: 35;
+  /* Раскладку содержимого задаёт сам компонент ДС; вуаль только центрирует его,
+     гасит фон и приглушает цвет, чтобы штатная разметка не спорила яркостью с тем,
+     что она закрывает. */
+  display: grid; place-items: center; padding: var(--ou-space-4);
+  color: var(--ou-fg-muted); backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--ou-bg-surface-2) 80%, transparent); }
+/* The glyph aligns with the text on the middle line and shrinks to line size: the stock 56 px
+   art is meant for an empty PAGE area and next to a single heading line reads as a separate
+   element rather than its icon. */
+.tb-protection-veil .ou-empty { align-items: center; --_art-size: 22px; }
+.tb-protection-veil .ou-empty__art { align-self: center; }
+</style></div></div>
+    <div id="wf-hub-retake" class="wf-state"><div class="tb-player" data-template="default"><div class="tb-scene">
+  <header class="tb-scene__header">
+    <div class="tb-scene__brandrow tb-scene__brandrow--center">
+      
+      <div class="tb-scene__titles">
+        <h1 class="tb-scene__title" data-path="course.title">Работа в информационных системах</h1>
+        
+      </div>
+      
+      <div class="tb-scene__timers">
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="timer-display">
+          <span class="ou-timer__lbl">тест</span><span class="ou-timer__num"></span>
+        </div>
+        <div class="ou-timer ou-timer--digital ou-timer--s q-timer--hidden" id="section-timer-display">
+          <span class="ou-timer__lbl">раздел</span><span class="ou-timer__num"></span>
+        </div>
+      </div>
+    </div>
+    
+  </header>
+
+  <main class="tb-scene__body tb-content-body">
+    <div class="tb-content" data-slot="page-content"><div class="content-page content-page--router" data-template-key="router.menu"><div class="content-placeholder content-placeholder--title" data-placeholder="title">Выберите раздел</div><div class="content-placeholder content-placeholder--instruction" data-placeholder="instruction">Пройдите все разделы в любом порядке. Задание в информационной системе откроется на весь экран.</div></div><div class="router-progress" role="group" aria-label="Прогресс по разделам"><div class="router-progress__head"><span class="router-progress__label">Разделы</span><span class="router-progress__count">3 / 3</span></div><div class="router-progress__bar"><div class="router-progress__fill" style="width:100%"></div></div></div><div class="router-topic-cards" role="list" aria-label="Доступные темы"><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t1" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Делопроизводство: основы</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">12 вопросов</span><span class="router-topic-card__chip">15 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed" data-topic-id="t2" data-router-status="completed" disabled=""><span class="router-topic-card__top"><span class="router-topic-card__name">Защита информации</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">8 вопросов</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершена</span></span></button><button type="button" role="listitem" class="router-topic-card router-topic-card--completed router-topic-card--scenario" data-router-status="completed" data-item-key="scenario:sed" data-action="router-select:scenario:sed"><span class="router-topic-card__top"><span class="router-topic-card__name">Работа с документами в СЭД</span></span><span class="router-topic-card__meta"><span class="router-topic-card__chip">Сценарий</span><span class="router-topic-card__chip">5 мин</span></span><span class="router-topic-card__foot"><span class="router-topic-card__status"><svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Завершён</span><span class="router-topic-card__go">пройти заново</span></span></button></div></div>
   </main>
   <footer class="tb-scene__foot">
     
@@ -1076,7 +1134,8 @@
           <tr><td>Карточка сценария</td><td><code>test_scenarios</code>, ключ пункта <code>scenario:&lt;id&gt;</code>, <code>data-item-key</code></td><td>Карточка темы из <code>buildRouterHubHtml</code> без изменений структуры. Дельта: метка «Сценарий» первой в ряду меток, класс <code>router-topic-card--scenario</code>, мужской род подписей («Не начат», «Завершён», «Недоступен», «(необязательный)»)</td></tr>
           <tr><td>Название карточки</td><td><code>test_scenarios.title</code></td><td>Название, которое автор задал пункту; какой сценарий выпадет из банка, участник до запуска не видит</td></tr>
           <tr><td>Метка лимита</td><td><code>test_scenarios.time_limit_minutes</code>, иначе <code>settings.limitSeconds</code> сценария</td><td>У случайной выдачи сценарий ещё не выбран, поэтому лимит пункта задаёт автор; без него метки нет</td></tr>
-          <tr><td>Состояния</td><td>те же, что у темы</td><td>Хаб говорит, ЧТО пункт закрыт, а не КАК пройден: «Завершён» с галочкой, без цвета исхода. Повторный вход — по правилу теста «менять ответ»; на эскизе — как у темы, закрыт</td></tr>
+          <tr><td>Состояния</td><td>те же, что у темы</td><td>Хаб говорит, ЧТО пункт закрыт, а не КАК пройден: «Завершён» с галочкой, без цвета исхода. Повторный вход — по правилу теста «менять ответ»: запрещено — карточка закрыта, как у темы (хаб: сценарий завершён); разрешено — карточка нажимается и несёт «пройти заново» (хаб: завершён, менять ответ можно)</td></tr>
+          <tr><td>«пройти заново» в хабе</td><td>правило теста «менять ответ» (<code>allowAnswerChange</code>)</td><td>Техдолг №7. Щелчок сразу открывает плеер на весь экран, как первый вход, — без окна-подтверждения (не добавлять участнику лишних экранов). Сценарий начинается сначала; засчитывается ПОСЛЕДНИЙ прогон, в том числе досрочный выход. Пункт остаётся завершённым, счётчик «Разделы» не меняется. Темы повторного входа не имеют — правило касается только пункта-сценария (решение владельца 2026-10-06)</td></tr>
           <tr><td>Закрыт правилом</td><td>правило разблокировки пункта</td><td>На эскизе — «после тем 1 и 2». Тот же код <code>isSectionUnlocked</code>, что у тем</td></tr>
           <tr><td>«Завершить»</td><td>стандартный подвал</td><td>Неактивна, пока не закрыты все обязательные пункты, сценарии считаются наравне с темами</td></tr>
           <tr><td>Старт теста «Сценарий»</td><td>макет <code>start.html</code> шаблона без изменений</td><td>Описание — задание; «Как проходить» — правила полного экрана; факты — проходной балл, лимит, попытки. «вопросов» не показывается: в тесте один пункт</td></tr>
