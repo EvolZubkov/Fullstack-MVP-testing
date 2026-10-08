@@ -2725,6 +2725,10 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
    правила — отбор исходников выбрасывал всё, чей класс уже объявлен выше, и вместе с
    повторами выбросил базовые правила и части составных селекторов. */
 .ou-combo__lbl-req { color: var(--ou-error-default); }
+/* Подсказка и ошибка под полем — компонент выводит их классом ou-combo__hint, а стилей у класса не
+   было: ошибка печаталась обычным текстом. Те же токены, что у ou-field__msg. */
+.ou-combo__hint { display: block; margin-top: var(--ou-space-1); font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+.ou-combo__hint.is-error { color: var(--ou-error-default); }
 
 
 /* ─── CommandPalette.css ───────────────────────────────── */
@@ -14254,6 +14258,28 @@ function timeLimitText(minutes) {
 }
 
 /**
+ * How many questions of `section` THIS run delivers — what the learner will actually answer. The
+ * hub card and the section intro state this number (owner's decision 2026-10-08, host parity Г1):
+ * the configured `drawCount` overstates it when the topic's bank is smaller than the draw, and a
+ * variant set may deliver another size. The web counts its delivery the same way. Adaptive topics
+ * keep the configured number: their questions are drawn as the run goes, not up front.
+ * @param {object} section A section of TEST_DATA.sections
+ * @returns {number}
+ */
+function deliveredQuestionCount(section) {
+  if (!section) return 0;
+  if ((typeof TEST_DATA !== "undefined" && TEST_DATA.mode === "adaptive") ||
+      typeof state === "undefined" || !state || !state.flatQuestions || state.flatQuestions.length === 0) {
+    return section.drawCount;
+  }
+  var n = 0;
+  for (var i = 0; i < state.flatQuestions.length; i++) {
+    if (state.flatQuestions[i].topicId === section.topicId) n++;
+  }
+  return n;
+}
+
+/**
  * Plain-JS fallback for buildSectionIntroContext — used only when the shared
  * builder is absent from the (per-process cached) TBTemplate bundle, e.g. in dev
  * before a server restart picks up a newly-added export. Mirrors
@@ -14366,7 +14392,7 @@ function renderSectionIntro(page) {
     courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
     topicName: section.topicName,
     description: section.topicDescription,
-    questionCount: section.drawCount,
+    questionCount: deliveredQuestionCount(section),
     timeLimitMinutes: section.timeLimitMinutes,
     instruction: instruction,
     illustration: illustrationUrl,
@@ -14454,6 +14480,10 @@ function buildPageRenderContext(page) {
     (typeof canNavigateBack === "function" && canNavigateBack()) ||
     (typeof state !== "undefined" && state && (state.currentPageIndex || 0) > 0) ||
     (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode());
+  // The hub itself has nowhere to go back to: «Назад» there is not in the approved hub
+  // (sim-scenario-learner.html, screen 4 — the footer holds «Завершить» only) and the web
+  // hub never offers it. The router clause above is for a TOPIC page returning to the hub.
+  if (page && page.kind === "router") canGoBack = false;
   if (!TB || !TB.buildPageContextFor || !page) {
     return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack: !!canGoBack };
   }
@@ -14682,14 +14712,50 @@ function renderContentPage(page, contentTemplates) {
     return after.preResults;
   }
 
+  /**
+   * Исходы пунктов, какими их читает хаб: зафиксированный при возврате признак «пройден»
+   * (`state.sectionPassed`, техдолг №8) поверх результатов экранов итогов раздела. Признак свежее:
+   * повторный прогон сценария меняет исход, а экран итогов раздела мог и не показываться.
+   */
+  function hubSectionResults() {
+    var out = {};
+    var shown = state.sectionResults || {};
+    Object.keys(shown).forEach(function (key) { out[key] = shown[key]; });
+    var frozen = state.sectionPassed || {};
+    Object.keys(frozen).forEach(function (key) { out[key] = { passed: frozen[key] }; });
+    return out;
+  }
+
+  /**
+   * Зафиксировать, пройден ли пункт, — при КАЖДОМ возврате в хаб из завершённого пункта.
+   * Без этого «Открывается после успешного прохождения» и политика «все обязательные пройдены»
+   * видели исход только там, где тест показывает итоги раздела. Адаптивную тему оценивает движок:
+   * его результат уже лежит в `sectionResults`. Пункт без порога — `null`: его нельзя не пройти.
+   */
+  function freezeSectionPass(topicId) {
+    if (!topicId) return;
+    var passed = null;
+    if (TEST_DATA.mode === "adaptive") {
+      var adaptive = (state.sectionResults || {})[topicId];
+      passed = adaptive && typeof adaptive.passed === "boolean" ? adaptive.passed : null;
+    } else if (typeof buildSectionResult === "function") {
+      var built = buildSectionResult(topicId);
+      passed = built && typeof built.passed === "boolean" ? built.passed : null;
+    }
+    if (!state.sectionPassed) state.sectionPassed = {};
+    state.sectionPassed[topicId] = passed;
+  }
+
   /** The hub state the shared rules read (topic states + frozen results + policy). */
   function hubState() {
     return {
       topicStates: state.routerTopicStates || {},
-      sectionResults: state.sectionResults || {},
+      sectionResults: hubSectionResults(),
       unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
       completionPolicy:
         (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
+      // Техдолг №7: «менять ответ» разрешает пройти завершённый пункт-сценарий заново.
+      rerunScenarios: !!TEST_DATA.allowAnswerChange,
     };
   }
 
@@ -14738,7 +14804,15 @@ function renderContentPage(page, contentTemplates) {
     if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
     var hub = document.createElement("div");
     hub.className = "router-hub";
-    hub.innerHTML = TBTemplate.buildRouterHubHtml(TEST_DATA.sections || [], hubState(), {
+    // A card states how many questions the learner WILL answer — this run's delivery, not the
+    // configured draw (owner's decision 2026-10-08, host parity Г1; `deliveredQuestionCount`).
+    var hubSections = (TEST_DATA.sections || []).map(function (s) {
+      var copy = {};
+      for (var k in s) copy[k] = s[k];
+      copy.drawCount = typeof deliveredQuestionCount === "function" ? deliveredQuestionCount(s) : s.drawCount;
+      return copy;
+    });
+    hub.innerHTML = TBTemplate.buildRouterHubHtml(hubSections, hubState(), {
       deadline: TEST_DATA.deadline || null,
     });
     host.appendChild(hub);
@@ -14750,7 +14824,14 @@ function renderContentPage(page, contentTemplates) {
         var action = el.getAttribute("data-action") || "";
         if (action.indexOf("router-select:") === 0) {
           var topicId = action.slice("router-select:".length);
-          el.onclick = function () { selectRouterTopic(topicId); };
+          el.onclick = function () {
+            // «Сценарий в ИС»: полный экран браузер даёт только в самом щелчке — позже,
+            // после отрисовки плеера, просьба опоздала бы. Ключ пункта — `scenario:<id>`.
+            if (topicId.indexOf("scenario:") === 0 && typeof TBSimRun !== "undefined") {
+              TBSimRun.requestFullscreen();
+            }
+            selectRouterTopic(topicId);
+          };
         } else if (action === "router-finish") {
           el.onclick = finishRouter;
         }
@@ -14826,7 +14907,17 @@ function renderContentPage(page, contentTemplates) {
    */
   function selectRouterTopic(topicId) {
     if (!isRouterMode()) return;
-    if (state.routerTopicStates[topicId] === "completed") return;
+    if (state.routerTopicStates[topicId] === "completed") {
+      // Техдолг №7: завершённый пункт-сценарий проходится заново, если тест разрешает менять
+      // ответ; плеер получает разрешение на ОДИН повторный прогон этого пункта.
+      var rerun = topicId.indexOf("scenario:") === 0 && !!TEST_DATA.allowAnswerChange
+        && typeof TBSimRun !== "undefined";
+      if (!rerun) return;
+      TBSimRun.allowRerun(topicId);
+      // Исход прежнего прогона больше не действует: его зафиксирует возврат из нового.
+      if (state.sectionPassed) delete state.sectionPassed[topicId];
+      if (state.sectionResults) delete state.sectionResults[topicId];
+    }
     // Record the router hub on the nav route BEFORE mutating state, so the
     // topic's «Назад» (section-intro / first page) returns to the hub instead of
     // dead-ending at the rebuilt chunk's index 0. Captures the clean hub state
@@ -14927,6 +15018,7 @@ function renderContentPage(page, contentTemplates) {
     var topicId = state.currentRouterTopic;
     if (topicId) {
       state.routerTopicStates[topicId] = "completed";
+      freezeSectionPass(topicId);
     }
     state.currentRouterTopic = null;
     // PRD-4 v1.1 §3.2 / Phase 4f — checkpoint the sectional state on
@@ -15020,6 +15112,7 @@ function renderContentPage(page, contentTemplates) {
     var closed = topicId && typeof isSectionClosedByLeave === "function" && isSectionClosedByLeave(topicId);
     if (closed) {
       state.routerTopicStates[topicId] = "completed";
+      freezeSectionPass(topicId);
     } else if (topicId && state.routerTopicStates[topicId] === "inProgress") {
       delete state.routerTopicStates[topicId];
     }
@@ -15417,6 +15510,7 @@ var TBTemplate = (() => {
     distributesBudget: () => distributesBudget,
     dropOnPoolSlot: () => dropOnPoolSlot,
     dropOnRight: () => dropOnRight,
+    encodeSimProtocol: () => encodeProtocol,
     escapeHtml: () => escapeHtml2,
     exportReportPdf: () => exportReportPdf,
     feedbackBanner: () => feedbackBanner,
@@ -15448,6 +15542,7 @@ var TBTemplate = (() => {
     isTestTheme: () => isTestTheme,
     lmsScoreFor: () => lmsScoreFor,
     mediaUrlOf: () => mediaUrlOf,
+    mountPlayer: () => mountPlayer,
     nextScaleIndex: () => nextScaleIndex,
     normalizeAllocation: () => normalizeAllocation,
     normalizeFeedback: () => normalizeFeedback,
@@ -15484,6 +15579,8 @@ var TBTemplate = (() => {
     renderScale: () => renderScale,
     renderScreenInto: () => renderScreenInto,
     renderShortAnswer: () => renderShortAnswer,
+    renderSimCover: () => renderSimCover,
+    renderSimRulesDialog: () => renderSimRulesDialog,
     renderSingleChoice: () => renderSingleChoice,
     renderTemplate: () => renderTemplate,
     reportFileName: () => reportFileName,
@@ -15506,6 +15603,12 @@ var TBTemplate = (() => {
     sequenceIdOf: () => sequenceIdOf,
     setAllocationValue: () => setAllocationValue,
     shouldShowReview: () => shouldShowReview,
+    simCoverShot: () => simCoverShot,
+    simCoverState: () => simCoverState,
+    simProtocolChunks: () => protocolChunks,
+    simRules: () => simRules,
+    simRunReplaces: () => simRunReplaces,
+    simulationRatio: () => simulationRatio,
     startImageForVariant: () => startImageForVariant,
     statusLabel: () => statusLabel,
     stripMarkdown: () => stripMarkdown,
@@ -17152,8 +17255,8 @@ ${MASK}b${blocks.length - 1}${MASK}
   }
   function lerpHue(from, to, t) {
     let delta = ((to - from) % 360 + 540) % 360 - 180;
-    const h = from + delta * t;
-    return (h % 360 + 360) % 360;
+    const h2 = from + delta * t;
+    return (h2 % 360 + 360) % 360;
   }
   function lerp(from, to, t) {
     return {
@@ -17447,10 +17550,10 @@ ${MASK}b${blocks.length - 1}${MASK}
     return Math.round(n * 10) / 10;
   }
   function tripleToRgb(triple) {
-    const { h, s, l } = parseHsl(triple);
+    const { h: h2, s, l } = parseHsl(triple);
     const sat = s / 100;
     const lig = l / 100;
-    const k = (n) => (n + h / 30) % 12;
+    const k = (n) => (n + h2 / 30) % 12;
     const a = sat * Math.min(lig, 1 - lig);
     const f = (n) => lig - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
     return [f(0) * 255, f(8) * 255, f(4) * 255];
@@ -18814,6 +18917,9 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
   function isOpenText(type) {
     return type === "long";
   }
+  function isSimulation(type) {
+    return type === "simulation";
+  }
   function isMeasurementOnly(question) {
     var _a, _b, _c;
     if (distributesBudget(question.type)) return true;
@@ -18832,6 +18938,40 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     if (question.type !== "scale") return false;
     const key = (_c = question.correctJson) != null ? _c : question.correct;
     return !key || typeof key.correctIndex !== "number";
+  }
+
+  // shared/sim/scoring.ts
+  var DEFAULT_SIM_PENALTIES = Object.freeze({
+    miss: 0.02,
+    blocked: 0.02,
+    wrongValue: 0.05,
+    detour: 0.01,
+    trap: 0.15,
+    hint: 0.05
+  });
+  function isGradedRun(value) {
+    return typeof value === "object" && value !== null && typeof value.outcome === "string";
+  }
+  function goalShare(run, countPartial = true) {
+    var _a;
+    if (run.outcome === "success") return 1;
+    if (run.outcome === "partial" && countPartial) {
+      const share = (_a = run.goal) == null ? void 0 : _a.share;
+      return typeof share === "number" && share > 0 ? Math.min(1, share) : 0;
+    }
+    return 0;
+  }
+  function penaltyShare(run, penalties = DEFAULT_SIM_PENALTIES) {
+    var _a;
+    const c = (_a = run.counts) != null ? _a : {};
+    const n = (v) => typeof v === "number" && v > 0 ? v : 0;
+    return n(c.misses) * penalties.miss + n(c.blocked) * penalties.blocked + n(c.wrongValues) * penalties.wrongValue + n(c.detours) * penalties.detour + n(c.traps) * penalties.trap + n(c.hints) * penalties.hint;
+  }
+  function simulationRatio(run, penalties = DEFAULT_SIM_PENALTIES, countPartial = true) {
+    if (!isGradedRun(run)) return 0;
+    const share = goalShare(run, countPartial);
+    if (share === 0) return 0;
+    return Math.max(0, Math.min(1, share - penaltyShare(run, penalties)));
   }
 
   // shared/answer-check/normalize.ts
@@ -19111,9 +19251,18 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     return index >= 0 ? index : null;
   }
   function scoreAnswer(input) {
-    var _a;
+    var _a, _b;
     const { type, correct, answer, scoring } = input;
-    const kind = (_a = scoring == null ? void 0 : scoring.kind) != null ? _a : "exact";
+    if (isSimulation(type)) {
+      const sim = (scoring == null ? void 0 : scoring.kind) === "simulation" ? scoring : null;
+      const ratio2 = simulationRatio(
+        answer,
+        (sim == null ? void 0 : sim.penalties) ? { ...DEFAULT_SIM_PENALTIES, ...sim.penalties } : DEFAULT_SIM_PENALTIES,
+        (_a = sim == null ? void 0 : sim.countPartial) != null ? _a : true
+      );
+      return { score: ratio2, sMax: 1, ratio: ratio2 };
+    }
+    const kind = (_b = scoring == null ? void 0 : scoring.kind) != null ? _b : "exact";
     if (kind === "weighted") {
       const weights = scoring && scoring.kind === "weighted" ? scoring.weights : [];
       const sMax = scoring && scoring.kind === "weighted" && scoring.sMax || maxOf(weights);
@@ -21343,6 +21492,27 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     return issues;
   }
 
+  // shared/test-items.ts
+  var SCENARIO_KEY_PREFIX = "scenario:";
+  var TOPIC_KEY_PREFIX = "topic:";
+  function parseItemKey(key) {
+    if (key.startsWith(SCENARIO_KEY_PREFIX)) return { kind: "scenario", scenarioId: key.slice(SCENARIO_KEY_PREFIX.length) };
+    if (key.startsWith(TOPIC_KEY_PREFIX)) return { kind: "topic", topicId: key.slice(TOPIC_KEY_PREFIX.length) };
+    return { kind: "topic", topicId: key };
+  }
+  function matchTestItem(ref, handlers) {
+    switch (ref.kind) {
+      case "topic":
+        return handlers.topic(ref.topicId);
+      case "scenario":
+        return handlers.scenario(ref.scenarioId);
+      default: {
+        const unreachable = ref;
+        throw new Error(`\u041D\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043D\u044B\u0439 \u0432\u0438\u0434 \u043F\u0443\u043D\u043A\u0442\u0430 \u0442\u0435\u0441\u0442\u0430: ${JSON.stringify(unreachable)}`);
+      }
+    }
+  }
+
   // shared/flow/router-hub.ts
   function escHtml3(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -21367,21 +21537,37 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
       return ids.every((id) => {
         if (state.topicStates[id] !== "completed") return false;
         const result = (state.sectionResults || {})[id];
-        return !result || result.passed !== false;
+        return !result || !result.pending && result.passed !== false;
       });
     }
     return true;
+  }
+  function isFinalFailure(topicId, state) {
+    if (state.topicStates[topicId] !== "completed") return false;
+    const result = (state.sectionResults || {})[topicId];
+    if (!result || result.pending || result.passed !== false) return false;
+    return !(state.rerunScenarios && parseItemKey(topicId).kind === "scenario");
+  }
+  function isSectionUnreachable(topicId, state, seen = /* @__PURE__ */ new Set()) {
+    if (seen.has(topicId)) return false;
+    seen.add(topicId);
+    const rule = (state.unlockRules || {})[topicId];
+    if (!rule || rule.mode !== "after_sections_completed" && rule.mode !== "after_sections_passed") return false;
+    return (rule.sectionIds || []).some((id) => {
+      if (state.topicStates[id] !== "completed") return isSectionUnreachable(id, state, seen);
+      return rule.mode === "after_sections_passed" && isFinalFailure(id, state);
+    });
   }
   function isRouterReadyToFinish(sections, state) {
     const policy = state.completionPolicy || "all_required_completed";
     const required = (sections || []).filter((s) => s.required !== false);
     if (required.length === 0) return true;
     return required.every((s) => {
-      if (state.topicStates[s.topicId] !== "completed") return false;
+      if (state.topicStates[s.topicId] !== "completed") return isSectionUnreachable(s.topicId, state);
       if (policy === "all_required_passed") {
         const result = (state.sectionResults || {})[s.topicId];
         if (!result) return false;
-        return result.passed === true;
+        return result.passed === true || isFinalFailure(s.topicId, state);
       }
       return true;
     });
@@ -21390,6 +21576,17 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
     if (status === "completed") return "\u0417\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430";
     if (status === "inProgress") return "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435";
     return "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442\u0430";
+  }
+  function cardWords(section) {
+    return matchTestItem(parseItemKey(section.topicId), {
+      topic: () => ({ status: statusLabel, locked: "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430", optional: "(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)", isScenario: false }),
+      scenario: () => ({
+        status: (st) => st === "completed" ? "\u0417\u0430\u0432\u0435\u0440\u0448\u0451\u043D" : st === "inProgress" ? "\u0412 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435" : "\u041D\u0435 \u043D\u0430\u0447\u0430\u0442",
+        locked: "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D",
+        optional: "(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u044B\u0439)",
+        isScenario: true
+      })
+    });
   }
   var CARD_CHECK = '<svg class="router-topic-card__ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
   function buildRouterHubHtml(sections, state, options) {
@@ -21417,17 +21614,20 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
       const status = state.topicStates[section.topicId] || "notStarted";
       const unlocked = isSectionUnlocked(section, state);
       const locked = !unlocked && status !== "completed";
-      const disabled = status === "completed" || !unlocked;
+      const words = cardWords(section);
+      const rerun = state.rerunScenarios === true && words.isScenario && status === "completed";
+      const disabled = status === "completed" && !rerun || !unlocked;
       const meta = [];
-      if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
+      if (words.isScenario) meta.push("\u0421\u0446\u0435\u043D\u0430\u0440\u0438\u0439");
+      else if (section.drawCount) meta.push(section.drawCount + " " + pluralQuestions2(section.drawCount));
       if (section.timeLimitMinutes) meta.push(section.timeLimitMinutes + " \u043C\u0438\u043D");
       const metaHtml = meta.length ? '<span class="router-topic-card__meta">' + meta.map((m) => '<span class="router-topic-card__chip">' + escHtml3(m) + "</span>").join("") + "</span>" : "";
       const imgUrl = section.image && typeof section.image === "object" ? section.image.url || "" : section.image || "";
       const imgHtml = imgUrl ? '<span class="router-topic-card__img"><img src="' + escHtml3(imgUrl) + '" alt=""></span>' : "";
-      const goHtml = unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
-      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">(\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u0430\u044F)</span>' : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + // A completed card carries a ✓ so it reads as clearly finished, distinct from a
+      const goHtml = rerun ? '<span class="router-topic-card__go">\u043F\u0440\u043E\u0439\u0442\u0438 \u0437\u0430\u043D\u043E\u0432\u043E</span>' : unlocked && status !== "completed" ? '<span class="router-topic-card__go">\u043D\u0430\u0447\u0430\u0442\u044C</span>' : "";
+      cards += '<button type="button" role="listitem" class="router-topic-card router-topic-card--' + status + (words.isScenario ? " router-topic-card--scenario" : "") + (locked ? " router-topic-card--locked" : "") + '" data-topic-id="' + escHtml3(section.topicId) + '" data-router-status="' + status + '"' + (locked ? ' data-router-locked="true"' : "") + (disabled ? " disabled" : ' data-action="router-select:' + escHtml3(section.topicId) + '"') + '><span class="router-topic-card__top"><span class="router-topic-card__name">' + escHtml3(section.topicName || section.topicId) + (section.required === false ? ' <span class="router-topic-card__optional">' + words.optional + "</span>" : "") + "</span>" + imgHtml + "</span>" + metaHtml + '<span class="router-topic-card__foot"><span class="router-topic-card__status">' + // A completed card carries a ✓ so it reads as clearly finished, distinct from a
       // fresh «Не начата» card at a glance. The mark says «closed», not «passed».
-      (status === "completed" ? CARD_CHECK : "") + escHtml3(unlocked ? statusLabel(status) : "\u041D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u043D\u0430") + "</span>" + goHtml + "</span></button>";
+      (status === "completed" ? CARD_CHECK : "") + escHtml3(unlocked ? words.status(status) : words.locked) + "</span>" + goHtml + "</span></button>";
     }
     html += '<div class="router-topic-cards" role="list" aria-label="\u0414\u043E\u0441\u0442\u0443\u043F\u043D\u044B\u0435 \u0442\u0435\u043C\u044B">' + cards + "</div>";
     return html;
@@ -22176,6 +22376,1067 @@ ${(_a = s.description) != null ? _a : ""}`.trimEnd();
       showCompetencyRadar: values.showCompetencyRadar === true
     };
     return { ...screen, chartSettings };
+  }
+
+  // shared/sim/contract.ts
+  var RESULT_FORMAT = "skillum.sim-result";
+  var CONTRACT_VERSION = 1;
+
+  // shared/sim/geometry.ts
+  function boundsOf(z) {
+    if (z.shape === "polygon") {
+      const xs = z.points.map((p) => p[0]);
+      const ys = z.points.map((p) => p[1]);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+    }
+    return { x: z.x, y: z.y, w: z.w, h: z.h };
+  }
+  function insidePolygon(points, x, y) {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const [xi, yi] = points[i];
+      const [xj, yj] = points[j];
+      if (onSegment(xi, yi, xj, yj, x, y)) return true;
+      if (yi > y !== yj > y && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function onSegment(x1, y1, x2, y2, x, y) {
+    const cross = (x - x1) * (y2 - y1) - (y - y1) * (x2 - x1);
+    if (Math.abs(cross) > 1e-9) return false;
+    return x >= Math.min(x1, x2) && x <= Math.max(x1, x2) && y >= Math.min(y1, y2) && y <= Math.max(y1, y2);
+  }
+  var EPS = 1e-6;
+  function contains(z, x, y) {
+    var _a;
+    if (z.shape === "polygon") return insidePolygon(z.points, x, y);
+    if (z.shape === "ellipse") {
+      const rx = z.w / 2;
+      const ry = z.h / 2;
+      if (rx <= 0 || ry <= 0) return false;
+      const dx2 = (x - (z.x + rx)) / rx;
+      const dy2 = (y - (z.y + ry)) / ry;
+      return dx2 * dx2 + dy2 * dy2 <= 1 + EPS;
+    }
+    if (!(x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h)) return false;
+    const r = Math.min((_a = z.radius) != null ? _a : 0, z.w / 2, z.h / 2);
+    if (r <= 0) return true;
+    const dx = Math.max(z.x + r - x, 0, x - (z.x + z.w - r));
+    const dy = Math.max(z.y + r - y, 0, y - (z.y + z.h - r));
+    return dx * dx + dy * dy <= r * r * (1 + EPS);
+  }
+  function radiusOf(z) {
+    var _a;
+    if (z.shape === "polygon" || z.shape === "ellipse") return 0;
+    return Math.max(0, Math.min((_a = z.radius) != null ? _a : 0, z.w / 2, z.h / 2));
+  }
+  function svgPoints(points) {
+    return points.map((p) => `${p[0]},${p[1]}`).join(" ");
+  }
+
+  // shared/sim/engine.ts
+  var DEFAULT_HINT_AFTER = 3;
+  function shapeOf(z) {
+    if (z.shape === "polygon") return { shape: "polygon", points: z.points.map((p) => [p[0], p[1]]) };
+    if (z.shape === "ellipse") return { shape: "ellipse", x: z.x, y: z.y, w: z.w, h: z.h };
+    return z.radius ? { x: z.x, y: z.y, w: z.w, h: z.h, radius: z.radius } : { x: z.x, y: z.y, w: z.w, h: z.h };
+  }
+  function passes(check, value) {
+    if (!check) return value.trim() !== "";
+    return checkRuleSet(check, value).passed;
+  }
+  function createRun(scenario, options = {}) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const now = (_a = options.now) != null ? _a : (() => Date.now());
+    const t0 = now();
+    const startedAt = (/* @__PURE__ */ new Date()).toISOString();
+    const scenes = new Map(scenario.scenes.map((s) => [s.id, s]));
+    const fieldDefs = new Map(((_b = scenario.fields) != null ? _b : []).map((f) => [f.id, f]));
+    const hintsOn = ((_d = (_c = scenario.settings) == null ? void 0 : _c.hints) == null ? void 0 : _d.enabled) !== false;
+    const hintAfter = (_g = (_f = (_e = scenario.settings) == null ? void 0 : _e.hints) == null ? void 0 : _f.afterMisses) != null ? _g : DEFAULT_HINT_AFTER;
+    let current = scenes.get(scenario.start);
+    const values = {};
+    const wrong = {};
+    for (const f of fieldDefs.values()) if (f.initial) values[f.id] = f.initial;
+    const visibility = /* @__PURE__ */ new Map();
+    const events = [];
+    const counts = { actions: 0, misses: 0, blocked: 0, wrongValues: 0, detours: 0, traps: 0, hints: 0 };
+    const traps = [];
+    let localErrors = 0;
+    let hintOn = null;
+    let selected = null;
+    let finished = null;
+    const t = () => now() - t0;
+    const elementOf = (id) => current.elements.find((e) => e.id === id);
+    const isVisible = (id) => {
+      var _a2, _b2;
+      const own = visibility.get(id);
+      if (own !== void 0) return own;
+      return !((_b2 = (_a2 = elementOf(id)) == null ? void 0 : _a2.hidden) != null ? _b2 : false);
+    };
+    function evaluate(c) {
+      var _a2;
+      if ("filled" in c) return c.filled.every((f) => {
+        var _a3;
+        return ((_a3 = values[f]) != null ? _a3 : "").trim() !== "";
+      });
+      if ("field" in c) return checkRuleSet(c.check, (_a2 = values[c.field]) != null ? _a2 : "").passed;
+      if ("visible" in c) return isVisible(c.visible);
+      if ("all" in c) return c.all.every(evaluate);
+      if ("any" in c) return c.any.some(evaluate);
+      return !evaluate(c.not);
+    }
+    function finish(outcome, goal) {
+      if (finished) return;
+      finished = { outcome, at: t(), goal };
+      hintOn = null;
+    }
+    function judgeGoal(scene) {
+      var _a2;
+      const g = scene.goal;
+      if (g.outcome === "fail") {
+        events.push({ t: t(), type: "goal", scene: scene.id, outcome: "fail" });
+        finish("fail", { scene: scene.id, message: g.message, checks: [], share: 0 });
+        return;
+      }
+      const checks = ((_a2 = g.checks) != null ? _a2 : []).map((c) => {
+        var _a3, _b2, _c2, _d2;
+        return {
+          field: c.field,
+          passed: passes((_b2 = c.check) != null ? _b2 : (_a3 = fieldDefs.get(c.field)) == null ? void 0 : _a3.check, (_c2 = values[c.field]) != null ? _c2 : ""),
+          critical: c.critical !== false,
+          weight: (_d2 = c.weight) != null ? _d2 : 1
+        };
+      });
+      const total = checks.reduce((s, c) => s + c.weight, 0);
+      const got = checks.reduce((s, c) => s + (c.passed ? c.weight : 0), 0);
+      const outcome = checks.every((c) => c.passed) ? "success" : checks.some((c) => c.critical && !c.passed) ? "fail" : "partial";
+      events.push({ t: t(), type: "goal", scene: scene.id, outcome });
+      finish(outcome, { scene: scene.id, message: g.message, checks, share: total ? got / total : 1 });
+    }
+    function enter(id) {
+      const next = scenes.get(id);
+      if (!next) return;
+      current = next;
+      selected = null;
+      localErrors = 0;
+      hintOn = null;
+      events.push({ t: t(), type: "enter", scene: id });
+      if (next.goal) judgeGoal(next);
+    }
+    function apply(effects) {
+      let moved = false;
+      for (const e of effects != null ? effects : []) {
+        if (finished) break;
+        if ("goto" in e) {
+          enter(e.goto);
+          moved = true;
+        } else if ("show" in e) visibility.set(e.show, true);
+        else if ("hide" in e) visibility.set(e.hide, false);
+        else if ("toggle" in e) visibility.set(e.toggle, !isVisible(e.toggle));
+        else if ("set" in e) {
+          values[e.set] = e.value;
+          const def = fieldDefs.get(e.set);
+          wrong[e.set] = !!(def == null ? void 0 : def.check) && !passes(def.check, e.value);
+        } else if ("clear" in e) {
+          delete values[e.clear];
+          wrong[e.clear] = false;
+        }
+      }
+      return moved;
+    }
+    function raiseError() {
+      localErrors += 1;
+      if (hintsOn && !hintOn && localErrors >= hintAfter) {
+        hintOn = findHint();
+        if (hintOn) {
+          counts.hints += 1;
+          events.push({ t: t(), type: "hint", scene: current.id, target: hintOn.target });
+        }
+      }
+    }
+    function act(a) {
+      var _a2;
+      const allowed = !a.when || evaluate(a.when);
+      if (!allowed) {
+        counts.blocked += 1;
+        events.push({ t: t(), type: "blocked", scene: current.id, id: a.id });
+        apply(a.otherwise);
+        raiseError();
+        return { kind: "blocked", id: a.id };
+      }
+      if (a.role !== "neutral") {
+        counts.actions += 1;
+        if (a.role === "detour") counts.detours += 1;
+        if (a.role === "trap") {
+          counts.traps += 1;
+          traps.push({ id: a.id, error: (_a2 = a.error) != null ? _a2 : a.id, t: t() });
+        }
+        events.push({ t: t(), type: "action", scene: current.id, id: a.id, role: a.role, ...a.role === "trap" ? { error: a.error } : {} });
+        localErrors = 0;
+        hintOn = null;
+      }
+      const moved = apply(a.effects);
+      if (finished) return { kind: "done", outcome: finished.outcome };
+      return { kind: "action", id: a.id, role: a.role, sceneChanged: moved };
+    }
+    function useful(z) {
+      var _a2, _b2, _c2, _d2;
+      if (z.when && !evaluate(z.when)) return false;
+      const sets = (effects) => (effects != null ? effects : []).filter((e) => "set" in e).map((e) => e.set);
+      const direct = sets(z.effects);
+      if (direct.length && direct.every((f) => values[f] && !wrong[f])) return false;
+      const target = (_b2 = ((_a2 = z.effects) != null ? _a2 : []).find((e) => "goto" in e)) == null ? void 0 : _b2.goto;
+      const via = target ? ((_d2 = (_c2 = scenes.get(target)) == null ? void 0 : _c2.zones) != null ? _d2 : []).filter((x) => x.role === "path").flatMap((x) => sets(x.effects)) : [];
+      if (via.length && via.every((f) => values[f] && !wrong[f])) return false;
+      return true;
+    }
+    function findHint() {
+      var _a2, _b2, _c2, _d2;
+      for (const p of (_a2 = current.fields) != null ? _a2 : []) {
+        const def = fieldDefs.get(p.field);
+        if (p.editable && (def == null ? void 0 : def.hint) && (!((_b2 = values[p.field]) != null ? _b2 : "").trim() || wrong[p.field])) {
+          const box = { x: p.x, y: p.y, w: p.w, h: p.h };
+          return { target: p.field, box, shape: { ...box }, text: def.hint };
+        }
+      }
+      const zones = (_c2 = current.zones) != null ? _c2 : [];
+      const pick = (_d2 = zones.find((z) => z.role === "path" && z.hint && useful(z))) != null ? _d2 : zones.find((z) => z.role === "alt" && z.hint && useful(z));
+      return pick ? { target: pick.id, box: boundsOf(pick), shape: shapeOf(pick), text: pick.hint } : null;
+    }
+    function miss(x, y) {
+      counts.misses += 1;
+      events.push({ t: t(), type: "miss", scene: current.id, x: Math.round(x), y: Math.round(y) });
+      selected = null;
+      raiseError();
+      if (current.onMissGoto) {
+        enter(current.onMissGoto);
+        if (finished) return { kind: "done", outcome: finished.outcome };
+        return { kind: "miss", x, y, sceneChanged: true };
+      }
+      return { kind: "miss", x, y, sceneChanged: false };
+    }
+    const run = {
+      scenario,
+      scene: () => current,
+      stage: () => {
+        var _a2, _b2, _c2;
+        return (_c2 = (_b2 = current.size) != null ? _b2 : (_a2 = scenario.settings) == null ? void 0 : _a2.stage) != null ? _c2 : { w: 1920, h: 1080 };
+      },
+      isVisible,
+      value: (id) => {
+        var _a2;
+        return (_a2 = values[id]) != null ? _a2 : "";
+      },
+      isWrong: (id) => !!wrong[id],
+      selection: () => selected,
+      hint: () => hintOn,
+      done: () => !!finished,
+      click(x, y, kind = "click") {
+        var _a2, _b2;
+        if (finished) return { kind: "none" };
+        const zone = ((_a2 = current.zones) != null ? _a2 : []).find((z) => contains(z, x, y));
+        if (zone) {
+          const wants = (_b2 = zone.action) != null ? _b2 : "click";
+          if (zone.copyText) {
+            if (kind === "dblclick") {
+              selected = zone.id;
+              return { kind: "select", id: zone.id, text: zone.copyText };
+            }
+            return kind === "rightclick" ? (selected = zone.id, { kind: "select", id: zone.id, text: zone.copyText }) : { kind: "none" };
+          }
+          if (zone.role === "neutral") return { kind: "none" };
+          if (wants === "dblclick") return kind === "dblclick" ? act(zone) : { kind: "none" };
+          if (kind === "dblclick") return { kind: "none" };
+          if (wants === kind) return act(zone);
+          if (wants === "hover" || wants === "drag") return { kind: "none" };
+        }
+        if (kind === "dblclick") return { kind: "none" };
+        return miss(x, y);
+      },
+      key(combo) {
+        var _a2, _b2;
+        if (finished) return { kind: "none" };
+        const binding = ((_a2 = current.keys) != null ? _a2 : []).find((k) => k.keys === combo);
+        if (binding) return act(binding);
+        if ((combo === "Ctrl+C" || combo === "Meta+C") && selected) {
+          const zone = ((_b2 = current.zones) != null ? _b2 : []).find((z) => z.id === selected);
+          if (zone == null ? void 0 : zone.copyText) {
+            events.push({ t: t(), type: "copy", scene: current.id, id: zone.id });
+            return { kind: "copy", text: zone.copyText };
+          }
+        }
+        return { kind: "none" };
+      },
+      commitField(fieldId, value) {
+        var _a2, _b2;
+        if (finished) return { kind: "none" };
+        const placement = ((_a2 = current.fields) != null ? _a2 : []).find((p) => p.field === fieldId && p.editable);
+        const def = fieldDefs.get(fieldId);
+        if (!placement || !def) return { kind: "none" };
+        values[fieldId] = value;
+        const judged = !!def.check && ((_b2 = def.checkWhen) != null ? _b2 : "input") === "input" && value.trim() !== "";
+        const correct = judged ? passes(def.check, value) : null;
+        wrong[fieldId] = correct === false;
+        events.push({ t: t(), type: "value", scene: current.id, field: fieldId, value, correct });
+        if (correct === false) {
+          counts.wrongValues += 1;
+          raiseError();
+        } else if (correct === true && (hintOn == null ? void 0 : hintOn.target) === fieldId) {
+          hintOn = null;
+          localErrors = 0;
+        }
+        return { kind: "value", field: fieldId, correct };
+      },
+      expire(elementId) {
+        visibility.set(elementId, false);
+      },
+      trigger(id) {
+        var _a2, _b2;
+        if (finished) return null;
+        const action = [...(_a2 = current.zones) != null ? _a2 : [], ...(_b2 = current.keys) != null ? _b2 : []].find((a) => a.id === id);
+        if (!action || action.role === "neutral") return null;
+        return act(action);
+      },
+      missAt(x, y) {
+        if (finished) return { kind: "none" };
+        return miss(x, y);
+      },
+      exit() {
+        if (finished) return { kind: "none" };
+        events.push({ t: t(), type: "exit" });
+        finish("exited", null);
+        return { kind: "done", outcome: "exited" };
+      },
+      timeout() {
+        if (finished) return { kind: "none" };
+        events.push({ t: t(), type: "timeout" });
+        finish("timeout", null);
+        return { kind: "done", outcome: "timeout" };
+      },
+      result() {
+        var _a2, _b2;
+        return {
+          format: RESULT_FORMAT,
+          version: CONTRACT_VERSION,
+          scenario: { title: scenario.meta.title },
+          startedAt,
+          durationMs: finished ? finished.at : t(),
+          outcome: (_a2 = finished == null ? void 0 : finished.outcome) != null ? _a2 : "exited",
+          goal: (_b2 = finished == null ? void 0 : finished.goal) != null ? _b2 : null,
+          counts: { ...counts },
+          traps: traps.slice(),
+          fields: { ...values },
+          events: events.slice()
+        };
+      }
+    };
+    events.push({ t: 0, type: "enter", scene: current.id });
+    if (current.goal) judgeGoal(current);
+    return run;
+  }
+
+  // shared/sim/diff.ts
+  function elementBox(el, media) {
+    var _a, _b, _c, _d;
+    const m = media.get(el.media);
+    return { x: el.x, y: el.y, w: (_b = (_a = el.w) != null ? _a : m == null ? void 0 : m.w) != null ? _b : 0, h: (_d = (_c = el.h) != null ? _c : m == null ? void 0 : m.h) != null ? _d : 0 };
+  }
+  function same(a, b, media) {
+    if (a.media !== b.media) return false;
+    const x = elementBox(a, media);
+    const y = elementBox(b, media);
+    return x.x === y.x && x.y === y.y && x.w === y.w && x.h === y.h;
+  }
+  function diffScenes(from, to, media) {
+    var _a;
+    const before = new Map(((_a = from == null ? void 0 : from.elements) != null ? _a : []).map((e) => [e.id, e]));
+    const keep = [];
+    const add = [];
+    for (const el of to.elements) {
+      const old = before.get(el.id);
+      if (old && same(old, el, media)) keep.push(el.id);
+      else add.push(el);
+    }
+    const kept = new Set(keep);
+    const remove = [...before.keys()].filter((id) => !kept.has(id));
+    return { keep, add, remove };
+  }
+  function appearSchedule(add) {
+    var _a, _b, _c;
+    const plan = /* @__PURE__ */ new Map();
+    let prevStart = 0;
+    let prevEnd = 0;
+    for (const el of add) {
+      const a = (_a = el.appear) != null ? _a : {};
+      const fade = a.effect === "fade";
+      const durationMs = fade ? (_b = a.durationMs) != null ? _b : 200 : 0;
+      const start = (a.mode === "after-previous" ? prevEnd : prevStart) + ((_c = a.delayMs) != null ? _c : 0);
+      plan.set(el.id, { delayMs: start, durationMs, fade });
+      prevStart = start;
+      prevEnd = start + durationMs;
+    }
+    return plan;
+  }
+
+  // shared/sim/player.ts
+  var CSS = `
+.tbsim{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--tbsim-bg,#eef0f3);color:var(--tbsim-fg,#16181d);font:14px/1.4 var(--tbsim-font,-apple-system,"Segoe UI",Roboto,Arial,sans-serif);user-select:none}
+.tbsim__bar{flex:none;display:flex;align-items:center;gap:16px;padding:12px 24px;background:var(--tbsim-bar,#fff);border-bottom:1px solid #dfe3e8}
+.tbsim__task{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.tbsim__cap{font-size:12px;color:#5b6270}
+.tbsim__counters{display:flex;gap:16px;color:#5b6270;white-space:nowrap}
+.tbsim__counters b{color:#16181d;font-variant-numeric:tabular-nums}
+.tbsim__timer{display:flex;flex-direction:column;align-items:flex-end;font-size:12px;color:#5b6270}
+.tbsim__timer b{font-size:22px;line-height:1;color:var(--tbsim-accent,#6b2bd9);font-variant-numeric:tabular-nums}
+.tbsim__timer.is-warning b{color:#b3261e}
+.tbsim__btn{font:inherit;padding:8px 14px;border-radius:8px;border:1px solid #c9ced6;background:#fff;color:#16181d;cursor:pointer;white-space:nowrap}
+.tbsim__btn--primary{background:var(--tbsim-accent,#6b2bd9);border-color:var(--tbsim-accent,#6b2bd9);color:#fff}
+.tbsim__btn--danger{background:#b3261e;border-color:#b3261e;color:#fff}
+.tbsim__wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:24px;overflow:hidden}
+.tbsim__frame{position:relative;flex:none;box-shadow:0 2px 12px rgba(0,0,0,.12)}
+.tbsim__canvas{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:#fff}
+.tbsim__el{position:absolute;display:block;pointer-events:none;-webkit-user-drag:none}
+.tbsim__val{position:absolute;box-sizing:border-box;display:flex;align-items:center;padding:0 12px;pointer-events:none;color:#16181d;white-space:nowrap;overflow:hidden}
+.tbsim__input{position:absolute;box-sizing:border-box;margin:0;padding:0 12px;border:3px solid var(--tbsim-accent,#6b2bd9);border-radius:6px;background:#fff;color:#16181d;outline:none;user-select:text}
+.tbsim__input.is-wrong{border-color:#b3261e;box-shadow:0 0 0 6px rgba(179,38,30,.2)}
+.tbsim__miss{position:absolute;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:50%;border:4px solid #b3261e;background:rgba(179,38,30,.18);pointer-events:none;animation:tbsim-miss .6s ease-out forwards}
+@keyframes tbsim-miss{from{opacity:1;transform:scale(.6)}to{opacity:0;transform:scale(1.4)}}
+.tbsim__hintbox{position:absolute;box-sizing:border-box;border:4px solid #d99a00;border-radius:8px;background:rgba(217,154,0,.18);box-shadow:0 0 0 8px rgba(217,154,0,.25);pointer-events:none}
+.tbsim__hint{position:absolute;max-width:520px;padding:16px 20px;border-radius:12px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.2);pointer-events:none}
+.tbsim__hint b{display:block;margin-bottom:6px}
+.tbsim__sel{position:absolute;background:rgba(40,110,255,.28);pointer-events:none}
+.tbsim__shape{position:absolute;inset:0;overflow:visible}
+.tbsim__hintbox.is-poly,.tbsim__sel.is-poly{border:0;border-radius:0;background:none;box-shadow:none}
+.tbsim__hintbox polygon{fill:rgba(217,154,0,.18);stroke:#d99a00;stroke-width:4;stroke-linejoin:round;filter:drop-shadow(0 0 6px rgba(217,154,0,.55))}
+.tbsim__sel polygon{fill:rgba(40,110,255,.28)}
+.tbsim__veil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(22,24,29,.45);z-index:10}
+.tbsim__dialog{width:min(480px,calc(100% - 32px));padding:24px;border-radius:14px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:16px}
+.tbsim__dialog h2{margin:0;font-size:20px}
+.tbsim__dialog p{margin:0;color:#5b6270}
+.tbsim__kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tbsim__kpi{padding:12px;border:1px solid #dfe3e8;border-radius:10px;display:flex;flex-direction:column;gap:4px;color:#5b6270;font-size:12px}
+.tbsim__kpi b{font-size:22px;color:#16181d;font-variant-numeric:tabular-nums}
+.tbsim__actions{display:flex;justify-content:flex-end;gap:8px}
+`;
+  function ensureStyle2(doc) {
+    if (doc.getElementById("tbsim-css")) return;
+    const s = doc.createElement("style");
+    s.id = "tbsim-css";
+    s.textContent = CSS;
+    doc.head.appendChild(s);
+  }
+  function h(doc, tag, cls, text) {
+    const el = doc.createElement(tag);
+    if (cls) el.className = cls;
+    if (text !== void 0) el.textContent = text;
+    return el;
+  }
+  function place(el, b) {
+    el.style.left = `${b.x}px`;
+    el.style.top = `${b.y}px`;
+    el.style.width = `${b.w}px`;
+    el.style.height = `${b.h}px`;
+  }
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  function outline(doc, cls, shape) {
+    const b = boundsOf(shape);
+    const el = h(doc, "div", cls);
+    place(el, b);
+    if (shape.shape === "polygon") {
+      el.classList.add("is-poly");
+      const svg = doc.createElementNS(SVG_NS, "svg");
+      svg.setAttribute("class", "tbsim__shape");
+      svg.setAttribute("viewBox", `${b.x} ${b.y} ${Math.max(b.w, 1)} ${Math.max(b.h, 1)}`);
+      svg.setAttribute("width", String(b.w));
+      svg.setAttribute("height", String(b.h));
+      const poly = doc.createElementNS(SVG_NS, "polygon");
+      poly.setAttribute("points", svgPoints(shape.points));
+      svg.appendChild(poly);
+      el.appendChild(svg);
+    } else if (shape.shape === "ellipse") {
+      el.style.borderRadius = "50%";
+    } else if (radiusOf(shape) > 0) {
+      el.style.borderRadius = `${radiusOf(shape)}px`;
+    }
+    return el;
+  }
+  function mmss(ms) {
+    const s = Math.max(0, Math.round(ms / 1e3));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }
+  function comboOf(e) {
+    let key = null;
+    if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
+    else if (/^Digit[0-9]$/.test(e.code)) key = e.code.slice(5);
+    else if (/^(F([1-9]|1[0-2])|Enter|Escape|Tab|Delete|Backspace|Space|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown)$/.test(e.code)) key = e.code;
+    else if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") key = e.key;
+    if (!key) return null;
+    const mods = [e.ctrlKey && "Ctrl", e.altKey && "Alt", e.shiftKey && "Shift", e.metaKey && "Meta"].filter(Boolean);
+    return [...mods, key].join("+");
+  }
+  var TITLES = {
+    success: "\u0426\u0435\u043B\u044C \u0434\u043E\u0441\u0442\u0438\u0433\u043D\u0443\u0442\u0430",
+    partial: "\u0426\u0435\u043B\u044C \u0434\u043E\u0441\u0442\u0438\u0433\u043D\u0443\u0442\u0430 \u0447\u0430\u0441\u0442\u0438\u0447\u043D\u043E",
+    fail: "\u0426\u0435\u043B\u044C \u043D\u0435 \u0434\u043E\u0441\u0442\u0438\u0433\u043D\u0443\u0442\u0430",
+    exited: "\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u043F\u0440\u0435\u0440\u0432\u0430\u043D\u043E",
+    timeout: "\u0412\u0440\u0435\u043C\u044F \u0432\u044B\u0448\u043B\u043E"
+  };
+  function mountPlayer(root, options) {
+    var _a, _b, _c, _d, _e, _f;
+    const doc = root.ownerDocument;
+    ensureStyle2(doc);
+    const { scenario } = options;
+    const media = new Map(scenario.media.map((m) => [m.id, m]));
+    const fieldDefs = new Map(((_a = scenario.fields) != null ? _a : []).map((f) => [f.id, f]));
+    const run = createRun(scenario);
+    const counters = (_c = (_b = scenario.settings) == null ? void 0 : _b.counters) != null ? _c : {};
+    const limitMs = ((_d = scenario.settings) == null ? void 0 : _d.limitSeconds) ? scenario.settings.limitSeconds * 1e3 : null;
+    const startedAt = Date.now();
+    const shell = h(doc, "div", "tbsim");
+    const bar = h(doc, "div", "tbsim__bar");
+    const task = h(doc, "div", "tbsim__task");
+    task.append(h(doc, "span", "tbsim__cap", (_e = options.caption) != null ? _e : "\u0417\u0430\u0434\u0430\u043D\u0438\u0435"), h(doc, "span", "", scenario.meta.task));
+    const counterBox = h(doc, "div", "tbsim__counters");
+    const timerBox = h(doc, "div", "tbsim__timer");
+    const timerNum = h(doc, "b");
+    if (limitMs) timerBox.append(h(doc, "span", "", "\u043E\u0441\u0442\u0430\u043B\u043E\u0441\u044C"), timerNum);
+    const exitBtn = h(doc, "button", "tbsim__btn", "\u0412\u044B\u0439\u0442\u0438 \u0434\u043E\u0441\u0440\u043E\u0447\u043D\u043E");
+    exitBtn.type = "button";
+    bar.append(task, counterBox, timerBox, exitBtn);
+    const wrap = h(doc, "div", "tbsim__wrap");
+    const frame = h(doc, "div", "tbsim__frame");
+    const canvas = h(doc, "div", "tbsim__canvas");
+    frame.append(canvas);
+    wrap.append(frame);
+    shell.append(bar, wrap);
+    root.append(shell);
+    const overlay = h(doc, "div");
+    overlay.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:5";
+    canvas.append(overlay);
+    let scale = 1;
+    function fit() {
+      const stage = run.stage();
+      const r = wrap.getBoundingClientRect();
+      const availW = Math.max(1, r.width - 48);
+      const availH = Math.max(1, r.height - 48);
+      scale = Math.min(availW / stage.w, availH / stage.h);
+      frame.style.width = `${stage.w * scale}px`;
+      frame.style.height = `${stage.h * scale}px`;
+      canvas.style.width = `${stage.w}px`;
+      canvas.style.height = `${stage.h}px`;
+      canvas.style.transform = `scale(${scale})`;
+    }
+    const onResize = () => fit();
+    (_f = doc.defaultView) == null ? void 0 : _f.addEventListener("resize", onResize);
+    const nodes = /* @__PURE__ */ new Map();
+    const timers = /* @__PURE__ */ new Set();
+    const shownAt = /* @__PURE__ */ new Map();
+    let drawn = null;
+    function later(fn, ms) {
+      const id = setTimeout(() => {
+        timers.delete(id);
+        fn();
+      }, ms);
+      timers.add(id);
+    }
+    function drawScene() {
+      var _a2, _b2;
+      const scene = run.scene();
+      const d = diffScenes(drawn, scene, media);
+      for (const id of d.remove) {
+        (_a2 = nodes.get(id)) == null ? void 0 : _a2.remove();
+        nodes.delete(id);
+        shownAt.delete(id);
+      }
+      const plan = appearSchedule(d.add);
+      for (const el of d.add) {
+        const m = media.get(el.media);
+        const img = h(doc, "img", "tbsim__el");
+        img.alt = "";
+        img.draggable = false;
+        img.src = options.mediaUrl((_b2 = m == null ? void 0 : m.file) != null ? _b2 : "");
+        place(img, elementBox(el, media));
+        const p = plan.get(el.id);
+        if (p.fade || p.delayMs) {
+          img.style.opacity = "0";
+          if (p.fade) img.style.transition = `opacity ${p.durationMs}ms ease-out`;
+          later(() => {
+            img.style.opacity = "1";
+          }, p.delayMs + 16);
+        }
+        nodes.set(el.id, img);
+      }
+      for (const el of scene.elements) {
+        const n = nodes.get(el.id);
+        if (n) canvas.insertBefore(n, overlay);
+      }
+      drawn = scene;
+      fit();
+    }
+    function drawVisibility() {
+      for (const el of run.scene().elements) {
+        const n = nodes.get(el.id);
+        if (!n) continue;
+        const on = run.isVisible(el.id);
+        n.style.visibility = on ? "visible" : "hidden";
+        if (on && !shownAt.get(el.id) && el.autoHideMs) {
+          later(() => {
+            run.expire(el.id);
+            render();
+          }, el.autoHideMs);
+        }
+        shownAt.set(el.id, on);
+      }
+    }
+    const inputs = /* @__PURE__ */ new Map();
+    const labels = /* @__PURE__ */ new Map();
+    const committed = /* @__PURE__ */ new Map();
+    let clipboard = "";
+    function commit(id, input) {
+      if (committed.get(id) === input.value) return;
+      committed.set(id, input.value);
+      react(run.commitField(id, input.value));
+    }
+    function focusNext(from) {
+      var _a2, _b2;
+      const editable = ((_a2 = run.scene().fields) != null ? _a2 : []).filter((p) => p.editable).sort((a, b) => {
+        var _a3, _b3, _c2, _d2;
+        return ((_b3 = (_a3 = fieldDefs.get(a.field)) == null ? void 0 : _a3.tabIndex) != null ? _b3 : 0) - ((_d2 = (_c2 = fieldDefs.get(b.field)) == null ? void 0 : _c2.tabIndex) != null ? _d2 : 0);
+      });
+      const i = editable.findIndex((p) => p.field === from);
+      const next = editable[i + 1];
+      if (next) (_b2 = inputs.get(next.field)) == null ? void 0 : _b2.focus();
+    }
+    function makeInput(p) {
+      var _a2, _b2;
+      const input = h(doc, "input", "tbsim__input");
+      input.type = "text";
+      input.setAttribute("aria-label", (_b2 = (_a2 = fieldDefs.get(p.field)) == null ? void 0 : _a2.title) != null ? _b2 : p.field);
+      input.addEventListener("click", (e) => e.stopPropagation());
+      input.addEventListener("dblclick", (e) => e.stopPropagation());
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          e.stopPropagation();
+          commit(p.field, input);
+          if (e.key === "Tab") focusNext(p.field);
+        }
+      });
+      input.addEventListener("blur", () => commit(p.field, input));
+      input.addEventListener("paste", (e) => {
+        var _a3, _b3, _c2, _d2, _e2;
+        if (((_a3 = fieldDefs.get(p.field)) == null ? void 0 : _a3.allowPaste) === false) {
+          e.preventDefault();
+          return;
+        }
+        const text = (_c2 = (_b3 = e.clipboardData) == null ? void 0 : _b3.getData("text")) != null ? _c2 : "";
+        if (!text && clipboard) {
+          e.preventDefault();
+          input.setRangeText(clipboard, (_d2 = input.selectionStart) != null ? _d2 : input.value.length, (_e2 = input.selectionEnd) != null ? _e2 : input.value.length, "end");
+        }
+      });
+      return input;
+    }
+    function drawFields() {
+      var _a2, _b2, _c2;
+      const placed = /* @__PURE__ */ new Set();
+      for (const p of (_a2 = run.scene().fields) != null ? _a2 : []) {
+        placed.add(p.field);
+        const fontPx = Math.round(p.h * 0.34);
+        if (p.editable) {
+          (_b2 = labels.get(p.field)) == null ? void 0 : _b2.remove();
+          labels.delete(p.field);
+          let input = inputs.get(p.field);
+          if (!input) {
+            input = makeInput(p);
+            inputs.set(p.field, input);
+            input.value = run.value(p.field);
+            committed.set(p.field, input.value);
+          }
+          if (doc.activeElement !== input) input.value = run.value(p.field);
+          input.classList.toggle("is-wrong", run.isWrong(p.field));
+          place(input, p);
+          input.style.fontSize = `${fontPx}px`;
+          canvas.insertBefore(input, overlay);
+        } else {
+          (_c2 = inputs.get(p.field)) == null ? void 0 : _c2.remove();
+          inputs.delete(p.field);
+          let label = labels.get(p.field);
+          if (!label) {
+            label = h(doc, "div", "tbsim__val");
+            labels.set(p.field, label);
+          }
+          label.textContent = run.value(p.field);
+          place(label, p);
+          label.style.fontSize = `${fontPx}px`;
+          canvas.insertBefore(label, overlay);
+        }
+      }
+      for (const [id, n] of inputs) if (!placed.has(id)) {
+        n.remove();
+        inputs.delete(id);
+      }
+      for (const [id, n] of labels) if (!placed.has(id)) {
+        n.remove();
+        labels.delete(id);
+      }
+    }
+    function drawOverlay() {
+      var _a2;
+      overlay.querySelectorAll(".tbsim__hintbox,.tbsim__hint,.tbsim__sel").forEach((n) => n.remove());
+      const hint = run.hint();
+      if (hint) {
+        const box = outline(doc, "tbsim__hintbox", hint.shape);
+        const bubble = h(doc, "div", "tbsim__hint");
+        bubble.append(h(doc, "b", "", "\u041F\u043E\u0434\u0441\u043A\u0430\u0437\u043A\u0430"), h(doc, "span", "", hint.text));
+        const stage = run.stage();
+        const below = hint.box.y + hint.box.h + 16;
+        bubble.style.left = `${Math.min(hint.box.x, stage.w - 540)}px`;
+        bubble.style.fontSize = `${Math.round(stage.h / 45)}px`;
+        if (below + 160 < stage.h) bubble.style.top = `${below}px`;
+        else bubble.style.bottom = `${stage.h - hint.box.y + 16}px`;
+        overlay.append(box, bubble);
+      }
+      const sel = run.selection();
+      if (sel) {
+        const z = ((_a2 = run.scene().zones) != null ? _a2 : []).find((x) => x.id === sel);
+        if (z) overlay.append(outline(doc, "tbsim__sel", z));
+      }
+    }
+    function drawBar() {
+      const r = run.result();
+      counterBox.replaceChildren();
+      const add = (label, n) => {
+        const s = h(doc, "span", "", `${label} `);
+        s.append(h(doc, "b", "", String(n)));
+        counterBox.append(s);
+      };
+      if (counters.actions) add("\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0439", r.counts.actions);
+      if (counters.misses) add("\u041E\u0448\u0438\u0431\u043E\u043A", r.counts.misses + r.counts.blocked + r.counts.wrongValues);
+      if (counters.detours) add("\u0412 \u0441\u0442\u043E\u0440\u043E\u043D\u0443", r.counts.detours);
+      exitBtn.hidden = run.done();
+    }
+    function render() {
+      if (drawn !== run.scene()) drawScene();
+      drawVisibility();
+      drawFields();
+      drawOverlay();
+      drawBar();
+    }
+    function ring(x, y) {
+      const r = h(doc, "span", "tbsim__miss");
+      r.style.left = `${x}px`;
+      r.style.top = `${y}px`;
+      overlay.append(r);
+      later(() => r.remove(), 700);
+    }
+    let finishedShown = false;
+    function react(reaction) {
+      var _a2, _b2, _c2;
+      if (reaction.kind === "miss") ring(reaction.x, reaction.y);
+      if (reaction.kind === "copy") {
+        clipboard = reaction.text;
+        (_b2 = (_a2 = doc.defaultView) == null ? void 0 : _a2.navigator.clipboard) == null ? void 0 : _b2.writeText(reaction.text).catch(() => void 0);
+      }
+      render();
+      if (run.done() && !finishedShown) {
+        finishedShown = true;
+        const result = run.result();
+        (_c2 = options.onFinish) == null ? void 0 : _c2.call(options, result);
+        showResult(result);
+      }
+    }
+    function dialog() {
+      const veil = h(doc, "div", "tbsim__veil");
+      const box = h(doc, "div", "tbsim__dialog");
+      veil.append(box);
+      shell.append(veil);
+      return { veil, box };
+    }
+    function showResult(result) {
+      var _a2, _b2, _c2, _d2;
+      const { box } = dialog();
+      box.append(h(doc, "h2", "", TITLES[result.outcome]));
+      let text = "";
+      if (result.outcome === "success") text = "\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E.";
+      else if (result.outcome === "partial") text = `\u0412\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E \u043D\u0435 \u043F\u043E\u043B\u043D\u043E\u0441\u0442\u044C\u044E: \u043E\u0448\u0438\u0431\u043A\u0438 \u0432 \u043F\u043E\u043B\u044F\u0445 ${(_a2 = result.goal) == null ? void 0 : _a2.checks.filter((c) => !c.passed).map((c) => {
+        var _a3, _b3;
+        return (_b3 = (_a3 = fieldDefs.get(c.field)) == null ? void 0 : _a3.title) != null ? _b3 : c.field;
+      }).join(", ")}.`;
+      else if (result.outcome === "fail") {
+        const trap = result.traps[result.traps.length - 1];
+        text = ((_b2 = result.goal) == null ? void 0 : _b2.message) ? `${result.goal.message}.${trap ? ` \u041E\u0448\u0438\u0431\u043A\u0430: ${trap.error}.` : ""}` : `\u0414\u043E\u043A\u0443\u043C\u0435\u043D\u0442 \u043E\u0444\u043E\u0440\u043C\u043B\u0435\u043D \u0441 \u043E\u0448\u0438\u0431\u043A\u0430\u043C\u0438: ${(_c2 = result.goal) == null ? void 0 : _c2.checks.filter((c) => !c.passed).map((c) => {
+          var _a3, _b3;
+          return (_b3 = (_a3 = fieldDefs.get(c.field)) == null ? void 0 : _a3.title) != null ? _b3 : c.field;
+        }).join(", ")}.`;
+      } else if (result.outcome === "timeout") text = "\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u043E \u043F\u043E \u0432\u0440\u0435\u043C\u0435\u043D\u0438 \u0438 \u0437\u0430\u0441\u0447\u0438\u0442\u0430\u043D\u043E \u043A\u0430\u043A \u043D\u0435\u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043D\u043E\u0435.";
+      else text = "\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u0437\u0430\u0441\u0447\u0438\u0442\u0430\u043D\u043E \u043A\u0430\u043A \u043D\u0435\u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043D\u043E\u0435.";
+      box.append(h(doc, "p", "", text));
+      if (options.showDetails !== false) {
+        const k = h(doc, "div", "tbsim__kpis");
+        const kpi = (label, v) => {
+          const d = h(doc, "div", "tbsim__kpi", label);
+          d.append(h(doc, "b", "", v));
+          k.append(d);
+        };
+        kpi("\u0432\u0440\u0435\u043C\u044F", mmss(result.durationMs));
+        kpi("\u043E\u0448\u0438\u0431\u043E\u043A", String(result.counts.misses + result.counts.blocked + result.counts.wrongValues + result.counts.traps));
+        kpi("\u043F\u043E\u0434\u0441\u043A\u0430\u0437\u043E\u043A", String(result.counts.hints));
+        box.append(k);
+      }
+      const actions = h(doc, "div", "tbsim__actions");
+      const back = h(doc, "button", "tbsim__btn tbsim__btn--primary", (_d2 = options.closeLabel) != null ? _d2 : "\u0412\u0435\u0440\u043D\u0443\u0442\u044C\u0441\u044F \u043A \u0432\u043E\u043F\u0440\u043E\u0441\u0443");
+      back.type = "button";
+      back.addEventListener("click", () => {
+        var _a3;
+        return (_a3 = options.onClose) == null ? void 0 : _a3.call(options, result);
+      });
+      actions.append(back);
+      box.append(actions);
+      back.focus();
+    }
+    exitBtn.addEventListener("click", () => {
+      const { veil, box } = dialog();
+      box.append(h(doc, "h2", "", "\u0412\u044B\u0439\u0442\u0438 \u0434\u043E\u0441\u0440\u043E\u0447\u043D\u043E?"), h(doc, "p", "", "\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u0431\u0443\u0434\u0435\u0442 \u0437\u0430\u0441\u0447\u0438\u0442\u0430\u043D\u043E \u043A\u0430\u043A \u043D\u0435\u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043D\u043E\u0435. \u041F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u043D\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u0441\u044F."));
+      const actions = h(doc, "div", "tbsim__actions");
+      const stay = h(doc, "button", "tbsim__btn", "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u0435");
+      const leave = h(doc, "button", "tbsim__btn tbsim__btn--danger", "\u0412\u044B\u0439\u0442\u0438");
+      stay.type = leave.type = "button";
+      stay.addEventListener("click", () => veil.remove());
+      leave.addEventListener("click", () => {
+        veil.remove();
+        react(run.exit());
+      });
+      actions.append(stay, leave);
+      box.append(actions);
+      stay.focus();
+    });
+    function stagePoint(e) {
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+    }
+    canvas.addEventListener("click", (e) => {
+      const p = stagePoint(e);
+      react(run.click(p.x, p.y, "click"));
+    });
+    canvas.addEventListener("dblclick", (e) => {
+      const p = stagePoint(e);
+      react(run.click(p.x, p.y, "dblclick"));
+    });
+    canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const p = stagePoint(e);
+      react(run.click(p.x, p.y, "rightclick"));
+    });
+    const onKey = (e) => {
+      var _a2, _b2;
+      if (run.done() || shell.querySelector(".tbsim__veil")) return;
+      const combo = comboOf(e);
+      if (!combo) return;
+      const inInput = (_b2 = (_a2 = e.target) == null ? void 0 : _a2.classList) == null ? void 0 : _b2.contains("tbsim__input");
+      if (inInput && !/^(Ctrl|Alt|Meta)\+/.test(combo) && combo !== "Escape") return;
+      if (inInput && /^(Ctrl|Meta)\+[CVXAZ]$/.test(combo)) return;
+      if (/^(Ctrl|Meta)\+S$/.test(combo)) e.preventDefault();
+      const reaction = run.key(combo);
+      if (reaction.kind !== "none") {
+        e.preventDefault();
+        react(reaction);
+      }
+    };
+    doc.addEventListener("keydown", onKey);
+    const tick = setInterval(() => {
+      if (!limitMs || run.done()) return;
+      const left = limitMs - (Date.now() - startedAt);
+      timerNum.textContent = mmss(left);
+      timerBox.classList.toggle("is-warning", left <= 6e4);
+      if (left <= 0) react(run.timeout());
+    }, 250);
+    if (limitMs) timerNum.textContent = mmss(limitMs);
+    render();
+    later(fit, 0);
+    return {
+      run,
+      destroy() {
+        var _a2;
+        clearInterval(tick);
+        timers.forEach((id) => clearTimeout(id));
+        doc.removeEventListener("keydown", onKey);
+        (_a2 = doc.defaultView) == null ? void 0 : _a2.removeEventListener("resize", onResize);
+        shell.remove();
+      }
+    };
+  }
+
+  // shared/sim/protocol-codec.ts
+  var PROTOCOL_CODEC_VERSION = 1;
+  var CHUNK_SIZE = 3999;
+  var MAX_CHUNKS = 10;
+  var CHUNK_MARK = "~";
+  function escape(text) {
+    return String(text).replace(/[%;@=,~\s]/g, (ch) => {
+      const code = ch.charCodeAt(0);
+      return code > 255 ? `%u${code.toString(16).padStart(4, "0")}` : `%${code.toString(16).padStart(2, "0")}`;
+    });
+  }
+  function encodeProtocol(events, durationMs) {
+    if (!Array.isArray(events)) return "";
+    const parts = [];
+    let last = 0;
+    for (const event of events) {
+      if (!event || typeof event.t !== "number") continue;
+      let body;
+      switch (event.type) {
+        case "action":
+          body = `a${escape(event.id)}`;
+          break;
+        case "blocked":
+          body = `b${escape(event.id)}`;
+          break;
+        case "miss":
+          body = `m${escape(String(event.x))},${escape(String(event.y))}`;
+          break;
+        case "value":
+          body = `v${escape(event.field)}=${escape(event.value)}`;
+          break;
+        case "exit":
+          body = "x";
+          break;
+        case "timeout":
+          body = "o";
+          break;
+        default:
+          continue;
+      }
+      const t = Math.max(0, Math.round(event.t));
+      parts.push(`${body}@${Math.max(0, t - last).toString(36)}`);
+      last = Math.max(last, t);
+    }
+    if (parts.length === 0) return "";
+    if (typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0) {
+      parts.push(`z@${Math.max(0, Math.round(durationMs) - last).toString(36)}`);
+    }
+    return `${PROTOCOL_CODEC_VERSION};${parts.join(";")}`;
+  }
+  function protocolChunks(encoded) {
+    if (!encoded) return [];
+    const chunks = [];
+    for (let i = 0; i < encoded.length; i += CHUNK_SIZE) chunks.push(CHUNK_MARK + encoded.slice(i, i + CHUNK_SIZE));
+    return chunks.length > MAX_CHUNKS ? [] : chunks;
+  }
+
+  // shared/sim/cover.ts
+  function simCoverState(answer) {
+    const outcome = answer && typeof answer === "object" ? answer.outcome : void 0;
+    if (outcome === "exited") return "exited";
+    if (outcome === "timeout") return "timeout";
+    if (outcome === "success" || outcome === "partial" || outcome === "fail") return "done";
+    return "fresh";
+  }
+  function simCoverShot(scenario) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    if (!scenario) return null;
+    const scene = (_c = (_a = scenario.scenes) == null ? void 0 : _a.find((s) => s.id === scenario.start)) != null ? _c : (_b = scenario.scenes) == null ? void 0 : _b[0];
+    const first = (_f = (_d = scene == null ? void 0 : scene.elements) == null ? void 0 : _d.find((el) => !el.hidden)) != null ? _f : (_e = scene == null ? void 0 : scene.elements) == null ? void 0 : _e[0];
+    const media = first ? (_g = scenario.media) == null ? void 0 : _g.find((m) => m.id === first.media) : void 0;
+    return (_h = media == null ? void 0 : media.file) != null ? _h : null;
+  }
+  var esc3 = (text) => String(text).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+  var ICON_PLAY = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>';
+  var ICON_CHECK = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+  var ICON_LOG_OUT = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out" aria-hidden="true"><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path></svg>';
+  var ICON_TIMER_OFF = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer-off" aria-hidden="true"><path d="M10 2h4"></path><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"></path><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2"></path><path d="m2 2 20 20"></path><path d="M12 12v-2"></path></svg>';
+  var ICON_MAXIMIZE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" x2="14" y1="3" y2="10"></line><line x1="3" x2="10" y1="21" y2="14"></line></svg>';
+  var SIM_OPEN_ACTION = "sim-open";
+  var STYLE = {
+    cover: "position:relative;width:100%;max-width:960px;border:1px solid var(--ou-border-soft);border-radius:var(--ou-radius-m);overflow:hidden;background:var(--ou-bg-surface-2)",
+    shot: "display:block;width:100%;height:auto;filter:blur(2px);transform:scale(1.02)",
+    blank: "display:block;width:100%;aspect-ratio:16/10",
+    veil: "position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--ou-space-4);padding:var(--ou-space-4);background:color-mix(in srgb, var(--ou-bg-page) 60%, transparent)",
+    done: "display:flex;flex-direction:column;align-items:center;gap:var(--ou-space-4)",
+    title: "margin:0;font:var(--ou-text-heading-l);color:var(--ou-fg-default);text-align:center",
+    note: "font:var(--ou-text-body-s);color:var(--ou-fg-muted)"
+  };
+  function renderSimCover(options) {
+    const { state, shotUrl, retake, readonly = false } = options;
+    const shot = shotUrl ? `<img class="tb-sim-cover__shot" src="${esc3(shotUrl)}" alt="" style="${STYLE.shot}">` : `<div class="tb-sim-cover__blank" style="${STYLE.blank}"></div>`;
+    const button = (variant, size, label, icon = "") => `<button type="button" class="ou-btn ou-btn--${variant} ou-btn--${size}" data-action="${SIM_OPEN_ACTION}">${icon ? `<span class="ou-btn__ico">${icon}</span>` : ""}<span>${label}</span></button>`;
+    const finished = (tone, icon, title, withRetake) => `<div class="tb-sim-cover__done" style="${STYLE.done}"><span class="ou-iconbadge ou-iconbadge--${tone} ou-iconbadge--l">${icon}</span><h2 class="tb-sim-cover__title" style="${STYLE.title}">${title}</h2>${withRetake && !readonly ? button("secondary", "m", "\u041F\u0440\u043E\u0439\u0442\u0438 \u0437\u0430\u043D\u043E\u0432\u043E") : ""}</div>`;
+    let veil;
+    if (state === "fresh") {
+      veil = (readonly ? "" : button("primary", "l", "\u041F\u0440\u043E\u0439\u0442\u0438", ICON_PLAY)) + `<span class="tb-sim-cover__note" style="${STYLE.note}">\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u044F\u0435\u0442\u0441\u044F \u043D\u0430 \u0432\u0435\u0441\u044C \u044D\u043A\u0440\u0430\u043D</span>`;
+    } else if (state === "done") {
+      veil = finished("success", ICON_CHECK, "\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E", retake);
+    } else if (state === "exited") {
+      veil = finished("warning", ICON_LOG_OUT, "\u0412\u044B\u0445\u043E\u0434 \u0434\u043E\u0441\u0440\u043E\u0447\u043D\u043E: \u0437\u0430\u0434\u0430\u043D\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E", retake);
+    } else {
+      veil = finished("warning", ICON_TIMER_OFF, "\u0412\u0440\u0435\u043C\u044F \u0432\u044B\u0448\u043B\u043E: \u0437\u0430\u0434\u0430\u043D\u0438\u0435 \u043D\u0435 \u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043E", retake);
+    }
+    return `<div class="tb-sim-cover" data-testid="sim-cover" data-sim-state="${state}" style="${STYLE.cover}">${shot}<div class="tb-sim-cover__veil" style="${STYLE.veil}">${veil}</div></div>`;
+  }
+  var PENALTY_WORDS = [
+    ["miss", "\u0449\u0435\u043B\u0447\u043A\u0438 \u043C\u0438\u043C\u043E \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0439 \u044D\u043A\u0440\u0430\u043D\u0430"],
+    ["blocked", "\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F, \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u0441\u0438\u0441\u0442\u0435\u043C\u0430 \u043D\u0435 \u0434\u0430\u0451\u0442 \u0432\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u044C"],
+    ["wrongValue", "\u043D\u0435\u0432\u0435\u0440\u043D\u044B\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F \u0432 \u043F\u043E\u043B\u044F\u0445"],
+    ["detour", "\u043B\u0438\u0448\u043D\u0438\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u0432 \u0441\u0442\u043E\u0440\u043E\u043D\u0435 \u043E\u0442 \u0437\u0430\u0434\u0430\u043D\u0438\u044F"],
+    ["trap", "\u043E\u0448\u0438\u0431\u043E\u0447\u043D\u044B\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u0441 \u043F\u043E\u0441\u043B\u0435\u0434\u0441\u0442\u0432\u0438\u044F\u043C\u0438"]
+  ];
+  function plural(n, one, few, many) {
+    const m10 = n % 10;
+    const m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+  function duration(seconds) {
+    if (seconds % 60 === 0) {
+      const minutes2 = seconds / 60;
+      return `${minutes2} ${plural(minutes2, "\u043C\u0438\u043D\u0443\u0442\u0430", "\u043C\u0438\u043D\u0443\u0442\u044B", "\u043C\u0438\u043D\u0443\u0442")}`;
+    }
+    if (seconds < 60) return `${seconds} ${plural(seconds, "\u0441\u0435\u043A\u0443\u043D\u0434\u0430", "\u0441\u0435\u043A\u0443\u043D\u0434\u044B", "\u0441\u0435\u043A\u0443\u043D\u0434")}`;
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return `${minutes} \u043C\u0438\u043D ${rest} \u0441`;
+  }
+  function simRules(scenario, penalties) {
+    var _a, _b, _c, _d, _e;
+    const settings = (_a = scenario.settings) != null ? _a : {};
+    const items = ["\u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u043E\u0442\u043A\u0440\u043E\u0435\u0442\u0441\u044F \u043D\u0430 \u0432\u0435\u0441\u044C \u044D\u043A\u0440\u0430\u043D. \u0412\u044B\u043F\u043E\u043B\u043D\u0438\u0442\u0435 \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044F \u0432 \u043E\u043A\u043D\u0435 \u0441\u0438\u0441\u0442\u0435\u043C\u044B \u0442\u0430\u043A, \u043A\u0430\u043A \u0434\u0435\u043B\u0430\u0435\u0442\u0435 \u044D\u0442\u043E \u0432 \u0440\u0430\u0431\u043E\u0442\u0435."];
+    const limit = typeof settings.limitSeconds === "number" && settings.limitSeconds > 0 ? settings.limitSeconds : null;
+    if (limit !== null) {
+      items.push(`\u041D\u0430 \u0437\u0430\u0434\u0430\u043D\u0438\u0435 \u043E\u0442\u0432\u043E\u0434\u0438\u0442\u0441\u044F ${duration(limit)}. \u0422\u0430\u0439\u043C\u0435\u0440 \u2014 \u043D\u0430 \u043F\u0430\u043D\u0435\u043B\u0438 \u043D\u0430\u0434 \u043E\u043A\u043D\u043E\u043C \u0441\u0438\u0441\u0442\u0435\u043C\u044B; \u043A\u043E\u0433\u0434\u0430 \u0432\u0440\u0435\u043C\u044F \u0432\u044B\u0439\u0434\u0435\u0442, \u0437\u0430\u0434\u0430\u043D\u0438\u0435 \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u0441\u044F.`);
+    }
+    if (penalties) {
+      const named = PENALTY_WORDS.filter(([key]) => penalties[key] > 0).map(([, words]) => words);
+      if (named.length > 0) {
+        items.push(`\u0411\u0430\u043B\u043B \u0441\u043D\u0438\u0436\u0430\u044E\u0442: ${named.join("; ")}.`);
+      }
+    }
+    if ((_b = settings.hints) == null ? void 0 : _b.enabled) {
+      const after = (_c = settings.hints.afterMisses) != null ? _c : 3;
+      const hintCosts = penalties ? penalties.hint > 0 : false;
+      items.push(`\u041F\u043E\u0441\u043B\u0435 ${after} ${plural(after, "\u043E\u0448\u0438\u0431\u043A\u0438", "\u043E\u0448\u0438\u0431\u043E\u043A", "\u043E\u0448\u0438\u0431\u043E\u043A")} \u043D\u0430 \u043E\u0434\u043D\u043E\u043C \u0448\u0430\u0433\u0435 \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F \u043F\u043E\u0434\u0441\u043A\u0430\u0437\u043A\u0430.${hintCosts ? " \u041F\u043E\u0434\u0441\u043A\u0430\u0437\u043A\u0430 \u0442\u043E\u0436\u0435 \u0441\u043D\u0438\u0436\u0430\u0435\u0442 \u0431\u0430\u043B\u043B." : ""}`);
+    }
+    items.push("\u0412\u044B\u0439\u0442\u0438 \u0434\u043E\u0441\u0440\u043E\u0447\u043D\u043E \u043C\u043E\u0436\u043D\u043E \u043A\u043D\u043E\u043F\u043A\u043E\u0439 \u043D\u0430 \u043F\u0430\u043D\u0435\u043B\u0438. \u0417\u0430\u0434\u0430\u043D\u0438\u0435 \u0442\u043E\u0433\u0434\u0430 \u0431\u0443\u0434\u0435\u0442 \u0437\u0430\u0441\u0447\u0438\u0442\u0430\u043D\u043E \u043A\u0430\u043A \u043D\u0435\u0432\u044B\u043F\u043E\u043B\u043D\u0435\u043D\u043D\u043E\u0435.");
+    return { title: "\u041F\u0440\u0430\u043A\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0435 \u0437\u0430\u0434\u0430\u043D\u0438\u0435", description: (_e = (_d = scenario.meta) == null ? void 0 : _d.title) != null ? _e : "", items };
+  }
+  function renderSimRulesDialog(rules) {
+    const items = rules.items.map((item) => `<li>${esc3(item)}</li>`).join("");
+    return `<div class="ou-modal-root tb-sim-modal" role="dialog" aria-modal="true" aria-labelledby="tb-sim-rules-title" style="position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center">
+  <div class="ou-modal__backdrop"></div>
+  <div class="ou-modal ou-modal--m">
+    <div class="ou-modal__head"><div class="ou-modal__head-text"><p class="ou-modal__title" id="tb-sim-rules-title">${esc3(rules.title)}</p>${rules.description ? `<p class="ou-modal__desc">${esc3(rules.description)}</p>` : ""}</div></div>
+    <div class="ou-modal__body"><ul class="ou-list--bulleted tb-sim-rules" style="margin:0;display:flex;flex-direction:column;gap:var(--ou-space-2)">${items}</ul></div>
+    <div class="ou-modal__foot"><button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-action="sim-cancel">\u041E\u0442\u043C\u0435\u043D\u0430</button><button type="button" class="ou-btn ou-btn--primary ou-btn--m" data-action="sim-start"><span class="ou-btn__ico">${ICON_MAXIMIZE}</span><span>\u0421\u0442\u0430\u0440\u0442</span></button></div>
+  </div>
+</div>`;
+  }
+  function simRunReplaces(previous, next) {
+    if (simCoverState(next) !== "exited") return true;
+    const before = simCoverState(previous);
+    return before === "fresh" || before === "exited";
   }
   return __toCommonJS(runtime_entry_exports);
 })();
