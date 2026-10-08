@@ -29,7 +29,7 @@ export interface ScenarioTaskSectionProps {
 
 /** The «Задание» tab of a «Сценарий» test. */
 export function ScenarioTaskSection({ model, updateModel, testId, content, savedFlowMode, designDraft }: ScenarioTaskSectionProps) {
-  const { banks, isLoading } = useScenarioBanks();
+  const { banks, isLoading, isError } = useScenarioBanks();
 
   // Тест «Сценарий» использует первый пункт; остальные (от роутера) хранятся нетронутыми.
   const item = (model.scenarioItems ?? [])[0] ?? null;
@@ -52,7 +52,7 @@ export function ScenarioTaskSection({ model, updateModel, testId, content, saved
   return (
     <div className="tb-settings-content" data-testid="settings-pane-scenario-task">
       <FormSection title="Задание" stacked>
-        <ScenarioBankFields item={item} onChange={setItem} banks={banks} isLoading={isLoading} />
+        <ScenarioBankFields item={item} onChange={setItem} banks={banks} isLoading={isLoading} loadError={isError} />
       </FormSection>
 
       <FormSection title="Страницы теста" stacked>

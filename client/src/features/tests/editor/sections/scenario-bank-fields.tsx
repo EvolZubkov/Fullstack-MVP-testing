@@ -1,7 +1,7 @@
 /**
  * @module features/tests/editor/sections/scenario-bank-fields
  * @description Поля пункта-сценария: тема-банк, выдача (случайный сценарий темы или
- * фиксированный), сводка банка или сценария, ожидаемая экспозиция, «Сыграть», «Открыть банк» —
+ * фиксированный), сводка банка или сценария, ожидаемая экспозиция, «Сыграть» —
  * согласованный эскиз `docs/wireframes/sim-scenario-test-editor.html`.
  *
  * Одни и те же поля стоят во вкладке «Задание» теста «Сценарий» и в карточке пункта-сценария
@@ -33,10 +33,22 @@ export interface ScenarioBank {
   scenarios: BankScenario[];
 }
 
-/** Темы со сценариями, видимые автору. */
+/**
+ * Темы со сценариями, видимые автору.
+ *
+ * Банк правят в ДРУГОЙ вкладке (раздел «Темы и вопросы»), а клиентский кэш по умолчанию вечный
+ * (`staleTime: Infinity`, без перезапроса при фокусе): без перезапроса список, загруженный пустым,
+ * оставался бы пустым в уже открытом ящике и после того, как сценарий добавили. Поэтому запрос
+ * обновляется при каждом монтировании и при возврате на вкладку.
+ */
 export function useScenarioBanks() {
-  const { data = [], isLoading } = useQuery<ScenarioBank[]>({ queryKey: ["/api/questions/scenario-banks"] });
-  return { banks: data, isLoading };
+  const { data = [], isLoading, isError } = useQuery<ScenarioBank[]>({
+    queryKey: ["/api/questions/scenario-banks"],
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+  return { banks: data, isLoading, isError };
 }
 
 /** Что известно о выдаче пункта: его банк, фиксированный сценарий, ожидаемая экспозиция. */
@@ -114,12 +126,14 @@ export interface ScenarioBankFieldsProps {
   onChange: (next: ScenarioItemDraft | null) => void;
   banks: ScenarioBank[];
   isLoading: boolean;
+  /** Список банков не загрузился: «нет сценариев» тут было бы неправдой. */
+  loadError?: boolean;
   /** Поля пункта, стоящие перед действиями («Обязательный» у пункта роутера). */
   beforeActions?: React.ReactNode;
 }
 
 /** Поля пункта-сценария. */
-export function ScenarioBankFields({ item, onChange, banks, isLoading, beforeActions }: ScenarioBankFieldsProps) {
+export function ScenarioBankFields({ item, onChange, banks, isLoading, loadError, beforeActions }: ScenarioBankFieldsProps) {
   const [playing, setPlaying] = useState<Scenario | null>(null);
   const { bank, fixed, exposure } = scenarioItemFacts(item, banks);
   const mode: PickMode = item?.questionId ? "fixed" : "random";
@@ -136,7 +150,15 @@ export function ScenarioBankFields({ item, onChange, banks, isLoading, beforeAct
         }}
         onClear={() => onChange(null)}
         clearLabel="Убрать банк"
-        placeholder={isLoading ? "Загрузка…" : banks.length ? "Выберите тему со сценариями" : "В доступных темах нет сценариев"}
+        placeholder={
+          isLoading
+            ? "Загрузка…"
+            : loadError
+              ? "Не удалось загрузить список тем"
+              : banks.length
+                ? "Выберите тему со сценариями"
+                : "В доступных темах нет сценариев"
+        }
         fullWidth
         searchable
         searchPlaceholder="Название темы"
@@ -216,8 +238,8 @@ export function ScenarioBankFields({ item, onChange, banks, isLoading, beforeAct
 
       {beforeActions}
 
-      <Cluster gap={1}>
-        {fixed && (
+      {fixed && (
+        <Cluster gap={1}>
           <Button
             variant="secondary"
             size="s"
@@ -230,16 +252,8 @@ export function ScenarioBankFields({ item, onChange, banks, isLoading, beforeAct
           >
             Сыграть
           </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="s"
-          onClick={() => window.open("/author/content?type=simulation", "_blank", "noopener")}
-          data-testid="scenario-open-bank"
-        >
-          Открыть банк
-        </Button>
-      </Cluster>
+        </Cluster>
+      )}
 
       {playing && (
         <ScenarioRun
