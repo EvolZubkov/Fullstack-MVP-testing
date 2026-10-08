@@ -169,7 +169,15 @@
     if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
     var hub = document.createElement("div");
     hub.className = "router-hub";
-    hub.innerHTML = TBTemplate.buildRouterHubHtml(TEST_DATA.sections || [], hubState(), {
+    // A card states how many questions the learner WILL answer — this run's delivery, not the
+    // configured draw (owner's decision 2026-10-08, host parity Г1; `deliveredQuestionCount`).
+    var hubSections = (TEST_DATA.sections || []).map(function (s) {
+      var copy = {};
+      for (var k in s) copy[k] = s[k];
+      copy.drawCount = typeof deliveredQuestionCount === "function" ? deliveredQuestionCount(s) : s.drawCount;
+      return copy;
+    });
+    hub.innerHTML = TBTemplate.buildRouterHubHtml(hubSections, hubState(), {
       deadline: TEST_DATA.deadline || null,
     });
     host.appendChild(hub);

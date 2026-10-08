@@ -152,6 +152,28 @@ function timeLimitText(minutes) {
 }
 
 /**
+ * How many questions of `section` THIS run delivers — what the learner will actually answer. The
+ * hub card and the section intro state this number (owner's decision 2026-10-08, host parity Г1):
+ * the configured `drawCount` overstates it when the topic's bank is smaller than the draw, and a
+ * variant set may deliver another size. The web counts its delivery the same way. Adaptive topics
+ * keep the configured number: their questions are drawn as the run goes, not up front.
+ * @param {object} section A section of TEST_DATA.sections
+ * @returns {number}
+ */
+function deliveredQuestionCount(section) {
+  if (!section) return 0;
+  if ((typeof TEST_DATA !== "undefined" && TEST_DATA.mode === "adaptive") ||
+      typeof state === "undefined" || !state || !state.flatQuestions || state.flatQuestions.length === 0) {
+    return section.drawCount;
+  }
+  var n = 0;
+  for (var i = 0; i < state.flatQuestions.length; i++) {
+    if (state.flatQuestions[i].topicId === section.topicId) n++;
+  }
+  return n;
+}
+
+/**
  * Plain-JS fallback for buildSectionIntroContext — used only when the shared
  * builder is absent from the (per-process cached) TBTemplate bundle, e.g. in dev
  * before a server restart picks up a newly-added export. Mirrors
@@ -264,7 +286,7 @@ function renderSectionIntro(page) {
     courseTitle: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") || section.topicName,
     topicName: section.topicName,
     description: section.topicDescription,
-    questionCount: section.drawCount,
+    questionCount: deliveredQuestionCount(section),
     timeLimitMinutes: section.timeLimitMinutes,
     instruction: instruction,
     illustration: illustrationUrl,
