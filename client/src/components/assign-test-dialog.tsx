@@ -65,7 +65,8 @@ interface Assignment {
 
 interface GroupUser {
   id: string;
-  email: string;
+  /** `null` — the account has no email (PRD-54 BR-54-42, an imported LMS participant). */
+  email: string | null;
   name: string | null;
   status: string;
   tokenStatus: "active" | "revoked" | "none";
@@ -122,21 +123,24 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
     <Cluster justify="between" gap={0} wrap={false} padY={1} className="tb-row-sep">
       <Cluster gap={3} wrap={false}>
         <Users size={12} color="var(--ou-fg-muted)" />
-        <Text weight="medium">{user.email}</Text>
+        <Text weight="medium">{user.email ?? "—"}</Text>
         {user.name && <Text tone="muted">{user.name}</Text>}
       </Cluster>
       <Cluster gap={2} wrap={false}>
         <Tag size="s" tone={user.tokenStatus === "active" ? "success" : "neutral"}>
           {user.tokenStatus === "active" ? "Активна" : user.tokenStatus === "revoked" ? "Отозвана" : "Нет ссылки"}
         </Tag>
+        {/* PRD-54 BR-54-42: без почты ссылку отправить некуда — пункт гаснет, а не прячется,
+            и подсказка говорит почему; сервер такой запрос отклоняет и сам. */}
         <IconButton
           variant="ghost"
           size="s"
-          title="Обновить ссылку и отправить письмо"
+          title={user.email ? "Обновить ссылку и отправить письмо" : "У участника нет почты — ссылку отправить некуда"}
           aria-label="Обновить ссылку"
-          icon={<RefreshCw size={12} color="var(--ou-info-600)" />}
+          // Цвет значка задан явно, поэтому погасшую кнопку приглушает и он: иначе она выглядит живой.
+          icon={<RefreshCw size={12} color={user.email ? "var(--ou-info-600)" : "var(--ou-fg-muted)"} />}
           onClick={() => resendUser.mutate()}
-          disabled={resendUser.isPending}
+          disabled={resendUser.isPending || !user.email}
         />
         {user.tokenStatus === "active" && (
           <IconButton

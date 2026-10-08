@@ -308,6 +308,9 @@ router.post("/assignments/:id/resend", requirePermission("assignments.manage"), 
 
     const user = await storage.getUser(token.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
+    // PRD-54 BR-54-42: an account without email cannot receive the link, and the server says so
+    // explicitly — BEFORE revoking: a resend that cannot deliver must not take away the working link.
+    if (!user.email) return res.status(400).json({ error: "Account has no email", field: "email" });
 
     // Отзываем старые токены. Это остаётся штатным действием независимо от
     // того, будет ли выпущен новый (revocation of an existing link is always
@@ -448,6 +451,8 @@ router.post("/assignments/:id/resend-user/:userId", requirePermission("assignmen
 
     const user = await storage.getUser(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
+    // PRD-54 BR-54-42: same explicit refusal as /resend, before anything is revoked.
+    if (!user.email) return res.status(400).json({ error: "Account has no email", field: "email" });
 
     // Отзываем старые токены этого пользователя для данного назначения. Стоит
     // независимо от того, будет ли выпущен новый (see /resend, /resend-group).

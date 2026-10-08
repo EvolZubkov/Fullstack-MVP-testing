@@ -158,6 +158,25 @@ describe("<AssignTestDialog /> — current assignments tab", () => {
     fireEvent.click(screen.getByText("Группа Б"));
     expect(await screen.findByText("member@example.com")).toBeInTheDocument();
   });
+
+  // PRD-54 BR-54-42: участнику без почты ссылку отправить некуда — пункт гаснет, сервер отказ даёт сам.
+  it("гасит «Обновить ссылку» у участника группы без почты", async () => {
+    assignmentsData = [groupAssignment];
+    groupUsersData = [
+      { id: "m1", email: "member@example.com", name: "Член", status: "active", tokenStatus: "active" },
+      { id: "m2", email: null, name: "Участник 1a2b3c4d", status: "active", tokenStatus: "none" },
+    ];
+    renderDialog();
+    await screen.findByText("Группа Б");
+    fireEvent.click(screen.getByText("Группа Б"));
+    await screen.findByText("Участник 1a2b3c4d");
+    const [withEmail, withoutEmail] = screen.getAllByRole("button", { name: "Обновить ссылку" });
+    expect(withEmail).not.toBeDisabled();
+    expect(withoutEmail).toBeDisabled();
+    expect(withoutEmail).toHaveAttribute("title", "У участника нет почты — ссылку отправить некуда");
+    // Вместо почты в строке участника — прочерк, как на экране «Пользователи».
+    expect(screen.getByText("Участник 1a2b3c4d").previousElementSibling).toHaveTextContent("—");
+  });
 });
 
 describe("<AssignTestDialog /> — users tab", () => {
