@@ -271,13 +271,17 @@ export function passages(): Passage[] {
       ],
     },
     {
-      // Г1: topic A asks for 3 questions, its bank holds 2. Both hosts deliver the 2 there are; the
-      // hub card is where the configured number and the delivered one can part.
+      // Г1: topic A asks for 3 questions, its bank holds 2. Both hosts deliver the 2 there are, and the
+      // hub card states the DELIVERED number (owner's decision 2026-10-08).
       name: "10. банк темы меньше заданного числа вопросов: карточка хаба",
       options: { shortBankTopicA: true },
-      known: ["Г1"],
       steps: [
         { do: "start" },
+        {
+          do: "check",
+          what: "на карточке темы А — выданные 2 вопроса, а не заданные 3",
+          test: (p) => /data-topic-id="topic-a"[\s\S]*?router-topic-card__chip">2 вопроса</.test(p.hub ?? ""),
+        },
         ...topic("A", true),
         ...scenario("success"),
         ...topic("B", true),
