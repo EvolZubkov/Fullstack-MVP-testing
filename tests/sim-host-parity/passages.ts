@@ -34,8 +34,7 @@ export interface Passage {
   steps: Step[];
   /**
    * Divergences awaiting the owner's decision that this passage is expected to show
-   * (`known-divergences.ts`). Every passage with a reload shows Г6; a reload inside a scenario run
-   * shows N1.
+   * (`known-divergences.ts`). Every passage with a reload shows Г6.
    */
   known?: KnownId[];
 }
@@ -194,16 +193,18 @@ export function passages(): Passage[] {
       ],
     },
     {
+      // Owner's decision 2026-10-08 (N1): a run cut by a reload is not continued — back to the hub,
+      // the item «Не начат», the participant starts it from its card.
       name: "6. перезагрузка внутри сценария: прогон не засчитан, пункт запускается заново",
       options: {},
-      known: ["Г6", "N1"],
+      known: ["Г6"],
       steps: [
         { do: "start" },
         ...topic("A", true),
         { do: "pick", item: "SC1" },
         { do: "reload" },
         { do: "resume" },
-        { do: "check", what: "после перезагрузки внутри сценария пункт не завершён", test: (p) => !/scenario-1[^"]*"[^>]*data-router-status="completed"/.test(p.hub ?? "") },
+        { do: "check", what: "после перезагрузки внутри сценария — хаб, пункт «Не начат»", test: (p) => p.screen === "hub" && /scenario-1[^"]*"[^>]*data-router-status="notStarted"/.test(p.hub ?? "") },
         ...scenario("success"),
         ...topic("B", true),
         { do: "finish" },
