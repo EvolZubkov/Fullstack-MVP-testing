@@ -31,6 +31,11 @@ export interface RouterSection {
 /** A frozen section result, as far as the hub cares about it. */
 export interface RouterSectionResult {
   passed?: boolean | null;
+  /**
+   * Исход ещё считается (веб ждёт серверную оценку раздела). Такой пункт не открывает зависимых и
+   * не считается проваленным окончательно — до ответа о нём ничего не известно.
+   */
+  pending?: boolean;
 }
 
 export interface SectionUnlockRule {
@@ -96,13 +101,44 @@ export function isSectionUnlocked(section: RouterSection, state: RouterHubState)
       const result = (state.sectionResults || {})[id];
       // A section with no pass rule reports `passed: null`; treat that as passed
       // for navigation — it cannot be failed, so it cannot block.
-      return !result || result.passed !== false;
+      return !result || (!result.pending && result.passed !== false);
     });
   }
   return true;
 }
 
-/** Whether «Завершить» may be offered. Optional sections never block. */
+/** Провал пункта окончателен: пройти его заново нельзя (повтор есть только у сценария). */
+function isFinalFailure(topicId: string, state: RouterHubState): boolean {
+  if (state.topicStates[topicId] !== "completed") return false;
+  const result = (state.sectionResults || {})[topicId];
+  if (!result || result.pending || result.passed !== false) return false;
+  return !(state.rerunScenarios && parseItemKey(topicId).kind === "scenario");
+}
+
+/**
+ * Пункт уже не откроется никогда (техдолг №8, решение владельца 2026-10-08): он ждёт успешного
+ * прохождения пункта, проваленного окончательно, — или ждёт пункт, который сам недостижим. Такой
+ * пункт не держит «Завершить»: в вердикте он идёт непройденным, а в хабе остаётся «Недоступен».
+ * Иначе участник застревал бы в тесте без выхода.
+ */
+export function isSectionUnreachable(topicId: string, state: RouterHubState, seen: Set<string> = new Set()): boolean {
+  if (seen.has(topicId)) return false;
+  seen.add(topicId);
+  const rule = (state.unlockRules || {})[topicId];
+  if (!rule || (rule.mode !== "after_sections_completed" && rule.mode !== "after_sections_passed")) return false;
+  return (rule.sectionIds || []).some((id) => {
+    if (state.topicStates[id] !== "completed") return isSectionUnreachable(id, state, seen);
+    return rule.mode === "after_sections_passed" && isFinalFailure(id, state);
+  });
+}
+
+/**
+ * Whether «Завершить» may be offered. Optional sections never block.
+ *
+ * Недостижимое не ждут (решение владельца 2026-10-08): ни пункт, который уже не откроется, ни — при
+ * политике «все обязательные пройдены» — пункт, проваленный окончательно. Оба идут в вердикт
+ * непройденными; держать из-за них «Завершить» значило бы запереть участника в тесте.
+ */
 export function isRouterReadyToFinish(
   sections: RouterSection[] | null | undefined,
   state: RouterHubState,
@@ -111,12 +147,12 @@ export function isRouterReadyToFinish(
   const required = (sections || []).filter((s) => s.required !== false);
   if (required.length === 0) return true;
   return required.every((s) => {
-    if (state.topicStates[s.topicId] !== "completed") return false;
+    if (state.topicStates[s.topicId] !== "completed") return isSectionUnreachable(s.topicId, state);
     if (policy === "all_required_passed") {
       const result = (state.sectionResults || {})[s.topicId];
       // No result under the strict policy means «not demonstrably passed».
       if (!result) return false;
-      return result.passed === true;
+      return result.passed === true || isFinalFailure(s.topicId, state);
     }
     return true;
   });

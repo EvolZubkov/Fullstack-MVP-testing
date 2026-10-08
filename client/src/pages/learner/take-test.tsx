@@ -588,7 +588,7 @@ export default function TakeTestPage() {
   // Frozen per-section pass/fail, so the hub card can show its outcome (green/red)
   // when the test reveals section results — parity with the SCORM `state.sectionResults`.
   const [routerSectionResults, setRouterSectionResults] = useState<
-    Record<string, { passed?: boolean | null }>
+    Record<string, { passed?: boolean | null; pending?: boolean }>
   >({});
   const [currentRouterTopic, setCurrentRouterTopic] = useState<string | null>(null);
   /**
@@ -1973,8 +1973,8 @@ export default function TakeTestPage() {
    * Техдолг №8: исход каждого завершённого пункта роутера — тем же серверным расчётом раздела, что
    * у экрана итогов раздела. Без него «Открывается после успешного прохождения» и политика «все
    * обязательные пройдены» знали исход только там, где тест показывает итоги раздела, а после
-   * перезагрузки — нигде. Пока оценка в пути, пункт считается непройденным: зависимый пункт не
-   * мелькнёт открытым. Ошибка запроса — исход неизвестен (`null`), и пункт не запирает других, как
+   * перезагрузки — нигде. Пока оценка в пути (`pending`), пункт не открывает зависимых и не считается
+   * проваленным окончательно: ни зависимый пункт, ни «Завершить» не мелькнут открытыми. Ошибка запроса — исход неизвестен (`null`), и пункт не запирает других, как
    * пункт без порога. Адаптивную тему оценивает движок, а не этот расчёт.
    */
   const sectionGrading = useRef(new Set<string>());
@@ -1987,7 +1987,7 @@ export default function TakeTestPage() {
     for (const topicId of completed) {
       if (topicId in routerSectionResults || sectionGrading.current.has(topicId)) continue;
       sectionGrading.current.add(topicId);
-      setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed: false } }));
+      setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed: false, pending: true } }));
       const settle = (passed: boolean | null) => {
         sectionGrading.current.delete(topicId);
         setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed } }));

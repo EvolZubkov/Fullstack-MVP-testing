@@ -71,6 +71,12 @@ describe("исход пункта фиксируется при возврате
     expect(flow.isSectionUnlocked({ topicId: SCENARIO })).toBe(false);
   });
 
+  it("проваленная тема: обязательный сценарий уже не откроется и не держит «Завершить»", () => {
+    const { flow, run } = runtime(testData(), { t1: false });
+    run("t1");
+    expect(flow.isRouterReadyToFinish()).toBe(true);
+  });
+
   it("пройденная тема открывает сценарий", () => {
     const { flow, run } = runtime(testData(), { t1: true });
     run("t1");

@@ -10,6 +10,7 @@ import {
   buildRouterHubHtml,
   isRouterReadyToFinish,
   isSectionUnlocked,
+  isSectionUnreachable,
   pluralQuestions,
   statusLabel,
   type RouterHubState,
@@ -172,5 +173,60 @@ describe("router-hub — labels", () => {
     expect(statusLabel("notStarted")).toBe("Не начата");
     expect(statusLabel("inProgress")).toBe("В процессе");
     expect(statusLabel("completed")).toBe("Завершена");
+  });
+});
+
+// ─── Техдолг №8: недостижимое не ждут (решение владельца 2026-10-08) ───────────
+
+describe("недостижимый пункт не держит «Завершить»", () => {
+  const sections = [
+    { topicId: "t1", required: true },
+    { topicId: "scenario:s", required: true },
+  ];
+  const unlockRules = { "scenario:s": { mode: "after_sections_passed", sectionIds: ["t1"] } };
+
+  it("пункт ждёт успеха проваленной темы — не откроется, но и завершить не мешает", () => {
+    const state = { topicStates: { t1: "completed" as const }, sectionResults: { t1: { passed: false } }, unlockRules };
+    expect(isSectionUnlocked({ topicId: "scenario:s" }, state)).toBe(false);
+    expect(isSectionUnreachable("scenario:s", state)).toBe(true);
+    expect(isRouterReadyToFinish(sections, state)).toBe(true);
+  });
+
+  it("цепочка: пункт ждёт недостижимый пункт — тоже недостижим", () => {
+    const state = {
+      topicStates: { t1: "completed" as const },
+      sectionResults: { t1: { passed: false } },
+      unlockRules: { ...unlockRules, t3: { mode: "after_sections_completed", sectionIds: ["scenario:s"] } },
+    };
+    expect(isSectionUnreachable("t3", state)).toBe(true);
+    expect(isRouterReadyToFinish([...sections, { topicId: "t3", required: true }], state)).toBe(true);
+  });
+
+  it("тема ещё не пройдена или оценка в пути — пункт достижим и ждётся", () => {
+    expect(isRouterReadyToFinish(sections, { topicStates: {}, unlockRules })).toBe(false);
+    const pending = { topicStates: { t1: "completed" as const }, sectionResults: { t1: { passed: false, pending: true } }, unlockRules };
+    expect(isSectionUnlocked({ topicId: "scenario:s" }, pending)).toBe(false);
+    expect(isRouterReadyToFinish(sections, pending)).toBe(false);
+  });
+
+  it("проваленный сценарий, который можно пройти заново, — провал не окончателен", () => {
+    const state = {
+      topicStates: { "scenario:s": "completed" as const },
+      sectionResults: { "scenario:s": { passed: false } },
+      unlockRules: { t1: { mode: "after_sections_passed", sectionIds: ["scenario:s"] } },
+      rerunScenarios: true,
+    };
+    expect(isSectionUnreachable("t1", state)).toBe(false);
+    expect(isSectionUnreachable("t1", { ...state, rerunScenarios: false })).toBe(true);
+  });
+
+  it("«все обязательные пройдены»: окончательно проваленный пункт не держит, повторяемый — держит", () => {
+    const base = {
+      topicStates: { t1: "completed" as const, "scenario:s": "completed" as const },
+      sectionResults: { t1: { passed: true }, "scenario:s": { passed: false } },
+      completionPolicy: "all_required_passed",
+    };
+    expect(isRouterReadyToFinish(sections, base)).toBe(true);
+    expect(isRouterReadyToFinish(sections, { ...base, rerunScenarios: true })).toBe(false);
   });
 });
