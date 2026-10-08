@@ -1,0 +1,180 @@
+/**
+ * @module tests/sim-host-parity/snapshot
+ * @description «Сценарий в ИС», техдолг №4: снимок хоста после шага прохождения и его сравнение
+ * (записка `docs/handoff/HANDOFF-2026-10-08-sim-host-parity.md`, 9.7 и 9.8).
+ *
+ * Снимок собирается из НАБЛЮДАЕМОГО: что видит участник и что уходит наружу (тело хаба, кнопки
+ * подвала, контекст экрана итогов раздела, параметры запуска плеера, ответ попытки, итог). Внутреннее
+ * состояние веба живёт в React и снаружи недоступно, а сравнивать внутренности одного пакета —
+ * несимметрично.
+ *
+ * Уровни:
+ * - L0 выдача — вопросы по пунктам в порядке выдачи;
+ * - L1 экран — `start` / `hub` / `content` / `question` / `section-results` / `scenario` / `other`;
+ * - L2 тело хаба, байт в байт (оба хоста строят его одной функцией `buildRouterHubHtml`);
+ * - L3 подвал хаба — подпись и доступность «Завершить», есть ли «Назад»;
+ * - L4 итоги раздела — `sectionResult` контекста экрана (оба хоста строят его одной функцией);
+ * - L5 запуск плеера — см. `player-double.ts`;
+ * - L6 ответ на сценарий — сжатый прогон без протокола;
+ * - L7 итог попытки — балл, вердикт и вердикты пунктов.
+ */
+import type { PackageHost } from "./package-host";
+import type { WebHost } from "./web-host";
+import type { PlayerDouble } from "./player-double";
+
+export type ScreenKind = "start" | "hub" | "content" | "question" | "section-results" | "scenario" | "results" | "other";
+
+/** L1 – L4: what the participant sees after a step. */
+export interface StepSnapshot {
+  screen: ScreenKind;
+  /** L1: the question on a question screen. */
+  question: string | null;
+  /** L2 */
+  hub: string | null;
+  /** L3 */
+  footer: { finishLabel: string | null; finishEnabled: boolean; back: boolean } | null;
+  /** L4 */
+  sectionResult: unknown;
+}
+
+/** L7: the attempt's outcome, in the units both hosts report. */
+export interface FinalSnapshot {
+  earned: number;
+  possible: number;
+  passed: boolean | null;
+  items: Array<{ key: string; earned: number; possible: number; passed: boolean | null }>;
+}
+
+const PHASES: Record<string, ScreenKind> = {
+  start: "start",
+  content: "content",
+  question: "question",
+  sectionResults: "section-results",
+  router: "hub",
+  results: "results",
+};
+
+const round = (n: number) => Math.round(n * 10000) / 10000;
+
+export function packageStep(host: PackageHost, player: PlayerDouble): StepSnapshot {
+  const doc = host.doc;
+  const hubEl = doc.querySelector(".router-hub");
+  const phase = String(host.state.phase);
+  const screen: ScreenKind = player.active ? "scenario" : hubEl ? "hub" : PHASES[phase] ?? "other";
+  let footer: StepSnapshot["footer"] = null;
+  if (screen === "hub") {
+    const buttons = [...doc.querySelectorAll("#app button")].filter((b) => !b.closest(".router-hub")) as HTMLButtonElement[];
+    const finish = buttons.find((b) => /Завершить/.test(b.textContent || ""));
+    const back = buttons.find((b) => /Назад/.test(b.textContent || ""));
+    footer = {
+      finishLabel: finish ? (finish.textContent || "").trim() : null,
+      finishEnabled: !!finish && !finish.disabled,
+      back: !!back && !back.disabled,
+    };
+  }
+  const lastSection = [...host.rendered].reverse().find((c) => c && c.sectionResult);
+  const fq = host.state.flatQuestions?.[host.state.currentIndex];
+  return {
+    screen,
+    question: screen === "question" ? (fq?.question?.id ?? null) : null,
+    hub: screen === "hub" ? hubEl!.innerHTML : null,
+    footer,
+    sectionResult: screen === "section-results" ? (lastSection?.sectionResult ?? null) : null,
+  };
+}
+
+export function webStep(web: WebHost, player: PlayerDouble): StepSnapshot {
+  const s = web.screen;
+  let screen: ScreenKind;
+  if (player.active) screen = "scenario";
+  else if (!s) screen = "other";
+  else if (s.kind === "content") screen = s.props.bodyHtml ? "hub" : "content";
+  else screen = s.kind as ScreenKind;
+  return {
+    screen,
+    question: screen === "question" ? (s!.props.question?.id ?? null) : null,
+    hub: screen === "hub" ? String(s!.props.bodyHtml) : null,
+    footer:
+      screen === "hub"
+        ? {
+            finishLabel: s!.props.nextLabel ?? null,
+            finishEnabled: !s!.props.nextDisabled,
+            back: typeof s!.props.onBack === "function",
+          }
+        : null,
+    sectionResult: screen === "section-results" ? (s!.props.context?.sectionResult ?? null) : null,
+  };
+}
+
+/** L0 from the package: the delivered questions, item by item. */
+export function packageDelivery(host: PackageHost): Array<[string, string]> {
+  return (host.state.flatQuestions as Array<{ topicId: string; question: { id: string } }>).map((fq) => [fq.topicId, fq.question.id]);
+}
+
+/** L0 from the web: the variant the start route persisted. */
+export function webDelivery(variant: { sections: Array<{ topicId: string; questionIds: string[] }> }): Array<[string, string]> {
+  return variant.sections.flatMap((s) => s.questionIds.map((id) => [s.topicId, id] as [string, string]));
+}
+
+/** L6: a scenario answer, compacted by the PACKAGE's own `TBSimRun.compact`, protocol dropped. */
+export function compactRun(host: PackageHost, answer: unknown): unknown {
+  if (answer == null) return null;
+  const c = host.window.TBSimRun.compact(answer);
+  return JSON.parse(JSON.stringify(c));
+}
+
+/** L7 from the package: what it reported to the LMS. */
+export function packageFinal(cmi: Record<string, string>): FinalSnapshot {
+  const n = Number(cmi["cmi.objectives._count"] ?? 0) || Object.keys(cmi).filter((k) => /^cmi\.objectives\.\d+\.id$/.test(k)).length;
+  const items: FinalSnapshot["items"] = [];
+  for (let i = 0; i < n; i++) {
+    const id = cmi[`cmi.objectives.${i}.id`] ?? "";
+    if (!id.startsWith("topic_")) continue;
+    const status = cmi[`cmi.objectives.${i}.success_status`];
+    items.push({
+      key: id.slice("topic_".length),
+      earned: round(Number(cmi[`cmi.objectives.${i}.score.raw`] ?? 0)),
+      possible: round(Number(cmi[`cmi.objectives.${i}.score.max`] ?? 0)),
+      passed: status === "passed" ? true : status === "failed" ? false : null,
+    });
+  }
+  const status = cmi["cmi.success_status"];
+  return {
+    earned: round(Number(cmi["cmi.score.raw"] ?? 0)),
+    possible: round(Number(cmi["cmi.score.max"] ?? 0)),
+    passed: status === "passed" ? true : status === "failed" ? false : null,
+    items,
+  };
+}
+
+/** L7 from the web: the result the server stored with the attempt. */
+export function webFinal(result: any): FinalSnapshot {
+  return {
+    earned: round(result.totalEarnedPoints),
+    possible: round(result.totalPossiblePoints),
+    passed: typeof result.overallPassed === "boolean" ? result.overallPassed : null,
+    items: (result.topicResults as any[]).map((t) => ({
+      key: t.topicId,
+      earned: round(t.earnedPoints),
+      possible: round(t.possiblePoints),
+      passed: typeof t.passed === "boolean" ? t.passed : null,
+    })),
+  };
+}
+
+/** Per-card view of a hub body — what a failing L2 prints instead of two 3 KB strings. */
+export function hubCards(html: string | null): string[] {
+  if (!html) return [];
+  const out: string[] = [];
+  const re = /<button[^>]*data-topic-id="([^"]+)"[^>]*>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const tag = m[0];
+    const attr = (name: string) => new RegExp(`${name}="([^"]*)"`).exec(tag)?.[1] ?? "";
+    out.push(
+      `${m[1]} status=${attr("data-router-status")} locked=${attr("data-router-locked") || "false"} ` +
+        `action=${attr("data-action") || "-"} disabled=${/\sdisabled(\s|>|$)/.test(tag)}`,
+    );
+  }
+  return out;
+}
