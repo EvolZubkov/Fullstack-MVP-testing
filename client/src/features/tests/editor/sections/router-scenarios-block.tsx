@@ -164,7 +164,10 @@ export function ScenarioItemRow(props: ScenarioItemRowProps) {
                   onChange={(e) => props.onChange({ ...item, required: e.target.checked })}
                   data-testid="router-scenario-required"
                 />
-                {props.unlockFields}
+                {/* Одним блоком: карточка — стопка с шагом 16, а соседние `ou-formfield` добавляют
+                    свои 16 сверху. Без обёртки «Каких пунктов» отстояло бы от «Открывается» на 32,
+                    а не на 16, как в эскизе и в карточке темы. */}
+                {props.unlockFields && <div>{props.unlockFields}</div>}
               </>
             }
           />
