@@ -72,7 +72,7 @@ import type { QuestionType } from "@shared/scales/engine";
 import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 import { buildAfterZone, type FlowContentPage } from "@shared/flow/page-sequence";
-import { isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
+import { isDeliverable, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
 import { replayRun } from "@shared/sim/replay";
 import type { Scenario } from "@shared/sim/contract";
 // PRD-50 FR-17: элементы разреза адаптивного прогона собирает хост — движок их вывести не может.
@@ -255,13 +255,22 @@ async function questionsForClient(
       ...promptHtmlOf(q),
     }) as Question;
 
-  if (!test.showCorrectAnswers) {
+  // «Сценарий в ИС»: штрафы сценария — не ключ ответа, а правила, которые участник читает в окне
+  // перед стартом. Поэтому вопрос-сценарий получает разрешённую цену ВСЕГДА — как и в пакете, где
+  // она печатается для сценария всегда (иначе пропал бы уровень теста).
+  const hasSimulation = questions.some((q) => isSimulation(q.type));
+  if (!test.showCorrectAnswers && !hasSimulation) {
     return questions.map((q) => ({ ...withLimit(q), correctJson: undefined })) as Question[];
   }
   const scoring = await loadTestScoringContext(test.id, src);
   return questions.map((q) => {
     const effective = scoring.resolve(q);
     const base = withLimit(q);
+    if (isSimulation(q.type)) {
+      const sim = test.showCorrectAnswers ? base : { ...base, correctJson: undefined };
+      return { ...sim, scoring: effective.scoring };
+    }
+    if (!test.showCorrectAnswers) return { ...base, correctJson: undefined } as Question;
     return effective.source.scoring === "system" ? base : { ...base, scoring: effective.scoring };
   });
 }
@@ -1232,7 +1241,9 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       questionsByTopic.set(
         topicId,
         (await src.getQuestionsByTopic(topicId))
-          .filter((question) => !excludedFromDelivery.has(question.id)),
+          .filter((question) => !excludedFromDelivery.has(question.id))
+          // «Сценарий в ИС»: адаптивный обход сценарий не играет — см. `isDeliverable`.
+          .filter((question) => isDeliverable(question.type, "adaptive")),
       );
     }
 

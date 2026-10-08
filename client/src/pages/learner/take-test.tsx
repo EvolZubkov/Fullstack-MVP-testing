@@ -8,7 +8,7 @@ import { TemplateQuestionScreen } from "./template-question-screen";
 import { fmtIsoDateHuman, fmtIsoInstantHuman } from "./cooldown-format";
 import { downloadAttemptReport } from "@/features/learner/attempt-report";
 import { deliversShuffledOrder, hasAnswer, rankingDeliveryOrder } from "./answer-gate";
-import { isSingleIndexChoice, isMeasurementOnly } from "@shared/questions/question-type";
+import { isSingleIndexChoice, isMeasurementOnly, isSimulation } from "@shared/questions/question-type";
 import { createQuestionTime } from "@shared/questions/question-time";
 // PRD-10 (FR-12): мгновенный вердикт по ответу считает тот же движок, что и итоги
 // попытки и рантайм SCORM-пакета — второй копии правил оценивания на вебе нет.
@@ -70,6 +70,8 @@ import { useAuth } from "@/lib/auth";
 import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
 import type { Scenario } from "@shared/sim/contract";
 import { ScenarioRun, requestScenarioFullscreen } from "@/features/questions/scenario/scenario-run";
+import { SimRulesDialog } from "@/features/questions/scenario/sim-rules-dialog";
+import { resolveSimScoring, type SimScoringLevel } from "@shared/sim/scoring";
 import { isScenarioItemKey } from "@shared/test-items";
 import type { ResolvedRule } from "@shared/scoring/pass-rule";
 
@@ -519,6 +521,12 @@ export default function TakeTestPage() {
   const [scenarioTest, setScenarioTest] = useState(false);
   /** Прогон закрыт участником, попытка отправляется: плеер больше не показывается. */
   const [scenarioDone, setScenarioDone] = useState(false);
+  /**
+   * «Сценарий в ИС» в обычном разделе (техдолг №5): «Пройти» на обложке открывает окно правил
+   * (`rules`), «Старт» в нём — плеер на весь экран (`run`); закрытие окна результата плеера
+   * возвращает к экрану вопроса. Смена вопроса закрывает и то, и другое.
+   */
+  const [simDialog, setSimDialog] = useState<null | "rules" | "run">(null);
   const [testInfo, setTestInfo] = useState<Test | null>(null);
   const [phase, setPhase] = useState<"loading" | "start" | "question" | "content" | "finished" | "blocked">("loading");
   // PRD-12 FR-6: the author's structure, delivered with the attempt. `pageQueue`
@@ -733,6 +741,8 @@ export default function TakeTestPage() {
   // Standard mode state
   const [attempt, setAttempt] = useState<AttemptWithQuestions | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  // «Сценарий в ИС»: смена вопроса закрывает окно правил и плеер вопроса-сценария.
+  useEffect(() => setSimDialog(null), [currentIndex]);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState(false);
   const [standardFeedbackShown, setStandardFeedbackShown] = useState(false);
   const [standardAnswerResult, setStandardAnswerResult] = useState<{
@@ -3608,8 +3618,43 @@ export default function TakeTestPage() {
         return committedCurrent ? handleStandardContinue() : handleNext();
       }
     };
+    // «Сценарий в ИС» в обычном разделе (техдолг №5, эскиз sim-scenario-learner.html): прогон —
+    // плеер на весь экран поверх страницы; результат — ответ на вопрос, как у любого типа, и
+    // фиксируется обычным «Далее». Закрытие окна результата возвращает к экрану вопроса.
+    const currentScenario = isSimulation(currentQ.question.type)
+      ? (currentQ.question.dataJson as { scenario?: Scenario } | null)?.scenario ?? null
+      : null;
+    if (currentScenario && simDialog === "run") {
+      return (
+        <ScenarioRun
+          scenario={currentScenario}
+          caption={testInfo?.title}
+          showDetails={showCorrectAnswers}
+          closeLabel="Вернуться к вопросу"
+          remainingSeconds={sectionRemainingSeconds ?? remainingSeconds}
+          onFinish={(result) => handleAnswer(currentQ.question.id, result)}
+          onClose={() => setSimDialog(null)}
+          data-testid="scenario-task"
+        />
+      );
+    }
+    // Штрафы — для строки о балле в окне правил: сервер присылает цену сценария всегда.
+    const simScoring = (currentQ.question as GradedQuestion).scoring as SimScoringLevel | null | undefined;
+    const simPenalties = currentScenario && simScoring ? resolveSimScoring(null, simScoring).penalties : null;
     return (
+      <>
+      {currentScenario && (
+        <SimRulesDialog
+          open={simDialog === "rules"}
+          scenario={currentScenario}
+          penalties={simPenalties}
+          onCancel={() => setSimDialog(null)}
+          onStart={() => setSimDialog("run")}
+        />
+      )}
       <TemplateQuestionScreen
+        simRetake={navSettings.allowAnswerChange}
+        onSimOpen={() => setSimDialog("rules")}
         tpl={questionTpl}
         protection={questionProtection}
         testTitle={attempt.testTitle}
@@ -3643,6 +3688,7 @@ export default function TakeTestPage() {
         questionsProgress={questionsProgress}
         onNavigateToQuestion={navigateToQuestion}
       />
+      </>
     );
   }
 

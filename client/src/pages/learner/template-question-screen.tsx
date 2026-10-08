@@ -44,7 +44,9 @@ import { hasBlanks } from "@shared/questions/question-type";
 import { attachShortAnswer } from "@shared/template/short-answer-dom";
 import type { BlankRuleSet } from "@shared/questions/blanks-render";
 import { allocationSpec, seedAllocation } from "@shared/questions/allocation";
-import { distributesBudget, isOpenText, isTextEntry } from "@shared/questions/question-type";
+import { distributesBudget, isOpenText, isSimulation, isTextEntry } from "@shared/questions/question-type";
+import { renderSimCover, simCoverShot, simCoverState, SIM_OPEN_ACTION } from "@shared/sim/cover";
+import type { Scenario } from "@shared/sim/contract";
 import { questionFont, optionFont } from "@shared/template/fit-font";
 import { buildQuestionNav, QUESTION_NAV_ACTIONS, type QuestionNavState } from "@shared/template/question-nav";
 import type { SceneTimersState } from "@shared/template/scene-timers";
@@ -110,7 +112,19 @@ function interactionHtml(
   shuffleMapping: ShuffleMapping | undefined,
   poolOrder: number[],
   review?: ReviewCorrect,
+  sim?: { retake: boolean; readonly: boolean },
 ): string {
+  // «Сценарий в ИС» в обычном разделе (техдолг №5): на месте ответа — обложка со скриншотом первой
+  // сцены и «Пройти»; сам прогон хост играет на весь экран (`onSimOpen`). Разметка — общая с пакетом.
+  if (isSimulation(question.type)) {
+    const scenario = (question.dataJson as { scenario?: Scenario } | null)?.scenario ?? null;
+    return renderSimCover({
+      state: simCoverState(answer),
+      shotUrl: simCoverShot(scenario),
+      retake: sim?.retake ?? false,
+      readonly: sim?.readonly ?? review !== undefined,
+    });
+  }
   const arr = Array.isArray(shuffleMapping) ? shuffleMapping : undefined;
   if (question.type === "ranking") return renderRanking(question, answer, arr, review);
   if (question.type === "matching") {
@@ -219,6 +233,13 @@ export interface TemplateQuestionScreenProps {
   onNavigateToQuestion?: (index: number) => void;
   /** PRD-34 (FR-30): protection decision for the question screen, from the shared builder. */
   protection?: ProtectionSpec;
+  /**
+   * «Сценарий в ИС» в обычном разделе: тест разрешает менять ответ — на обложке завершённого
+   * сценария есть «Пройти заново».
+   */
+  simRetake?: boolean;
+  /** «Пройти» / «Пройти заново» на обложке сценария: хост открывает окно правил и плеер. */
+  onSimOpen?: () => void;
 }
 
 export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
@@ -339,6 +360,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
       shuffleMapping,
       poolOrder,
       props.reviewMode ? props.correctAnswer : undefined,
+      { retake: props.simRetake === true, readonly: props.locked === true || props.reviewMode === true },
     ),
     "question-feedback": props.feedbackHtml ?? "",
   };
@@ -416,6 +438,11 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
             return;
           }
           if (props.locked) return; // read-only while feedback is shown
+          // «Сценарий в ИС»: «Пройти» и «Пройти заново» — открыть окно правил и затем плеер.
+          if (action === SIM_OPEN_ACTION) {
+            props.onSimOpen?.();
+            return;
+          }
           if (action.startsWith("select:")) {
             const i = Number(action.slice("select:".length));
             if (!Number.isNaN(i)) onAnswer(nextAnswer(question, answer, i));

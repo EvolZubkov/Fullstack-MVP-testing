@@ -120,17 +120,21 @@ export function isSimulation(type: string): boolean {
   return type === "simulation";
 }
 
+/** How a test hands questions out: drawn sections or the adaptive level walk. */
+export type DeliveryMode = "standard" | "adaptive";
+
 /**
- * Can a test host hand this question to a learner?
+ * Can a test host hand this question to a learner in a test of this mode?
  *
- * Every type but the scenario. A scenario sits in its bank from stage Э1 of the sim-scenario
- * plan (`docs/specs/sim-scenario/plan-tests.md`), while the hosts learn to play it only at
- * Э2 (web) and Э4 (SCORM). Until then a section must not draw it: a learner would get a
- * question the host cannot show. The delivery sources (`server/services/test-snapshot.ts`)
- * drop such questions, so this is the ONE switch to flip when the hosts are ready.
+ * A standard section delivers every type, the scenario included (owner decision 2026-10-06,
+ * sim-scenario tech debt №5): the section draws scenarios of its topic like any other question,
+ * and both hosts play them from a cover on the question screen. The adaptive walk does NOT: its
+ * screen and its level logic know nothing of a run played full-screen, so a scenario there would
+ * reach a learner as a question the host cannot show. The adaptive delivery paths — the web start
+ * and the SCORM bake — filter through this predicate.
  */
-export function isDeliverable(type: string): boolean {
-  return !isSimulation(type);
+export function isDeliverable(type: string, mode: DeliveryMode = "standard"): boolean {
+  return mode === "standard" || !isSimulation(type);
 }
 
 /**

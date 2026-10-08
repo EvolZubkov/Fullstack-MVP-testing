@@ -270,6 +270,13 @@ function updateNavigationButton() {
 function reportAnswerTelemetry(fq, answer) {
   if (typeof Telemetry === 'undefined' || !fq || !fq.question) return;
   var q = fq.question;
+  // «Сценарий в ИС» в обычном разделе: фиксация шлёт ПОЛНЫЙ прогон с протоколом, сыгранный в этой
+  // сессии, а не компактную ячейку попытки — аналитике сцен и промахов нужен протокол.
+  if (typeof TBQType !== 'undefined' && TBQType.isSimulation && TBQType.isSimulation(q.type)
+      && typeof TBSimRun !== 'undefined') {
+    var full = TBSimRun.fullResultFor(q.id);
+    if (full) answer = full;
+  }
   var scoreRatio = checkAnswer(q, answer);
   var isCorrect = scoreRatio === 1;
 

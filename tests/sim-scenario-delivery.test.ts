@@ -43,8 +43,9 @@ describe("пункт-сценарий в выдаче", () => {
     expect(sections).toHaveLength(1);
     expect(sections[0].topicId).toBe("scenario:item-1");
     expect((await src.getScenarioPool(item as never)).map((x) => x.id)).toEqual(["s1", "s2"]);
-    // Обычный путь чтения темы сценарии по-прежнему не выдаёт.
-    expect((await src.getQuestionsByTopic("bank")).map((x) => x.id)).toEqual(["x1", "x2"]);
+    // Тема отдаёт все свои вопросы (техдолг №5: обычный раздел выдаёт сценарии); пул пункта —
+    // только сценарии.
+    expect((await src.getQuestionsByTopic("bank")).map((x) => x.id)).toEqual(["s1", "x1", "s2", "x2"]);
   });
 
   it("стандартный тест читает свои разделы; снимок без пунктов — пунктов нет", async () => {

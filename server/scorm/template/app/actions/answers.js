@@ -82,6 +82,12 @@ function showToast(message, kind, durationMs) {
 function hasAnswer(q, answer) {
   if (!q) return true;
 
+  // «Сценарий в ИС»: ответ — прогон; готов, когда у прогона есть исход (зеркало веба,
+  // `answer-gate.ts`). Ветка до прочих: объект без исхода ответом не считается.
+  if (typeof TBQType !== 'undefined' && TBQType.isSimulation(q.type)) {
+    return !!answer && typeof answer === 'object' && typeof answer.outcome === 'string';
+  }
+
   // A scale is answered by one graduation index, exactly like single choice — and
   // index 0 is a real answer, so the check is on the type of the value.
   if (typeof TBQType !== 'undefined' && TBQType.isSingleIndexChoice(q.type)) return typeof answer === 'number';
@@ -275,6 +281,12 @@ function bindQuestionInputClicksOnce() {
       // A scale answer is one index, so it goes through the single-choice path.
       else if (typeof TBQType !== 'undefined' && TBQType.isSingleIndexChoice(q.type)) selectSingle(q.id, idx);
       else if (q.type === 'single') selectSingle(q.id, idx);
+    } else if (a === 'sim-open') {
+      // «Сценарий в ИС» в обычном разделе: «Пройти» / «Пройти заново» на обложке — окно правил.
+      var fqSim = state.flatQuestions && state.flatQuestions[state.currentIndex];
+      if (!fqSim || typeof TBSimRun === 'undefined') return;
+      if (typeof isAnswerLocked === 'function' && isAnswerLocked(fqSim)) return;
+      TBSimRun.openRules(fqSim);
     } else if (a.indexOf('rank-up:') === 0 || a.indexOf('rank-down:') === 0) {
       var up = a.indexOf('rank-up:') === 0;
       var pos = parseInt(a.slice(a.indexOf(':') + 1), 10);

@@ -167,7 +167,9 @@
 месте вариантов ответа — масштабированный, слегка размытый скриншот первого экрана и кнопка
 «Пройти». «Далее» недоступна, пока задание не завершено; «Пропустить» работает как обычно.
 
-Эскиз: [форма вопроса](../../wireframes/sim-scenario-task.html?state=learn-start).
+Эскиз: [форма вопроса](../../wireframes/sim-scenario-task.html?state=learn-start); экран вопроса
+в обычном разделе, собранный шаблоном, — [sim-scenario-learner.html](../../wireframes/sim-scenario-learner.html?state=section-fresh)
+(согласован 2026-10-08).
 
 ### 5.2. Правила и старт
 

@@ -24,7 +24,7 @@
  * snapshot attempts share one resolution code path (FR-32).
  */
 
-import { isDeliverable, isSimulation } from "@shared/questions/question-type";
+import { isSimulation } from "@shared/questions/question-type";
 import { orderTestItems, scenarioItemKey } from "@shared/test-items";
 import { resolveFlowPolicy } from "@shared/flow/flow-policy";
 import { storage } from "../storage";
@@ -104,7 +104,7 @@ export interface TestSnapshotContent {
  * работают с разделами, и пункт приходит к ним разделом. Синтез живёт в ОДНОМ месте — в
  * `getTestSections` источников данных ниже, — поэтому все читатели видят один и тот же раздел.
  * Своё у такого раздела только одно: пул. Его даёт {@link TestDataSource.getScenarioPool}, а
- * не `getQuestionsByTopic`: тот сценарии из выдачи отбрасывает (см. `isDeliverable`).
+ * не `getQuestionsByTopic`: пункт выдаёт ТОЛЬКО сценарии темы, а тема отдаёт все свои вопросы.
  */
 export type ScenarioSection = TestSection & { scenarioItem: TestScenario };
 
@@ -375,18 +375,6 @@ export async function pruneSnapshots(testId: string, keepId: string): Promise<vo
   }
 }
 
-/**
- * The questions of a topic a host may hand to a learner.
- *
- * Both sources below answer `getQuestionsByTopic` through it, and every delivery path — the web
- * start, the adaptive pool, the SCORM bake, the debug player — reads a topic through a source.
- * A type a host cannot play yet (see {@link isDeliverable}) therefore never reaches a learner,
- * from live content or from a snapshot published before the type existed.
- */
-function deliverable(questions: Question[]): Question[] {
-  return questions.filter((question) => isDeliverable(question.type));
-}
-
 /** A read source backed by live storage (drafts, preview, legacy attempts). */
 export function liveDataSource(): TestDataSource {
   return {
@@ -403,7 +391,7 @@ export function liveDataSource(): TestDataSource {
     getScenarioPool: async (item) => scenarioPool(item, await storage.getQuestionsByTopic(item.topicId)),
     getTopics: () => storage.getTopics(),
     getTopic: (id) => storage.getTopic(id),
-    getQuestionsByTopic: async (id) => deliverable(await storage.getQuestionsByTopic(id)),
+    getQuestionsByTopic: (id) => storage.getQuestionsByTopic(id),
     getQuestionsByIds: (ids) => storage.getQuestionsByIds(ids),
     getTopicCourses: (id) => storage.getTopicCourses(id),
     getTopicEvents: (id) => storage.getTopicEvents(id),
@@ -448,7 +436,7 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
       return content.topics.find((t) => t.id === topicId);
     },
     async getQuestionsByTopic(topicId) {
-      return deliverable(content.questionsByTopic[topicId] ?? []);
+      return content.questionsByTopic[topicId] ?? [];
     },
     async getQuestionsByIds(ids) {
       return ids.map((id) => byId.get(id)).filter((q): q is Question => !!q);

@@ -24,6 +24,7 @@ import { resolveTemplateDir } from "../services/template-dir";
 import { readResultsDeclarations } from "../services/template-render";
 import { resolveScreenLabels } from "../services/result-context";
 import { templateBlockOrder } from "@shared/template/results-order";
+import { isDeliverable } from "@shared/questions/question-type";
 import type { DesignSettings } from "@shared/schema";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import type { ExportData } from "./builders/test-json";
@@ -134,7 +135,9 @@ export async function buildScormExportData(
       }
       const topic = await src.getTopic(s.topicId);
       const questions = (await src.getQuestionsByTopic(s.topicId))
-        .filter((question) => !excludedFromDelivery.has(question.id));
+        .filter((question) => !excludedFromDelivery.has(question.id))
+        // «Сценарий в ИС»: обычный раздел сценарии выдаёт, адаптивный обход — нет (`isDeliverable`).
+        .filter((question) => isDeliverable(question.type, test.mode === "adaptive" ? "adaptive" : "standard"));
       const courses = await src.getTopicCourses(s.topicId);
       const events = await src.getTopicEvents(s.topicId);
       return { ...s, topic: topic!, questions, courses, events };

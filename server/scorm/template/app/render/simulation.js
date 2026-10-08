@@ -16,13 +16,33 @@
  * однажды смонтированный, держится, пока текущий экран — тот же вопрос-сценарий: перерисовка не
  * перезапускает прогон. Ушёл экран (истекло время теста, итоги) — слой снимается
  * (`TBSimRun.beginRender` / `endRender` обрамляют каждую отрисовку).
+ *
+ * Два режима. В тесте «Сценарий» и пунктом роутера (`isFullScreenItem`) плеер встаёт сразу на месте
+ * экрана вопроса, а после окна результата пакет идёт дальше сам. В обычном разделе (техдолг №5,
+ * эскиз sim-scenario-learner.html) экран вопроса показывает обложку из общего `shared/sim/cover`;
+ * «Пройти» открывает окно правил (`openRules`), «Старт» — плеер; закрытие окна результата
+ * возвращает к экрану вопроса, а ответ фиксируется обычным «Далее», как у любого типа. Поэтому в
+ * разделе прогон НЕ ставит статус «отвечен» и не шлёт телеметрию сам: это делает фиксация, а полный
+ * результат с протоколом она берёт из `fullResultFor`.
  */
+/**
+ * Перерисовать экран пакета — ГЛОБАЛЬНЫЙ `render()` из `mainRender.js`. Вынесено из `TBSimRun`:
+ * внутри него своя `render(fq)`, и вызов оттуда попал бы в неё.
+ */
+function redrawQuestionScreen() {
+  if (typeof render === 'function') render();
+}
+
 var TBSimRun = (function () {
   /** Слой плеера, его плеер и вопрос, для которого он смонтирован. */
   var mounted = null;
   /** Глубина вложенных `render()` и признак, что текущая отрисовка — экран сценария. */
   var depth = 0;
   var claimed = false;
+  /** Полные результаты прогонов этой сессии SCO по вопросу — для телеметрии фиксации. */
+  var fullRuns = {};
+  /** Открытое окно правил. */
+  var rulesHost = null;
 
   /** Попросить у браузера полный экран — ТОЛЬКО из обработчика щелчка, иначе откажет. */
   function requestFullscreen() {
@@ -101,8 +121,11 @@ var TBSimRun = (function () {
     advanceAfterCommit();
   }
 
-  /** Записать прогон в попытку: компактный ответ, статус, телеметрия, сохранение. */
-  function record(fq, result) {
+  /**
+   * Записать прогон в попытку: компактный ответ и сохранение. В тесте «Сценарий» и в роутере прогон
+   * и есть фиксация — ещё статус и телеметрия; в разделе их делает «Далее».
+   */
+  function record(fq, result, inSection) {
     var q = fq.question;
     var answer = compact(result);
     // Протокол для отчёта LMS (`sim_<id>_<n>`, `resultsPage.js`) — только в памяти: кодек
@@ -113,11 +136,60 @@ var TBSimRun = (function () {
       if (encoded) answer.protocol = encoded;
     } catch (e) { /* без протокола уедут исход и счётчики */ }
     state.answers[q.id] = answer;
-    state.questionStatuses[q.id] = 'answered';
-    if (typeof TBQuestionTime !== 'undefined') TBQuestionTime.leave();
-    // Полный результат — с протоколом — только телеметрии: в попытку он не помещается.
-    if (typeof reportAnswerTelemetry === 'function') reportAnswerTelemetry(fq, result);
+    fullRuns[q.id] = result;
+    if (!inSection) {
+      state.questionStatuses[q.id] = 'answered';
+      if (typeof TBQuestionTime !== 'undefined') TBQuestionTime.leave();
+      // Полный результат — с протоколом — только телеметрии: в попытку он не помещается.
+      if (typeof reportAnswerTelemetry === 'function') reportAnswerTelemetry(fq, result);
+    }
     if (typeof saveSessionState === 'function') saveSessionState();
+  }
+
+  /** Тест «Сценарий» или пункт роутера: плеер вместо экрана вопроса. */
+  function isFullScreenItem(fq) {
+    return TEST_DATA.mode === 'scenario' || String((fq && fq.topicId) || '').indexOf('scenario:') === 0;
+  }
+
+  /** Перерисовка во время прогона в разделе: экран остаётся за плеером. */
+  function keep(fq) {
+    if (!mounted || !fq || !fq.question || mounted.questionId !== fq.question.id) return false;
+    claimed = true;
+    return true;
+  }
+
+  function closeRules() {
+    if (rulesHost && rulesHost.parentNode) rulesHost.parentNode.removeChild(rulesHost);
+    rulesHost = null;
+  }
+
+  /** Штрафы вопроса в этом тесте — для строки о балле в окне правил. */
+  function penaltiesOf(q) {
+    var sim = q && q.scoring && q.scoring.kind === 'simulation' ? q.scoring : null;
+    return sim && sim.penalties ? sim.penalties : null;
+  }
+
+  /** «Пройти» на обложке: окно правил; «Старт» — полный экран и плеер. */
+  function openRules(fq) {
+    closeRules();
+    var q = fq.question;
+    var scenario = (q.data && q.data.scenario) || null;
+    if (!scenario) return;
+    var host = document.createElement('div');
+    host.className = 'ou';
+    host.innerHTML = TBTemplate.renderSimRulesDialog(TBTemplate.simRules(scenario, penaltiesOf(q)));
+    host.addEventListener('click', function (e) {
+      var el = (e.target && e.target.closest) ? e.target.closest('[data-action]') : null;
+      var a = el ? el.getAttribute('data-action') : '';
+      if (a === 'sim-cancel') { closeRules(); return; }
+      if (a === 'sim-start') {
+        requestFullscreen();
+        closeRules();
+        mountRun(fq, true);
+      }
+    });
+    document.body.appendChild(host);
+    rulesHost = host;
   }
 
   /**
@@ -137,6 +209,15 @@ var TBSimRun = (function () {
 
     var app = document.getElementById('app');
     if (app) app.innerHTML = '';
+    mountRun(fq, false);
+  }
+
+  /**
+   * Смонтировать плеер. `inSection` — сценарий обычного раздела: окно результата возвращает к
+   * экрану вопроса, а не ведёт дальше.
+   */
+  function mountRun(fq, inSection) {
+    var q = fq.question;
     var host = document.createElement('div');
     host.className = 'tb-sim-host';
     host.setAttribute('data-testid', 'scenario-player');
@@ -145,20 +226,26 @@ var TBSimRun = (function () {
 
     var router = typeof RouterFlow !== 'undefined' && RouterFlow.isRouterMode && RouterFlow.isRouterMode();
     var finished = null;
+    var closeLabel = inSection ? 'Вернуться к вопросу' : (router ? 'Вернуться к разделам' : 'Перейти к итогам');
     var player = TBTemplate.mountPlayer(host, {
       scenario: playedScenario((q.data && q.data.scenario) || {}),
       // Адреса медиа уже переписаны упаковщиком на файлы внутри пакета.
       mediaUrl: function (file) { return file; },
       showDetails: true,
       caption: TEST_DATA.title || '',
-      closeLabel: router ? 'Вернуться к разделам' : 'Перейти к итогам',
+      closeLabel: closeLabel,
       onFinish: function (result) {
         finished = result;
-        record(fq, result);
+        record(fq, result, inSection);
       },
       onClose: function (result) {
-        if (!finished && result) record(fq, result);
+        if (!finished && result) record(fq, result, inSection);
         unmount();
+        if (inSection) {
+          // Назад к экрану вопроса: обложка покажет исход, «Далее» станет доступна.
+          redrawQuestionScreen();
+          return;
+        }
         continueAfter();
       },
     });
@@ -183,6 +270,10 @@ var TBSimRun = (function () {
     endRender: endRender,
     requestFullscreen: requestFullscreen,
     compact: compact,
+    isFullScreenItem: isFullScreenItem,
+    keep: keep,
+    openRules: openRules,
+    fullResultFor: function (questionId) { return fullRuns[questionId] || null; },
   };
 }());
 

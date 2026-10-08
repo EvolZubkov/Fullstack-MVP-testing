@@ -140,11 +140,16 @@ function renderScreen() {
         TBQuestionTime.show(qData.question.id);
     }
 
-    // «Сценарий в ИС»: вопрос-сценарий играется плеером на месте экрана вопроса.
+    // «Сценарий в ИС»: в тесте «Сценарий» и пунктом роутера вопрос-сценарий играется плеером на
+    // месте экрана вопроса. В обычном разделе — экран вопроса с обложкой (техдолг №5), а идущий
+    // прогон удерживает свой слой: перерисовка по таймеру не должна его снять.
     if (qData && qData.question && typeof TBQType !== 'undefined' && TBQType.isSimulation(qData.question.type)
         && typeof TBSimRun !== 'undefined') {
-        TBSimRun.render(qData);
-        return;
+        if (TBSimRun.isFullScreenItem(qData)) {
+            TBSimRun.render(qData);
+            return;
+        }
+        if (TBSimRun.keep(qData)) return;
     }
 
     renderStandardQuestion(qData, current, total, progress);

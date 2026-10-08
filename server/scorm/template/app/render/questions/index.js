@@ -12,6 +12,20 @@ function renderQuestionInput(q) {
   var correct = q.correct || {};
   var shuffleMapping = state.shuffleMappings[q.id];
 
+  // «Сценарий в ИС» в обычном разделе (техдолг №5): на месте ответа — обложка из общего
+  // `shared/sim/cover` (та же разметка, что у веба); прогон открывает «Пройти» → окно правил.
+  if (typeof TBQType !== 'undefined' && TBQType.isSimulation(q.type)) {
+    var TBs = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    if (!TBs || !TBs.renderSimCover) return '';
+    var scenario = (q.data && q.data.scenario) || null;
+    return TBs.renderSimCover({
+      state: TBs.simCoverState(answer),
+      shotUrl: TBs.simCoverShot(scenario),
+      retake: !!TEST_DATA.allowAnswerChange,
+      readonly: typeof isAnswerLocked === 'function' && fqCur ? isAnswerLocked(fqCur) : false,
+    });
+  }
+
   // The type hint is the question subtitle (state.questionHint in the layout, both
   // hosts) — not prepended here, so the package matches the web exactly.
   if (q.type === 'single')   return renderSingleQuestionInput(q, answer, showReview, correct, shuffleMapping);

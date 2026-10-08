@@ -12,6 +12,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import JSZip from "jszip";
+import { isDeliverable } from "@shared/questions/question-type";
 
 const stored = new Map<string, { bytes: Buffer; mimeType: string }>();
 
@@ -120,10 +121,17 @@ describe("заголовок изображения", () => {
   });
 });
 
-describe("выдача до этапа Э2", () => {
-  it("источник выдачи не отдаёт сценарии темы, остальные вопросы отдаёт", async () => {
+describe("выдача сценариев (техдолг №5)", () => {
+  it("источник отдаёт ВСЕ вопросы темы: обычный раздел выдаёт сценарии наравне с прочими", async () => {
     const q = (id: string, type: string) => ({ id, type, topicId: "t" });
     const src = snapshotDataSource({ questionsByTopic: { t: [q("a", "single"), q("b", "simulation"), q("c", "long")] } } as never);
-    expect((await src.getQuestionsByTopic("t")).map((x) => x.id)).toEqual(["a", "c"]);
+    expect((await src.getQuestionsByTopic("t")).map((x) => x.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("адаптивный обход сценарий не выдаёт — его хост не играет", () => {
+    expect(isDeliverable("simulation")).toBe(true);
+    expect(isDeliverable("simulation", "standard")).toBe(true);
+    expect(isDeliverable("simulation", "adaptive")).toBe(false);
+    expect(isDeliverable("single", "adaptive")).toBe(true);
   });
 });
