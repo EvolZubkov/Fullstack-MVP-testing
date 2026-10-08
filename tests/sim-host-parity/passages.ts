@@ -11,6 +11,7 @@ import type { FixtureOptions } from "./fixture";
 import { T_A, T_B } from "./fixture";
 import type { SimRunKind } from "../helpers/sim-runs";
 import type { StepSnapshot, FinalSnapshot } from "./snapshot";
+import type { KnownId } from "./known-divergences";
 
 export type Step =
   | { do: "start" }
@@ -31,6 +32,12 @@ export interface Passage {
   name: string;
   options: FixtureOptions;
   steps: Step[];
+  /**
+   * Divergences awaiting the owner's decision that this passage is expected to show
+   * (`known-divergences.ts`). Every passage with a reload shows Г6; a reload inside a scenario run
+   * shows N1.
+   */
+  known?: KnownId[];
 }
 
 /** A topic answered through: pick, both questions, the section-results screen when shown. */
@@ -66,6 +73,7 @@ export function passages(): Passage[] {
     {
       name: "1. тема пройдена — зависимый сценарий открылся; перезагрузки в хабе и внутри темы",
       options: {},
+      known: ["Г6"],
       steps: [
         { do: "start" },
         { do: "check", what: "сценарий 1 заперт до темы А", test: (p) => p.screen === "hub" && /scenario-1[^"]*"[^>]*data-router-locked="true"/.test(p.hub ?? "") },
@@ -128,6 +136,7 @@ export function passages(): Passage[] {
     {
       name: "4. повторный прогон: досрочный выход не затирает завершённый прогон",
       options: { allowAnswerChange: true },
+      known: ["Г6"],
       steps: [
         { do: "start" },
         ...topic("A", true, true, true),
@@ -169,6 +178,7 @@ export function passages(): Passage[] {
     {
       name: "5. «все обязательные пройдены»: провал сценария повторяемый",
       options: { completionPolicy: "all_required_passed", allowAnswerChange: true },
+      known: ["Г6"],
       steps: [
         { do: "start" },
         ...topic("A", true, true, true),
@@ -186,6 +196,7 @@ export function passages(): Passage[] {
     {
       name: "6. перезагрузка внутри сценария: прогон не засчитан, пункт запускается заново",
       options: {},
+      known: ["Г6", "N1"],
       steps: [
         { do: "start" },
         ...topic("A", true),
@@ -202,6 +213,7 @@ export function passages(): Passage[] {
     {
       name: "7. без экрана итогов раздела: исход пункта всё равно фиксируется",
       options: { showSectionResults: false },
+      known: ["Г6"],
       steps: [
         { do: "start" },
         ...topic("A", false, false),

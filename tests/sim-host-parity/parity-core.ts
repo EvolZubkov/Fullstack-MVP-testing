@@ -27,6 +27,7 @@ import {
   type StepSnapshot,
 } from "./snapshot";
 import { passages, keyOf, type Passage, type Step } from "./passages";
+import { knownOf, type KnownId } from "./known-divergences";
 import attemptsRouter from "../../server/routes/attempts";
 import { storage } from "../../server/storage";
 import TakeTestPage from "@/pages/learner/take-test";
@@ -172,7 +173,7 @@ function diffStep(web: StepSnapshot, pkg: StepSnapshot): string[] {
   return out;
 }
 
-async function play(p: Passage, index: number): Promise<{ diffs: string[]; anchors: string[] }> {
+async function play(p: Passage, index: number): Promise<{ diffs: string[]; anchors: string[]; known: KnownId[] }> {
   const { testId, keySc1, keySc2 } = await createRouterTest(h.current!, p.options, `-${index}`);
   h.testId = testId;
   const key = (item: "A" | "B" | "SC1" | "SC2") => keyOf(item, keySc1, keySc2);
@@ -191,6 +192,8 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
 
   const diffs: string[] = [];
   const anchors: string[] = [];
+  // Divergences awaiting the owner's decision (`known-divergences.ts`): kept apart, never dropped.
+  const known = new Set<KnownId>();
   const attemptId = () => {
     const m = webHost.requests.map((r) => /\/api\/attempts\/([\w-]+)\//.exec(r)?.[1]).find(Boolean);
     return m ?? null;
@@ -213,33 +216,40 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
       const prevActive = [pkgPlayer.active, webPlayer.active];
       await pkg.do(step);
       await web.do(step);
-      for (const d of diffStep(web.snapshot(), pkg.snapshot())) diffs.push(`${at}: ${d}`);
+      const stepDiffs = diffStep(web.snapshot(), pkg.snapshot());
+      // Every difference of the step goes through the known-divergence registry, whatever level.
+      const note = (d: string) => {
+        const id = knownOf(step, d, stepDiffs, known);
+        if (id) known.add(id);
+        else diffs.push(`${at}: ${d}`);
+      };
+      stepDiffs.forEach(note);
 
       if (step.do === "start") {
         const variant = (await storage.getAttempt(attemptId()!))?.variantJson as never;
         const wd = JSON.stringify(variant ? webDelivery(variant) : null);
         const pd = JSON.stringify(packageDelivery(pkgHost));
-        if (wd !== pd) diffs.push(`${at}: L0 выдача: веб ${wd}, пакет ${pd}`);
+        if (wd !== pd) note(`L0 выдача: веб ${wd}, пакет ${pd}`);
       }
       if (step.do === "pick" && (step.item === "SC1" || step.item === "SC2")) {
         const wm = JSON.stringify(webPlayer.mounts.slice(mountsBefore[1]));
         const pm = JSON.stringify(pkgPlayer.mounts.slice(mountsBefore[0]));
-        if (wm !== pm) diffs.push(`${at}: L5 запуск плеера: веб ${wm}, пакет ${pm}`);
+        if (wm !== pm) note(`L5 запуск плеера: веб ${wm}, пакет ${pm}`);
       }
       if (step.do === "sim" && prevActive[0] !== prevActive[1]) {
-        diffs.push(`${at}: L5 плеер запущен только на ${prevActive[1] ? "вебе" : "пакете"}`);
+        note(`L5 плеер запущен только на ${prevActive[1] ? "вебе" : "пакете"}`);
       }
       if (step.do === "sim") {
         const stored = (await storage.getAttempt(attemptId()!))?.answersJson as Record<string, unknown> | null;
         const wa = JSON.stringify(compactRun(pkgHost, stored?.[SIM_Q1] ?? null));
         const pa = JSON.stringify(compactRun(pkgHost, pkgHost.state.answers?.[SIM_Q1] ?? null));
-        if (wa !== pa) diffs.push(`${at}: L6 ответ на сценарий: веб ${wa}, пакет ${pa}`);
+        if (wa !== pa) note(`L6 ответ на сценарий: веб ${wa}, пакет ${pa}`);
       }
       if (step.do === "finish") {
         const result = (await storage.getAttempt(attemptId()!))?.resultJson;
         const wf = JSON.stringify(result ? webFinal(result) : null);
         const pf = JSON.stringify(packageFinal(pkgHost.cmi));
-        if (wf !== pf) diffs.push(`${at}: L7 итог: веб ${wf}, пакет ${pf}`);
+        if (wf !== pf) note(`L7 итог: веб ${wf}, пакет ${pf}`);
       }
     }
     if (pkgHost.errors.length) diffs.push(`ошибки пакета: ${pkgHost.errors.join(" | ")}`);
@@ -248,7 +258,7 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
     pkgHost.close();
     await webHost.idle();
   }
-  return { diffs, anchors };
+  return { diffs, anchors, known: [...known].sort() };
 }
 
 /**
@@ -273,8 +283,10 @@ export function registerParity(shared: ParityShared, select: (index: number) => 
     passages().forEach((p, i) => {
       if (!select(i)) return;
       it(p.name, async () => {
-        const { diffs, anchors } = await play(p, i);
-        expect({ anchors, diffs }).toEqual({ anchors: [], diffs: [] });
+        const { diffs, anchors, known } = await play(p, i);
+        // A known divergence must show up exactly where the passage says: one that vanished means
+        // the owner's decision landed and its entry in known-divergences.ts is due for removal.
+        expect({ anchors, diffs, known }).toEqual({ anchors: [], diffs: [], known: [...(p.known ?? [])].sort() });
       }, 180000);
     });
   });
