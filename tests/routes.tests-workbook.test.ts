@@ -46,6 +46,8 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     upsertQuestionMeasurements: vi.fn(),
     // export
     getTestSections: vi.fn(),
+    // Техдолг №8: зависимость темы от пункта-сценария книга сверяет с пунктами теста.
+    getTestScenarios: vi.fn(),
     getQuestions: vi.fn(),
     getQuestionMeasurements: vi.fn(),
     // PRD-48 §4.1: «Папка» of the settings sheet is resolved from the folder tree;
@@ -253,6 +255,7 @@ beforeEach(() => {
   // Разделы приёмника: импорт «Структуры» читает их, чтобы не стереть обратную связь
   // раздела, которого книга не назвала. По умолчанию тест-приёмник разделов не имеет.
   storageMock.getTestSections.mockResolvedValue([]);
+  storageMock.getTestScenarios.mockResolvedValue([]);
   // Адаптивных настроек у теста по умолчанию нет.
   storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
   storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
@@ -3046,6 +3049,38 @@ describe("POST /:id/workbook/import — разблокировка раздел�
       mode: "after_sections_completed",
       sectionIds: [introTopic.id],
     });
+  });
+
+  // Техдолг №8: тема может открываться после пункта-сценария. Книга сценариев не знает и выгружает
+  // такую зависимость ключом пункта — загрузка той же книги не должна её ронять.
+  it("зависимость от пункта-сценария этого теста возвращается ключом пункта", async () => {
+    storageMock.getTestScenarios.mockResolvedValue([{ id: "sc-1", testId: "t1", topicId: "bank" }]);
+    const buf = await makeWorkbook({
+      "Настройки": [routerRow],
+      "Структура": [
+        { "Раздел": "Основной", "Порядок": 1, "Вопросов в выборке": 1, "Доступность раздела": "После успешного прохождения выбранных разделов", "Зависит от разделов": "scenario:sc-1" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    const flow = (testSettingsMock.save.mock.calls[0][1] as any).test.flowPolicyJson;
+    expect(flow.router.sectionUnlockRules[mainTopic.id]).toEqual({
+      mode: "after_sections_passed",
+      sectionIds: ["scenario:sc-1"],
+    });
+  });
+
+  it("ключ чужого или исчезнувшего пункта-сценария — ошибка строки, как неизвестное имя", async () => {
+    const buf = await makeWorkbook({
+      "Настройки": [routerRow],
+      "Структура": [
+        { "Раздел": "Основной", "Порядок": 1, "Вопросов в выборке": 1, "Доступность раздела": "После успешного прохождения выбранных разделов", "Зависит от разделов": "scenario:gone" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /scenario:gone/.test(e))).toBe(true);
   });
 
   // Молча выброшенная зависимость ОТКРЫЛА бы раздел, который должен быть закрыт.

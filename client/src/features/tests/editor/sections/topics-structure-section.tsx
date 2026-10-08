@@ -73,12 +73,18 @@ import {
 import { effectiveSectionOrder, type TestQuestionOrder } from "@shared/draw/assemble-delivery";
 import { VariantsEditor } from "./variants-editor";
 import { ScenarioItemRow, ScenarioPickerModal } from "./router-scenarios-block";
+import { ItemUnlockFields, type UnlockItemOption } from "./item-unlock-fields";
+import { unlockSummary } from "@shared/flow/unlock-rules";
 import { useScenarioBanks, type ScenarioBank } from "./scenario-bank-fields";
 import {
   compositionEntries,
+  unlockKeyOf,
+  withUnlockRule,
+  withoutItemUnlockRules,
   entryGroup,
   moveEntryOnto,
   moveEntryToGroup,
+  scenarioEntryKey,
   type CompositionEntry,
 } from "./composition-items";
 import { FoldAllButtons, useSectionFold, type SectionFold } from "./section-fold";
@@ -369,6 +375,44 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
       });
   }, [entries, search]);
 
+  // Техдолг №8: «Открывается» — только у теста с роутером: в линейных потоках пункты идут по
+  // порядку. Список «Каких пунктов» и номера в хвосте подзаголовка — по ВСЕМУ составу, а не по
+  // отфильтрованному поиском.
+  const routerFlow = model.mode !== "scenario" && model.flowMode === "router_by_topics";
+  const unlockRules = model.flowSettings.router?.sectionUnlockRules ?? {};
+  const unlockItems = useMemo<UnlockItemOption[]>(
+    () =>
+      entries.map((entry, n) => ({
+        key: unlockKeyOf(entry),
+        number: n + 1,
+        name: entry.kind === "topic" ? entry.section.topicName : entry.item.title?.trim() || entry.item.topicName,
+      })),
+    [entries],
+  );
+  const numberOf = useMemo(() => {
+    const map = new Map(unlockItems.map((item) => [item.key, item.number]));
+    return (key: string) => map.get(key);
+  }, [unlockItems]);
+  /** Поля и хвост подзаголовка правила открытия пункта; вне роутера — ничего. */
+  const unlockFor = (entry: CompositionEntry, field: string) => {
+    if (!routerFlow) return { fields: undefined, tail: null };
+    const key = unlockKeyOf(entry);
+    return {
+      fields: (
+        <ItemUnlockFields
+          itemKey={key}
+          kind={entry.kind}
+          items={unlockItems}
+          rules={unlockRules}
+          onChange={(rule) => updateModel((m) => withUnlockRule(m, key, rule))}
+          field={field}
+          error={fieldErrors.get(field)}
+        />
+      ),
+      tail: unlockSummary(unlockRules[key], numberOf),
+    };
+  };
+
   const usedTopicIds = useMemo(
     () => new Set(model.sections.map((s) => s.topicId)),
     [model.sections],
@@ -392,7 +436,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
 
   const removeSection = (topicId: string) => {
     updateModel((m) => ({
-      ...m,
+      ...withoutItemUnlockRules(m, topicId),
       sections: m.sections.filter((s) => s.topicId !== topicId),
       passRules: {
         ...m.passRules,
@@ -506,9 +550,16 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
   const updateScenario = (index: number, next: ScenarioItemDraft | null) =>
     updateModel((m) => {
       const list = [...(m.scenarioItems ?? [])];
-      if (next) list[index] = { ...list[index], ...next };
-      else list.splice(index, 1);
-      return { ...m, scenarioItems: list };
+      if (next) {
+        list[index] = { ...list[index], ...next };
+        return { ...m, scenarioItems: list };
+      }
+      // Убранный пункт уносит своё правило открытия, упоминания в чужих и свой порог.
+      const key = scenarioEntryKey(list[index], index);
+      list.splice(index, 1);
+      const pruned = withoutItemUnlockRules(m, key);
+      const { [key]: _dropped, ...byTopic } = pruned.passRules.byTopic;
+      return { ...pruned, scenarioItems: list, passRules: { ...pruned.passRules, byTopic } };
     });
 
   const sensors = useSensors(
@@ -559,6 +610,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
   /** Одна строка пункта — и в плоском списке, и внутри карточки группы. */
   const renderEntry = (entry: NumberedEntry) => {
     if (entry.kind === "scenario") {
+      const unlock = unlockFor(entry, `scenarioItems[${entry.index}].unlock`);
       return (
         <ScenarioItemRow
           key={entry.key}
@@ -573,14 +625,27 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           onChange={(next) => updateScenario(entry.index, next)}
           titleError={fieldErrors.get(`scenarioItems[${entry.index}].title`)}
           hasIssue={fieldErrors.has(`scenarioItems[${entry.index}]`)}
+          unlockFields={unlock.fields}
+          unlockTail={unlock.tail}
         />
       );
     }
-    return renderTopic({ section: entry.section, index: entry.index, number: entry.number });
+    const unlock = unlockFor(entry, `sections[${entry.index}].unlock`);
+    return renderTopic({ section: entry.section, index: entry.index, number: entry.number, unlock });
   };
 
   /** Строка темы. */
-  const renderTopic = ({ section, index, number }: { section: EditorSection; index: number; number: number }) => (
+  const renderTopic = ({
+    section,
+    index,
+    number,
+    unlock,
+  }: {
+    section: EditorSection;
+    index: number;
+    number: number;
+    unlock: { fields: React.ReactNode; tail: string | null };
+  }) => (
     <TopicRow
       key={section.topicId}
       index={index}
@@ -620,6 +685,8 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
       }
       pointsOf={(questionId) => pointsOf(questionId, section.defaultPoints)}
       onRemove={() => removeSection(section.topicId)}
+      unlockFields={unlock.fields}
+      unlockTail={unlock.tail}
     />
   );
 
@@ -1073,6 +1140,10 @@ function TopicRow(props: {
    * revoked / made private). The test still works and saves; only new draws
    * from this topic are blocked. */
   unavailable?: boolean;
+  /** Техдолг №8: поля «Открывается» / «Каких пунктов» (только у роутера). */
+  unlockFields?: React.ReactNode;
+  /** Хвост подзаголовка — «откроется после …»; нет правила — `null`. */
+  unlockTail?: string | null;
 }) {
   const { section } = props;
   const maxQ = Math.max(section.maxQuestions, 1);
@@ -1200,6 +1271,9 @@ function TopicRow(props: {
                     {` · увидят ${expectedDelivery.percent}%`}
                   </span>
                 )}
+                {props.unlockTail && (
+                  <span data-testid={`topic-unlock-tail-${section.topicId}`}>{` · ${props.unlockTail}`}</span>
+                )}
               </span>
             </span>
           </button>
@@ -1250,6 +1324,7 @@ function TopicRow(props: {
               data-testid={`topic-required-${section.topicId}`}
             />
           </div>
+          {props.unlockFields}
           {/* PRD-17: variants mode overrides the whole-topic draw (the source
               becomes the drawn variant, delivered whole), and "draw all" overrides
               the partial-draw quotas. Per author request these controls are kept

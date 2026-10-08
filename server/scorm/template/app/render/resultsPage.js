@@ -603,6 +603,18 @@ function computeSectionResult(topicId) {
   if (state.sectionResults && state.sectionResults[topicId]) {
     return state.sectionResults[topicId];
   }
+  var result = buildSectionResult(topicId);
+  if (!state.sectionResults) state.sectionResults = {};
+  state.sectionResults[topicId] = result;
+  return result;
+}
+
+/**
+ * Результат раздела по нынешним ответам — без кэша. Его же читает хаб роутера, когда фиксирует
+ * «пройден ли пункт» при возврате (техдолг №8): экрана итогов раздела может и не быть, а условие
+ * «открывается после успешного прохождения» и политика «все обязательные пройдены» читают исход.
+ */
+function buildSectionResult(topicId) {
   var earnedPoints = 0;
   var possiblePoints = 0;
   var fullyCorrect = 0;
@@ -671,9 +683,6 @@ function computeSectionResult(topicId) {
     recommendedEvents: section ? (section.recommendedEvents || []) : [],
     breakdown: sectionEntries,
   };
-
-  if (!state.sectionResults) state.sectionResults = {};
-  state.sectionResults[topicId] = result;
   return result;
 }
 

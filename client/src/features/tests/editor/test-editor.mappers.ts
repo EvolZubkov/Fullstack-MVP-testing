@@ -72,6 +72,7 @@ import { DEFAULT_BREAKDOWN_DISPLAY } from "./test-editor.types";
 import { makeQuestionOverride, type QuestionScoringOverride } from "./scoring-api";
 import type { DraftBlock } from "./use-report-document";
 import { itemOrderForSave } from "./sections/composition-items";
+import { scenarioItemKey } from "@shared/test-items";
 
 // ─── API response shape ───────────────────────────────────────────────────────
 
@@ -165,6 +166,22 @@ function readScenarioItemsFromApi(src: ApiTestResponse): ScenarioItemDraft[] {
       ...(typeof item.defaultPoints === "number" ? { defaultPoints: item.defaultPoints } : {}),
     }];
   });
+}
+
+/**
+ * Техдолг №8: пороги пунктов-сценариев (`test_scenarios.pass_rule_json`) — в `passRules.byTopic`
+ * под ключом пункта `scenario:<id>`, рядом с порогами тем: таблица «Правила оценки тем и
+ * сценариев» правит их одним кодом. Пункт без id порога не несёт — его ключ ещё не устоялся.
+ */
+function readScenarioPassRulesFromApi(src: ApiTestResponse): PassRules["byTopic"] {
+  const items = (src as { scenarios?: unknown }).scenarios;
+  if (!Array.isArray(items)) return {};
+  const out: PassRules["byTopic"] = {};
+  for (const raw of items) {
+    if (!isPlainObject(raw) || typeof raw.id !== "string") continue;
+    out[scenarioItemKey(raw.id)] = readTopicPassRuleFromApi(raw.passRuleJson);
+  }
+  return out;
 }
 
 /** «Сценарий в ИС» (Э5а): штрафы сценариев теста из ответа; чужая форма читается как «нет». */
@@ -1340,8 +1357,9 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
   const feedback = readFeedbackFromApi(src);
   const overall = readOverallPassRuleFromApi(src);
 
-  const { sections, byTopic } = buildSectionsFromApi(src);
-  const decisionPolicy = readPassDecisionPolicyFromApi(src, byTopic);
+  const { sections, byTopic: topicRules } = buildSectionsFromApi(src);
+  const decisionPolicy = readPassDecisionPolicyFromApi(src, topicRules);
+  const byTopic = { ...topicRules, ...readScenarioPassRulesFromApi(src) };
 
   const showDifficultyLevel =
     typeof src.showDifficultyLevel === "boolean" ? src.showDifficultyLevel : true;

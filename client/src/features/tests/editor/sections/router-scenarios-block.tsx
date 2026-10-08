@@ -46,6 +46,10 @@ export interface ScenarioItemRowProps {
   titleError?: string;
   /** Ошибка внутри пункта — точка в шапке видна, пока строка свёрнута. */
   hasIssue?: boolean;
+  /** Техдолг №8: поля «Открывается» / «Каких пунктов» — сразу под «Обязательный». */
+  unlockFields?: React.ReactNode;
+  /** Хвост подзаголовка — «откроется после …»; нет правила — `null`. */
+  unlockTail?: string | null;
 }
 
 /** Строка пункта-сценария в списке «Состава». */
@@ -111,7 +115,10 @@ export function ScenarioItemRow(props: ScenarioItemRowProps) {
             <span className="ou-acc__title">
               <MonitorPlay size={16} className="tb-acc-title-ico" aria-label="Сценарий" />{`${props.number}. ${name}`}
             </span>
-            <span className="ou-acc__subtitle">{scenarioSubtitle(item, props.banks)}</span>
+            <span className="ou-acc__subtitle">
+              {scenarioSubtitle(item, props.banks)}
+              {props.unlockTail ? ` · ${props.unlockTail}` : ""}
+            </span>
           </span>
         </button>
         <span className="tb-topic-actions">
@@ -150,12 +157,15 @@ export function ScenarioItemRow(props: ScenarioItemRowProps) {
             banks={props.banks}
             isLoading={props.isLoading}
             beforeActions={
-              <Switch
-                label="Обязательный"
-                checked={item.required !== false}
-                onChange={(e) => props.onChange({ ...item, required: e.target.checked })}
-                data-testid="router-scenario-required"
-              />
+              <>
+                <Switch
+                  label="Обязательный"
+                  checked={item.required !== false}
+                  onChange={(e) => props.onChange({ ...item, required: e.target.checked })}
+                  data-testid="router-scenario-required"
+                />
+                {props.unlockFields}
+              </>
             }
           />
         </Stack>

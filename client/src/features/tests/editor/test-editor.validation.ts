@@ -26,6 +26,8 @@ import { parseAuthorNumber } from "./numeric-input";
 import { profileFindings } from "./profile-diagnostics";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
+import { findUnlockCycle, isConditionalUnlockMode } from "@shared/flow/unlock-rules";
+import { scenarioEntryKey } from "./sections/composition-items";
 
 const VALID_PASS_DECISION_POLICIES: PassDecisionPolicy[] = [
   "overall_only",
@@ -186,6 +188,35 @@ export function validateTestEditor(
         });
       }
     });
+  }
+
+  // Техдолг №8: правила открытия пунктов роутера. Условие без пунктов не значит ничего, а кольцо
+  // не даёт открыться ни одному своему пункту. Кольцо редактор не предлагает собрать, но оно может
+  // прийти из книги или из данных до проверки — тогда о нём говорит пункт, с которого оно видно.
+  if (model.mode !== "scenario" && model.flowMode === "router_by_topics") {
+    const rules = model.flowSettings.router?.sectionUnlockRules ?? {};
+    const addressOf = new Map<string, string>();
+    model.sections.forEach((s, i) => addressOf.set(s.topicId, `sections[${i}].unlock`));
+    if (model.mode === "standard") {
+      (model.scenarioItems ?? []).forEach((item, i) => addressOf.set(scenarioEntryKey(item, i), `scenarioItems[${i}].unlock`));
+    }
+    for (const [key, rule] of Object.entries(rules)) {
+      const field = addressOf.get(key);
+      if (!field || !isConditionalUnlockMode(rule.mode)) continue;
+      const ids = "sectionIds" in rule ? rule.sectionIds : [];
+      if (!ids.some((id) => addressOf.has(id))) {
+        errors.push({ field, code: "required", message: "Выберите хотя бы один пункт.", severity: "error" });
+      }
+    }
+    const cycle = findUnlockCycle(rules, new Set(addressOf.keys()));
+    if (cycle) {
+      errors.push({
+        field: addressOf.get(cycle[0]) as string,
+        code: "unlock_cycle",
+        message: "Пункты ждут друг друга по кругу — ни один из них не откроется. Уберите одно из условий.",
+        severity: "error",
+      });
+    }
   }
 
   // FR-12: at least one section (topic) must be added

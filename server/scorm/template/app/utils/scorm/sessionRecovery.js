@@ -21,6 +21,29 @@
 // currentSession stored inside suspend_data object:
 //   { attemptsUsed, attempts: [...], currentSession: { ... } | null }
 
+/**
+ * Техдолг №8: исходы пунктов роутера (`state.sectionPassed`) в `suspend_data` — `1` пройден, `0`
+ * не пройден. Пункт без порога (`null`) не пишется: его нельзя не пройти, а бюджет `suspend_data`
+ * не резиновый (PRD-36).
+ */
+function encodeSectionPassed(map) {
+  var out = {};
+  Object.keys(map || {}).forEach(function (key) {
+    if (map[key] === true) out[key] = 1;
+    else if (map[key] === false) out[key] = 0;
+  });
+  return out;
+}
+
+/** Обратное к {@link encodeSectionPassed}; сеанс до появления поля — пустая карта. */
+function decodeSectionPassed(raw) {
+  var out = {};
+  Object.keys(raw || {}).forEach(function (key) {
+    out[key] = raw[key] === 1;
+  });
+  return out;
+}
+
 function saveCurrentSession() {
   // PRD-4 v1.1: router mode persists sectional checkpoint even with a test
   // timer (the section progress itself doesn't depend on timer state).
@@ -68,6 +91,8 @@ function saveCurrentSession() {
     fm: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat',
     rt: JSON.parse(JSON.stringify(state.routerTopicStates || {})),
     sr: JSON.parse(JSON.stringify(state.sectionResults || {})),
+    // Техдолг №8: исходы пунктов роутера для хаба — `1`/`0`, пункт без порога не пишется.
+    sp: encodeSectionPassed(state.sectionPassed),
     rf: state.routerFinished === true,
     // PRD-20 (2e): in-progress router topic + position within its chunk, so a
     // reload resumes INSIDE the unfinished non-adaptive topic (not re-run).
@@ -244,6 +269,7 @@ function restoreRouterSession(session) {
   if (!session) return;
   state.routerTopicStates = JSON.parse(JSON.stringify(session.rt || {}));
   state.sectionResults = JSON.parse(JSON.stringify(session.sr || {}));
+  state.sectionPassed = decodeSectionPassed(session.sp);
   state.routerFinished = session.rf === true;
   // PRD-36 FR-19: the router run keeps its delivered variants too — a topic re-entered
   // after the reload must be gated by the SAME variant threshold it was gated by before.

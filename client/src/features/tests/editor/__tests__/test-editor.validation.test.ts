@@ -1419,3 +1419,43 @@ describe("тест «Сценарий»", () => {
     expect(result.errors).toContainEqual(expect.objectContaining({ field: "sections", code: "required" }));
   });
 });
+
+// ─── «Сценарий в ИС», техдолг №8: правила открытия пунктов роутера ─────────────
+
+describe("правила открытия пунктов роутера", () => {
+  const router = (sectionUnlockRules: Record<string, unknown>) =>
+    baseModel({
+      flowMode: "router_by_topics",
+      flowSettings: { router: { completionPolicy: "all_required_completed", sectionUnlockRules } },
+      scenarioItems: [{ id: "s1", topicId: "bank", topicName: "Банк", questionId: null, title: "Сценарий" }],
+    } as Partial<TestEditorModel>);
+  const unlockErrors = (m: TestEditorModel) => validateTestEditor(m).errors.filter((e) => e.field.endsWith(".unlock"));
+
+  it("условие без пунктов — ошибка поля у самого пункта", () => {
+    expect(unlockErrors(router({ "scenario:s1": { mode: "after_sections_passed", sectionIds: [] } }))).toEqual([
+      expect.objectContaining({ field: "scenarioItems[0].unlock", message: "Выберите хотя бы один пункт." }),
+    ]);
+  });
+
+  it("пункт, которого в составе нет, условием не считается", () => {
+    expect(unlockErrors(router({ "topic-1": { mode: "after_sections_completed", sectionIds: ["gone"] } }))).toEqual([
+      expect.objectContaining({ field: "sections[0].unlock", code: "required" }),
+    ]);
+  });
+
+  it("кольцо — ошибка у пункта, с которого оно видно", () => {
+    const errors = unlockErrors(router({
+      "topic-1": { mode: "after_sections_completed", sectionIds: ["scenario:s1"] },
+      "scenario:s1": { mode: "after_sections_passed", sectionIds: ["topic-1"] },
+    }));
+    expect(errors).toEqual([expect.objectContaining({ code: "unlock_cycle", field: "sections[0].unlock" })]);
+  });
+
+  it("цепочка без кольца и линейный поток — без ошибок", () => {
+    expect(unlockErrors(router({ "scenario:s1": { mode: "after_sections_passed", sectionIds: ["topic-1"] } }))).toEqual([]);
+    expect(unlockErrors({
+      ...router({ "topic-1": { mode: "after_sections_completed", sectionIds: [] } }),
+      flowMode: "linear_by_topics",
+    })).toEqual([]);
+  });
+});

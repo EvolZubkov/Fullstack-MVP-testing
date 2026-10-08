@@ -239,6 +239,8 @@ export interface ScenarioPayload {
   groupKey?: string | null;
   /** Балл по умолчанию для сценариев пункта; `null`/отсутствие — по тесту. */
   defaultPoints?: number | null;
+  /** Правило прохождения пункта (как `topicPassRuleJson` раздела); отсутствие — порога нет. */
+  passRuleJson?: unknown;
 }
 
 export interface CreatePayload {
@@ -893,6 +895,7 @@ export class TestSettingsService {
         imageUrl: s.imageUrl ?? null,
         groupKey: s.groupKey ?? null,
         defaultPoints: s.defaultPoints ?? null,
+        passRuleJson: s.passRuleJson ?? null,
         sortOrder: i,
       });
     }

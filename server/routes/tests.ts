@@ -123,6 +123,8 @@ const scenarioBodySchema = z.object({
   groupKey: z.string().min(1).nullable().optional(),
   // Балл по умолчанию для сценариев пункта (как у раздела темы); null — по тесту.
   defaultPoints: z.number().int().min(0).nullable().optional(),
+  // Техдолг №8: правило прохождения пункта — как `topicPassRuleJson` раздела темы.
+  passRuleJson: z.unknown().optional(),
 });
 
 /**

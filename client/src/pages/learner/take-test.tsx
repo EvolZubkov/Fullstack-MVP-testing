@@ -1968,6 +1968,42 @@ export default function TakeTestPage() {
     !reviewScreenHidden && shouldShowReview(input);
 
   const isRouterMode = flowStructure.flowMode === "router_by_topics";
+
+  /*
+   * Техдолг №8: исход каждого завершённого пункта роутера — тем же серверным расчётом раздела, что
+   * у экрана итогов раздела. Без него «Открывается после успешного прохождения» и политика «все
+   * обязательные пройдены» знали исход только там, где тест показывает итоги раздела, а после
+   * перезагрузки — нигде. Пока оценка в пути, пункт считается непройденным: зависимый пункт не
+   * мелькнёт открытым. Ошибка запроса — исход неизвестен (`null`), и пункт не запирает других, как
+   * пункт без порога. Адаптивную тему оценивает движок, а не этот расчёт.
+   */
+  const sectionGrading = useRef(new Set<string>());
+  useEffect(() => {
+    if (!isRouterMode || !attempt || testMode === "adaptive") return;
+    const completed = new Set(closedTopics);
+    for (const [topicId, status] of Object.entries(routerTopicStates)) {
+      if (status === "completed") completed.add(topicId);
+    }
+    for (const topicId of completed) {
+      if (topicId in routerSectionResults || sectionGrading.current.has(topicId)) continue;
+      sectionGrading.current.add(topicId);
+      setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed: false } }));
+      const settle = (passed: boolean | null) => {
+        sectionGrading.current.delete(topicId);
+        setRouterSectionResults((prev) => ({ ...prev, [topicId]: { passed } }));
+      };
+      fetch(`/api/attempts/${attempt.id}/section-result`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ topicId, answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((d: { passed?: boolean | null } | null) => settle(typeof d?.passed === "boolean" ? d.passed : null))
+        .catch(() => settle(null));
+    }
+  }, [isRouterMode, attempt, testMode, closedTopics, routerTopicStates, routerSectionResults, answers, questionStatus, navSettings.allowReturnToUnanswered]);
+
   /** The hub page itself (the `router` content page the author placed). */
   const hubPage = useMemo(
     () => flowStructure.contentPages.find((p) => p.kind === "router") as RenderableContentPage | undefined,
@@ -2001,10 +2037,21 @@ export default function TakeTestPage() {
     const first =
       typeof saved === "number" && flatQuestions[saved]?.topicId === topicId ? saved : firstOfTopic;
     setRouterTopicStates((prev) => ({ ...prev, [topicId]: "inProgress" }));
+    // Техдолг №8: повторный прогон сценария — прежний исход не действует; новый оценит возврат.
+    setRouterSectionResults((prev) => {
+      if (!(topicId in prev)) return prev;
+      const next = { ...prev };
+      delete next[topicId];
+      return next;
+    });
     setCurrentRouterTopic(topicId);
     setShowHub(false);
     const pre = contentPagesFor(flowStructure.contentPages, topicId, "before_topic") as RenderableContentPage[];
     if (pre.length > 0 && contentTpl) {
+      // Текущим становится первый вопрос раздела ДО его заставки: отложенный переход судит о
+      // границе раздела от текущего вопроса, и вопрос прежнего пункта (в начале прогона — первого
+      // в выдаче) принял бы вход в раздел за выход из чужого и показал бы обзор чужого раздела.
+      if (first >= 0) setCurrentIndex(first);
       setPageQueue(pre);
       setPendingAdvance({ nextIdx: first < 0 ? null : first, answers, status: questionStatus });
       setPhase("content");

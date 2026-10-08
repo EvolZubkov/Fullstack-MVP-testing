@@ -13,7 +13,8 @@
  */
 import { arrayMove } from "@dnd-kit/sortable";
 import { orderTestItems, scenarioItemKey, topicItemKey } from "@shared/test-items";
-import type { EditorSection, FlowRouterSettings, ScenarioItemDraft, TestEditorModel } from "../test-editor.types";
+import { pruneUnlockRules } from "@shared/flow/unlock-rules";
+import type { EditorSection, FlowRouterSettings, RouterUnlockRule, ScenarioItemDraft, TestEditorModel } from "../test-editor.types";
 
 /** Пункт состава: тема или пункт-сценарий, с адресом в своём массиве модели. */
 export type CompositionEntry =
@@ -108,4 +109,40 @@ export function itemOrderForSave(model: TestEditorModel): string[] | undefined {
   if (!hasRouterItems(model) || (model.scenarioItems ?? []).length === 0) return undefined;
   if (!model.flowSettings.router?.itemOrder?.length) return undefined;
   return compositionEntries(model).map((e) => e.key);
+}
+
+/**
+ * Ключ пункта в правилах открытия и в состоянии хаба: голый `topicId` у темы (так ключуются разделы
+ * выдачи), `scenario:<id>` у сценария. Ключ СОСТАВА у темы другой — `topic:<id>`.
+ */
+export function unlockKeyOf(entry: CompositionEntry): string {
+  return entry.kind === "topic" ? entry.section.topicId : entry.key;
+}
+
+/** Задать правило открытия пункта; `null` — «Сразу», правило снимается. */
+export function withUnlockRule(model: TestEditorModel, key: string, rule: RouterUnlockRule | null): TestEditorModel {
+  const router: FlowRouterSettings = model.flowSettings.router ?? {
+    completionPolicy: "all_required_completed",
+    sectionUnlockRules: {},
+  };
+  const rules = { ...router.sectionUnlockRules };
+  if (rule) rules[key] = rule;
+  else delete rules[key];
+  return { ...model, flowSettings: { ...model.flowSettings, router: { ...router, sectionUnlockRules: rules } } };
+}
+
+/**
+ * Пункт убран из состава: его правило открытия и упоминания в чужих правилах уходят вместе с ним.
+ * Иначе чужое «после завершения 3» ссылалось бы на пункт, которого нет, и пункт не открылся бы.
+ */
+export function withoutItemUnlockRules(model: TestEditorModel, key: string): TestEditorModel {
+  const router = model.flowSettings.router;
+  if (!router) return model;
+  return {
+    ...model,
+    flowSettings: {
+      ...model.flowSettings,
+      router: { ...router, sectionUnlockRules: pruneUnlockRules(router.sectionUnlockRules, key) },
+    },
+  };
 }

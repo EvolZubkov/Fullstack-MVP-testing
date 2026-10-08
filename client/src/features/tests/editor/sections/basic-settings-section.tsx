@@ -22,7 +22,8 @@
  */
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, MonitorPlay, Plus, Trash2 } from "lucide-react";
+import { compositionEntries, hasRouterItems } from "./composition-items";
 import { pluralize, t } from "@/lib/i18n";
 import {
   Banner,
@@ -1579,6 +1580,39 @@ const DECISION_POLICIES: { value: PassDecisionPolicy; label: string }[] = [
 ];
 
 /**
+ * Техдолг №8: в тесте с пунктами-сценариями политика судит и их — обязательный сценарий проверяется
+ * своим порогом наравне с обязательной темой (согласованный эскиз, «роутер: порог сценария»).
+ */
+const DECISION_POLICIES_WITH_SCENARIOS: { value: PassDecisionPolicy; label: string }[] = [
+  { value: "overall_only", label: "достигнут общий проходной порог теста" },
+  {
+    value: "overall_and_required_topics",
+    label: "достигнут порог и пройдены все обязательные темы и сценарии",
+  },
+  { value: "required_topics_only", label: "пройдены все обязательные темы и сценарии" },
+  { value: "all_topics_passed", label: "пройден каждый выбранный пункт" },
+];
+
+/** Строка таблицы правил: тема или (у роутера) пункт-сценарий — в порядке состава. */
+interface RuleRow {
+  key: string;
+  kind: "topic" | "scenario";
+  name: string;
+  section?: EditorSection;
+}
+
+function ruleRowsOf(model: TestEditorModel): RuleRow[] {
+  if (!hasRouterItems(model) || (model.scenarioItems ?? []).length === 0) {
+    return model.sections.map((section) => ({ key: section.topicId, kind: "topic", name: section.topicName, section }));
+  }
+  return compositionEntries(model).map((entry, n): RuleRow =>
+    entry.kind === "topic"
+      ? { key: entry.section.topicId, kind: "topic", name: `${n + 1}. ${entry.section.topicName}`, section: entry.section }
+      : { key: entry.key, kind: "scenario", name: `${n + 1}. ${entry.item.title?.trim() || entry.item.topicName}` },
+  );
+}
+
+/**
  * Что значит «тест пройден»: общая политика, общее правило и правила тем. Прежде карточка
  * стояла в хвосте «Правил прохождения» — рядом с навигацией, к которой не относится (Э3.5).
  */
@@ -1587,6 +1621,8 @@ export function VerdictPane({
   updateModel,
   fieldErrors = EMPTY_FIELD_ERRORS,
 }: SettingsSectionProps) {
+  const ruleRows = ruleRowsOf(model);
+  const withScenarios = ruleRows.some((r) => r.kind === "scenario");
   return (
     <>
       <FormSection
@@ -1603,7 +1639,7 @@ export function VerdictPane({
             <RadioGroup<PassDecisionPolicy>
               name="pass-decision-policy"
               value={model.passRules.decisionPolicy}
-              options={DECISION_POLICIES}
+              options={withScenarios ? DECISION_POLICIES_WITH_SCENARIOS : DECISION_POLICIES}
               error={fieldErrors.get("passRules.decisionPolicy")}
               onChange={(value) =>
                 updateModel((m) => ({
@@ -1691,30 +1727,36 @@ export function VerdictPane({
       </div>
 
       {model.sections.length > 0 && (
-        <FormSection stacked title="Правила оценки тем">
+        // Техдолг №8: у теста с пунктами-сценариями строки идут в порядке состава, и сценарий
+        // судится своим порогом, как тема (решение владельца 2026-10-08). Без сценариев таблица
+        // прежняя.
+        <FormSection stacked title={withScenarios ? "Правила оценки тем и сценариев" : "Правила оценки тем"}>
           <table
             className="tb-table tb-pass-table"
-            aria-label="Правила оценки тем"
+            aria-label={withScenarios ? "Правила оценки тем и сценариев" : "Правила оценки тем"}
             data-testid="pass-rules-topics-table"
           >
             <thead>
               <tr>
-                <th scope="col" className="tb-pass-table__topic-col">Тема</th>
-                <th scope="col">Правило оценки темы</th>
+                <th scope="col" className="tb-pass-table__topic-col">
+                  {withScenarios ? "Пункт" : "Тема"}
+                </th>
+                <th scope="col">{withScenarios ? "Правило оценки" : "Правило оценки темы"}</th>
               </tr>
             </thead>
             <tbody>
-              {model.sections.map((section) => {
+              {ruleRows.map(({ key, kind, name, section }) => {
                 const rule: TopicPassRule =
-                  model.passRules.byTopic[section.topicId] ?? { source: "inherit_overall" };
+                  model.passRules.byTopic[key] ?? { source: "inherit_overall" };
                 return (
                   <PassTopicRow
-                    key={section.topicId}
-                    topicId={section.topicId}
-                    topicName={section.topicName}
+                    key={key}
+                    topicId={key}
+                    topicName={name}
+                    kind={kind}
                     rule={rule}
-                    forms={section.formSet?.forms}
-                    variantMaxPoints={variantMaxPointsFor(model, section)}
+                    forms={section?.formSet?.forms}
+                    variantMaxPoints={section ? variantMaxPointsFor(model, section) : undefined}
                     fieldErrors={fieldErrors}
                     onSourceChange={(source) =>
                       updateModel((m) => ({
@@ -1723,21 +1765,21 @@ export function VerdictPane({
                           ...m.passRules,
                           byTopic: {
                             ...m.passRules.byTopic,
-                            [section.topicId]: buildTopicRuleBySource(source, rule, section, m),
+                            [key]: buildTopicRuleBySource(source, rule, section, m),
                           },
                         },
                       }))
                     }
                     onVariantTypeChange={(formId, type) =>
-                      updateModel((m) => updateVariantEntry(m, section.topicId, formId, (e) => ({ ...e, type })))
+                      updateModel((m) => updateVariantEntry(m, key, formId, (e) => ({ ...e, type })))
                     }
                     onVariantValueChange={(formId, value) =>
-                      updateModel((m) => updateVariantEntry(m, section.topicId, formId, (e) => ({ ...e, value })))
+                      updateModel((m) => updateVariantEntry(m, key, formId, (e) => ({ ...e, value })))
                     }
                     onCustomTypeChange={(customType) =>
                       updateModel((m) => {
                         const current =
-                          m.passRules.byTopic[section.topicId] ?? { source: "inherit_overall" };
+                          m.passRules.byTopic[key] ?? { source: "inherit_overall" };
                         if (current.source !== "custom") return m;
                         return {
                           ...m,
@@ -1745,7 +1787,7 @@ export function VerdictPane({
                             ...m.passRules,
                             byTopic: {
                               ...m.passRules.byTopic,
-                              [section.topicId]: { ...current, type: customType },
+                              [key]: { ...current, type: customType },
                             },
                           },
                         };
@@ -1754,7 +1796,7 @@ export function VerdictPane({
                     onCustomValueChange={(value) =>
                       updateModel((m) => {
                         const current =
-                          m.passRules.byTopic[section.topicId] ?? { source: "inherit_overall" };
+                          m.passRules.byTopic[key] ?? { source: "inherit_overall" };
                         if (current.source !== "custom") return m;
                         return {
                           ...m,
@@ -1762,7 +1804,7 @@ export function VerdictPane({
                             ...m.passRules,
                             byTopic: {
                               ...m.passRules.byTopic,
-                              [section.topicId]: { ...current, value },
+                              [key]: { ...current, value },
                             },
                           },
                         };
@@ -1796,8 +1838,11 @@ export function VerdictPane({
 }
 
 function PassTopicRow(props: {
+  /** Ключ правила: `topicId` темы или `scenario:<id>` пункта-сценария. */
   topicId: string;
   topicName: string;
+  /** Техдолг №8: строка пункта-сценария — значок сценария и «сценария» в подписях. */
+  kind?: "topic" | "scenario";
   rule: TopicPassRule;
   /** PRD-24: the topic's variants (PRD-17). Empty = «По вариантам» is not offered. */
   forms?: Form[];
@@ -1812,18 +1857,28 @@ function PassTopicRow(props: {
 }) {
   const isCustom = props.rule.source === "custom";
   const forms = props.forms ?? [];
+  const noun = props.kind === "scenario" ? "сценария" : "темы";
   // FR-02: the per-variant rule only exists for a topic delivered as variants.
   const hasVariants = forms.length >= 2;
   return (
     <>
       <tr data-testid={`pass-topic-row-${props.topicId}`}>
-        <td>{props.topicName}</td>
+        <td>
+          {props.kind === "scenario" ? (
+            <span className="tb-pass-table__item">
+              <MonitorPlay size={16} aria-label="Сценарий" />
+              {props.topicName}
+            </span>
+          ) : (
+            props.topicName
+          )}
+        </td>
         <td data-field={`passRules.byTopic[${props.topicId}]`}>
           <Select<TopicPassRule["source"]>
             size="s"
             fullWidth
             value={props.rule.source}
-            aria-label={`Правило оценки темы ${props.topicName}`}
+            aria-label={`Правило оценки ${noun} ${props.topicName}`}
             // «По вариантам» у темы без вариантов: правило выбрано, а варианта нет.
             // Пометка садится на САМ выбор — больше её посадить не на что, а строка
             // без неё выглядит исправной.
@@ -1923,7 +1978,7 @@ function PassTopicRow(props: {
                   size="s"
                   label="Тип"
                   value={props.rule.type}
-                  aria-label={`Тип индивидуального правила темы ${props.topicName}`}
+                  aria-label={`Тип индивидуального правила ${noun} ${props.topicName}`}
                   options={[
                     { value: "percent", label: "Процент" },
                     { value: "absolute", label: "Сумма баллов" },
@@ -1944,7 +1999,7 @@ function PassTopicRow(props: {
                   max={props.rule.type === "percent" ? 100 : undefined}
                   suffix={props.rule.type === "percent" ? "%" : undefined}
                   error={props.fieldErrors?.get(`passRules.byTopic[${props.topicId}].value`)}
-                  aria-label={`Значение порога темы ${props.topicName}`}
+                  aria-label={`Значение порога ${noun} ${props.topicName}`}
                   data-testid={`pass-topic-custom-value-${props.topicId}`}
                   onChange={(next) => props.onCustomValueChange(next)}
                 />

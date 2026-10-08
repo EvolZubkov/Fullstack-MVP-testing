@@ -10,6 +10,9 @@ import {
   itemOrderForSave,
   moveEntryOnto,
   moveEntryToGroup,
+  unlockKeyOf,
+  withUnlockRule,
+  withoutItemUnlockRules,
 } from "../sections/composition-items";
 import type { EditorSection, ScenarioItemDraft, TestEditorModel } from "../test-editor.types";
 
@@ -64,5 +67,34 @@ describe("общий список пунктов", () => {
     expect(keys(grouped)).toEqual(keys(model()));
     const placed = moveEntryOnto(model({ scenarioItems: [scenario("s1"), scenario("s2")] }), "scenario:s2", "topic:t1");
     expect(itemOrderForSave({ ...placed, scenarioItems: [scenario("s1")] })).toEqual(["topic:t1", "topic:t2", "scenario:s1"]);
+  });
+});
+
+describe("правила открытия пунктов (техдолг №8)", () => {
+  it("ключ правила: голый topicId у темы, scenario:<id> у сценария", () => {
+    expect(compositionEntries(model()).map(unlockKeyOf)).toEqual(["t1", "t2", "scenario:s1"]);
+  });
+
+  it("«Сразу» — отсутствие правила, а не правило always_available", () => {
+    const withRule = withUnlockRule(model(), "scenario:s1", { mode: "after_sections_passed", sectionIds: ["t1"] });
+    expect(withRule.flowSettings.router?.sectionUnlockRules).toEqual({
+      "scenario:s1": { mode: "after_sections_passed", sectionIds: ["t1"] },
+    });
+    expect(withUnlockRule(withRule, "scenario:s1", null).flowSettings.router?.sectionUnlockRules).toEqual({});
+  });
+
+  it("убранный пункт уносит своё правило и упоминания в чужих", () => {
+    const start = model({
+      flowSettings: {
+        router: {
+          completionPolicy: "all_required_completed",
+          sectionUnlockRules: {
+            t2: { mode: "after_sections_completed", sectionIds: ["scenario:s1"] },
+            "scenario:s1": { mode: "after_sections_passed", sectionIds: ["t1"] },
+          },
+        },
+      },
+    });
+    expect(withoutItemUnlockRules(start, "scenario:s1").flowSettings.router?.sectionUnlockRules).toEqual({});
   });
 });

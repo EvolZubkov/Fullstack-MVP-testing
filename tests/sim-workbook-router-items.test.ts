@@ -51,6 +51,21 @@ describe("книга не портит пункты-сценарии", () => {
     expect((patch.flowPolicyJson as { router: { itemOrder: string[] } }).router.itemOrder).toEqual(["topic:b", "scenario:s", "topic:a"]);
   });
 
+  it("тема, которой нет в книге, уходит из условия сценария; пустое условие снимается (техдолг №8)", () => {
+    const withRules = routerFlow({
+      completionPolicy: "all_required_completed",
+      sectionUnlockRules: {
+        "scenario:s": { mode: "after_sections_passed", sectionIds: ["a", "b", "scenario:t"] },
+        "scenario:t": { mode: "after_sections_completed", sectionIds: ["b"] },
+      },
+    });
+    const patch: Record<string, unknown> = { flowPolicyJson: routerFlow({ sectionUnlockRules: {} }) };
+    keepRouterItemsFromBook(withRules, patch, ["a"]);
+    expect((patch.flowPolicyJson as { router: { sectionUnlockRules: unknown } }).router.sectionUnlockRules).toEqual({
+      "scenario:s": { mode: "after_sections_passed", sectionIds: ["a", "scenario:t"] },
+    });
+  });
+
   it("тест без сценариев и линейный тест книга не трогает", () => {
     const plain: Record<string, unknown> = {};
     keepRouterItemsFromBook(routerFlow({ completionPolicy: "all_required_completed" }), plain, ["a"]);

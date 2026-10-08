@@ -41,6 +41,7 @@ import {
 } from "./test-editor.mappers";
 import { validateTestEditor, type ValidationContext } from "./test-editor.validation";
 import { tagKey } from "@shared/tags";
+import { scenarioEntryKey } from "./sections/composition-items";
 import { saveResultVariables } from "./result-variables-api";
 import { saveScales, saveMeasurements } from "./scales-api";
 import { saveQuestionOverrides } from "./scoring-api";
@@ -427,7 +428,7 @@ function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
   const payload: Record<string, unknown> = { ...test, sections };
   // «Сценарий в ИС»: пункты-сценарии уходят всегда и целиком — тест «Сценарий» берёт первый,
   // роутер все, а смена режима не должна терять ни одного (FR-40).
-  payload.scenarios = (draft.scenarioItems ?? []).map((item) => ({
+  payload.scenarios = (draft.scenarioItems ?? []).map((item, index) => ({
     // Стабильный id: на нём держится ключ пункта `scenario:<id>` в порядке и правилах роутера.
     ...(item.id ? { id: item.id } : {}),
     topicId: item.topicId,
@@ -436,6 +437,8 @@ function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
     required: item.required !== false,
     groupKey: item.groupKey ?? null,
     defaultPoints: item.defaultPoints ?? null,
+    // Техдолг №8: порог пункта — из таблицы «Правила оценки тем и сценариев», как у темы.
+    passRuleJson: draft.passRules.byTopic[scenarioEntryKey(item, index)] ?? { source: "inherit_overall" },
   }));
   if (adaptive) {
     payload.showDifficultyLevel = adaptive.showDifficultyLevel;

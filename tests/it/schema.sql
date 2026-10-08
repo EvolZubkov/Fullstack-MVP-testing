@@ -433,7 +433,8 @@ CREATE TABLE "test_scenarios" (
 	"image_url" text,
 	"group_key" text,
 	"default_points" integer,
-	"sort_order" integer DEFAULT 0 NOT NULL
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"pass_rule_json" jsonb
 );
 
 CREATE TABLE "test_sections" (

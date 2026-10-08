@@ -1007,6 +1007,14 @@ export const testScenarios = pgTable("test_scenarios", {
   groupKey: text("group_key"),
   /** Балл по умолчанию для сценариев пункта (как `test_sections.default_points`); NULL — по тесту. */
   defaultPoints: integer("default_points"),
+  /**
+   * Правило прохождения пункта — то же, что `test_sections.topic_pass_rule_json` у темы
+   * (`shared/scoring/pass-rule`): «как у теста», «не менее, %», «не менее, баллов». Его читают
+   * «Открывается после успешного прохождения» и вердикт теста (техдолг №8, решение владельца
+   * 2026-10-08: успех сценария определяет порог, как у темы). NULL — порога нет: любое завершение
+   * засчитывается, как у темы без порога.
+   */
+  passRuleJson: jsonb("pass_rule_json"),
   /** Порядок пунктов теста (в роутере — общий с темами, этап Э3). */
   sortOrder: integer("sort_order").notNull().default(0),
 }, (table) => ({

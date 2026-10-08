@@ -127,7 +127,9 @@ export function scenarioSection(item: TestScenario): ScenarioSection {
     topicId: scenarioItemKey(item.id),
     drawCount: 1,
     drawAll: false,
-    topicPassRuleJson: null,
+    // Техдолг №8: порог пункта — тот же движок, что у темы. Снимок до появления столбца его не
+    // несёт: порога нет, как и было.
+    topicPassRuleJson: item.passRuleJson ?? null,
     required: item.required,
     timeLimitMinutes: item.timeLimitMinutes,
     feedbackJson: null,

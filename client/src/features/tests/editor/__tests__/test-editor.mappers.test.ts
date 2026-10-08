@@ -1213,6 +1213,22 @@ describe("apiToEditorModel — тест «Сценарий»", () => {
     expect(model.sections.map((s) => s.topicId)).toEqual(["old-topic"]);
   });
 
+  it("порог пункта-сценария — в passRules.byTopic под ключом пункта; без порога — «Как у теста» (техдолг №8)", () => {
+    const model = apiToEditorModel({
+      id: "t",
+      version: 1,
+      title: "x",
+      mode: "standard",
+      sections: [apiSection({ topicId: "t1" })],
+      scenarios: [
+        { id: "s1", topicId: "bank", passRuleJson: { source: "custom", type: "percent", value: 80 } },
+        { id: "s2", topicId: "bank", passRuleJson: null },
+      ],
+    });
+    expect(model.passRules.byTopic["scenario:s1"]).toEqual({ source: "custom", type: "percent", value: 80 });
+    expect(model.passRules.byTopic["scenario:s2"]).toEqual({ source: "inherit_overall" });
+  });
+
   it("тест без пунктов — пункта нет; случайная выдача читается как questionId = null", () => {
     expect(apiToEditorModel({ id: "t", version: 1, title: "x", mode: "standard", sections: [] }).scenarioItems).toEqual([]);
     const random = apiToEditorModel({ id: "t", version: 1, title: "x", mode: "scenario", sections: [], scenarios: [{ topicId: "bank", questionId: null }] });

@@ -70,7 +70,7 @@ import {
   type ContentPage,
   type TemplateManifest,
 } from "@shared/schema";
-import { isScenarioItemKey, reflowItemOrder } from "@shared/test-items";
+import { isScenarioItemKey, reflowItemOrder, scenarioItemKey } from "@shared/test-items";
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
@@ -440,6 +440,18 @@ export function resolveSectionGroups(
 }
 
 /**
+ * Условие пункта-сценария после загрузки книги: только пункты, что в тесте остались, — темы книги
+ * и сценарии (их книга не трогает). Условие, у которого не осталось ни одного пункта, — `null`.
+ */
+function keepKnownPrerequisites(rule: unknown, topicIds: ReadonlySet<string>): unknown | null {
+  const r = (rule ?? {}) as { mode?: unknown; sectionIds?: unknown };
+  if (r.mode !== "after_sections_completed" && r.mode !== "after_sections_passed") return rule;
+  const ids = Array.isArray(r.sectionIds) ? (r.sectionIds as unknown[]) : [];
+  const kept = ids.filter((id): id is string => typeof id === "string" && (topicIds.has(id) || isScenarioItemKey(id)));
+  return kept.length > 0 ? { ...r, sectionIds: kept } : null;
+}
+
+/**
  * «Сценарий в ИС»: не дать книге тихо испортить пункты-сценарии роутера.
  *
  * Книга сценарии не переносит (они едут архивом, тест целиком — пакетом `.tbtest`), а значит и
@@ -475,7 +487,13 @@ export function keepRouterItemsFromBook(
 
   if (patch.flowPolicyJson && scenarioRules.length > 0) {
     const rules = { ...((router.sectionUnlockRules ?? {}) as Record<string, unknown>) };
-    for (const [key, rule] of scenarioRules) if (!(key in rules)) rules[key] = rule;
+    for (const [key, rule] of scenarioRules) {
+      if (key in rules) continue;
+      // Техдолг №8: тема, которой больше нет в книге, уходит и из условия сценария — иначе он
+      // ждал бы пункт, которого нет, и не открылся бы никогда. Условие без пунктов снимается.
+      const kept = topicIds ? keepKnownPrerequisites(rule, new Set(topicIds)) : rule;
+      if (kept) rules[key] = kept;
+    }
     router.sectionUnlockRules = rules;
     changed = true;
   }
@@ -2273,11 +2291,21 @@ export async function importWorkbook(
     // topic. A name absent from the book's sections is an author's typo, and a silently
     // dropped dependency would OPEN a section that is meant to stay locked.
     const unlockRules: Record<string, unknown> = {};
+    // Техдолг №8: тема может открываться после пункта-сценария. Книга сценариев не знает (их
+    // перенос — техдолг №1) и выгружает такую зависимость ключом `scenario:<id>`; ключ пункта
+    // ЭТОГО теста возвращается как есть, а не роняет загрузку «раздел не найден».
+    const ownScenarioKeys = unlockByTopicKey.size > 0
+      ? new Set((await storage.getTestScenarios(testId)).map((item) => scenarioItemKey(item.id)))
+      : new Set<string>();
     for (const [key, rule] of unlockByTopicKey) {
       const topicId = sectionTopicIdByKey.get(key);
       if (!topicId) continue;
       const sectionIds: string[] = [];
       for (const dep of rule.dependsOn) {
+        if (ownScenarioKeys.has(dep.trim())) {
+          sectionIds.push(dep.trim());
+          continue;
+        }
         const depId = sectionTopicIdByKey.get(normalizeName(dep));
         if (!depId) {
           result.errors.push(`Лист «Структура»: раздел "${dep}" из «Зависит от разделов» не найден`);

@@ -77,11 +77,45 @@
     return after.preResults;
   }
 
+  /**
+   * Исходы пунктов, какими их читает хаб: зафиксированный при возврате признак «пройден»
+   * (`state.sectionPassed`, техдолг №8) поверх результатов экранов итогов раздела. Признак свежее:
+   * повторный прогон сценария меняет исход, а экран итогов раздела мог и не показываться.
+   */
+  function hubSectionResults() {
+    var out = {};
+    var shown = state.sectionResults || {};
+    Object.keys(shown).forEach(function (key) { out[key] = shown[key]; });
+    var frozen = state.sectionPassed || {};
+    Object.keys(frozen).forEach(function (key) { out[key] = { passed: frozen[key] }; });
+    return out;
+  }
+
+  /**
+   * Зафиксировать, пройден ли пункт, — при КАЖДОМ возврате в хаб из завершённого пункта.
+   * Без этого «Открывается после успешного прохождения» и политика «все обязательные пройдены»
+   * видели исход только там, где тест показывает итоги раздела. Адаптивную тему оценивает движок:
+   * его результат уже лежит в `sectionResults`. Пункт без порога — `null`: его нельзя не пройти.
+   */
+  function freezeSectionPass(topicId) {
+    if (!topicId) return;
+    var passed = null;
+    if (TEST_DATA.mode === "adaptive") {
+      var adaptive = (state.sectionResults || {})[topicId];
+      passed = adaptive && typeof adaptive.passed === "boolean" ? adaptive.passed : null;
+    } else if (typeof buildSectionResult === "function") {
+      var built = buildSectionResult(topicId);
+      passed = built && typeof built.passed === "boolean" ? built.passed : null;
+    }
+    if (!state.sectionPassed) state.sectionPassed = {};
+    state.sectionPassed[topicId] = passed;
+  }
+
   /** The hub state the shared rules read (topic states + frozen results + policy). */
   function hubState() {
     return {
       topicStates: state.routerTopicStates || {},
-      sectionResults: state.sectionResults || {},
+      sectionResults: hubSectionResults(),
       unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
       completionPolicy:
         (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
@@ -237,6 +271,9 @@
         && typeof TBSimRun !== "undefined";
       if (!rerun) return;
       TBSimRun.allowRerun(topicId);
+      // Исход прежнего прогона больше не действует: его зафиксирует возврат из нового.
+      if (state.sectionPassed) delete state.sectionPassed[topicId];
+      if (state.sectionResults) delete state.sectionResults[topicId];
     }
     // Record the router hub on the nav route BEFORE mutating state, so the
     // topic's «Назад» (section-intro / first page) returns to the hub instead of
@@ -338,6 +375,7 @@
     var topicId = state.currentRouterTopic;
     if (topicId) {
       state.routerTopicStates[topicId] = "completed";
+      freezeSectionPass(topicId);
     }
     state.currentRouterTopic = null;
     // PRD-4 v1.1 §3.2 / Phase 4f — checkpoint the sectional state on
@@ -431,6 +469,7 @@
     var closed = topicId && typeof isSectionClosedByLeave === "function" && isSectionClosedByLeave(topicId);
     if (closed) {
       state.routerTopicStates[topicId] = "completed";
+      freezeSectionPass(topicId);
     } else if (topicId && state.routerTopicStates[topicId] === "inProgress") {
       delete state.routerTopicStates[topicId];
     }

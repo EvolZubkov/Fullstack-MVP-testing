@@ -400,6 +400,13 @@
       "when": 1791416454711,
       "tag": "0056_scale_scorm_target_default",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1791475258431,
+      "tag": "0057_scenario_pass_rule",
+      "breakpoints": true
     }
   ]
 }

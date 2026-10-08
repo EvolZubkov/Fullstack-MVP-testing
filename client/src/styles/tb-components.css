@@ -604,6 +604,8 @@
 }
 .tb-pass-table th { font: var(--ou-text-body-s); font-weight: 500; }
 .tb-pass-table__topic-col { width: var(--wf-size-180); }
+/* Техдолг №8: строка пункта-сценария — значок сценария перед названием, как в «Составе». */
+.tb-pass-table__item { display: inline-flex; align-items: center; gap: var(--ou-space-1); }
 
 /* Expand-row: 3-td layout. */
 .tb-pass-table__detail > td {
