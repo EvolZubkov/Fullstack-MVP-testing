@@ -280,7 +280,8 @@ export function passages(): Passage[] {
         {
           do: "check",
           what: "на карточке темы А — выданные 2 вопроса, а не заданные 3",
-          test: (p) => /data-topic-id="topic-a"[\s\S]*?router-topic-card__chip">2 вопроса</.test(p.hub ?? ""),
+          // Within topic A's card only: topic B's card also reads «2 вопроса».
+          test: (p) => (/data-topic-id="topic-a"[\s\S]*?<\/button>/.exec(p.hub ?? "")?.[0] ?? "").includes('router-topic-card__chip">2 вопроса<'),
         },
         ...topic("A", true),
         ...scenario("success"),
