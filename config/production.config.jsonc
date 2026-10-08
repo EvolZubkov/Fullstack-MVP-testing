@@ -19,7 +19,10 @@
   //   access.superadminEmails
   // =========================================================================
   "log": {
-    "fileName": "",
+    // File sink in the logs volume (/app/logs -> /srv/logs/<project>). The app never rotates it:
+    // the host's logrotate rule for /srv/logs/<project>/*.log does, with copytruncate (pino keeps
+    // the file open).
+    "fileName": "./logs/app.log",
     "level": { "common": "info", "console": "info", "file": "info", "objects": {} }
   },
   "server": {
