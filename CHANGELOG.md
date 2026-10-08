@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.43.4](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.43.3...v2.43.4)
+
+### Fixes
+
+- **fix**(analytics): исходы показателя — по убыванию доли (2026-10-08) [`9ef04a36a16a168e74c11c6e6334d81715fc381b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9ef04a36a16a168e74c11c6e6334d81715fc381b)
+
 ## [2.43.3](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.43.2...v2.43.3)
 
 ### Fixes
