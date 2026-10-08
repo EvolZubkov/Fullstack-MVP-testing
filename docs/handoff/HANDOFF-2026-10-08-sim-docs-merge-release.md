@@ -1,8 +1,8 @@
 # Передача работы: документация, вливание и выпуск «Сценарий в ИС»
 
-Дата: 2026-10-08. Ветка `sim-scenario`, worktree `C:\Repositories\test-builder-sim-scenario`:
-ветка поверх `main` 2.43.4 (коммиты — `git log main..sim-scenario`), в `origin` не отправлена. Миграции трека — `0053`-`0057`, все
-применены к общей dev-базе.
+Дата: 2026-10-08. Ветка `sim-scenario`, worktree `C:\Repositories\test-builder-sim-scenario`,
+поверх `main` 2.43.4 (коммиты трека — `git log main..sim-scenario`), в `origin` не отправлена.
+Миграции трека — `0053`-`0057`, все применены к общей dev-базе.
 
 Соседние записки:
 
