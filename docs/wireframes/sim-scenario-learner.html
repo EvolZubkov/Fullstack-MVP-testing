@@ -27,6 +27,8 @@
       .tb-sim-cover__shot { display: block; width: 100%; height: auto; filter: blur(2px); transform: scale(1.02); }
       .tb-sim-cover__veil { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--ou-space-4); background: color-mix(in srgb, var(--ou-bg-page) 60%, transparent); }
       .tb-sim-cover__note { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      .tb-sim-cover__done { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-4); }
+      .tb-sim-cover__title { margin: 0; font: var(--ou-text-heading-l); color: var(--ou-fg-default); }
       .tb-sim-modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; }
       .tb-sim-rules { margin: 0; display: flex; flex-direction: column; gap: var(--ou-space-2); }
       .wf-notes { padding: 24px; font: 14px/1.5 system-ui, sans-serif; color: var(--ou-fg-default); }
@@ -651,7 +653,7 @@
       <div class="tb-qbody">
         <div class="tb-qbody__answers">
           <div data-slot="question-feedback"></div>
-          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><span class="ou-tag ou-tag--success">Задание выполнено</span></div></div></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--success ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><h2 class="tb-sim-cover__title">Задание выполнено</h2></div></div></div></div>
         </div>
       </div>
     </div>
@@ -775,8 +777,7 @@
       <div class="tb-qbody">
         <div class="tb-qbody__answers">
           <div data-slot="question-feedback"></div>
-          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><span class="ou-tag ou-tag--success">Задание выполнено</span>
-          <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" data-action="sim-open"><span>Пройти заново</span></button></div></div></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--success ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span><h2 class="tb-sim-cover__title">Задание выполнено</h2><button class="ou-btn ou-btn--secondary ou-btn--m" data-action="sim-open"><span>Пройти заново</span></button></div></div></div></div>
         </div>
       </div>
     </div>
@@ -900,7 +901,7 @@
       <div class="tb-qbody">
         <div class="tb-qbody__answers">
           <div data-slot="question-feedback"></div>
-          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><span class="ou-tag ou-tag--warning">Выход досрочно: задание не выполнено</span></div></div></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--warning ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-out" aria-hidden="true"><path d="m16 17 5-5-5-5"></path><path d="M21 12H9"></path><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path></svg></span><h2 class="tb-sim-cover__title">Выход досрочно: задание не выполнено</h2></div></div></div></div>
         </div>
       </div>
     </div>
@@ -1024,7 +1025,7 @@
       <div class="tb-qbody">
         <div class="tb-qbody__answers">
           <div data-slot="question-feedback"></div>
-          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><span class="ou-tag ou-tag--warning">Время вышло: задание не выполнено</span></div></div></div>
+          <div data-slot="question-interaction"><div class="tb-sim-cover"><img class="tb-sim-cover__shot" src="/docs/specs/sim-scenario/example/media/home.png" alt=""><div class="tb-sim-cover__veil"><div class="tb-sim-cover__done"><span class="ou-iconbadge ou-iconbadge--warning ou-iconbadge--l"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer-off" aria-hidden="true"><path d="M10 2h4"></path><path d="M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7"></path><path d="M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2"></path><path d="m2 2 20 20"></path><path d="M12 12v-2"></path></svg></span><h2 class="tb-sim-cover__title">Время вышло: задание не выполнено</h2></div></div></div></div>
         </div>
       </div>
     </div>
@@ -1084,7 +1085,7 @@
           <tr><td>Обложка сценария</td><td>изображение первой сцены сценария, класс <code>tb-sim-cover</code></td><td>Скриншот первого экрана, слегка размыт; поверх — «Пройти» и «Задание выполняется на весь экран». Из эскиза Э0 <code>sim-scenario-task.html</code> (состояния learn-start, learn-done, learn-exited) без изменений. Стили обложки — в общих стилях шаблона, как у прочих компонентов экрана вопроса</td></tr>
           <tr><td>«Пройти»</td><td>окно правил, затем <code>requestFullscreen</code> по «Старт»</td><td>Окно правил собирается из настроек сценария и оценки в тесте: лимит, подсказки, штрафы, досрочный выход (путь участника 5.2). «Отмена» возвращает к форме, сценарий не начат</td></tr>
           <tr><td>«Далее»</td><td><code>answerReady</code> = прогон завершён</td><td>Неактивна, пока сценарий не пройден до конца — прогон и есть ответ. «Пропустить» и «Назад» — по правилам теста, как у других типов; пропущенный сценарий можно начать позже</td></tr>
-          <tr><td>После прогона</td><td>исход прогона</td><td>Обложка говорит, ЗАВЕРШЁН ли сценарий, а не как: «Задание выполнено» — цель достигнута полностью, частично или не достигнута; «Выход досрочно» и «Время вышло» — не выполнено. Исход и баллы участник видит в окне результата плеера по правилам показа результатов теста</td></tr>
+          <tr><td>После прогона</td><td>исход прогона</td><td>Обложка говорит, ЗАВЕРШЁН ли сценарий, а не как: «Задание выполнено» — цель достигнута полностью, частично или не достигнута; «Выход досрочно» и «Время вышло» — не выполнено. Вид — <code>IconBadge</code> размера l в тоне исхода (success / warning, значки lucide check, log-out, timer-off) и заголовок; выбор владельца 2026-10-08 вместо мелкой метки. Исход и баллы участник видит в окне результата плеера по правилам показа результатов теста</td></tr>
           <tr><td>«Пройти заново»</td><td>правило теста «менять ответ»</td><td>Есть, только если тест разрешает менять ответ; сценарий начинается сначала, засчитывается последнее выполнение. Без права менять ответ завершённый сценарий не перезапускается</td></tr>
           <tr><td>Закрытие раздела при уходе (PRD-67)</td><td>как у других типов</td><td>Действует на форму вопроса так же; прогон на весь экран уходом с вопроса не считается</td></tr>
         </tbody>
