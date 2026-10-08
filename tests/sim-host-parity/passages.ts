@@ -225,6 +225,31 @@ export function passages(): Passage[] {
         { do: "checkFinal", what: "тема А провалена, тема Б пройдена", test: (f) => f.items[0]?.passed === false && f.items[2]?.passed === true },
       ],
     },
+    {
+      // The 2026-10-08 acceptance found «the last section» counted by DELIVERY order: the web promised
+      // «Завершить тест» on the section-results screen of the topic last in delivery, though in a
+      // router the hub always comes next. Only a TOPIC last in delivery, closed through its review
+      // screen («Завершить раздел» — «менять ответ» puts it there), takes that path.
+      name: "8. тема последняя в выдаче: после её итогов — хаб, а не завершение теста",
+      options: { topicLast: true, allowAnswerChange: true },
+      steps: [
+        { do: "start" },
+        ...topic("A", true, true, true),
+        ...scenario("success"),
+        { do: "pick", item: "B" },
+        { do: "answer", qid: "qb1", correct: true },
+        { do: "answer", qid: "qb2", correct: true },
+        { do: "finishReview" },
+        {
+          do: "check",
+          what: "итоги последней в выдаче темы ведут в хаб («Продолжить»), не завершают тест",
+          test: (p) => p.screen === "section-results" && (p.sectionResult as { continueLabel?: string } | null)?.continueLabel === "Продолжить",
+        },
+        { do: "sectionContinue" },
+        { do: "check", what: "после итогов темы — хаб", test: (p) => p.screen === "hub" },
+        { do: "finish" },
+      ],
+    },
   ];
 }
 

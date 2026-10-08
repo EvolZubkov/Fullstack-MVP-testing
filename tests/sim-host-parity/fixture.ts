@@ -52,6 +52,11 @@ export interface FixtureOptions {
   allowAnswerChange?: boolean;
   /** «Засчитывать частичное» for scenarios. Default `true`. */
   countPartial?: boolean;
+  /**
+   * Topic B goes LAST in delivery (after both scenarios). By default the last item is a scenario,
+   * and «the last section» rules (`isLastSectionWeb`) never come into play: they concern a topic.
+   */
+  topicLast?: boolean;
 }
 
 /** Single-choice question; the correct option is always the first one. */
@@ -134,7 +139,9 @@ export async function createRouterTest(h: Harness, options: FixtureOptions = {},
         mode: "router_by_topics",
         router: {
           completionPolicy: options.completionPolicy ?? "all_required_completed",
-          itemOrder: [`topic:${T_A}`, keySc1, `topic:${T_B}`, keySc2],
+          itemOrder: options.topicLast
+            ? [`topic:${T_A}`, keySc1, keySc2, `topic:${T_B}`]
+            : [`topic:${T_A}`, keySc1, `topic:${T_B}`, keySc2],
           sectionUnlockRules: {
             // The scenario opens only after topic A is PASSED — the rule that needs an outcome.
             [keySc1]: { mode: "after_sections_passed", sectionIds: [T_A] },
