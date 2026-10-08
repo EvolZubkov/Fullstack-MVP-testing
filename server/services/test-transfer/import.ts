@@ -19,7 +19,6 @@
  * filesystem or a ZIP.
  */
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { storage } from "../../storage";
@@ -94,7 +93,11 @@ export const registryMediaRegistrar: MediaRegistrar = async (entry, bytes, owner
 
   const mimeType = entry.mimeType ?? "application/octet-stream";
   const ext = path.extname(entry.originalName ?? "") || `.${extensionForMime(mimeType) ?? "bin"}`;
-  const tempPath = path.join(os.tmpdir(), `tbtest-${randomUUID()}${ext}`);
+  // Staged next to the store, as the media upload does (`uploads/tmp`): a file in `os.tmpdir()`
+  // lives on another filesystem in a container, and moving it into the store needs a full copy.
+  const stagingDir = path.resolve(process.cwd(), "uploads", "tmp");
+  fs.mkdirSync(stagingDir, { recursive: true });
+  const tempPath = path.join(stagingDir, `tbtest-${randomUUID()}${ext}`);
 
   try {
     fs.writeFileSync(tempPath, bytes);
