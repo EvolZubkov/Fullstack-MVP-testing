@@ -69,9 +69,9 @@ describe("приём архива", () => {
     const result = await importScenarioArchive(await referenceZip(), "owner", register as never);
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
-    expect(result.summary).toMatchObject({ title: "Регистрация входящего письма", scenes: 11, images: 12 });
-    expect(result.mediaCreated).toBe(12);
-    expect(calls).toHaveLength(12);
+    expect(result.summary).toMatchObject({ title: "Регистрация входящего письма", scenes: 16, images: 13 });
+    expect(result.mediaCreated).toBe(13);
+    expect(calls).toHaveLength(13);
     const media = result.dataJson!.scenario.media;
     expect(media.every((m) => /^\/api\/media\/asset-\d+$/.test(m.file))).toBe(true);
     expect(storedScenarioErrors(result.dataJson)).toEqual([]);

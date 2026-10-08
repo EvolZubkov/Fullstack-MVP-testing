@@ -40,7 +40,9 @@ function fillCard(run: SimRun, opts: { corr?: string; exec?: string } = {}) {
   hit(run, "home-inbox");
   hit(run, "list-create");
   hit(run, "form-corr");
-  hit(run, opts.corr ?? "dir-2", "dblclick");
+  const corr = opts.corr ?? "dir-2";
+  hit(run, corr);
+  hit(run, `sel${corr.slice(4)}-choose`);
   run.commitField("num", "ВХ-1183");
   run.commitField("topic", "Запрос коммерческого предложения");
   hit(run, "form-exec");
@@ -150,12 +152,33 @@ describe("отказ системы и ошибки", () => {
     expect(run.result().counts.wrongValues).toBe(1);
   });
 
-  it("одиночный клик по строке справочника не ошибка — ждём двойного", () => {
+  it("щелчок выделяет строку справочника, «Выбрать» без выделения ничего не делает", () => {
     const run = createRun(scenario);
     hit(run, "home-inbox");
     hit(run, "list-create");
     hit(run, "form-corr");
-    expect(hit(run, "dir-2", "click")).toEqual({ kind: "none" });
+    expect(hit(run, "dir-choose")).toEqual({ kind: "none" });
+    hit(run, "dir-0");
+    expect(run.scene().id).toBe("form-dir-sel-0");
+    hit(run, "sel0-row-2");
+    expect(run.scene().id).toBe("form-dir-sel-2");
+    expect(run.value("corr")).toBe("");
+    hit(run, "sel2-choose");
+    expect(run.scene().id).toBe("form");
+    expect(run.value("corr")).toBe("ООО «Ромашка»");
+    expect(run.result().counts.misses).toBe(0);
+  });
+
+  it("двойной щелчок по строке выбирает её сразу: первый щелчок выделяет, второй не ошибка", () => {
+    const run = createRun(scenario);
+    hit(run, "home-inbox");
+    hit(run, "list-create");
+    hit(run, "form-corr");
+    hit(run, "dir-2", "click");
+    expect(hit(run, "sel2-pick", "click")).toEqual({ kind: "none" });
+    hit(run, "sel2-pick", "dblclick");
+    expect(run.scene().id).toBe("form");
+    expect(run.value("corr")).toBe("ООО «Ромашка»");
     expect(run.result().counts.misses).toBe(0);
   });
 });
@@ -178,7 +201,8 @@ describe("подсказка", () => {
     hit(run, "home-inbox");
     hit(run, "list-create");
     hit(run, "form-corr");
-    hit(run, "dir-2", "dblclick");
+    hit(run, "dir-2");
+  hit(run, "sel2-choose");
     for (let i = 0; i < 3; i += 1) run.click(1800, 1150);
     expect(run.hint()?.target).toBe("num");
   });
@@ -194,7 +218,8 @@ describe("клавиши и копирование", () => {
     hit(run, "list-create");
     expect(run.key("Ctrl+S").kind).toBe("blocked");
     hit(run, "form-corr");
-    hit(run, "dir-2", "dblclick");
+    hit(run, "dir-2");
+  hit(run, "sel2-choose");
     run.commitField("num", "ВХ-1183");
     run.commitField("topic", "Запрос коммерческого предложения");
     hit(run, "form-exec");

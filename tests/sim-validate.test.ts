@@ -45,7 +45,7 @@ describe("эталонный сценарий", () => {
 
   it("сводка называет сцены, изображения, поля, ловушки и проверки цели", () => {
     const summary = summarizeScenario(reference);
-    expect(summary).toMatchObject({ title: "Регистрация входящего письма", scenes: 11, images: 12, fields: 4, traps: 2, checks: 4 });
+    expect(summary).toMatchObject({ title: "Регистрация входящего письма", scenes: 16, images: 13, fields: 4, traps: 2, checks: 4 });
   });
 });
 

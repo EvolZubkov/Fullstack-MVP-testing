@@ -103,6 +103,12 @@
       "file": "media/save-error.png",
       "w": 728,
       "h": 72
+    },
+    {
+      "id": "row-selected",
+      "file": "media/row-selected.png",
+      "w": 883,
+      "h": 71
     }
   ],
   "fields": [
@@ -817,6 +823,198 @@
           "role": "detour",
           "effects": [
             {
+              "goto": "form-dir-sel-0"
+            }
+          ]
+        },
+        {
+          "id": "dir-1",
+          "x": 518,
+          "y": 516,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-1"
+            }
+          ]
+        },
+        {
+          "id": "dir-2",
+          "x": 518,
+          "y": 588,
+          "w": 883,
+          "h": 72,
+          "role": "path",
+          "effects": [
+            {
+              "goto": "form-dir-sel-2"
+            }
+          ],
+          "hint": "Выделите щелчком строку нужной организации"
+        },
+        {
+          "id": "dir-3",
+          "x": 518,
+          "y": 660,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-3"
+            }
+          ]
+        },
+        {
+          "id": "dir-4",
+          "x": 518,
+          "y": 732,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-4"
+            }
+          ]
+        },
+        {
+          "id": "dir-choose",
+          "x": 999,
+          "y": 948,
+          "w": 191,
+          "h": 72,
+          "role": "neutral"
+        },
+        {
+          "id": "dir-cancel",
+          "x": 1210,
+          "y": 948,
+          "w": 173,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-dir-sel-0",
+      "title": "Карточка · справочник, выделена строка 1",
+      "elements": [
+        {
+          "id": "bg",
+          "media": "form",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "save-error",
+          "media": "save-error",
+          "x": 806,
+          "y": 90,
+          "w": 730,
+          "h": 72,
+          "hidden": true,
+          "autoHideMs": 2500
+        },
+        {
+          "id": "dialog",
+          "media": "dir-dialog",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "row-sel",
+          "media": "row-selected",
+          "x": 518,
+          "y": 445,
+          "w": 883,
+          "h": 71
+        }
+      ],
+      "fields": [
+        {
+          "field": "corr",
+          "x": 422,
+          "y": 240,
+          "w": 960,
+          "h": 72
+        },
+        {
+          "field": "num",
+          "x": 422,
+          "y": 348,
+          "w": 480,
+          "h": 72
+        },
+        {
+          "field": "topic",
+          "x": 422,
+          "y": 564,
+          "w": 1056,
+          "h": 72
+        },
+        {
+          "field": "exec",
+          "x": 422,
+          "y": 672,
+          "w": 960,
+          "h": 72
+        }
+      ],
+      "keys": [
+        {
+          "id": "sel0-esc",
+          "keys": "Escape",
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ],
+      "zones": [
+        {
+          "id": "sel0-choose",
+          "x": 999,
+          "y": 948,
+          "w": 191,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "set": "corr",
+              "value": "АО «Север»"
+            },
+            {
+              "goto": "form"
+            }
+          ]
+        },
+        {
+          "id": "sel0-search",
+          "x": 518,
+          "y": 288,
+          "w": 883,
+          "h": 72,
+          "role": "neutral"
+        },
+        {
+          "id": "sel0-pick",
+          "x": 518,
+          "y": 444,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
               "set": "corr",
               "value": "АО «Север»"
             },
@@ -827,7 +1025,191 @@
           "action": "dblclick"
         },
         {
-          "id": "dir-1",
+          "id": "sel0-row-1",
+          "x": 518,
+          "y": 516,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-1"
+            }
+          ]
+        },
+        {
+          "id": "sel0-row-2",
+          "x": 518,
+          "y": 588,
+          "w": 883,
+          "h": 72,
+          "role": "path",
+          "effects": [
+            {
+              "goto": "form-dir-sel-2"
+            }
+          ],
+          "hint": "Выделите щелчком строку нужной организации"
+        },
+        {
+          "id": "sel0-row-3",
+          "x": 518,
+          "y": 660,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-3"
+            }
+          ]
+        },
+        {
+          "id": "sel0-row-4",
+          "x": 518,
+          "y": 732,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-4"
+            }
+          ]
+        },
+        {
+          "id": "sel0-cancel",
+          "x": 1210,
+          "y": 948,
+          "w": 173,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-dir-sel-1",
+      "title": "Карточка · справочник, выделена строка 2",
+      "elements": [
+        {
+          "id": "bg",
+          "media": "form",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "save-error",
+          "media": "save-error",
+          "x": 806,
+          "y": 90,
+          "w": 730,
+          "h": 72,
+          "hidden": true,
+          "autoHideMs": 2500
+        },
+        {
+          "id": "dialog",
+          "media": "dir-dialog",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "row-sel",
+          "media": "row-selected",
+          "x": 518,
+          "y": 517,
+          "w": 883,
+          "h": 71
+        }
+      ],
+      "fields": [
+        {
+          "field": "corr",
+          "x": 422,
+          "y": 240,
+          "w": 960,
+          "h": 72
+        },
+        {
+          "field": "num",
+          "x": 422,
+          "y": 348,
+          "w": 480,
+          "h": 72
+        },
+        {
+          "field": "topic",
+          "x": 422,
+          "y": 564,
+          "w": 1056,
+          "h": 72
+        },
+        {
+          "field": "exec",
+          "x": 422,
+          "y": 672,
+          "w": 960,
+          "h": 72
+        }
+      ],
+      "keys": [
+        {
+          "id": "sel1-esc",
+          "keys": "Escape",
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ],
+      "zones": [
+        {
+          "id": "sel1-choose",
+          "x": 999,
+          "y": 948,
+          "w": 191,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "set": "corr",
+              "value": "ООО «Альфа»"
+            },
+            {
+              "goto": "form"
+            }
+          ]
+        },
+        {
+          "id": "sel1-search",
+          "x": 518,
+          "y": 288,
+          "w": 883,
+          "h": 72,
+          "role": "neutral"
+        },
+        {
+          "id": "sel1-row-0",
+          "x": 518,
+          "y": 444,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-0"
+            }
+          ]
+        },
+        {
+          "id": "sel1-pick",
           "x": 518,
           "y": 516,
           "w": 883,
@@ -845,7 +1227,192 @@
           "action": "dblclick"
         },
         {
-          "id": "dir-2",
+          "id": "sel1-row-2",
+          "x": 518,
+          "y": 588,
+          "w": 883,
+          "h": 72,
+          "role": "path",
+          "effects": [
+            {
+              "goto": "form-dir-sel-2"
+            }
+          ],
+          "hint": "Выделите щелчком строку нужной организации"
+        },
+        {
+          "id": "sel1-row-3",
+          "x": 518,
+          "y": 660,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-3"
+            }
+          ]
+        },
+        {
+          "id": "sel1-row-4",
+          "x": 518,
+          "y": 732,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-4"
+            }
+          ]
+        },
+        {
+          "id": "sel1-cancel",
+          "x": 1210,
+          "y": 948,
+          "w": 173,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-dir-sel-2",
+      "title": "Карточка · справочник, выделена строка 3",
+      "elements": [
+        {
+          "id": "bg",
+          "media": "form",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "save-error",
+          "media": "save-error",
+          "x": 806,
+          "y": 90,
+          "w": 730,
+          "h": 72,
+          "hidden": true,
+          "autoHideMs": 2500
+        },
+        {
+          "id": "dialog",
+          "media": "dir-dialog",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "row-sel",
+          "media": "row-selected",
+          "x": 518,
+          "y": 589,
+          "w": 883,
+          "h": 71
+        }
+      ],
+      "fields": [
+        {
+          "field": "corr",
+          "x": 422,
+          "y": 240,
+          "w": 960,
+          "h": 72
+        },
+        {
+          "field": "num",
+          "x": 422,
+          "y": 348,
+          "w": 480,
+          "h": 72
+        },
+        {
+          "field": "topic",
+          "x": 422,
+          "y": 564,
+          "w": 1056,
+          "h": 72
+        },
+        {
+          "field": "exec",
+          "x": 422,
+          "y": 672,
+          "w": 960,
+          "h": 72
+        }
+      ],
+      "keys": [
+        {
+          "id": "sel2-esc",
+          "keys": "Escape",
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ],
+      "zones": [
+        {
+          "id": "sel2-choose",
+          "x": 999,
+          "y": 948,
+          "w": 191,
+          "h": 72,
+          "role": "path",
+          "effects": [
+            {
+              "set": "corr",
+              "value": "ООО «Ромашка»"
+            },
+            {
+              "goto": "form"
+            }
+          ],
+          "hint": "Подтвердите выбор кнопкой «Выбрать»"
+        },
+        {
+          "id": "sel2-search",
+          "x": 518,
+          "y": 288,
+          "w": 883,
+          "h": 72,
+          "role": "neutral"
+        },
+        {
+          "id": "sel2-row-0",
+          "x": 518,
+          "y": 444,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-0"
+            }
+          ]
+        },
+        {
+          "id": "sel2-row-1",
+          "x": 518,
+          "y": 516,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-1"
+            }
+          ]
+        },
+        {
+          "id": "sel2-pick",
           "x": 518,
           "y": 588,
           "w": 883,
@@ -860,11 +1427,194 @@
               "goto": "form"
             }
           ],
-          "action": "dblclick",
-          "hint": "Дважды щёлкните по строке нужной организации"
+          "action": "dblclick"
         },
         {
-          "id": "dir-3",
+          "id": "sel2-row-3",
+          "x": 518,
+          "y": 660,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-3"
+            }
+          ]
+        },
+        {
+          "id": "sel2-row-4",
+          "x": 518,
+          "y": 732,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-4"
+            }
+          ]
+        },
+        {
+          "id": "sel2-cancel",
+          "x": 1210,
+          "y": 948,
+          "w": 173,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-dir-sel-3",
+      "title": "Карточка · справочник, выделена строка 4",
+      "elements": [
+        {
+          "id": "bg",
+          "media": "form",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "save-error",
+          "media": "save-error",
+          "x": 806,
+          "y": 90,
+          "w": 730,
+          "h": 72,
+          "hidden": true,
+          "autoHideMs": 2500
+        },
+        {
+          "id": "dialog",
+          "media": "dir-dialog",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "row-sel",
+          "media": "row-selected",
+          "x": 518,
+          "y": 661,
+          "w": 883,
+          "h": 71
+        }
+      ],
+      "fields": [
+        {
+          "field": "corr",
+          "x": 422,
+          "y": 240,
+          "w": 960,
+          "h": 72
+        },
+        {
+          "field": "num",
+          "x": 422,
+          "y": 348,
+          "w": 480,
+          "h": 72
+        },
+        {
+          "field": "topic",
+          "x": 422,
+          "y": 564,
+          "w": 1056,
+          "h": 72
+        },
+        {
+          "field": "exec",
+          "x": 422,
+          "y": 672,
+          "w": 960,
+          "h": 72
+        }
+      ],
+      "keys": [
+        {
+          "id": "sel3-esc",
+          "keys": "Escape",
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ],
+      "zones": [
+        {
+          "id": "sel3-choose",
+          "x": 999,
+          "y": 948,
+          "w": 191,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "set": "corr",
+              "value": "ООО «Вектор»"
+            },
+            {
+              "goto": "form"
+            }
+          ]
+        },
+        {
+          "id": "sel3-search",
+          "x": 518,
+          "y": 288,
+          "w": 883,
+          "h": 72,
+          "role": "neutral"
+        },
+        {
+          "id": "sel3-row-0",
+          "x": 518,
+          "y": 444,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-0"
+            }
+          ]
+        },
+        {
+          "id": "sel3-row-1",
+          "x": 518,
+          "y": 516,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-1"
+            }
+          ]
+        },
+        {
+          "id": "sel3-row-2",
+          "x": 518,
+          "y": 588,
+          "w": 883,
+          "h": 72,
+          "role": "path",
+          "effects": [
+            {
+              "goto": "form-dir-sel-2"
+            }
+          ],
+          "hint": "Выделите щелчком строку нужной организации"
+        },
+        {
+          "id": "sel3-pick",
           "x": 518,
           "y": 660,
           "w": 883,
@@ -882,7 +1632,191 @@
           "action": "dblclick"
         },
         {
-          "id": "dir-4",
+          "id": "sel3-row-4",
+          "x": 518,
+          "y": 732,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-4"
+            }
+          ]
+        },
+        {
+          "id": "sel3-cancel",
+          "x": 1210,
+          "y": 948,
+          "w": 173,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "form-dir-sel-4",
+      "title": "Карточка · справочник, выделена строка 5",
+      "elements": [
+        {
+          "id": "bg",
+          "media": "form",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "save-error",
+          "media": "save-error",
+          "x": 806,
+          "y": 90,
+          "w": 730,
+          "h": 72,
+          "hidden": true,
+          "autoHideMs": 2500
+        },
+        {
+          "id": "dialog",
+          "media": "dir-dialog",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "row-sel",
+          "media": "row-selected",
+          "x": 518,
+          "y": 733,
+          "w": 883,
+          "h": 71
+        }
+      ],
+      "fields": [
+        {
+          "field": "corr",
+          "x": 422,
+          "y": 240,
+          "w": 960,
+          "h": 72
+        },
+        {
+          "field": "num",
+          "x": 422,
+          "y": 348,
+          "w": 480,
+          "h": 72
+        },
+        {
+          "field": "topic",
+          "x": 422,
+          "y": 564,
+          "w": 1056,
+          "h": 72
+        },
+        {
+          "field": "exec",
+          "x": 422,
+          "y": 672,
+          "w": 960,
+          "h": 72
+        }
+      ],
+      "keys": [
+        {
+          "id": "sel4-esc",
+          "keys": "Escape",
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form"
+            }
+          ]
+        }
+      ],
+      "zones": [
+        {
+          "id": "sel4-choose",
+          "x": 999,
+          "y": 948,
+          "w": 191,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "set": "corr",
+              "value": "ИП Соколов"
+            },
+            {
+              "goto": "form"
+            }
+          ]
+        },
+        {
+          "id": "sel4-search",
+          "x": 518,
+          "y": 288,
+          "w": 883,
+          "h": 72,
+          "role": "neutral"
+        },
+        {
+          "id": "sel4-row-0",
+          "x": 518,
+          "y": 444,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-0"
+            }
+          ]
+        },
+        {
+          "id": "sel4-row-1",
+          "x": 518,
+          "y": 516,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-1"
+            }
+          ]
+        },
+        {
+          "id": "sel4-row-2",
+          "x": 518,
+          "y": 588,
+          "w": 883,
+          "h": 72,
+          "role": "path",
+          "effects": [
+            {
+              "goto": "form-dir-sel-2"
+            }
+          ],
+          "hint": "Выделите щелчком строку нужной организации"
+        },
+        {
+          "id": "sel4-row-3",
+          "x": 518,
+          "y": 660,
+          "w": 883,
+          "h": 72,
+          "role": "detour",
+          "effects": [
+            {
+              "goto": "form-dir-sel-3"
+            }
+          ]
+        },
+        {
+          "id": "sel4-pick",
           "x": 518,
           "y": 732,
           "w": 883,
@@ -900,7 +1834,7 @@
           "action": "dblclick"
         },
         {
-          "id": "dir-cancel",
+          "id": "sel4-cancel",
           "x": 1210,
           "y": 948,
           "w": 173,

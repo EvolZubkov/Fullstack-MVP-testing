@@ -42,7 +42,8 @@ function mainPath(scenario: Scenario, run: SimRun, values: { num: string; topic:
   tick();
   hit(scenario, run, "list-create");
   hit(scenario, run, "form-corr");
-  hit(scenario, run, "dir-2", "dblclick");
+  hit(scenario, run, "dir-2");
+  hit(scenario, run, "sel2-choose");
   run.commitField("num", values.num);
   run.commitField("topic", values.topic);
   hit(scenario, run, "form-exec");

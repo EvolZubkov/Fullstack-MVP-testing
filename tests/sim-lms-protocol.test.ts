@@ -41,7 +41,8 @@ function successRun(): SimResult {
   run.key("Ctrl+S");
   run.click(900, 276);
   run.click(1430, 276);
-  run.click(900, 624, "dblclick");
+  run.click(900, 624);
+  run.click(1094, 984);
   run.commitField("num", "ВХ-1183");
   run.commitField("topic", "Запрос коммерческого предложения");
   run.click(1430, 708);

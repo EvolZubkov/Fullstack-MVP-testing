@@ -40,7 +40,8 @@ function playSuccess(): ReturnType<SimRun["result"]> {
   run.click(5, 5); // a miss
   hit(run, "list-create");
   hit(run, "form-corr");
-  hit(run, "dir-2", "dblclick");
+  hit(run, "dir-2");
+  hit(run, "sel2-choose");
   run.commitField("num", "1183"); // wrong: no prefix
   run.commitField("num", "ВХ-1183");
   run.commitField("topic", "Запрос коммерческого предложения");
