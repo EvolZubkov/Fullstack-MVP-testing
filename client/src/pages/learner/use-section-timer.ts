@@ -176,6 +176,12 @@ export interface UseSectionTimerResult {
    * cannot know whether the section it shows was closed while the learner was away.
    */
   synced: boolean;
+  /**
+   * The topic `sectionRemainingSeconds` was last answered FOR by the server. A host that must read
+   * the remainder once and keep it — the scenario player takes its limit at mount — waits until it
+   * names the topic on screen; before that the number is unknown or belongs to the previous one.
+   */
+  syncedTopicId: string | null;
 }
 
 /**
@@ -193,6 +199,7 @@ export function useSectionTimer({
   const [lockedTopics, setLockedTopics] = useState<Set<string>>(new Set());
   const [closedTopics, setClosedTopics] = useState<Set<string>>(new Set());
   const [synced, setSynced] = useState(false);
+  const [syncedTopicId, setSyncedTopicId] = useState<string | null>(null);
   // PRD-67: one identity per page run — the initializer runs once per mount, so a reload
   // (a new mount) is the ONLY thing that changes it.
   const [runId] = useState(newRunId);
@@ -221,6 +228,7 @@ export function useSectionTimer({
       return sameSet(prev, closed) ? prev : closed;
     });
     setSynced(true);
+    setSyncedTopicId(topicId);
     if (
       topicId &&
       view.remainingSeconds !== null &&
@@ -276,7 +284,7 @@ export function useSectionTimer({
     return () => clearInterval(id);
   }, [enabled, topicId]);
 
-  return { sectionRemainingSeconds, lockedTopics, closedTopics, synced };
+  return { sectionRemainingSeconds, lockedTopics, closedTopics, synced, syncedTopicId };
 }
 
 export interface UseAdaptiveSectionTimerArgs {

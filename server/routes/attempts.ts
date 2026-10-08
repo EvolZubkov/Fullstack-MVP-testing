@@ -1818,8 +1818,11 @@ router.post("/attempts/:attemptId/section-timer", requirePermission("attempts.ta
       ? rawRunId
       : null;
     // The limit comes from the TEST, never from the client: a forged body must not
-    // be able to widen a section's budget.
-    const sections = await storage.getTestSections(attempt.testId);
+    // be able to widen a section's budget. Read through the attempt's delivery source:
+    // raw `test_sections` has no scenario items (`scenario:<id>`), so an item's own limit
+    // went unseen and the web ran its scenario under the test limit (host parity, Г5);
+    // the source also pins the limit to the version the attempt plays (PRD-15 block B).
+    const sections = await (await dataSourceForAttempt(attempt.snapshotId)).getTestSections(attempt.testId);
     const limitMinutes = topicId
       ? (sections.find((s) => s.topicId === topicId)?.timeLimitMinutes ?? null)
       : null;

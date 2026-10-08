@@ -815,6 +815,7 @@ export default function TakeTestPage() {
     sectionRemainingSeconds,
     lockedTopics,
     closedTopics,
+    syncedTopicId: sectionTimerTopicId,
   } = useSectionTimer({
     attemptId: attempt?.id ?? null,
     questions: flatQuestions,
@@ -3556,6 +3557,15 @@ export default function TakeTestPage() {
     const task = flatQuestions[scenarioTaskIndex].question;
     const itemKey = flatQuestions[scenarioTaskIndex].topicId;
     const scenario = (task.dataJson as { scenario?: Scenario } | null)?.scenario;
+    // Г5 паритета хостов: у пункта-сценария свой лимит времени, и прогон ограничен остатком ЕГО
+    // часов. Их ведёт сервер, а плеер берёт лимит один раз, при монтировании, — поэтому плеер ждёт,
+    // пока сервер назовёт остаток именно этого пункта (одна короткая сверка), а не берёт число
+    // прежнего пункта или лимит теста. Полный экран уже запрошен в щелчке по карточке.
+    const itemClockPending =
+      !scenarioTest && !!flatQuestions[scenarioTaskIndex].sectionTimeLimitMinutes && sectionTimerTopicId !== itemKey;
+    if (scenario && !scenarioDone && itemClockPending) {
+      return <LoadingState message="Открываем сценарий…" />;
+    }
     if (scenario && !scenarioDone) {
       return (
         <ScenarioRun
@@ -3563,7 +3573,9 @@ export default function TakeTestPage() {
           caption={testInfo?.title}
           showDetails={showCorrectAnswers}
           closeLabel={scenarioTest ? "Перейти к итогам" : "Вернуться к разделам"}
-          remainingSeconds={remainingSeconds}
+          // Лимит прогона — остаток таймера раздела (у пункта-сценария свой лимит времени), если он
+          // идёт, иначе теста (user-journey.md, 5.9) — как в обычном разделе ниже и как в пакете.
+          remainingSeconds={sectionRemainingSeconds ?? remainingSeconds}
           onFinish={(result) => {
             // Техдолг №7: досрочный выход из повторного прогона не затирает завершённый.
             if (!simRunReplaces(answers[task.id], result)) return;
