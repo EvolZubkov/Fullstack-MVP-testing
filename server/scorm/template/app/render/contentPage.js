@@ -352,6 +352,10 @@ function buildPageRenderContext(page) {
     (typeof canNavigateBack === "function" && canNavigateBack()) ||
     (typeof state !== "undefined" && state && (state.currentPageIndex || 0) > 0) ||
     (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode());
+  // The hub itself has nowhere to go back to: «Назад» there is not in the approved hub
+  // (sim-scenario-learner.html, screen 4 — the footer holds «Завершить» only) and the web
+  // hub never offers it. The router clause above is for a TOPIC page returning to the hub.
+  if (page && page.kind === "router") canGoBack = false;
   if (!TB || !TB.buildPageContextFor || !page) {
     return { dots: [], dotIndex: 0, dotsTotal: 0, canGoBack: !!canGoBack };
   }
