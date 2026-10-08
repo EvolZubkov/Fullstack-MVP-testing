@@ -220,6 +220,10 @@ chmod -R g+rX "${APP_DIR}"
 # to it; setgid keeps new files group-manageable from the host.
 chown "${APP_UID}":"${APP_GROUP}" "${LOG_DIR}"
 chmod 2770 "${LOG_DIR}"
+# Logs a root-run one-off container left behind (app.log of the first deploy with the
+# file sink): the app cannot append to them, so they pass to the app UID. Only root-owned
+# files are touched — a log the app already owns, or a rotated archive, stays as it is.
+find "${LOG_DIR}" -maxdepth 1 -type f -name '*.log' -user 0 -exec chown "${APP_UID}":"${APP_GROUP}" {} + 2>/dev/null || true
 chown -R "${APP_UID}":"${APP_GROUP}" "${DATA_DIR}"
 chmod -R 2770 "${DATA_DIR}"
 
@@ -586,11 +590,17 @@ fi
 # was invisible, because the former `drizzle-kit migrate` answered a connection
 # failure by exiting 1 with NO message whatsoever. Open the door first, then knock.
 # ---------------------------------------------------------------------------
+# One-off containers below (`docker compose run ... --entrypoint sh`) bypass the image
+# entrypoint, which is what drops root to the app user via gosu, and the service runs as
+# `user: root`. Each of them therefore passes `--user nodejs` explicitly: they share the
+# logs and uploads volumes with the app, and a file they create as root (app.log, first
+# of all) is one the app — UID 1500 — can no longer write to. That is how the first
+# deploy with the file sink left app.log root-owned and the running app logging nowhere.
 DOCKER_NETWORK="${PROJECT_NAME}_default"
 # Compose creates the network on its first `run`; none has happened yet (section 6
 # ended with `down`), so materialise it with a no-op container to learn the subnet.
 docker network inspect "${DOCKER_NETWORK}" > /dev/null 2>&1 || \
-    docker compose run --rm -T --no-deps --entrypoint sh app -c 'true' > /dev/null 2>&1 || true
+    docker compose run --rm -T --no-deps --user nodejs --entrypoint sh app -c 'true' > /dev/null 2>&1 || true
 DOCKER_SUBNET="$(docker network inspect "${DOCKER_NETWORK}" \
                  -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
 
@@ -642,13 +652,13 @@ fi
 # Non-fatal on purpose: if it cannot run, `migrate` below fails with its own legible
 # error, and one failure story is better than two.
 info "Reconciling the migration ledger with the journal..."
-if ! docker compose run --rm -T --no-deps --entrypoint sh app \
+if ! docker compose run --rm -T --no-deps --user nodejs --entrypoint sh app \
     -c 'node dist/reconcile-migration-ledger.cjs > /tmp/reconcile.log 2>&1; ec=$?; cat /tmp/reconcile.log; exit $ec'; then
     warn "ledger reconcile FAILED — continuing; the migration step below will report the real error."
 fi
 
 info "Applying DB migrations (dist/migrate.cjs)..."
-if ! docker compose run --rm -T --no-deps --entrypoint sh app \
+if ! docker compose run --rm -T --no-deps --user nodejs --entrypoint sh app \
     -c 'node dist/migrate.cjs > /tmp/migrate.log 2>&1; ec=$?; cat /tmp/migrate.log; exit $ec'; then
     echo ""
     warn "migrate FAILED — see the error above. Known causes:"
@@ -662,7 +672,7 @@ if ! docker compose run --rm -T --no-deps --entrypoint sh app \
     warn "     GRANT CREATE ON DATABASE \"${DB_NAME}\" TO \"${DB_USER}\";"
     warn "  'relation/table already exists': this database predates the migrate era"
     warn "     and was never baselined. Run ONCE, then redeploy:"
-    warn "     cd ${APP_DIR} && docker compose run --rm -T --no-deps --entrypoint sh \\"
+    warn "     cd ${APP_DIR} && docker compose run --rm -T --no-deps --user nodejs --entrypoint sh \\"
     warn "       app -c 'node scripts/db/run-sql.cjs drizzle/baseline-existing-db.sql'"
     warn "  See drizzle/README.md."
     error "Aborting before start — the schema is not in a known state."
@@ -681,7 +691,7 @@ ok "DB migrations applied"
 # Non-fatal on purpose: a cosmetic backfill must never block a release. A failure
 # is reported and the deploy continues — the next one retries it.
 info "Normalising content-page text (backfill)..."
-if ! docker compose run --rm -T --no-deps --entrypoint sh app \
+if ! docker compose run --rm -T --no-deps --user nodejs --entrypoint sh app \
     -c 'node dist/backfill-page-text.cjs > /tmp/backfill.log 2>&1; ec=$?; cat /tmp/backfill.log; exit $ec'; then
     warn "content-page text backfill FAILED — see the error above."
     warn "  The release continues: the step is cosmetic and re-runs on the next deploy."
