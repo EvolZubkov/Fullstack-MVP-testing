@@ -22,7 +22,7 @@ import type { PackageHost } from "./package-host";
 import type { WebHost } from "./web-host";
 import type { PlayerDouble } from "./player-double";
 
-export type ScreenKind = "start" | "hub" | "content" | "question" | "section-results" | "scenario" | "results" | "other";
+export type ScreenKind = "start" | "hub" | "content" | "question" | "section-results" | "review" | "scenario" | "results" | "other";
 
 /** L1 – L4: what the participant sees after a step. */
 export interface StepSnapshot {
@@ -53,6 +53,7 @@ const PHASES: Record<string, ScreenKind> = {
   content: "content",
   question: "question",
   sectionResults: "section-results",
+  review: "review",
   router: "hub",
   results: "results",
 };
@@ -94,7 +95,10 @@ export function packageStep(host: PackageHost, player: PlayerDouble): StepSnapsh
 export function webStep(web: WebHost, player: PlayerDouble): StepSnapshot {
   const s = web.screen;
   let screen: ScreenKind;
-  if (player.active) screen = "scenario";
+  // The page navigated to the result route: the scenario player of the page is gone with it,
+  // though its double was never told (the test keeps the page mounted).
+  if (s?.kind === "results") screen = "results";
+  else if (player.active) screen = "scenario";
   else if (!s) screen = "other";
   else if (s.kind === "content") screen = s.props.bodyHtml ? "hub" : "content";
   else screen = s.kind as ScreenKind;

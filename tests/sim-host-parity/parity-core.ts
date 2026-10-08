@@ -1,9 +1,8 @@
 /**
- * @module tests/sim-host-parity/parity
- * @description «Сценарий в ИС», техдолг №4: один набор прохождений проигрывается на вебе и в
- * SCORM-пакете, и после КАЖДОГО шага их снимки обязаны совпасть (план
- * `docs/specs/sim-scenario/plan-tests.md`, раздел 4, пункт 5; проект обвязки — записка
- * `docs/handoff/HANDOFF-2026-10-08-sim-host-parity.md`, раздел 9).
+ * @module tests/sim-host-parity/parity-core
+ * @description «Сценарий в ИС», техдолг №4: ядро теста паритета — драйверы двух хостов, сравнение
+ * снимков и проигрывание прохождения (записка `docs/handoff/HANDOFF-2026-10-08-sim-host-parity.md`,
+ * разделы 9.6 – 9.8, раскладка по файлам — 9.11).
  *
  * Оба хоста настоящие: веб — страница прохождения на настоящих маршрутах попытки, пакет — собранный
  * пакет целиком в jsdom; входы обоих собраны настоящими сборщиками из одной pglite. Подменён только
@@ -11,82 +10,42 @@
  *
  * Расхождения копятся по всему прохождению и печатаются разом: первое расхождение часто тянет за
  * собой следующие, и полная картина отличает причину от следствия.
+ *
+ * Модуль не мокает ничего сам: `vi.mock` поднимается выше импортов и обязан стоять в файле теста
+ * (`parity-1.test.ts`, `parity-2.test.ts`), который затем зовёт {@link registerParity}.
  */
-import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
-import { createHarness, type Harness } from "../it/db-harness";
-
-const h = vi.hoisted(() => ({ current: null as Harness | null, testId: "", web: null as { navigations: string[] } | null }));
-const player = vi.hoisted(() => ({ double: null as any }));
-vi.mock("../../server/db", () => ({
-  get db() {
-    if (!h.current) throw new Error("harness not initialized");
-    return h.current.db;
-  },
-}));
-vi.mock("../../server/middleware/auth", () => ({
-  requirePermission: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-}));
-vi.mock("wouter", () => ({
-  useParams: () => ({ testId: h.testId }),
-  useLocation: () => [`/learner/test/${h.testId}`, (to: string) => h.web?.navigations.push(String(to))],
-}));
-vi.mock("@skillum/ui-kit", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
-  useToast: () => ({ push: () => undefined, dismiss: () => undefined, clear: () => undefined }),
-}));
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { id: "learner-parity", magicScope: null } }) }));
-vi.mock("@/features/learner/attempt-report", () => ({ downloadAttemptReport: async () => "report.pdf" }));
-vi.mock("@/components/template-screen", async () => ({
-  TemplateScreen: (await import("./web-host")).ScreenDoubles.TemplateScreen,
-}));
-vi.mock("@/pages/learner/template-content-screen", async () => ({
-  TemplateContentScreen: (await import("./web-host")).ScreenDoubles.TemplateContentScreen,
-}));
-vi.mock("@/pages/learner/template-question-screen", async () => ({
-  TemplateQuestionScreen: (await import("./web-host")).ScreenDoubles.TemplateQuestionScreen,
-}));
-vi.mock("@shared/sim/player", () => ({
-  mountPlayer: (host: unknown, options: unknown) => player.double.mount(host, options),
-}));
-
-// eslint-disable-next-line import/first -- must import AFTER vi.mock
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import type { Harness } from "../it/db-harness";
+import { createHarness } from "../it/db-harness";
 import { seedBank, createRouterTest, LEARNER_ID, SIM_Q1 } from "./fixture";
-// eslint-disable-next-line import/first
 import { WebHost, makeServer } from "./web-host";
-// eslint-disable-next-line import/first
 import { buildPackage, PackageHost, sharedRuntimeBundle } from "./package-host";
-// eslint-disable-next-line import/first
 import { PlayerDouble } from "./player-double";
-// eslint-disable-next-line import/first
 import { playRun } from "../helpers/sim-runs";
-// eslint-disable-next-line import/first
 import {
   packageStep, webStep, packageDelivery, webDelivery, compactRun, packageFinal, webFinal, hubCards,
   type StepSnapshot,
 } from "./snapshot";
-// eslint-disable-next-line import/first
 import { passages, keyOf, type Passage, type Step } from "./passages";
-// eslint-disable-next-line import/first
 import attemptsRouter from "../../server/routes/attempts";
-// eslint-disable-next-line import/first
 import { storage } from "../../server/storage";
-// eslint-disable-next-line import/first
 import TakeTestPage from "@/pages/learner/take-test";
 
-beforeAll(async () => {
-  h.current = await createHarness();
-  await seedBank(h.current);
-  sharedRuntimeBundle(); // once per file, in a child process
-}, 120000);
-afterAll(async () => {
-  await h.current?.close();
-});
+
+/** State shared with the `vi.mock` factories of the test file. */
+export interface ParityShared {
+  h: { current: Harness | null; testId: string; web: { navigations: string[] } | null };
+  player: { double: any };
+}
+
+let h!: ParityShared["h"];
+let player!: ParityShared["player"];
 
 /** One host driven through a passage. */
 interface Driver {
   name: "web" | "package";
   player: PlayerDouble;
-  do(step: Exclude<Step, { do: "check" }>): Promise<void>;
+  do(step: Exclude<Step, { do: "check" | "checkFinal" }>): Promise<void>;
   snapshot(): StepSnapshot;
 }
 
@@ -109,10 +68,14 @@ function packageDriver(host: PackageHost, player: PlayerDouble, key: (i: any) =>
         case "answer":
           await host.answer(step.qid, step.correct ? 0 : 1);
           return;
+        case "finishReview":
+          await host.click("[data-action=finish-review]");
+          return;
         case "sectionContinue":
           await host.click("[data-action=section-continue]");
           return;
         case "sim": {
+          if (!player.active) return; // the host did not launch the player: reported as L5 by `play`
           const r = playRun(step.run);
           player.finish(r);
           await host.idle();
@@ -124,6 +87,7 @@ function packageDriver(host: PackageHost, player: PlayerDouble, key: (i: any) =>
           await host.finishTest();
           return;
         case "reload":
+          player.reset(); // the window with the mounted player is gone
           await host.reload();
           return;
         case "resume":
@@ -154,10 +118,14 @@ function webDriver(web: WebHost, player: PlayerDouble, key: (i: any) => string):
         case "answer":
           await web.answer(step.qid, step.correct ? 0 : 1);
           return;
+        case "finishReview":
+          await web.act(() => props().onAction?.("finish-review"));
+          return;
         case "sectionContinue":
           await web.act(() => props().onAction?.("section-continue"));
           return;
         case "sim": {
+          if (!player.active) return; // the host did not launch the player: reported as L5 by `play`
           const r = playRun(step.run);
           await web.act(() => player.finish(r));
           await web.act(() => player.close(r));
@@ -167,6 +135,7 @@ function webDriver(web: WebHost, player: PlayerDouble, key: (i: any) => string):
           await web.act(() => props().onNext?.());
           return;
         case "reload":
+          player.reset();
           await web.reload();
           return;
         case "resume":
@@ -236,7 +205,12 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
         if (!step.test(pkg.snapshot())) anchors.push(`${at}: не выполнено «${step.what}»`);
         continue;
       }
+      if (step.do === "checkFinal") {
+        if (!step.test(packageFinal(pkgHost.cmi))) anchors.push(`${at}: не выполнено «${step.what}»`);
+        continue;
+      }
       const mountsBefore = [pkgPlayer.mounts.length, webPlayer.mounts.length];
+      const prevActive = [pkgPlayer.active, webPlayer.active];
       await pkg.do(step);
       await web.do(step);
       for (const d of diffStep(web.snapshot(), pkg.snapshot())) diffs.push(`${at}: ${d}`);
@@ -251,6 +225,9 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
         const wm = JSON.stringify(webPlayer.mounts.slice(mountsBefore[1]));
         const pm = JSON.stringify(pkgPlayer.mounts.slice(mountsBefore[0]));
         if (wm !== pm) diffs.push(`${at}: L5 запуск плеера: веб ${wm}, пакет ${pm}`);
+      }
+      if (step.do === "sim" && prevActive[0] !== prevActive[1]) {
+        diffs.push(`${at}: L5 плеер запущен только на ${prevActive[1] ? "вебе" : "пакете"}`);
       }
       if (step.do === "sim") {
         const stored = (await storage.getAttempt(attemptId()!))?.answersJson as Record<string, unknown> | null;
@@ -274,11 +251,31 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
   return { diffs, anchors };
 }
 
-describe("«Сценарий в ИС»: паритет веба и пакета на одном наборе прохождений", () => {
-  passages().forEach((p, i) => {
-    it(p.name, async () => {
-      const { diffs, anchors } = await play(p, i);
-      expect({ anchors, diffs }).toEqual({ anchors: [], diffs: [] });
-    }, 180000);
+/**
+ * Registers the passages chosen by `select` as tests of the calling file.
+ *
+ * @param shared - state the file's `vi.mock` factories read
+ * @param select - which passages (by index in {@link passages}) this file plays
+ */
+export function registerParity(shared: ParityShared, select: (index: number) => boolean): void {
+  h = shared.h;
+  player = shared.player;
+  beforeAll(async () => {
+    h.current = await createHarness();
+    await seedBank(h.current);
+    sharedRuntimeBundle(); // once per file, in a child process
+  }, 120000);
+  afterAll(async () => {
+    await h.current?.close();
   });
-});
+
+  describe("«Сценарий в ИС»: паритет веба и пакета на одном наборе прохождений", () => {
+    passages().forEach((p, i) => {
+      if (!select(i)) return;
+      it(p.name, async () => {
+        const { diffs, anchors } = await play(p, i);
+        expect({ anchors, diffs }).toEqual({ anchors: [], diffs: [] });
+      }, 180000);
+    });
+  });
+}

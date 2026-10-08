@@ -4,7 +4,7 @@
  * builds into a real package that boots in jsdom, reaches the router hub, delivers in the authored
  * order, locks what it must, survives a reload inside a topic and finishes with an LMS result.
  *
- * It never compares the package with the web — that is `parity.test.ts`. It pins the harness
+ * It never compares the package with the web — that is `parity-1.test.ts` and `parity-2.test.ts`. It pins the harness
  * itself, so a red parity run can be read as «the hosts differ», not «the harness slipped».
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";

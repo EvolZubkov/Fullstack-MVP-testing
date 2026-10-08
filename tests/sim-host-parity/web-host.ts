@@ -23,7 +23,7 @@ import { act, cleanup, render, waitFor } from "@testing-library/react";
 
 /** What the web currently shows, as the doubles saw it. */
 export interface WebScreen {
-  kind: "start" | "content" | "question" | "section-results" | "results" | "other";
+  kind: "start" | "content" | "question" | "section-results" | "review" | "results" | "other";
   props: any;
 }
 
@@ -38,7 +38,7 @@ export const ScreenDoubles = {
   TemplateScreen: (props: any) => {
     // The layout stub names its screen (see `layoutFor`): the wrapper itself has no screen prop.
     const screen = /<!--screen:([\w-]+)-->/.exec(String(props.layout ?? ""))?.[1] ?? "other";
-    set(screen === "start" ? "start" : screen === "section-results" ? "section-results" : "other", props);
+    set(screen === "start" || screen === "section-results" || screen === "review" ? screen : "other", props);
     return createElement("div", { "data-testid": "template-screen", "data-screen": screen });
   },
   TemplateContentScreen: (props: any) => {

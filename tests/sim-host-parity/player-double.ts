@@ -60,6 +60,11 @@ export class PlayerDouble {
     };
   };
 
+  /** The host's window is gone (a reload): whatever was mounted in it is gone too. */
+  reset(): void {
+    this.current = null;
+  }
+
   /** Whether a run is mounted and waiting for the test's command. */
   get active(): boolean {
     return this.current !== null && !this.current.destroyed;
