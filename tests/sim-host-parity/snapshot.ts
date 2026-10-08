@@ -191,14 +191,16 @@ export function normalizeHtml(html: string): string {
 export function hubCards(html: string | null): string[] {
   if (!html) return [];
   const out: string[] = [];
-  const re = /<button[^>]*data-topic-id="([^"]+)"[^>]*>/g;
+  const re = /<button[^>]*data-topic-id="([^"]+)"[^>]*>([\s\S]*?)<\/button>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
-    const tag = m[0];
+    const tag = /^<button[^>]*>/.exec(m[0])![0];
     const attr = (name: string) => new RegExp(`${name}="([^"]*)"`).exec(tag)?.[1] ?? "";
+    // The card's chips (question count, time limit, «Сценарий») — markup that attributes miss.
+    const chips = [...m[2].matchAll(/router-topic-card__chip">([^<]*)</g)].map((c) => c[1]);
     out.push(
       `${m[1]} status=${attr("data-router-status")} locked=${attr("data-router-locked") || "false"} ` +
-        `action=${attr("data-action") || "-"} disabled=${/\sdisabled(=|\s|>|$)/.test(tag)}`,
+        `action=${attr("data-action") || "-"} disabled=${/\sdisabled(=|\s|>|$)/.test(tag)} chips=[${chips.join(", ")}]`,
     );
   }
   return out;

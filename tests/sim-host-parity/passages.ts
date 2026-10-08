@@ -270,6 +270,20 @@ export function passages(): Passage[] {
         { do: "finish" },
       ],
     },
+    {
+      // Г1: topic A asks for 3 questions, its bank holds 2. Both hosts deliver the 2 there are; the
+      // hub card is where the configured number and the delivered one can part.
+      name: "10. банк темы меньше заданного числа вопросов: карточка хаба",
+      options: { shortBankTopicA: true },
+      known: ["Г1"],
+      steps: [
+        { do: "start" },
+        ...topic("A", true),
+        ...scenario("success"),
+        ...topic("B", true),
+        { do: "finish" },
+      ],
+    },
   ];
 }
 

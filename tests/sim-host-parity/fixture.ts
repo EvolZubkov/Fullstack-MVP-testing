@@ -59,6 +59,11 @@ export interface FixtureOptions {
   topicLast?: boolean;
   /** Own time limit of scenario item 1, minutes; its section clock then bounds the run. */
   scenarioTimeLimitMinutes?: number;
+  /**
+   * Topic A asks for MORE questions than its bank holds (3 of 2, not «all»): the configured draw and
+   * the delivered count part ways — what the hub card shows then is Г1.
+   */
+  shortBankTopicA?: boolean;
 }
 
 /** Single-choice question; the correct option is always the first one. */
@@ -152,7 +157,9 @@ export async function createRouterTest(h: Harness, options: FixtureOptions = {},
       },
     } as never,
     sections: [
-      { topicId: T_A, drawCount: 2, drawAll: true, topicPassRuleJson: { source: "custom", type: "percent", value: 60 } },
+      options.shortBankTopicA
+        ? { topicId: T_A, drawCount: 3, drawAll: false, topicPassRuleJson: { source: "custom", type: "percent", value: 60 } }
+        : { topicId: T_A, drawCount: 2, drawAll: true, topicPassRuleJson: { source: "custom", type: "percent", value: 60 } },
       { topicId: T_B, drawCount: 2, drawAll: true, topicPassRuleJson: { source: "custom", type: "percent", value: 60 } },
     ] as never,
     scenarios: [

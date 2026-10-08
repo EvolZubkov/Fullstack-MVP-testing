@@ -19,7 +19,7 @@
  */
 import type { Step } from "./passages";
 
-export type KnownId = "Г6";
+export type KnownId = "Г6" | "Г1";
 
 export interface KnownDivergence {
   id: KnownId;
@@ -50,6 +50,24 @@ export const KNOWN_DIVERGENCES: KnownDivergence[] = [
     matches: (step, diff) =>
       step.do === "reload" &&
       (/^L1 экран: веб start, /.test(diff) || diff === "L2 хаб есть только у пакета" || /^L3 подвал хаба: веб null, /.test(diff)),
+  },
+  {
+    id: "Г1",
+    status: "pending",
+    summary:
+      "Число вопросов на карточке хаба: веб показывает, сколько вопросов темы ВЫДАНО участнику, пакет — " +
+      "сколько задано в настройке раздела. Расходятся, когда банк темы меньше заданного числа (или у " +
+      "темы набор вариантов разного размера). Что показывать?",
+    // The hub bodies differ only in a card's question-count chip: every other part of every card —
+    // status, lock, action, other chips — is the same on both hosts.
+    matches: (_step, diff) => {
+      if (!diff.startsWith("L2 хаб различается:")) return false;
+      const lines = diff.split(/\r?\n/).slice(1).map((l) => l.trim());
+      const web = lines.filter((l) => l.startsWith("веб ")).map((l) => l.slice(4));
+      const pkg = lines.filter((l) => l.startsWith("пакет ")).map((l) => l.slice(6));
+      const strip = (l: string) => l.replace(/\d+ вопрос[а-я]*/g, "N вопросов").trim();
+      return web.length > 0 && web.length === pkg.length && web.every((w, i) => strip(w) === strip(pkg[i]));
+    },
   },
 ];
 
