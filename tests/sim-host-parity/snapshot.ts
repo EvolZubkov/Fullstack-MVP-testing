@@ -37,10 +37,13 @@ export interface StepSnapshot {
   sectionResult: unknown;
 }
 
-/** L7: the attempt's outcome, in the units both hosts report. */
+/**
+ * L7: the attempt's outcome, in the units both hosts report. The overall score is a PERCENT: the
+ * package sends the LMS `cmi.score.raw` of `cmi.score.max` = 100, the web stores points. Per-item
+ * results stay in points (`cmi.objectives.n.score.*` carry them).
+ */
 export interface FinalSnapshot {
-  earned: number;
-  possible: number;
+  percent: number;
   passed: boolean | null;
   items: Array<{ key: string; earned: number; possible: number; passed: boolean | null }>;
 }
@@ -77,7 +80,7 @@ export function packageStep(host: PackageHost, player: PlayerDouble): StepSnapsh
   return {
     screen,
     question: screen === "question" ? (fq?.question?.id ?? null) : null,
-    hub: screen === "hub" ? hubEl!.innerHTML : null,
+    hub: screen === "hub" ? normalizeHtml(hubEl!.innerHTML) : null,
     footer,
     sectionResult: screen === "section-results" ? (lastSection?.sectionResult ?? null) : null,
   };
@@ -93,7 +96,7 @@ export function webStep(web: WebHost, player: PlayerDouble): StepSnapshot {
   return {
     screen,
     question: screen === "question" ? (s!.props.question?.id ?? null) : null,
-    hub: screen === "hub" ? String(s!.props.bodyHtml) : null,
+    hub: screen === "hub" ? normalizeHtml(String(s!.props.bodyHtml)) : null,
     footer:
       screen === "hub"
         ? {
@@ -140,8 +143,7 @@ export function packageFinal(cmi: Record<string, string>): FinalSnapshot {
   }
   const status = cmi["cmi.success_status"];
   return {
-    earned: round(Number(cmi["cmi.score.raw"] ?? 0)),
-    possible: round(Number(cmi["cmi.score.max"] ?? 0)),
+    percent: round(Number(cmi["cmi.score.raw"] ?? 0)),
     passed: status === "passed" ? true : status === "failed" ? false : null,
     items,
   };
@@ -150,8 +152,7 @@ export function packageFinal(cmi: Record<string, string>): FinalSnapshot {
 /** L7 from the web: the result the server stored with the attempt. */
 export function webFinal(result: any): FinalSnapshot {
   return {
-    earned: round(result.totalEarnedPoints),
-    possible: round(result.totalPossiblePoints),
+    percent: result.totalPossiblePoints > 0 ? Math.round((result.totalEarnedPoints / result.totalPossiblePoints) * 100) : 0,
     passed: typeof result.overallPassed === "boolean" ? result.overallPassed : null,
     items: (result.topicResults as any[]).map((t) => ({
       key: t.topicId,
@@ -160,6 +161,17 @@ export function webFinal(result: any): FinalSnapshot {
       passed: typeof t.passed === "boolean" ? t.passed : null,
     })),
   };
+}
+
+/**
+ * Serialises a markup string the way a live DOM does (`innerHTML`): the package's hub is read back
+ * from its DOM, the web's arrives as the raw string, and `disabled` vs `disabled=""` is not a
+ * difference between hosts.
+ */
+export function normalizeHtml(html: string): string {
+  const box = new DOMParser().parseFromString("<body></body>", "text/html").createElement("div");
+  box.innerHTML = html;
+  return box.innerHTML;
 }
 
 /** Per-card view of a hub body — what a failing L2 prints instead of two 3 KB strings. */
@@ -173,7 +185,7 @@ export function hubCards(html: string | null): string[] {
     const attr = (name: string) => new RegExp(`${name}="([^"]*)"`).exec(tag)?.[1] ?? "";
     out.push(
       `${m[1]} status=${attr("data-router-status")} locked=${attr("data-router-locked") || "false"} ` +
-        `action=${attr("data-action") || "-"} disabled=${/\sdisabled(\s|>|$)/.test(tag)}`,
+        `action=${attr("data-action") || "-"} disabled=${/\sdisabled(=|\s|>|$)/.test(tag)}`,
     );
   }
   return out;

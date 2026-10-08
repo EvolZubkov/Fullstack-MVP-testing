@@ -55,9 +55,12 @@ export interface FixtureOptions {
 }
 
 /** Single-choice question; the correct option is always the first one. */
-const choice = (id: string, topicId: string) => ({
+const choice = (id: string, topicId: string, orderIndex: number) => ({
   id,
   topicId,
+  // `fixed` delivers by `order_index`; a question without one is SHUFFLED by the package runtime
+  // (app.js orderQuestions) but id-ordered by the web, so an unindexed fixture would diverge.
+  orderIndex,
   type: "single" as const,
   prompt: `Вопрос ${id}`,
   dataJson: { options: ["верно", "неверно"] },
@@ -88,10 +91,10 @@ export async function seedBank(h: Harness): Promise<void> {
     await db.insert(topics).values({ id, name, nameNormalized: name.toLowerCase() });
   }
   await db.insert(questions).values([
-    choice("qa1", T_A),
-    choice("qa2", T_A),
-    choice("qb1", T_B),
-    choice("qb2", T_B),
+    choice("qa1", T_A, 1),
+    choice("qa2", T_A, 2),
+    choice("qb1", T_B, 1),
+    choice("qb2", T_B, 2),
     simulation(SIM_Q1, BANK_1),
     simulation(SIM_Q2, BANK_2),
   ] as never);

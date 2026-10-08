@@ -173,6 +173,43 @@ export class PackageHost {
     return true;
   }
 
+  /** Id of the question on screen, `null` outside a question. */
+  get questionId(): string | null {
+    if (String(this.state.phase) !== "question") return null;
+    return this.state.flatQuestions?.[this.state.currentIndex]?.question?.id ?? null;
+  }
+
+  /**
+   * Answers question `qid` with option `index` the way a participant does: pick, «Отправить ответ»,
+   * «Далее». The package restores to the question that was answered LAST (its checkpoint is saved
+   * before the move, `advanceAfterCommit`), where the answer is locked and only «Далее» is live; a
+   * participant presses it to reach the next question, so does this method — up to a few steps, and
+   * only over questions already answered. Returns whether `qid` was reached and answered.
+   */
+  async answer(qid: string, index: number): Promise<boolean> {
+    for (let k = 0; k < 6 && this.questionId !== qid; k++) {
+      if (this.questionId === null || !(await this.click("[data-action=answer-next]"))) return false;
+    }
+    if (this.questionId !== qid) return false;
+    await this.click(`[data-action='select:${index}']`);
+    if (!(await this.click("[data-action=answer-submit]"))) return false;
+    await this.click("[data-action=answer-next]");
+    return true;
+  }
+
+  /**
+   * Finishes the test the way a participant does, in TWO presses: «Завершить» on the hub opens the
+   * results screen, and only «Завершить» (`results-finish`) there reports to the LMS
+   * (`finishAndClose`). Waits for the score to land in `cmi`. Returns whether it did.
+   */
+  async finishTest(): Promise<boolean> {
+    if (!(await this.clickButton(/Завершить/))) return false;
+    if (!(await this.click("[data-action=results-finish]"))) return false;
+    const t0 = Date.now();
+    while (!this.cmi["cmi.score.raw"] && Date.now() - t0 < 6000) await this.idle(100);
+    return !!this.cmi["cmi.score.raw"];
+  }
+
   /** The enabled footer/nav button whose text matches. */
   async clickButton(text: RegExp): Promise<boolean> {
     const el = [...this.doc.querySelectorAll("#app button")].find(
