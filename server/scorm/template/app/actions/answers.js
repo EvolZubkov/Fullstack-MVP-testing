@@ -440,6 +440,7 @@ function advanceAfterCommit() {
     saveSessionState();
     state.feedbackShown = false;
     advancePageSequence();
+    saveLandedPosition();
     return;
   }
 
@@ -448,7 +449,19 @@ function advanceAfterCommit() {
     state.currentIndex++;
     state.feedbackShown = false;
     render();
+    saveLandedPosition();
   }
+}
+
+/**
+ * The checkpoint above is written BEFORE the move — the answer must not wait for it. Written
+ * only then, it pointed a reload back at the question just answered instead of the one the
+ * learner was looking at; PRD-20 (5.12) asks for the exact position, and the web resumes on the
+ * next question. So the position is written again once the move landed on a question. Not
+ * after the run was submitted: a checkpoint then would bring a finished attempt back to life.
+ */
+function saveLandedPosition() {
+  if (!state.submitted && state.phase === 'question') saveSessionState();
 }
 
 function next() {
