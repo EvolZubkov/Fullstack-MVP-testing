@@ -17,7 +17,7 @@
  * into (it needs the participant's click), the player only fills its container.
  */
 import { createRun, type Reaction, type SimRun } from "./engine";
-import { appearSchedule, diffScenes, elementBox } from "./diff";
+import { appearSchedule, diffScenes, elementBox, fieldStacking } from "./diff";
 import { boundsOf, radiusOf, svgPoints, type ZoneShape } from "./geometry";
 import type { FieldPlacement, MediaItem, Outcome, Scenario, Scene, SimResult } from "./contract";
 
@@ -321,6 +321,25 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
     return input;
   }
 
+  /**
+   * Put a field node in its place among the elements: right above its form, so a dialog drawn after
+   * the form covers it, and out of reach of clicks while it is covered or its form is hidden.
+   */
+  function stack(node: HTMLElement, p: FieldPlacement): void {
+    const scene = run.scene();
+    const st = fieldStacking(scene, p, media, (id) => run.isVisible(id));
+    const above = st.host < 0 ? null : scene.elements.slice(st.host + 1).map((el) => nodes.get(el.id)).find((n) => n) ?? null;
+    canvas.insertBefore(node, above ?? overlay);
+    node.style.visibility = st.shown ? "" : "hidden";
+    const reachable = st.shown && !st.covered;
+    node.style.pointerEvents = reachable ? "" : "none";
+    // By tag, not `instanceof`: in the package the player runs inside a frame with its own window.
+    if (node.tagName === "INPUT") {
+      node.tabIndex = reachable ? 0 : -1;
+      if (!reachable && doc.activeElement === node) node.blur();
+    }
+  }
+
   function drawFields(): void {
     const placed = new Set<string>();
     for (const p of run.scene().fields ?? []) {
@@ -340,7 +359,7 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
         input.classList.toggle("is-wrong", run.isWrong(p.field));
         place(input, p);
         input.style.fontSize = `${fontPx}px`;
-        canvas.insertBefore(input, overlay);
+        stack(input, p);
       } else {
         inputs.get(p.field)?.remove();
         inputs.delete(p.field);
@@ -349,7 +368,7 @@ export function mountPlayer(root: HTMLElement, options: PlayerOptions): MountedP
         label.textContent = run.value(p.field);
         place(label, p);
         label.style.fontSize = `${fontPx}px`;
-        canvas.insertBefore(label, overlay);
+        stack(label, p);
       }
     }
     for (const [id, n] of inputs) if (!placed.has(id)) { n.remove(); inputs.delete(id); }
