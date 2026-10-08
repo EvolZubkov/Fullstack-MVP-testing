@@ -2686,6 +2686,10 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
    правила — отбор исходников выбрасывал всё, чей класс уже объявлен выше, и вместе с
    повторами выбросил базовые правила и части составных селекторов. */
 .ou-combo__lbl-req { color: var(--ou-error-default); }
+/* Подсказка и ошибка под полем — компонент выводит их классом ou-combo__hint, а стилей у класса не
+   было: ошибка печаталась обычным текстом. Те же токены, что у ou-field__msg. */
+.ou-combo__hint { display: block; margin-top: var(--ou-space-1); font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+.ou-combo__hint.is-error { color: var(--ou-error-default); }
 
 
 /* ─── CommandPalette.css ───────────────────────────────── */

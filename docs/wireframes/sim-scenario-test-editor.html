@@ -482,6 +482,9 @@
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-fixed')">сценарий: фиксированный</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-composition')">роутер: сценарий в составе</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-scenario-picker')">роутер: добавить сценарий</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-unlock-topic')">роутер: открывается (тема)</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-unlock-after')">роутер: открывается после пунктов</button>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-unlock-cycle')">роутер: пункты ждут друг друга</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-docs')">сценарий: пояснения</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-e5-answer')">Э5а: штрафы в оценке</button>
       <button type="button" class="ou-btn ou-btn--secondary ou-btn--s" onclick="showState(this, 'sim-e5-qscoring')">Э5а: оценка сценария</button>
@@ -1540,6 +1543,1211 @@
     </div>
 
 
+    <div id="wf-sim-unlock-topic" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v8</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы состава и сценария">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Состав</button>
+                <button type="button" class="ou-drawer__rail-item">Сценарий</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Темы теста</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="sc-c-search">Поиск темы</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="sc-c-search" type="text" value="" /><span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span></div></div>
+                  </div>
+                  <div class="ou-select ou-field--m ou-field--full">
+                    <label class="ou-field__lbl" for="sc-c-order">Порядок выдачи вопросов в тесте</label>
+                    <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-order" aria-haspopup="listbox" aria-expanded="false">
+                      <span class="ou-select__value">Как в тесте</span>
+                      <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                  </div>
+                  <div class="tb-fold-toolbar">
+                    <!-- Согласовано 2026-09-21 (approved/prd-rtk-editor-cards.html, состояние
+                         «Состав · группы тем»): когда группы есть, «Добавить тему» уходит внутрь
+                         карточек — там видно, КУДА тема попадёт. -->
+                    <span class="ou-stack ou-stack--row ou-stack--gap-3 ou-stack--ai-center tb-fold-toolbar__lead">
+                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить группу</span></button>
+                    </span>
+                    <span class="tb-fold-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <!-- По умолчанию все темы СВЁРНУТЫ; здесь первая раскрыта автором. -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card tb-group-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="drag-handle" aria-label="Переместить группу «Управленческие компетенции»"><svg width="14" height="14" aria-hidden="true"><use href="#i-grip" /></svg></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <div class="ou-field ou-field--s ou-field--default ou-field--full">
+                      <div class="ou-field__box"><input class="ou-field__input" type="text" value="Управленческие компетенции" aria-label="Название группы" /></div>
+                    </div>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">1 тема</span>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить группу «Управленческие компетенции»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть группу" aria-expanded="true"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body">
+              <div class="ou-acc ou-acc--separated">
+                <div class="ou-acc__item is-open">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">1. О компании</span>
+                      <!-- PRD-55 (FR-33): ожидаемая экспозиция хвостом существующей сводки — так она
+                           видна по всем темам разом, без разворачивания каждой. -->
+                      <span class="ou-acc__subtitle">41 вопрос в банке · выдаётся 16<span> · увидят 39%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «1. О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region">
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Обязательная</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield"><div class="ou-select ou-field--m ou-field--default ou-field--full"><label for="ou-select-_R_0_" class="ou-field__lbl">Открывается</label><button id="ou-select-_R_0_" type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false"><span class="ou-select__value">Сразу</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Все вопросы темы</span></span>
+                      </label>
+                    </div>
+                    <div class="tb-draw-count-row">
+                      <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                      <div class="ou-number ou-number--s ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                          <input class="ou-number__input" id="sc-c-draw-41" type="text" inputmode="numeric" value="16" aria-label="Количество вопросов из темы «О компании»" />
+                          <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                        </div>
+                      </div>
+                      <span class="tb-draw-count-row__max">из 41</span>
+                    </div>
+                    <!-- PRD-55 (FR-33): ожидаемая экспозиция — сколько участников увидят каждое задание
+                         темы при нынешней выдаче. Данных о прохождениях НЕ требует, поэтому работает и
+                         на пустом тесте, то есть тогда, когда настройку ещё можно исправить. Величина
+                         показывается всегда, меняется только тон: выше 70% — предупреждение о том, что
+                         банк вырабатывается за один поток. -->
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="topic-exposure-banner">
+                      <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Каждое задание темы увидят около 39% участников</div>
+                        <div class="ou-banner__desc">Выдача 16 из 41 — запаса банка хватает, задания не приедаются.</div>
+                      </div>
+                    </div>
+                    <div class="tb-question-order-row">
+                      <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                      <div class="ou-select ou-field--s">
+                        <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-torder-1" aria-label="Порядок вопросов: О компании" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="ou-select__value">Случайный</span>
+                          <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                        </button>
+                      </div>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: О компании" title="Как в тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span></button>
+                      <span class="tb-question-order-row__hint">переопределяет порядок теста</span>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Квоты по подтемам (тегам)</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Пороги по подтемам (тегам)</span></span>
+                      </label>
+                    </div>
+                  <div class="tb-quota-block">
+                    <div class="tb-fold-toolbar">
+                      <span class="tb-fold-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                      </span>
+                    </div>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Стратегия компании</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 4 · доступно 11 · в вариантах A: 2 · B: 2</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Стратегия компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Свернуть квоту «Стратегия компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                      <div class="ou-card__body tb-level-card__body">
+                        <div class="ou-formgroup ou-formgroup--two">
+                          <div class="ou-select ou-field--m ou-field--full">
+                            <label class="ou-field__lbl" for="sc-c-quota-tag-1">Подтема (тег вопроса)</label>
+                            <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-quota-tag-1" aria-haspopup="listbox" aria-expanded="false">
+                              <span class="ou-select__value">Стратегия компании</span>
+                              <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                          </div>
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl" for="sc-c-quota-n-1">Сколько вопросов</label>
+                            <div class="ou-number ou-number--m ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                                <input class="ou-number__input" id="sc-c-quota-n-1" type="text" inputmode="numeric" value="4" aria-label="Сколько вопросов для подтемы «Стратегия компании»" />
+                                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="ou-formgroup ou-formgroup--three">
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl">Режим квоты</label>
+                            <div class="ou-seg" role="group" aria-label="Режим квоты для подтемы «Стратегия компании»">
+                              <button type="button" class="ou-seg__item is-active"><span>Ровно</span></button>
+                              <button type="button" class="ou-seg__item"><span>Не менее</span></button>
+                            </div>
+                          </div>
+                          <div class="ou-select ou-field--m ou-field--full">
+                            <label class="ou-field__lbl" for="sc-c-thr-1">Порог по подтеме</label>
+                            <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-thr-1" aria-label="Порог для подтемы «Стратегия компании»" aria-haspopup="listbox" aria-expanded="false">
+                              <span class="ou-select__value">Не менее, %</span>
+                              <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                          </div>
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl" for="sc-c-thr-v-1">Значение порога, %</label>
+                            <div class="ou-number ou-number--m ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                                <input class="ou-number__input" id="sc-c-thr-v-1" type="text" inputmode="numeric" value="60" aria-label="Значение порога для подтемы «Стратегия компании», проценты" />
+                                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                              </div>
+                        </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Продукты компании</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 5 · доступно 13 · в вариантах A: 3 · B: 3</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Продукты компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Развернуть квоту «Продукты компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Корпоративная культура</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 7 · доступно 17 · в вариантах A: 3 · B: 3</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Корпоративная культура»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Развернуть квоту «Корпоративная культура»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                    </section>
+                    <div class="tb-quota-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить квоту</span></button>
+                    </div>
+                    <div class="tb-quota-sum">
+                      <span>Σ квот: 16 из 16 · остаток 0</span>
+                      <span class="ou-tag ou-tag--success">в пределах выборки</span>
+                    </div>
+                    <p class="tb-card-desc">Порог сравнивается с долей баллов по подтеме. Подтема, не попавшая в выдачу, вердикт темы не роняет.</p>
+                  </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Варианты теста</span></span>
+                      </label>
+                    </div>
+                    <div class="tb-quota-block">
+                      <table class="tb-table" aria-label="Варианты темы">
+                        <thead>
+                          <tr>
+                            <th>Вариант</th>
+                            <th>Вопросов в варианте</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr><td>Вариант A</td><td>16</td></tr>
+                          <tr><td>Вариант B</td><td>16</td></tr>
+                        </tbody>
+                      </table>
+                      <div class="tb-quota-actions">
+                        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-list" /></svg></span><span>Настроить варианты…</span></button>
+                      </div>
+                      <div class="tb-quota-sum">
+                        <span>В вариантах задействовано <strong>32</strong> из 41 вопроса темы · 9 не используются</span>
+                        <span class="ou-tag ou-tag--warning">9 не используются</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+                  <div class="tb-fold-toolbar tb-group-card__foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить тему в группу</span></button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'sim-scenario-picker')"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить сценарий</span></button>
+                  </div>
+                </div>
+              </section>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card tb-group-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">Темы вне групп</h5>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">2 темы · 1 сценарий</span>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть группу" aria-expanded="true"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body">
+              <div class="ou-acc ou-acc--separated">
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">2. Корпоративные финансы</span>
+                      <span class="ou-acc__subtitle">25 вопросов в банке · выдаётся 10<span> · увидят 40%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «2. Корпоративные финансы»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region"></div>
+                </div>
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="true">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title"><svg width="16" height="16" aria-label="Сценарий"><use href="#i-monitor-play" /></svg> 3. Работа с документами в СЭД</span>
+                      <span class="ou-acc__subtitle">Сценарий · банк «Работа в СЭД» · случайный из 4<span> · увидят 25%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать сценарий «Работа с документами в СЭД»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="sc-scn-title">Название в меню <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m">
+                        <div class="ou-field__box">
+                          <input class="ou-field__input" id="sc-scn-title" type="text" value="Работа с документами в СЭД" />
+                        </div>
+                      </div>
+                    </div>
+            <div class="ou-select ou-field--m ou-field--full">
+              <label class="ou-field__lbl" for="sc-st-bank">Банк сценариев</label>
+              <div class="ou-select__control">
+                <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sc-st-bank" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="ou-select__value">Работа в СЭД</span>
+                  <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <button type="button" class="ou-select__clear" aria-label="Очистить: Банк сценариев"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+              </div>
+            </div>
+                      <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" id="sc-scn-pick">Выдача</label>
+                      <div class="ou-seg" role="group" aria-labelledby="sc-scn-pick">
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Случайный сценарий темы</span></button>
+                        <button type="button" class="ou-seg__item" aria-pressed="false"><span>Фиксированный сценарий</span></button>
+                      </div>
+                    </div>
+                    <div class="ou-tag-group">
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">4 сценария</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">7–14 сцен</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">изображения: 9,6 МБ</span>
+                    </div>
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="scenario-exposure-banner">
+                      <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Каждый сценарий темы увидят около 25% участников</div>
+                        <div class="ou-banner__desc">Выдача 1 из 4 — участник получает случайный сценарий, реже выдававшиеся выпадают чаще.</div>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Обязательный</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield"><div class="ou-select ou-field--m ou-field--default ou-field--full"><label for="ou-select-_R_0_" class="ou-field__lbl">Открывается</label><button id="ou-select-_R_0_" type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false"><span class="ou-select__value">Сразу</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div>
+                    <div class="ou-stack ou-stack--row ou-stack--gap-1">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть банк</span></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">4. Технологии</span>
+                      <span class="ou-acc__subtitle">28 вопросов в банке · выдаётся 12<span> · увидят 43%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «3. Технологии»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region"></div>
+                </div>
+              </div>
+                  <div class="tb-fold-toolbar tb-group-card__foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить тему</span></button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          </div>
+                    <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" disabled>Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Применить</button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+
+    <div id="wf-sim-unlock-after" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v8</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы состава и сценария">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Состав</button>
+                <button type="button" class="ou-drawer__rail-item">Сценарий</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Темы теста</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="sc-c-search">Поиск темы</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="sc-c-search" type="text" value="" /><span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span></div></div>
+                  </div>
+                  <div class="ou-select ou-field--m ou-field--full">
+                    <label class="ou-field__lbl" for="sc-c-order">Порядок выдачи вопросов в тесте</label>
+                    <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-order" aria-haspopup="listbox" aria-expanded="false">
+                      <span class="ou-select__value">Как в тесте</span>
+                      <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                  </div>
+                  <div class="tb-fold-toolbar">
+                    <!-- Согласовано 2026-09-21 (approved/prd-rtk-editor-cards.html, состояние
+                         «Состав · группы тем»): когда группы есть, «Добавить тему» уходит внутрь
+                         карточек — там видно, КУДА тема попадёт. -->
+                    <span class="ou-stack ou-stack--row ou-stack--gap-3 ou-stack--ai-center tb-fold-toolbar__lead">
+                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить группу</span></button>
+                    </span>
+                    <span class="tb-fold-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <!-- По умолчанию все темы СВЁРНУТЫ; здесь первая раскрыта автором. -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card tb-group-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="drag-handle" aria-label="Переместить группу «Управленческие компетенции»"><svg width="14" height="14" aria-hidden="true"><use href="#i-grip" /></svg></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <div class="ou-field ou-field--s ou-field--default ou-field--full">
+                      <div class="ou-field__box"><input class="ou-field__input" type="text" value="Управленческие компетенции" aria-label="Название группы" /></div>
+                    </div>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">1 тема</span>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить группу «Управленческие компетенции»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть группу" aria-expanded="true"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body">
+              <div class="ou-acc ou-acc--separated">
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">1. О компании</span>
+                      <!-- PRD-55 (FR-33): ожидаемая экспозиция хвостом существующей сводки — так она
+                           видна по всем темам разом, без разворачивания каждой. -->
+                      <span class="ou-acc__subtitle">41 вопрос в банке · выдаётся 16<span> · увидят 39%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «1. О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region">
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Обязательная</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield"><div class="ou-select ou-field--m ou-field--default ou-field--full"><label for="ou-select-_R_0_" class="ou-field__lbl">Открывается</label><button id="ou-select-_R_0_" type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false"><span class="ou-select__value">Сразу</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Все вопросы темы</span></span>
+                      </label>
+                    </div>
+                    <div class="tb-draw-count-row">
+                      <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                      <div class="ou-number ou-number--s ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                          <input class="ou-number__input" id="sc-c-draw-41" type="text" inputmode="numeric" value="16" aria-label="Количество вопросов из темы «О компании»" />
+                          <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                        </div>
+                      </div>
+                      <span class="tb-draw-count-row__max">из 41</span>
+                    </div>
+                    <!-- PRD-55 (FR-33): ожидаемая экспозиция — сколько участников увидят каждое задание
+                         темы при нынешней выдаче. Данных о прохождениях НЕ требует, поэтому работает и
+                         на пустом тесте, то есть тогда, когда настройку ещё можно исправить. Величина
+                         показывается всегда, меняется только тон: выше 70% — предупреждение о том, что
+                         банк вырабатывается за один поток. -->
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="topic-exposure-banner">
+                      <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Каждое задание темы увидят около 39% участников</div>
+                        <div class="ou-banner__desc">Выдача 16 из 41 — запаса банка хватает, задания не приедаются.</div>
+                      </div>
+                    </div>
+                    <div class="tb-question-order-row">
+                      <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                      <div class="ou-select ou-field--s">
+                        <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-torder-1" aria-label="Порядок вопросов: О компании" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="ou-select__value">Случайный</span>
+                          <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                        </button>
+                      </div>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: О компании" title="Как в тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span></button>
+                      <span class="tb-question-order-row__hint">переопределяет порядок теста</span>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Квоты по подтемам (тегам)</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Пороги по подтемам (тегам)</span></span>
+                      </label>
+                    </div>
+                  <div class="tb-quota-block">
+                    <div class="tb-fold-toolbar">
+                      <span class="tb-fold-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                      </span>
+                    </div>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Стратегия компании</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 4 · доступно 11 · в вариантах A: 2 · B: 2</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Стратегия компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Свернуть квоту «Стратегия компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                      <div class="ou-card__body tb-level-card__body">
+                        <div class="ou-formgroup ou-formgroup--two">
+                          <div class="ou-select ou-field--m ou-field--full">
+                            <label class="ou-field__lbl" for="sc-c-quota-tag-1">Подтема (тег вопроса)</label>
+                            <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-quota-tag-1" aria-haspopup="listbox" aria-expanded="false">
+                              <span class="ou-select__value">Стратегия компании</span>
+                              <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                          </div>
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl" for="sc-c-quota-n-1">Сколько вопросов</label>
+                            <div class="ou-number ou-number--m ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                                <input class="ou-number__input" id="sc-c-quota-n-1" type="text" inputmode="numeric" value="4" aria-label="Сколько вопросов для подтемы «Стратегия компании»" />
+                                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="ou-formgroup ou-formgroup--three">
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl">Режим квоты</label>
+                            <div class="ou-seg" role="group" aria-label="Режим квоты для подтемы «Стратегия компании»">
+                              <button type="button" class="ou-seg__item is-active"><span>Ровно</span></button>
+                              <button type="button" class="ou-seg__item"><span>Не менее</span></button>
+                            </div>
+                          </div>
+                          <div class="ou-select ou-field--m ou-field--full">
+                            <label class="ou-field__lbl" for="sc-c-thr-1">Порог по подтеме</label>
+                            <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-thr-1" aria-label="Порог для подтемы «Стратегия компании»" aria-haspopup="listbox" aria-expanded="false">
+                              <span class="ou-select__value">Не менее, %</span>
+                              <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                          </div>
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl" for="sc-c-thr-v-1">Значение порога, %</label>
+                            <div class="ou-number ou-number--m ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                                <input class="ou-number__input" id="sc-c-thr-v-1" type="text" inputmode="numeric" value="60" aria-label="Значение порога для подтемы «Стратегия компании», проценты" />
+                                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                              </div>
+                        </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Продукты компании</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 5 · доступно 13 · в вариантах A: 3 · B: 3</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Продукты компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Развернуть квоту «Продукты компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Корпоративная культура</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 7 · доступно 17 · в вариантах A: 3 · B: 3</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Корпоративная культура»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Развернуть квоту «Корпоративная культура»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                    </section>
+                    <div class="tb-quota-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить квоту</span></button>
+                    </div>
+                    <div class="tb-quota-sum">
+                      <span>Σ квот: 16 из 16 · остаток 0</span>
+                      <span class="ou-tag ou-tag--success">в пределах выборки</span>
+                    </div>
+                    <p class="tb-card-desc">Порог сравнивается с долей баллов по подтеме. Подтема, не попавшая в выдачу, вердикт темы не роняет.</p>
+                  </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Варианты теста</span></span>
+                      </label>
+                    </div>
+                    <div class="tb-quota-block">
+                      <table class="tb-table" aria-label="Варианты темы">
+                        <thead>
+                          <tr>
+                            <th>Вариант</th>
+                            <th>Вопросов в варианте</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr><td>Вариант A</td><td>16</td></tr>
+                          <tr><td>Вариант B</td><td>16</td></tr>
+                        </tbody>
+                      </table>
+                      <div class="tb-quota-actions">
+                        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-list" /></svg></span><span>Настроить варианты…</span></button>
+                      </div>
+                      <div class="tb-quota-sum">
+                        <span>В вариантах задействовано <strong>32</strong> из 41 вопроса темы · 9 не используются</span>
+                        <span class="ou-tag ou-tag--warning">9 не используются</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+                  <div class="tb-fold-toolbar tb-group-card__foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить тему в группу</span></button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'sim-scenario-picker')"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить сценарий</span></button>
+                  </div>
+                </div>
+              </section>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card tb-group-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">Темы вне групп</h5>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">2 темы · 1 сценарий</span>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть группу" aria-expanded="true"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body">
+              <div class="ou-acc ou-acc--separated">
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">2. Корпоративные финансы</span>
+                      <span class="ou-acc__subtitle">25 вопросов в банке · выдаётся 10<span> · увидят 40%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «2. Корпоративные финансы»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region"></div>
+                </div>
+                <div class="ou-acc__item is-open">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="true">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title"><svg width="16" height="16" aria-label="Сценарий"><use href="#i-monitor-play" /></svg> 3. Работа с документами в СЭД</span>
+                      <span class="ou-acc__subtitle">Сценарий · банк «Работа в СЭД» · случайный из 4<span> · увидят 25%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать сценарий «Работа с документами в СЭД»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="sc-scn-title">Название в меню <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m">
+                        <div class="ou-field__box">
+                          <input class="ou-field__input" id="sc-scn-title" type="text" value="Работа с документами в СЭД" />
+                        </div>
+                      </div>
+                    </div>
+            <div class="ou-select ou-field--m ou-field--full">
+              <label class="ou-field__lbl" for="sc-st-bank">Банк сценариев</label>
+              <div class="ou-select__control">
+                <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sc-st-bank" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="ou-select__value">Работа в СЭД</span>
+                  <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <button type="button" class="ou-select__clear" aria-label="Очистить: Банк сценариев"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+              </div>
+            </div>
+                      <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" id="sc-scn-pick">Выдача</label>
+                      <div class="ou-seg" role="group" aria-labelledby="sc-scn-pick">
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Случайный сценарий темы</span></button>
+                        <button type="button" class="ou-seg__item" aria-pressed="false"><span>Фиксированный сценарий</span></button>
+                      </div>
+                    </div>
+                    <div class="ou-tag-group">
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">4 сценария</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">7–14 сцен</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">изображения: 9,6 МБ</span>
+                    </div>
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="scenario-exposure-banner">
+                      <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Каждый сценарий темы увидят около 25% участников</div>
+                        <div class="ou-banner__desc">Выдача 1 из 4 — участник получает случайный сценарий, реже выдававшиеся выпадают чаще.</div>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Обязательный</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield"><div class="ou-select ou-field--m ou-field--default ou-field--full"><label for="ou-select-_R_0_" class="ou-field__lbl">Открывается</label><button id="ou-select-_R_0_" type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false"><span class="ou-select__value">После завершения пунктов</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div>
+                    <div class="ou-formfield"><div class="ou-combo ou-combo--full"><label for="ou-combo-_R_0_" class="ou-combo__lbl">Каких пунктов</label><div class="ou-combo__control"><span class="ou-combo__chip"><span class="ou-combo__chip-label">1. О компании</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span><span class="ou-combo__chip"><span class="ou-combo__chip-label">2. Корпоративные финансы</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span><input id="ou-combo-_R_0_" class="ou-combo__input" type="text" placeholder="Выберите пункты" autoComplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" aria-autocomplete="list" value=""/><span class="ou-combo__trail"><button type="button" class="ou-combo__clear" aria-label="Очистить всё"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></div></div></div>
+                    <div class="ou-stack ou-stack--row ou-stack--gap-1">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть банк</span></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">4. Технологии</span>
+                      <span class="ou-acc__subtitle">28 вопросов в банке · выдаётся 12<span> · увидят 43%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «3. Технологии»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region"></div>
+                </div>
+              </div>
+                  <div class="tb-fold-toolbar tb-group-card__foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить тему</span></button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          </div>
+                    <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" disabled>Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Применить</button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+
+    <div id="wf-sim-unlock-cycle" class="wf-state">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Сертификация руководителей в «Ростелекоме»</h2></div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">v8</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16" aria-hidden="true"><use href="#i-x" /></svg></button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Основное</span></button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true"><span class="ou-tabs__label">Состав и сценарий</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Правила прохождения</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оценка результата</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Обратная связь и итоги</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Оформление</span></button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false"><span class="ou-tabs__label">Комментарии</span></button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body ou-drawer__body--flush" tabindex="0">
+            <div class="ou-drawer__split">
+              <nav class="ou-drawer__rail" aria-label="Подразделы состава и сценария">
+                <button type="button" class="ou-drawer__rail-item is-active" aria-current="page">Состав</button>
+                <button type="button" class="ou-drawer__rail-item">Сценарий</button>
+              </nav>
+              <div class="tb-settings-content">
+              <div class="ou-formsection ou-formsection--stacked">
+                <div class="ou-formsection__intro">
+                  <h3 class="ou-formsection__title">Темы теста</h3>
+                </div>
+                <div class="ou-formsection__body">
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl" for="sc-c-search">Поиск темы</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="sc-c-search" type="text" value="" /><span class="ou-field__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-search" /></svg></span></div></div>
+                  </div>
+                  <div class="ou-select ou-field--m ou-field--full">
+                    <label class="ou-field__lbl" for="sc-c-order">Порядок выдачи вопросов в тесте</label>
+                    <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-order" aria-haspopup="listbox" aria-expanded="false">
+                      <span class="ou-select__value">Как в тесте</span>
+                      <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                    </button>
+                  </div>
+                  <div class="tb-fold-toolbar">
+                    <!-- Согласовано 2026-09-21 (approved/prd-rtk-editor-cards.html, состояние
+                         «Состав · группы тем»): когда группы есть, «Добавить тему» уходит внутрь
+                         карточек — там видно, КУДА тема попадёт. -->
+                    <span class="ou-stack ou-stack--row ou-stack--gap-3 ou-stack--ai-center tb-fold-toolbar__lead">
+                      <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить группу</span></button>
+                    </span>
+                    <span class="tb-fold-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <!-- По умолчанию все темы СВЁРНУТЫ; здесь первая раскрыта автором. -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card tb-group-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="drag-handle" aria-label="Переместить группу «Управленческие компетенции»"><svg width="14" height="14" aria-hidden="true"><use href="#i-grip" /></svg></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <div class="ou-field ou-field--s ou-field--default ou-field--full">
+                      <div class="ou-field__box"><input class="ou-field__input" type="text" value="Управленческие компетенции" aria-label="Название группы" /></div>
+                    </div>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">1 тема</span>
+                    <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить группу «Управленческие компетенции»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть группу" aria-expanded="true"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body">
+              <div class="ou-acc ou-acc--separated">
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">1. О компании</span>
+                      <!-- PRD-55 (FR-33): ожидаемая экспозиция хвостом существующей сводки — так она
+                           видна по всем темам разом, без разворачивания каждой. -->
+                      <span class="ou-acc__subtitle">41 вопрос в банке · выдаётся 16<span> · увидят 39%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «1. О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region">
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Обязательная</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield"><div class="ou-select ou-field--m ou-field--default ou-field--full"><label for="ou-select-_R_0_" class="ou-field__lbl">Открывается</label><button id="ou-select-_R_0_" type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false"><span class="ou-select__value">Сразу</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m" role="switch" aria-checked="false"><input type="checkbox" class="ou-switch__input" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Все вопросы темы</span></span>
+                      </label>
+                    </div>
+                    <div class="tb-draw-count-row">
+                      <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                      <div class="ou-number ou-number--s ou-number--split">
+                        <div class="ou-number__box">
+                          <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                          <input class="ou-number__input" id="sc-c-draw-41" type="text" inputmode="numeric" value="16" aria-label="Количество вопросов из темы «О компании»" />
+                          <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                        </div>
+                      </div>
+                      <span class="tb-draw-count-row__max">из 41</span>
+                    </div>
+                    <!-- PRD-55 (FR-33): ожидаемая экспозиция — сколько участников увидят каждое задание
+                         темы при нынешней выдаче. Данных о прохождениях НЕ требует, поэтому работает и
+                         на пустом тесте, то есть тогда, когда настройку ещё можно исправить. Величина
+                         показывается всегда, меняется только тон: выше 70% — предупреждение о том, что
+                         банк вырабатывается за один поток. -->
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="topic-exposure-banner">
+                      <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Каждое задание темы увидят около 39% участников</div>
+                        <div class="ou-banner__desc">Выдача 16 из 41 — запаса банка хватает, задания не приедаются.</div>
+                      </div>
+                    </div>
+                    <div class="tb-question-order-row">
+                      <span class="tb-question-order-row__lbl">Порядок вопросов</span>
+                      <div class="ou-select ou-field--s">
+                        <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-torder-1" aria-label="Порядок вопросов: О компании" aria-haspopup="listbox" aria-expanded="false">
+                          <span class="ou-select__value">Случайный</span>
+                          <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                        </button>
+                      </div>
+                      <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вернуть порядок как в тесте: О компании" title="Как в тесте"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-rotate-ccw" /></svg></span></button>
+                      <span class="tb-question-order-row__hint">переопределяет порядок теста</span>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Квоты по подтемам (тегам)</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Пороги по подтемам (тегам)</span></span>
+                      </label>
+                    </div>
+                  <div class="tb-quota-block">
+                    <div class="tb-fold-toolbar">
+                      <span class="tb-fold-actions">
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-up-down" /></svg></span><span>Развернуть все</span></button>
+                        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevrons-down-up" /></svg></span><span>Свернуть все</span></button>
+                      </span>
+                    </div>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Стратегия компании</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 4 · доступно 11 · в вариантах A: 2 · B: 2</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Стратегия компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Свернуть квоту «Стратегия компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                      <div class="ou-card__body tb-level-card__body">
+                        <div class="ou-formgroup ou-formgroup--two">
+                          <div class="ou-select ou-field--m ou-field--full">
+                            <label class="ou-field__lbl" for="sc-c-quota-tag-1">Подтема (тег вопроса)</label>
+                            <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-quota-tag-1" aria-haspopup="listbox" aria-expanded="false">
+                              <span class="ou-select__value">Стратегия компании</span>
+                              <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                          </div>
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl" for="sc-c-quota-n-1">Сколько вопросов</label>
+                            <div class="ou-number ou-number--m ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                                <input class="ou-number__input" id="sc-c-quota-n-1" type="text" inputmode="numeric" value="4" aria-label="Сколько вопросов для подтемы «Стратегия компании»" />
+                                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="ou-formgroup ou-formgroup--three">
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl">Режим квоты</label>
+                            <div class="ou-seg" role="group" aria-label="Режим квоты для подтемы «Стратегия компании»">
+                              <button type="button" class="ou-seg__item is-active"><span>Ровно</span></button>
+                              <button type="button" class="ou-seg__item"><span>Не менее</span></button>
+                            </div>
+                          </div>
+                          <div class="ou-select ou-field--m ou-field--full">
+                            <label class="ou-field__lbl" for="sc-c-thr-1">Порог по подтеме</label>
+                            <button type="button" class="ou-field__box ou-select__trigger" id="sc-c-thr-1" aria-label="Порог для подтемы «Стратегия компании»" aria-haspopup="listbox" aria-expanded="false">
+                              <span class="ou-select__value">Не менее, %</span>
+                              <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
+                            </button>
+                          </div>
+                          <div class="ou-formfield">
+                            <label class="ou-formfield__lbl" for="sc-c-thr-v-1">Значение порога, %</label>
+                            <div class="ou-number ou-number--m ou-number--split">
+                              <div class="ou-number__box">
+                                <button type="button" class="ou-number__btn" aria-label="Меньше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-minus" /></svg></span></button>
+                                <input class="ou-number__input" id="sc-c-thr-v-1" type="text" inputmode="numeric" value="60" aria-label="Значение порога для подтемы «Стратегия компании», проценты" />
+                                <button type="button" class="ou-number__btn" aria-label="Больше"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span></button>
+                              </div>
+                        </div>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Продукты компании</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 5 · доступно 13 · в вариантах A: 3 · B: 3</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Продукты компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Развернуть квоту «Продукты компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                    </section>
+                    <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
+                      <header class="ou-card__header tb-level-card__head">
+                        <div class="ou-card__heading tb-level-card__heading">
+                          <h5 class="ou-card__title tb-level-card__title">Корпоративная культура</h5>
+                          <p class="ou-card__subtitle tb-level-card__summary">ровно 7 · доступно 17 · в вариантах A: 3 · B: 3</p>
+                        </div>
+                        <div class="ou-card__trail tb-level-card__trail">
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить квоту «Корпоративная культура»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button>
+                          <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tb-level-card__chev" aria-label="Развернуть квоту «Корпоративная культура»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-chevron-down" /></svg></span></button>
+                        </div>
+                      </header>
+                    </section>
+                    <div class="tb-quota-actions">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить квоту</span></button>
+                    </div>
+                    <div class="tb-quota-sum">
+                      <span>Σ квот: 16 из 16 · остаток 0</span>
+                      <span class="ou-tag ou-tag--success">в пределах выборки</span>
+                    </div>
+                    <p class="tb-card-desc">Порог сравнивается с долей баллов по подтеме. Подтема, не попавшая в выдачу, вердикт темы не роняет.</p>
+                  </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Варианты теста</span></span>
+                      </label>
+                    </div>
+                    <div class="tb-quota-block">
+                      <table class="tb-table" aria-label="Варианты темы">
+                        <thead>
+                          <tr>
+                            <th>Вариант</th>
+                            <th>Вопросов в варианте</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr><td>Вариант A</td><td>16</td></tr>
+                          <tr><td>Вариант B</td><td>16</td></tr>
+                        </tbody>
+                      </table>
+                      <div class="tb-quota-actions">
+                        <button type="button" class="ou-btn ou-btn--secondary ou-btn--s"><span class="ou-btn__ico"><svg width="16" height="16" aria-hidden="true"><use href="#i-list" /></svg></span><span>Настроить варианты…</span></button>
+                      </div>
+                      <div class="tb-quota-sum">
+                        <span>В вариантах задействовано <strong>32</strong> из 41 вопроса темы · 9 не используются</span>
+                        <span class="ou-tag ou-tag--warning">9 не используются</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+                  <div class="tb-fold-toolbar tb-group-card__foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить тему в группу</span></button>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null, 'sim-scenario-picker')"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить сценарий</span></button>
+                  </div>
+                </div>
+              </section>
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card tb-group-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">Темы вне групп</h5>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <span class="ou-tag ou-tag--neutral ou-tag--s">2 темы · 1 сценарий</span>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть группу" aria-expanded="true"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body">
+              <div class="ou-acc ou-acc--separated">
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">2. Корпоративные финансы</span>
+                      <span class="ou-acc__subtitle">25 вопросов в банке · выдаётся 10<span> · увидят 40%</span> · откроется после 3</span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «2. Корпоративные финансы»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region"></div>
+                </div>
+                <div class="ou-acc__item is-open">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="true">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title"><svg width="16" height="16" aria-label="Сценарий"><use href="#i-monitor-play" /></svg> 3. Работа с документами в СЭД</span>
+                      <span class="ou-acc__subtitle">Сценарий · банк «Работа в СЭД» · случайный из 4<span> · увидят 25%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать сценарий «Работа с документами в СЭД»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region">
+                    <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" for="sc-scn-title">Название в меню <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                      <div class="ou-field ou-field--m">
+                        <div class="ou-field__box">
+                          <input class="ou-field__input" id="sc-scn-title" type="text" value="Работа с документами в СЭД" />
+                        </div>
+                      </div>
+                    </div>
+            <div class="ou-select ou-field--m ou-field--full">
+              <label class="ou-field__lbl" for="sc-st-bank">Банк сценариев</label>
+              <div class="ou-select__control">
+                <button type="button" class="ou-field__box ou-select__trigger ou-select__trigger--clearable" id="sc-st-bank" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="ou-select__value">Работа в СЭД</span>
+                  <svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <button type="button" class="ou-select__clear" aria-label="Очистить: Банк сценариев"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+              </div>
+            </div>
+                      <div class="ou-formfield">
+                      <label class="ou-formfield__lbl" id="sc-scn-pick">Выдача</label>
+                      <div class="ou-seg" role="group" aria-labelledby="sc-scn-pick">
+                        <button type="button" class="ou-seg__item is-active" aria-pressed="true"><span>Случайный сценарий темы</span></button>
+                        <button type="button" class="ou-seg__item" aria-pressed="false"><span>Фиксированный сценарий</span></button>
+                      </div>
+                    </div>
+                    <div class="ou-tag-group">
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">4 сценария</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">7–14 сцен</span>
+                      <span class="ou-tag ou-tag--neutral ou-tag--s">изображения: 9,6 МБ</span>
+                    </div>
+                    <div class="ou-banner ou-banner--subtle ou-banner--info" role="status" data-testid="scenario-exposure-banner">
+                      <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></span>
+                      <div class="ou-banner__body">
+                        <div class="ou-banner__title">Каждый сценарий темы увидят около 25% участников</div>
+                        <div class="ou-banner__desc">Выдача 1 из 4 — участник получает случайный сценарий, реже выдававшиеся выпадают чаще.</div>
+                      </div>
+                    </div>
+                    <div class="ou-formfield">
+                      <label class="ou-switch-field">
+                        <span class="ou-switch ou-switch--m is-on" role="switch" aria-checked="true"><input type="checkbox" class="ou-switch__input" checked /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+                        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Обязательный</span></span>
+                      </label>
+                    </div>
+                    <div class="ou-formfield"><div class="ou-select ou-field--m ou-field--default ou-field--full"><label for="ou-select-_R_0_" class="ou-field__lbl">Открывается</label><button id="ou-select-_R_0_" type="button" class="ou-field__box ou-select__trigger" aria-haspopup="listbox" aria-expanded="false"><span class="ou-select__value">После завершения пунктов</span><svg class="ou-select__chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div>
+                    <div class="ou-formfield"><div class="ou-combo ou-combo--error ou-combo--full"><label for="ou-combo-_R_0_" class="ou-combo__lbl">Каких пунктов</label><div class="ou-combo__control"><span class="ou-combo__chip"><span class="ou-combo__chip-label">2. Корпоративные финансы</span><button type="button" class="ou-combo__chip-x" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span><input id="ou-combo-_R_0_" class="ou-combo__input" type="text" placeholder="Выберите пункты" autoComplete="off" role="combobox" aria-expanded="false" aria-haspopup="listbox" aria-autocomplete="list" value=""/><span class="ou-combo__trail"><button type="button" class="ou-combo__clear" aria-label="Очистить всё"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg></button><svg class="ou-combo__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></div><span class="ou-combo__hint is-error">Пункты ждут друг друга: «2. Корпоративные финансы» открывается только после этого сценария. Ни один из них не откроется.</span></div></div>
+                    <div class="ou-stack ou-stack--row ou-stack--gap-1">
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span>Открыть банк</span></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="ou-acc__item">
+                  <div class="tb-acc-head">
+                    <button type="button" class="ou-acc__trigger" aria-expanded="false">
+                    <span class="ou-acc__trigger-text">
+                      <span class="ou-acc__title">4. Технологии</span>
+                      <span class="ou-acc__subtitle">28 вопросов в банке · выдаётся 12<span> · увидят 43%</span></span>
+                    </span>
+                    </button>
+                    <span class="tb-topic-actions"><button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «3. Технологии»"><span class="ou-iconbtn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-trash" /></svg></span></button></span>
+                    <span class="ou-acc__chev"><svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-down" /></svg></span>
+                  </div>
+                  <div class="ou-acc__body" role="region"></div>
+                </div>
+              </div>
+                  <div class="tb-fold-toolbar tb-group-card__foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><span class="ou-btn__ico"><svg width="14" height="14" aria-hidden="true"><use href="#i-plus" /></svg></span><span>Добавить тему</span></button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+          </div>
+                    <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" disabled>Отменить</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Применить</button>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+
     <div id="wf-sim-scenario-picker" class="wf-state">
       <div class="ou-modal-root" role="dialog" aria-modal="true">
         <div class="ou-modal__backdrop"></div>
@@ -1600,7 +2808,13 @@
               <tr><td>Сценарий в составе роутера</td><td><code>test_scenarios</code>, ключ пункта <code>scenario:&lt;id&gt;</code></td><td>Стоит в одном списке с темами и нумеруется вместе с ними; свойства пункта: название в меню участника (<code>test_scenarios.title</code>, по умолчанию — название темы), банк, выдача, обязательность. Выдачи, вариантов, порядка вопросов и квот у сценария нет. Правила разблокировки задаются так же, как для тем (в редакторе их интерфейса пока нет)</td></tr>
               <tr><td>«Добавить сценарий»</td><td>в группе тем, рядом с «Добавить тему в группу»</td><td>Доступно в тесте со сценарием прохождения «Через страницу-маршрутизатор». Одну тему можно добавить несколькими пунктами — например, разными фиксированными сценариями</td></tr>
               <tr><td>Пиктограмма сценария</td><td>lucide <code>monitor-play</code></td><td>Отличает сценарий от темы в общем списке</td></tr>
-            </tbody>
+                          <tr><td>«Открывается»</td><td><code>flowPolicyJson.router.sectionUnlockRules[&lt;ключ пункта&gt;].mode</code>: <code>always</code> / <code>after_sections_completed</code> / <code>after_sections_passed</code></td><td>Техдолг №8 трека. Поле в свойствах КАЖДОГО пункта роутера — темы и сценария одинаково — сразу под «Обязательная/Обязательный». Значения: «Сразу» (по умолчанию, правила нет), «После завершения пунктов», «После успешного прохождения пунктов». Правило соблюдают оба хоста общим <code>isSectionUnlocked</code>; хаб показывает закрытый пункт «Недоступен/Недоступна»</td></tr>
+              <tr><td>«Каких пунктов»</td><td><code>sectionUnlockRules[…].sectionIds</code> — ключи пунктов (<code>&lt;topicId&gt;</code> / <code>scenario:&lt;id&gt;</code>)</td><td>Появляется, когда выбрано условие. Combobox с множественным выбором: остальные пункты состава с их номерами и названиями, в порядке состава; сам пункт в списке не предлагается. Пусто при выбранном условии — ошибка поля «Выберите хотя бы один пункт»</td></tr>
+              <tr><td>«Успешное прохождение» сценария</td><td><code>sectionResults[…].passed</code></td><td>У пункта-сценария нет порога раздела: как условие «успешного прохождения» он засчитывается, когда завершён — так считает общий код и сейчас</td></tr>
+              <tr><td>Подзаголовок свёрнутой карточки</td><td>из правила</td><td>Хвост «· откроется после 1, 2» — номера пунктов по составу; правила нет — хвоста нет. Видно условие всех пунктов разом, не разворачивая каждый</td></tr>
+              <tr><td>Пункты ждут друг друга</td><td>проверка редактора</td><td>Цикл в правилах (2 ждёт 3, 3 ждёт 2 — или длиннее) значит, что ни один из этих пунктов не откроется. Ошибка поля у каждого пункта цикла, сохранение заблокировано, как у прочих ошибок ящика. Удалённый из состава пункт удаляется и из чужих условий</td></tr>
+              <tr><td>Режим потока</td><td><code>router_by_topics</code></td><td>Поле есть только у теста «Через маршрутизатор»: в линейных потоках пункты идут по порядку и правил разблокировки нет. При переключении режима правила хранятся, как и прочие параметры маршрутизатора</td></tr>
+</tbody>
           </table>
           <h3 class="ou-text ou-text--heading-s">Соответствие компонентам дизайн-системы</h3>
           <table class="tb-table">
