@@ -188,6 +188,17 @@ describe("summariseIndicators — outcomes", () => {
     ]);
   });
 
+  it("orders outcomes by share, largest first; ties keep the author's order; «Прочее» stays last", () => {
+    // Owner 2026-10-08: a list of outcomes is read by size, not in the order they were authored.
+    const [profile] = summariseIndicators(
+      rows({ style: "cel" }, { style: "zzz" }, { style: "zzz" }, { style: "zzz" }, { style: "vdh" }, { style: "vdh" }, { style: "kom" }),
+      [STYLE],
+      { ramp },
+    );
+
+    expect(profile.shares.map(s => s.label)).toEqual(["Вдохновляющий", "Командный", "Целеустремлённый", "Прочее"]);
+  });
+
   it("paints a toned outcome by its tone, the others by the categorical palette, the rest grey", () => {
     const [profile] = summariseIndicators(
       rows({ style: "kom" }, { style: "vdh" }, { style: "cel" }, { style: "zzz" }),

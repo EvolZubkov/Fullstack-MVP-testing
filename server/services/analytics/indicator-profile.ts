@@ -243,7 +243,7 @@ function byLabel(groups: ReadonlyArray<{ label: string; count: number; tone: Lev
 /**
  * Shares of the outcomes of a string or boolean indicator.
  *
- * With outcomes: the author's order, empty outcomes dropped, alike labels folded, unmatched values
+ * With outcomes: largest share first, empty outcomes dropped, alike labels folded, unmatched values
  * in «Прочее». The colour of an outcome is fixed by the position of its label among the
  * interpretation's labels — not by what this selection happened to contain — so the same outcome
  * keeps its colour in every slice. Without outcomes: groups of equal values, the most frequent
@@ -291,8 +291,11 @@ function outcomeShares(
       if (group) group.count += 1;
       else groups.set(label, { label, count: 1, tone });
     }
+    // Largest share first (owner 2026-10-08: a list of outcomes is read by size); a tie keeps the
+    // author's order. The colour stays bound to the author's order, so it does not change when the
+    // order of the rows does.
     const shares = [...groups.values()]
-      .sort((x, y) => labelOrder.indexOf(x.label) - labelOrder.indexOf(y.label))
+      .sort((x, y) => y.count - x.count || labelOrder.indexOf(x.label) - labelOrder.indexOf(y.label))
       .map(group => ({
         key: group.label,
         label: group.label,
