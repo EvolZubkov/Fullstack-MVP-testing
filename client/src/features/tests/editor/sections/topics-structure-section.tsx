@@ -75,9 +75,15 @@ import { VariantsEditor } from "./variants-editor";
 import { ScenarioItemRow, ScenarioPickerModal } from "./router-scenarios-block";
 import { ItemUnlockFields, type UnlockItemOption } from "./item-unlock-fields";
 import { unlockSummary } from "@shared/flow/unlock-rules";
-import { useScenarioBanks, type ScenarioBank } from "./scenario-bank-fields";
+import {
+  packageScenarioWeight,
+  packageScenarioWeightText,
+  useScenarioBanks,
+  type ScenarioBank,
+} from "./scenario-bank-fields";
 import {
   compositionEntries,
+  hasRouterItems,
   unlockKeyOf,
   withUnlockRule,
   withoutItemUnlockRules,
@@ -351,6 +357,14 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
     },
     [overrideByQuestion, model.scoring.defaultQuestionPoints],
   );
+
+  // Техдолг №6: вес сценариев в пакете — только у роутера с пунктами-сценариями (в тесте «Сценарий»
+  // итог — тег его единственного пункта).
+  const packageWeight = useMemo(() => {
+    if (!hasRouterItems(model)) return null;
+    const weight = packageScenarioWeight(model.scenarioItems ?? [], scenarioBanks);
+    return weight && weight.scenarios > 0 ? weight : null;
+  }, [model, scenarioBanks]);
 
   // Темы открываются СВЁРНУТЫМИ (комментарий эскиза): в списке на два десятка тем
   // раскрытые тела превращают экран в простыню.
@@ -705,7 +719,12 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           then the topics that inherit it. «Полное перемешивание» is offered only
           in the flat flow: the sectional flows carry the section screens on the
           topic boundary, so there is nothing to mix across. */}
-      <FormSection stacked title="Темы теста">
+      <FormSection
+        stacked
+        title="Темы теста"
+        // Техдолг №6: что пункты-сценарии добавят в пакет — видно, не разворачивая ни одного.
+        subtitle={packageWeight ? <span data-testid="composition-package-weight">{packageScenarioWeightText(packageWeight)}</span> : undefined}
+      >
         {/* Поиск по уже добавленным темам: у теста их бывает под два десятка, и найти
             нужную прокруткой — это и есть та работа, ради которой поле стоит здесь. */}
         <div className="ou-formfield">

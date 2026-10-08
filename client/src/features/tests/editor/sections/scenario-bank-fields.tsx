@@ -54,6 +54,50 @@ export function scenarioItemFacts(item: ScenarioItemDraft | null, banks: Scenari
   return { bank, fixed, exposure };
 }
 
+/** Что пункты-сценарии теста добавят в пакет. */
+export interface PackageScenarioWeight {
+  /** Разных сценариев в пакете. */
+  scenarios: number;
+  /** Разных банков, из которых они взяты. */
+  banks: number;
+  /** Вес их изображений. */
+  bytes: number;
+}
+
+/**
+ * Техдолг №6 (план, раздел 5): сколько сценариев и какой вес изображений пункты добавят в пакет.
+ *
+ * Считается по ОБЪЕДИНЕНИЮ сценариев, а не суммой тегов пунктов: случайная выдача несёт весь банк
+ * пункта, фиксированная — один сценарий, а сценарий, который берут два пункта, ложится в пакет один
+ * раз (пакет кладёт изображения по адресу файла). Пункт, чей банк ещё не загружен или исчез, не
+ * учитывается — о нём говорит его собственная карточка. Пунктов нет — `null`.
+ */
+export function packageScenarioWeight(items: ScenarioItemDraft[], banks: ScenarioBank[]): PackageScenarioWeight | null {
+  if (items.length === 0) return null;
+  const picked = new Map<string, BankScenario>();
+  const usedBanks = new Set<string>();
+  for (const item of items) {
+    const { bank, fixed } = scenarioItemFacts(item, banks);
+    if (!bank) continue;
+    const pool = item.questionId ? (fixed ? [fixed] : []) : bank.scenarios;
+    if (pool.length === 0) continue;
+    usedBanks.add(bank.topicId);
+    for (const scenario of pool) picked.set(scenario.questionId, scenario);
+  }
+  let bytes = 0;
+  for (const scenario of picked.values()) bytes += scenario.mediaBytes;
+  return { scenarios: picked.size, banks: usedBanks.size, bytes };
+}
+
+/** Строка итога под «Темы теста»: «В пакет войдут 4 сценария из 1 банка, изображения — 9,6 МБ». */
+export function packageScenarioWeightText(weight: PackageScenarioWeight): string {
+  // После «из» — родительный падеж: «из 1 банка», «из 21 банка», «из 2 банков».
+  const bankWord = weight.banks % 10 === 1 && weight.banks % 100 !== 11 ? "банка" : "банков";
+  const scenarios = plural(weight.scenarios, ["сценарий", "сценария", "сценариев"]);
+  const verb = weight.scenarios % 10 === 1 && weight.scenarios % 100 !== 11 ? "войдёт" : "войдут";
+  return `В пакет ${verb} ${scenarios} из ${weight.banks} ${bankWord}, изображения — ${megabytes(weight.bytes)}`;
+}
+
 /** Range of scene counts of a bank: «7–14 сцен» or «11 сцен». */
 function scenesRange(scenarios: BankScenario[]): string {
   const counts = scenarios.map((s) => s.summary.scenes);
