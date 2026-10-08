@@ -141,20 +141,24 @@
         // «Пройдена» so the learner picks up exactly where they left off.
         restoreRouterSession(recovery.session);
         generateVariant();
+        var _sess = recovery.session;
+        // The run's own rows — delivery, answers, statuses, option order, frozen sections —
+        // come back on EVERY router reload, not only on one inside a topic. Restoring them
+        // only for `crt` lost the answers of completed topics when the learner reloaded on
+        // the hub (an understated score reached the LMS) and swapped the delivery of topics
+        // not yet entered for a fresh draw. PRD-36: the pool comes back from the stored ROWS
+        // through the same hydration the linear resume uses. A checkpoint without a delivery
+        // row keeps the fresh variant above, as before; adaptive topics keep their own state.
+        if (_sess.dl && TEST_DATA.mode !== 'adaptive') applySessionRows(_sess);
         if (typeof rebuildPageSequence === 'function') rebuildPageSequence();
         // PRD-20 (5.6): resume the test timer from the active-time anchor
         // (may expire-and-submit if the limit ran out while away).
         if (TEST_DATA.timeLimitMinutes && typeof initTimer === 'function') initTimer();
-        var _sess = recovery.session;
         var _resumed = false;
         if (!state.submitted && _sess.crt && TEST_DATA.mode !== 'adaptive' &&
             typeof RouterFlow !== 'undefined' && RouterFlow.resumeRouterTopic) {
-          // PRD-20 (2e): resume INSIDE the unfinished topic. Restore the saved
-          // question pool + answers so the topic chunk and saved position line up.
-          // PRD-36: the pool comes back from the stored ROWS through the same hydration
-          // the linear resume uses — the checkpoint no longer carries question objects,
-          // and a second unpacking here would be a copy of that logic waiting to drift.
-          applySessionRows(_sess);
+          // PRD-20 (2e): resume INSIDE the unfinished topic; its pool and answers are already
+          // restored above, so the topic chunk and the saved position line up.
           _resumed = RouterFlow.resumeRouterTopic(_sess.crt, _sess.cpi);
         }
         if (!_resumed && !state.submitted) {
