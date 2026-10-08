@@ -283,4 +283,15 @@ describe("web router hub — возобновление прогона", () => {
     );
     expect(screen.queryByTestId("content-screen")).toBeNull();
   });
+
+  it("прогон сценария, оборванный перезагрузкой, не продолжается: участник в хабе, пункт не начат", async () => {
+    // Решение владельца 2026-10-08 (паритет хостов, N1): прогон нельзя продолжить, только начать
+    // заново — и запускает его участник сам, карточкой, на весь экран.
+    await resume({ topicStates: { t1: "completed", "scenario:s1": "inProgress" }, committed: { t1: true }, current: "scenario:s1" }, 1);
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ description: "Продолжаем с выбора раздела" })),
+    );
+    expect(screen.getByTestId("content-screen")).toBeTruthy();
+    expect(screen.getByTestId("cs-body").textContent).toContain("1 / 2");
+  });
 });

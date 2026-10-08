@@ -1318,11 +1318,18 @@ export default function TakeTestPage() {
         | { topicStates?: Record<string, RouterTopicStatus>; committed?: Record<string, boolean>; current?: string | null }
         | null
         | undefined;
-      const resumeAtHub = data.attempt.flowMode === "router_by_topics" && !!hub && !hub.current;
+      // Прогон сценария, оборванный перезагрузкой, не продолжается: его нельзя продолжить, только
+      // начать заново (user-journey.md, 5.5 — прерванный прогон не сохраняется). Участник
+      // возвращается в хаб, пункт снова «Не начат», и сценарий он запускает сам, карточкой — на весь
+      // экран (решение владельца 2026-10-08, паритет с пакетом). Тема возобновляется внутри, как прежде.
+      const cutScenario = !!hub?.current && isScenarioItemKey(hub.current);
+      const resumeAtHub = data.attempt.flowMode === "router_by_topics" && !!hub && (!hub.current || cutScenario);
       if (hub) {
-        setRouterTopicStates(hub.topicStates ?? {});
+        const topicStates = { ...(hub.topicStates ?? {}) };
+        if (cutScenario && topicStates[hub.current!] === "inProgress") delete topicStates[hub.current!];
+        setRouterTopicStates(topicStates);
         setSectionCommitted(hub.committed ?? {});
-        setCurrentRouterTopic(hub.current ?? null);
+        setCurrentRouterTopic(cutScenario ? null : (hub.current ?? null));
       }
 
       // Инициализация таймера (с учётом прошедшего времени)
