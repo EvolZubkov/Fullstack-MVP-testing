@@ -23,7 +23,7 @@ import { act, cleanup, render, waitFor } from "@testing-library/react";
 
 /** What the web currently shows, as the doubles saw it. */
 export interface WebScreen {
-  kind: "start" | "content" | "question" | "section-results" | "other";
+  kind: "start" | "content" | "question" | "section-results" | "results" | "other";
   props: any;
 }
 
@@ -80,14 +80,51 @@ export class WebHost {
   /** Requests on their way to the server; a step is over only when this drops to zero. */
   private inFlight = 0;
   readonly requests: string[] = [];
+  /** Where the page navigated (the test file's `wouter` mock pushes here). */
+  readonly navigations: string[] = [];
 
   constructor(
     private readonly app: express.Express,
     private readonly Page: () => any,
   ) {}
 
+  /**
+   * The screen the page shows now. A double records itself when it renders, but the page may since
+   * have moved to something no double stands for (a spinner, the scenario player, another route):
+   * the record counts only while its double is still in the document. After the page navigated to
+   * the result route the screen is `results` — that route is another page, not a screen of this one.
+   */
   get screen(): WebScreen | null {
-    return current.screen;
+    if (this.navigations.some((to) => to.startsWith("/learner/result/"))) return { kind: "results", props: {} };
+    const s = current.screen;
+    if (!s) return null;
+    const testId = s.kind === "content" ? "content-screen" : s.kind === "question" ? "question-screen" : "template-screen";
+    return document.querySelector(`[data-testid="${testId}"]`) ? s : null;
+  }
+
+  /** Id of the question on screen, `null` outside a question. */
+  get questionId(): string | null {
+    const s = this.screen;
+    return s?.kind === "question" ? (s.props.question?.id ?? null) : null;
+  }
+
+  /**
+   * Answers `qid` with option `index` as a participant does: pick, «Отправить ответ», «Далее». The
+   * twin of `PackageHost.answer`: when the page stands on an already answered question before
+   * `qid` (a resume lands on one), «Далее» is pressed over answered questions only, up to a few
+   * steps. Returns whether `qid` was reached and answered.
+   */
+  async answer(qid: string, index: number): Promise<boolean> {
+    for (let k = 0; k < 6 && this.questionId !== qid; k++) {
+      const nav = this.screen?.props.nav;
+      if (this.questionId === null || !nav?.committed) return false;
+      await this.act(() => this.screen!.props.onNavAction("answer-next"));
+    }
+    if (this.questionId !== qid) return false;
+    await this.act(() => this.screen!.props.onAnswer(index));
+    await this.act(() => this.screen!.props.onNavAction("answer-submit"));
+    await this.act(() => this.screen?.props.onNavAction?.("answer-next"));
+    return true;
   }
 
   private installFetch(): void {
@@ -113,6 +150,7 @@ export class WebHost {
   /** Mounts the page — a fresh browser tab on the test (the server keeps the attempt). */
   async open(): Promise<void> {
     this.installFetch();
+    this.navigations.length = 0;
     current.screen = null;
     render(createElement(this.Page));
     await this.idle();

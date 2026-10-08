@@ -15,7 +15,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { createHarness, type Harness } from "../it/db-harness";
 
-const h = vi.hoisted(() => ({ current: null as Harness | null, testId: "" }));
+const h = vi.hoisted(() => ({ current: null as Harness | null, testId: "", web: null as { navigations: string[] } | null }));
 const player = vi.hoisted(() => ({ double: null as any }));
 vi.mock("../../server/db", () => ({
   get db() {
@@ -28,7 +28,7 @@ vi.mock("../../server/middleware/auth", () => ({
 }));
 vi.mock("wouter", () => ({
   useParams: () => ({ testId: h.testId }),
-  useLocation: () => [`/learner/test/${h.testId}`, () => undefined],
+  useLocation: () => [`/learner/test/${h.testId}`, (to: string) => h.web?.navigations.push(String(to))],
 }));
 vi.mock("@skillum/ui-kit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@skillum/ui-kit")>()),
@@ -107,9 +107,7 @@ function packageDriver(host: PackageHost, player: PlayerDouble, key: (i: any) =>
           await host.clickButton(/Далее/);
           return;
         case "answer":
-          await host.click(`[data-action='select:${step.correct ? 0 : 1}']`);
-          await host.click("[data-action=answer-submit]");
-          await host.click("[data-action=answer-next]");
+          await host.answer(step.qid, step.correct ? 0 : 1);
           return;
         case "sectionContinue":
           await host.click("[data-action=section-continue]");
@@ -123,8 +121,7 @@ function packageDriver(host: PackageHost, player: PlayerDouble, key: (i: any) =>
           return;
         }
         case "finish":
-          await host.clickButton(/Завершить/);
-          await host.idle(500);
+          await host.finishTest();
           return;
         case "reload":
           await host.reload();
@@ -155,9 +152,7 @@ function webDriver(web: WebHost, player: PlayerDouble, key: (i: any) => string):
           await web.act(() => props().onNext?.());
           return;
         case "answer":
-          await web.act(() => props().onAnswer?.(step.correct ? 0 : 1));
-          await web.act(() => props().onNavAction?.("answer-submit"));
-          await web.act(() => props().onNavAction?.("answer-next"));
+          await web.answer(step.qid, step.correct ? 0 : 1);
           return;
         case "sectionContinue":
           await web.act(() => props().onAction?.("section-continue"));
@@ -191,7 +186,9 @@ function diffStep(web: StepSnapshot, pkg: StepSnapshot): string[] {
   if (web.screen !== pkg.screen || web.question !== pkg.question) {
     out.push(`L1 экран: веб ${web.screen}${web.question ? ` ${web.question}` : ""}, пакет ${pkg.screen}${pkg.question ? ` ${pkg.question}` : ""}`);
   }
-  if (web.hub !== pkg.hub) {
+  if (web.hub !== pkg.hub && (web.hub === null || pkg.hub === null)) {
+    out.push(`L2 хаб есть только у ${web.hub === null ? "пакета" : "веба"}`);
+  } else if (web.hub !== pkg.hub) {
     const w = hubCards(web.hub);
     const p = hubCards(pkg.hub);
     const cards = w.map((c, i) => (c === p[i] ? null : `    веб   ${c}\n    пакет ${p[i] ?? "-"}`)).filter(Boolean);
@@ -219,6 +216,7 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
   const webPlayer = new PlayerDouble();
   player.double = webPlayer;
   const webHost = new WebHost(makeServer(attemptsRouter as never, LEARNER_ID), TakeTestPage as never);
+  h.web = webHost;
   await webHost.open();
   const web = webDriver(webHost, webPlayer, key);
 

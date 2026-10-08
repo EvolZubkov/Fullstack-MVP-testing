@@ -67,46 +67,36 @@ describe("обвязка веба", () => {
     h.testId = testId;
     player.double = new PlayerDouble();
     const web = new WebHost(makeServer(attemptsRouter as never, LEARNER_ID), TakeTestPage as never);
-    const log: string[] = [];
-    const desc = () => {
-      const s = web.screen;
-      if (!s) return "none";
-      if (s.kind === "content") return `content next=${s.props.nextLabel ?? ""}/${!!s.props.nextDisabled} back=${!!s.props.onBack} body=${String(s.props.bodyHtml ?? "").length}`;
-      if (s.kind === "question") return `question ${s.props.question?.id} nav=${JSON.stringify(s.props.nav)?.slice(0, 200)}`;
-      return s.kind;
-    };
+    const hubCard = (key: string) =>
+      new RegExp(`data-topic-id="${key}"[^>]*>`).exec(String(web.screen?.props.bodyHtml ?? ""))?.[0] ?? "";
     await web.open();
-    log.push("0 " + desc());
+    expect(web.screen?.kind).toBe("start");
+
     await web.act(() => web.screen!.props.onAction("start-test"));
-    log.push("1 " + desc());
-    await web.act(() => web.screen!.props.onBodyAction(`router-select:${T_A}`));
-    for (let k = 0; k < 10; k++) {
-      log.push("q " + desc());
-      const s = web.screen!;
-      if (s.kind === "question") {
-        await web.act(() => s.props.onAnswer(0));
-        await web.act(() => web.screen!.props.onNavAction("answer-submit"));
-        log.push("q+ " + desc());
-        await web.act(() => web.screen!.props.onNavAction("answer-next"));
-      } else if (s.kind === "section-results") {
-        await web.act(() => s.props.onAction("section-continue"));
-      } else if (s.kind === "content" && s.props.bodyHtml) break;
-      else if (s.kind === "content") await web.act(() => s.props.onNext());
-      else break;
-    }
-    log.push("hub " + desc());
-    log.push("hubhtml " + web.screen?.props.bodyHtml);
-    await web.act(() => web.screen!.props.onBodyAction(`router-select:${keySc1}`));
-    log.push("sim active=" + player.double.active + " " + JSON.stringify(player.double.mounts));
-    if (player.double.active) {
-      const r = playRun("success");
-      await web.act(() => player.double.finish(r));
-      await web.act(() => player.double.close(r));
-    }
-    log.push("hub3 " + desc());
-    log.push("requests " + web.requests.join("\n"));
-    require("node:fs").writeFileSync("tests/sim-host-parity/web-smoke.log", log.join("\n"));
+    // The hub: the scenario waits for topic A to be passed, «Завершить» waits for the required items.
     expect(web.screen?.kind).toBe("content");
+    expect(hubCard(keySc1)).toContain('data-router-locked="true"');
+    expect(web.screen!.props.nextDisabled).toBe(true);
+
+    await web.act(() => web.screen!.props.onBodyAction(`router-select:${T_A}`));
+    expect(await web.answer("qa1", 0)).toBe(true);
+    expect(await web.answer("qa2", 0)).toBe(true);
+    // The section outcome comes from the REAL `/section-result`, not from the test.
+    expect(web.screen?.kind).toBe("section-results");
+    expect(web.screen!.props.context.sectionResult).toMatchObject({ correct: 2, total: 2, scorePercent: 100 });
+    await web.act(() => web.screen!.props.onAction("section-continue"));
+    expect(hubCard(T_A)).toContain('data-router-status="completed"');
+    expect(hubCard(keySc1)).not.toContain("data-router-locked");
+
+    await web.act(() => web.screen!.props.onBodyAction(`router-select:${keySc1}`));
+    expect(player.double.active).toBe(true);
+    const r = playRun("success");
+    await web.act(() => player.double.finish(r));
+    await web.act(() => player.double.close(r));
+    expect(player.double.active).toBe(false);
+    expect(hubCard(keySc1)).toContain('data-router-status="completed"');
+    expect(web.requests.some((q) => q.includes("/section-result"))).toBe(true);
     web.close();
+    await web.idle();
   }, 120000);
 });

@@ -63,7 +63,12 @@ export function packageStep(host: PackageHost, player: PlayerDouble): StepSnapsh
   const doc = host.doc;
   const hubEl = doc.querySelector(".router-hub");
   const phase = String(host.state.phase);
-  const screen: ScreenKind = player.active ? "scenario" : hubEl ? "hub" : PHASES[phase] ?? "other";
+  // `results` on both hosts means «the attempt is finished and reported»: the web leaves for the
+  // result route after `/finish`, the package stays on its page but has sent the LMS its result
+  // (`finishAndClose` sets `scormFinished`), whatever phase it is left in.
+  const screen: ScreenKind = host.window.scormFinished === true
+    ? "results"
+    : player.active ? "scenario" : hubEl ? "hub" : PHASES[phase] ?? "other";
   let footer: StepSnapshot["footer"] = null;
   if (screen === "hub") {
     const buttons = [...doc.querySelectorAll("#app button")].filter((b) => !b.closest(".router-hub")) as HTMLButtonElement[];
