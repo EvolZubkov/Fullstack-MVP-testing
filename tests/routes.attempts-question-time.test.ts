@@ -102,3 +102,32 @@ describe("сохранение прогресса несёт время на з�
     expect(storedVariant().latencyMs).toEqual({ a: 7000 });
   });
 });
+
+describe("сохранение прогресса несёт состояние хаба роутера", () => {
+  it("кладёт состояние хаба в форму попытки, отсекая то, чем оно быть не может", async () => {
+    await save({
+      answers: {},
+      currentIndex: 0,
+      routerState: {
+        topicStates: { t1: "completed", t2: "inProgress", t3: "notStarted", t4: 7 },
+        committed: { t1: true, t2: "yes" },
+        current: null,
+      },
+    });
+
+    expect(storedVariant().routerState).toEqual({
+      topicStates: { t1: "completed", t2: "inProgress" },
+      committed: { t1: true },
+      current: null,
+    });
+  });
+
+  it("сохранение без состояния хаба прежнее не стирает", async () => {
+    const routerState = { topicStates: { t1: "completed" }, committed: { t1: true }, current: null };
+    storageMock.getAttempt.mockResolvedValue({ ...attempt, variantJson: { ...attempt.variantJson, routerState } });
+
+    await save({ answers: {}, currentIndex: 0 });
+
+    expect(storedVariant().routerState).toEqual(routerState);
+  });
+});

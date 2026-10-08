@@ -175,6 +175,28 @@ function sanitizeLatency(raw: unknown): Record<string, number> | null {
 }
 
 /**
+ * Состояние хаба роутера в вебе — двойник `rt`/`sc`/`crt` сеанса пакета: какие пункты начаты и
+ * завершены, какие разделы закрыты и в каком пункте участник сейчас. Без него возобновлённый прогон
+ * не знал хаба: участник попадал внутрь уже завершённой темы и проходил её обзор и итоги заново.
+ *
+ * Приходит от клиента; отсекается то, что состоянием хаба быть не может. `null` — клиент состояния
+ * не прислал (не роутер или старый клиент), и прежнее не стирается.
+ */
+function sanitizeRouterState(raw: unknown): { topicStates: Record<string, string>; committed: Record<string, boolean>; current: string | null } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const src = raw as { topicStates?: unknown; committed?: unknown; current?: unknown };
+  const topicStates: Record<string, string> = {};
+  for (const [key, value] of Object.entries((src.topicStates ?? {}) as Record<string, unknown>)) {
+    if (value === "inProgress" || value === "completed") topicStates[key] = value;
+  }
+  const committed: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries((src.committed ?? {}) as Record<string, unknown>)) {
+    if (value === true) committed[key] = true;
+  }
+  return { topicStates, committed, current: typeof src.current === "string" && src.current ? src.current : null };
+}
+
+/**
  * PRD-66 FR-09b: штампы выдачи, сверенные с редакцией на момент завершения.
  *
  * Расхождение значит, что задание правили ПОСРЕДИ прохождения. Такое наблюдение не
@@ -812,7 +834,7 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
  * The delivered set of an abandoned run, stripped of its progress. `sections`
  * (composition, PRD-17 variant pins, PRD-4 per-topic budgets) and `deliveryOrder`
  * (the PRD-30 stream) are exactly what was handed out; `currentIndex`,
- * `questionStatus` and `sectionPositions` are progress the runtime wrote on top,
+ * `questionStatus`, `sectionPositions` and `routerState` are progress the runtime wrote on top,
  * and a restart drops them. Returns null when the stored variant holds no
  * questions — there is then nothing to carry and the caller draws anew.
  */
@@ -1830,7 +1852,7 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
       return res.status(400).json({ error: "Attempt already finished" });
     }
 
-    const { answers, currentIndex, shuffleMappings, questionStatus, sectionPositions, latencyMs } = req.body;
+    const { answers, currentIndex, shuffleMappings, questionStatus, sectionPositions, latencyMs, routerState } = req.body;
 
     const updatedVariant: any = {
       ...(attempt.variantJson as any),
@@ -1861,6 +1883,10 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
     if (sectionPositions && typeof sectionPositions === "object") {
       updatedVariant.sectionPositions = sectionPositions;
     }
+
+    // Состояние хаба роутера: возобновление продолжает с хаба или изнутри пункта, как в пакете.
+    const hub = sanitizeRouterState(routerState);
+    if (hub) updatedVariant.routerState = hub;
 
     // PRD-67 FR-10: a locked section (time spent or closed by a leave) keeps the answers
     // stored before the lock — the lock is enforced here, not only painted by the client.
@@ -1925,6 +1951,7 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
       // PRD-19 (Block B): restore per-question statuses; absent = all-'unanswered'.
       questionStatus: variant.questionStatus || {},
       sectionPositions: variant.sectionPositions || {},
+      routerState: (variant as { routerState?: unknown }).routerState ?? null,
     });
   } catch (error) {
     logger.error("Resume attempt error: " + (error as Error).message);

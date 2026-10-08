@@ -1313,6 +1313,17 @@ export default function TakeTestPage() {
       // Where the learner stopped inside each section — a re-entry from the hub
       // continues from that question instead of restarting the section.
       setSectionPositions(data.sectionPositions || {});
+      // Хаб роутера: какие пункты начаты и завершены, какие разделы закрыты, где участник сейчас.
+      const hub = data.routerState as
+        | { topicStates?: Record<string, RouterTopicStatus>; committed?: Record<string, boolean>; current?: string | null }
+        | null
+        | undefined;
+      const resumeAtHub = data.attempt.flowMode === "router_by_topics" && !!hub && !hub.current;
+      if (hub) {
+        setRouterTopicStates(hub.topicStates ?? {});
+        setSectionCommitted(hub.committed ?? {});
+        setCurrentRouterTopic(hub.current ?? null);
+      }
 
       // Инициализация таймера (с учётом прошедшего времени)
       if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
@@ -1414,10 +1425,12 @@ export default function TakeTestPage() {
         })),
       );
       setPhase("question");
+      // Участник был в хабе — туда и возвращается, а не к последнему вопросу пройденного пункта.
+      if (resumeAtHub) setShowHub(true);
 
       toast({
         tone: "success", title: "Тест восстановлен",
-        description: `Продолжаем с вопроса ${data.currentIndex + 1}`,
+        description: resumeAtHub ? "Продолжаем с выбора раздела" : `Продолжаем с вопроса ${data.currentIndex + 1}`,
       });
     } catch (err) {
       console.error("Resume test error:", err);
@@ -1687,6 +1700,11 @@ export default function TakeTestPage() {
         currentIndex: nextIndex,
         questionStatus: nextStatus,
         sectionPositions: positions,
+        // Состояние хаба роутера — двойник `rt`/`sc`/`crt` сеанса пакета: возобновление продолжает
+        // с хаба или изнутри пункта, а не с вопроса уже завершённой темы.
+        ...(flowStructure.flowMode === "router_by_topics"
+          ? { routerState: { topicStates: routerTopicStates, committed: sectionCommitted, current: currentRouterTopic } }
+          : {}),
         // PRD-66 FR-37a: замер едет с каждым сохранением — брошенная попытка тоже наблюдение,
         // и время, измеренное до ухода, теряться не должно.
         latencyMs: questionTime.totals(),
@@ -1883,8 +1901,15 @@ export default function TakeTestPage() {
   /** Sectional flows commit answers per section; flat commits the whole test. */
   const sectionScope = navSettings.answerCommitScope === "section";
 
-  /** True when `topicId` is the LAST section in delivery order (no later topic). */
+  /**
+   * True when `topicId` is the LAST section in delivery order (no later topic).
+   *
+   * В роутере последнего раздела нет: порядок выбирает участник, и после раздела всегда идёт хаб —
+   * его «Завершить» и закрывает тест. Иначе раздел, последний в ВЫДАЧЕ, терял экран итогов, а
+   * кнопка итогов обещала «Завершить тест», хотя вела в хаб (паритет с пакетом).
+   */
   const isLastSectionWeb = (topicId: string): boolean => {
+    if (flowStructure.flowMode === "router_by_topics") return false;
     const last = flatQuestions[flatQuestions.length - 1];
     return !last || last.topicId === topicId;
   };
@@ -1968,6 +1993,24 @@ export default function TakeTestPage() {
     !reviewScreenHidden && shouldShowReview(input);
 
   const isRouterMode = flowStructure.flowMode === "router_by_topics";
+
+  // Состояние хаба уезжает на сервер при каждом его изменении (вход в пункт, возврат, закрытие
+  // раздела) — не только вместе с ответом: возврат в хаб ответа не несёт, а без записи
+  // перезагрузка вернула бы участника внутрь уже завершённого пункта.
+  const hubStateSaved = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isRouterMode || !attempt || phase === "start") return;
+    const snapshot = JSON.stringify([routerTopicStates, sectionCommitted, currentRouterTopic]);
+    if (hubStateSaved.current === null) {
+      hubStateSaved.current = snapshot; // первое состояние — восстановленное или пустое: писать нечего
+      return;
+    }
+    if (hubStateSaved.current === snapshot) return;
+    hubStateSaved.current = snapshot;
+    saveProgress(answers, currentIndex, questionStatus);
+    // Сохраняется только при смене состояния хаба; ответы сохраняет их собственный путь.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRouterMode, attempt, phase, routerTopicStates, sectionCommitted, currentRouterTopic]);
 
   /*
    * Техдолг №8: исход каждого завершённого пункта роутера — тем же серверным расчётом раздела, что

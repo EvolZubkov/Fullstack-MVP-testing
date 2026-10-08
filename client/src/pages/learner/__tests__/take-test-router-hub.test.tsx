@@ -42,6 +42,9 @@ vi.mock("@/components/template-screen", () => ({
       <button data-testid="ts-start-test" onClick={() => props.onAction && props.onAction("start-test")}>
         start
       </button>
+      <button data-testid="ts-resume" onClick={() => props.onAction && props.onAction("resume")}>
+        resume
+      </button>
     </div>
   ),
 }));
@@ -237,5 +240,47 @@ describe("web router hub — section obligation", () => {
   it("withholds «Завершить» while an obligatory section is unfinished", async () => {
     await openHub(routerAttempt());
     expect(screen.getByTestId("cs-next-disabled").textContent).toBe("true");
+  });
+});
+
+describe("web router hub — возобновление прогона", () => {
+  /** Прерванная попытка: тема t1 завершена, участник стоял в хабе либо внутри t2. */
+  async function resume(routerState: Record<string, unknown>, currentIndex: number) {
+    const fn = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u === "/api/learner/tests") return jsonRes([{ ...learnerTest, inProgressAttemptId: "attempt-1" }]);
+      if (u.includes("/screen-template/")) return jsonRes(TPL());
+      if (u.includes("/resume")) {
+        return jsonRes({
+          hasInProgress: true,
+          attempt: routerAttempt(),
+          savedAnswers: { q1: 0 },
+          currentIndex,
+          questionStatus: { q1: "answered" },
+          sectionPositions: {},
+          routerState,
+        });
+      }
+      return jsonRes({});
+    });
+    vi.stubGlobal("fetch", fn);
+    render(<TakeTestPage />);
+    fireEvent.click(await screen.findByTestId("ts-resume"));
+  }
+
+  it("прогон, прерванный в хабе, возобновляется в хабе, а не на вопросе завершённой темы", async () => {
+    await resume({ topicStates: { t1: "completed" }, committed: { t1: true }, current: null }, 0);
+    await waitFor(() => expect(screen.getByTestId("content-screen")).toBeTruthy());
+    const body = screen.getByTestId("cs-body");
+    expect(body.querySelector('[data-topic-id="t1"]')!.getAttribute("data-router-status")).toBe("completed");
+    expect(body.textContent).toContain("1 / 2");
+  });
+
+  it("прогон, прерванный внутри пункта, возобновляется на его вопросе", async () => {
+    await resume({ topicStates: { t1: "completed", t2: "inProgress" }, committed: { t1: true }, current: "t2" }, 1);
+    await waitFor(() =>
+      expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ description: "Продолжаем с вопроса 2" })),
+    );
+    expect(screen.queryByTestId("content-screen")).toBeNull();
   });
 });

@@ -303,6 +303,10 @@ function showFinishConfirm(unansweredCount, finishLabel, onConfirm) {
 // (no later flatQuestions belong to a different topic). Drives «Завершить раздел»
 // vs «Завершить тест» labelling and the separate test-finish step.
 function isLastSectionTopic(topicId) {
+    // В роутере последнего раздела нет: порядок выбирает участник, и после раздела всегда идёт
+    // хаб — его «Завершить» и закрывает тест. Иначе раздел, последний в ВЫДАЧЕ, терял экран итогов
+    // раздела, а его кнопки обещали «Завершить тест».
+    if (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode && RouterFlow.isRouterMode()) return false;
     if (!state.flatQuestions || !state.flatQuestions.length) return true;
     var last = state.flatQuestions[state.flatQuestions.length - 1];
     return !!last && last.topicId === topicId;
