@@ -239,7 +239,9 @@ var TBSimRun = (function () {
       scenario: playedScenario((q.data && q.data.scenario) || {}),
       // Адреса медиа уже переписаны упаковщиком на файлы внутри пакета.
       mediaUrl: function (file) { return file; },
-      showDetails: true,
+      // Время, ошибки и подсказки в окне результата показываются по правилу показа результатов
+      // теста (user-journey.md, 5.4 и 5.9) — так же, как на вебе.
+      showDetails: !!TEST_DATA.showCorrectAnswers,
       caption: TEST_DATA.title || '',
       closeLabel: closeLabel,
       onFinish: function (result) {
