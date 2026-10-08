@@ -121,12 +121,11 @@ describe("обвязка пакета", () => {
     host.close();
   }, 180000);
 
-  // PRODUCT DEFECT, not a harness slip: after a reload at the hub `restoreRouterSession` brings back
-  // the section outcomes (`rt`, `sr`, `sp`) but `main.js` restores the ANSWERS only when a topic was
-  // open (`crt`), so the finished topic's answers are gone and the final result recounts it from
-  // nothing (topic A: 0 of 2, «failed», while the hub still says «Завершена»). `it.fails` keeps the
-  // suite green and turns red the day the defect is fixed — then drop `.fails`.
-  it.fails("перезагрузка в хабе после темы А не стирает её ответы в итоге попытки", async () => {
+  // Finding A of the parity harness, fixed in `bootstrap/main.js` (bf36aca3): a reload at the hub
+  // used to bring back the section outcomes but not the ANSWERS — those came back only when a topic
+  // was open (`crt`) — so the finished topic was recounted from nothing (topic A: 0 of 2, «failed»,
+  // while the hub still said «Завершена»).
+  it("перезагрузка в хабе после темы А не стирает её ответы в итоге попытки", async () => {
     const { host, player, keySc1 } = await started("-hubreload");
     const pick = (key: string) => host.click(`[data-action="router-select:${key}"]`);
     await pick(T_A);
