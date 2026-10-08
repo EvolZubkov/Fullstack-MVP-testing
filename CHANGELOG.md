@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.43.3](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.43.2...v2.43.3)
+
+### Fixes
+
+- **fix**(analytics): код набора из выгрузки WebTutor («cel kom» вместо «cel+kom») находит свой исход (2026-10-08) [`7d0dd9e4c1d26840753c79ad32e4660a89df4434`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7d0dd9e4c1d26840753c79ad32e4660a89df4434)
+
 ## [2.43.2](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.43.1...v2.43.2)
 
 ### Fixes
