@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import type { Scenario } from "@shared/sim/contract";
 import { DEFAULT_SIM_PENALTIES } from "@shared/sim/scoring";
-import { renderSimCover, renderSimRulesDialog, simCoverShot, simCoverState, simRules } from "@shared/sim/cover";
+import { renderSimCover, renderSimRulesDialog, simCoverShot, simCoverState, simRules, simRunReplaces } from "@shared/sim/cover";
 import example from "../docs/specs/sim-scenario/example/scenario.json";
 
 const scenario = example as unknown as Scenario;
@@ -82,5 +82,20 @@ describe("окно правил", () => {
     expect(html).toContain("ou-modal");
     expect(html).toContain('data-action="sim-cancel"');
     expect(html).toContain('data-action="sim-start"');
+  });
+});
+
+describe("какой прогон остаётся (техдолг №7)", () => {
+  it("досрочный выход из повтора не затирает завершённый прогон; время вышло — затирает", () => {
+    expect(simRunReplaces({ outcome: "success" }, { outcome: "exited" })).toBe(false);
+    expect(simRunReplaces({ outcome: "fail" }, { outcome: "exited" })).toBe(false);
+    expect(simRunReplaces({ outcome: "timeout" }, { outcome: "exited" })).toBe(false);
+    expect(simRunReplaces({ outcome: "success" }, { outcome: "timeout" })).toBe(true);
+    expect(simRunReplaces({ outcome: "success" }, { outcome: "partial" })).toBe(true);
+  });
+
+  it("если завершённого не было, записывается любой прогон", () => {
+    expect(simRunReplaces(undefined, { outcome: "exited" })).toBe(true);
+    expect(simRunReplaces({ outcome: "exited" }, { outcome: "exited" })).toBe(true);
   });
 });

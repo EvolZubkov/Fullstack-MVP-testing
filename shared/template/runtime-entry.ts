@@ -262,4 +262,4 @@ export { simulationRatio } from "../sim/scoring";
 export { encodeProtocol as encodeSimProtocol, protocolChunks as simProtocolChunks } from "../sim/protocol-codec";
 // Сценарий в обычном разделе (техдолг №5): обложка в области ответа и окно правил — одна разметка
 // для веба и пакета.
-export { renderSimCover, renderSimRulesDialog, simCoverShot, simCoverState, simRules } from "../sim/cover";
+export { renderSimCover, renderSimRulesDialog, simCoverShot, simCoverState, simRules, simRunReplaces } from "../sim/cover";

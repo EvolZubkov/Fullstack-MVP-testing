@@ -94,4 +94,17 @@ describe("карточка сценария в хабе", () => {
     expect(locked).toContain("Недоступен");
     expect(locked).toContain('data-router-locked="true"');
   });
+  it("завершённый сценарий: «менять ответ» разрешает пройти заново, тема по-прежнему закрыта (техдолг №7)", () => {
+    const sections = [{ topicId: "t1", topicName: "Т" }, { topicId: "scenario:s1", topicName: "С" }];
+    const states = { t1: "completed" as const, "scenario:s1": "completed" as const };
+    const closed = buildRouterHubHtml(sections, { topicStates: states });
+    expect(closed).not.toContain("пройти заново");
+    expect(closed).not.toContain('data-action="router-select:scenario:s1"');
+    const open = buildRouterHubHtml(sections, { topicStates: states, rerunScenarios: true });
+    expect(open).toContain('data-action="router-select:scenario:s1"');
+    expect(open).toContain('<span class="router-topic-card__go">пройти заново</span>');
+    expect(open).toContain("Завершён");
+    // Тема повторного входа не имеет — флаг касается только пункта-сценария.
+    expect(open).not.toContain('data-action="router-select:t1"');
+  });
 });

@@ -188,3 +188,19 @@ export function renderSimRulesDialog(rules: SimRules): string {
   </div>
 </div>`;
 }
+
+/**
+ * Does a new run replace the stored one? (techdebt №7, owner decision 2026-10-08)
+ *
+ * Running a scenario again is the test's «менять ответ» rule, and the LAST run counts — except an
+ * early exit: leaving a re-run half way must not wipe out a run the learner had finished. A timeout
+ * is a real finish and counts. With nothing finished before, any run is recorded.
+ *
+ * @param previous the stored answer (full web result or compact package cell)
+ * @param next the run that just ended
+ */
+export function simRunReplaces(previous: unknown, next: unknown): boolean {
+  if (simCoverState(next) !== "exited") return true;
+  const before = simCoverState(previous);
+  return before === "fresh" || before === "exited";
+}

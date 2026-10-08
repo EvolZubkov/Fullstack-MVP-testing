@@ -71,6 +71,7 @@ import type { Question, QuestionScoring, Attempt, Test } from "@shared/schema";
 import type { Scenario } from "@shared/sim/contract";
 import { ScenarioRun, requestScenarioFullscreen } from "@/features/questions/scenario/scenario-run";
 import { SimRulesDialog } from "@/features/questions/scenario/sim-rules-dialog";
+import { simRunReplaces } from "@shared/sim/cover";
 import { resolveSimScoring, type SimScoringLevel } from "@shared/sim/scoring";
 import { isScenarioItemKey } from "@shared/test-items";
 import type { ResolvedRule } from "@shared/scoring/pass-rule";
@@ -2890,6 +2891,8 @@ export default function TakeTestPage() {
       // empty rules is a hub that opens sections the LMS keeps locked.
       unlockRules: flowStructure.routerPolicy?.sectionUnlockRules ?? {},
       completionPolicy: flowStructure.routerPolicy?.completionPolicy ?? null,
+      // Техдолг №7: «менять ответ» разрешает пройти завершённый пункт-сценарий заново.
+      rerunScenarios: navSettings.allowAnswerChange,
     };
     const hubReady = isRouterReadyToFinish(hubSections, hubHubState);
     return (
@@ -3465,6 +3468,8 @@ export default function TakeTestPage() {
           closeLabel={scenarioTest ? "Перейти к итогам" : "Вернуться к разделам"}
           remainingSeconds={remainingSeconds}
           onFinish={(result) => {
+            // Техдолг №7: досрочный выход из повторного прогона не затирает завершённый.
+            if (!simRunReplaces(answers[task.id], result)) return;
             const nextAnswers = { ...answers, [task.id]: result };
             const nextStatus = { ...questionStatus, [task.id]: "answered" as const };
             setAnswers(nextAnswers);
@@ -3472,7 +3477,7 @@ export default function TakeTestPage() {
             saveProgress(nextAnswers, scenarioTaskIndex, nextStatus);
           }}
           onClose={(result) => {
-            const nextAnswers = result ? { ...answers, [task.id]: result } : answers;
+            const nextAnswers = result && simRunReplaces(answers[task.id], result) ? { ...answers, [task.id]: result } : answers;
             const nextStatus = result ? { ...questionStatus, [task.id]: "answered" as const } : questionStatus;
             if (scenarioTest) {
               setScenarioDone(true);
@@ -3632,7 +3637,10 @@ export default function TakeTestPage() {
           showDetails={showCorrectAnswers}
           closeLabel="Вернуться к вопросу"
           remainingSeconds={sectionRemainingSeconds ?? remainingSeconds}
-          onFinish={(result) => handleAnswer(currentQ.question.id, result)}
+          onFinish={(result) => {
+            // Техдолг №7: досрочный выход из «Пройти заново» не затирает завершённый прогон.
+            if (simRunReplaces(answers[currentQ.question.id], result)) handleAnswer(currentQ.question.id, result);
+          }}
           onClose={() => setSimDialog(null)}
           data-testid="scenario-task"
         />

@@ -50,6 +50,12 @@ export interface RouterHubState {
   unlockRules?: Record<string, SectionUnlockRule | undefined>;
   /** `all_required_completed` (default) | `all_required_passed`. */
   completionPolicy?: string | null;
+  /**
+   * «Сценарий в ИС», техдолг №7: тест разрешает менять ответ — завершённый пункт-сценарий можно
+   * пройти заново. Его карточка остаётся нажимаемой и несёт «пройти заново». Темы повторного входа
+   * не имеют: правило касается только пункта-сценария (решение владельца 2026-10-06).
+   */
+  rerunScenarios?: boolean;
 }
 
 function escHtml(s: unknown): string {
@@ -219,11 +225,13 @@ export function buildRouterHubHtml(
     const status: RouterTopicStatus = state.topicStates[section.topicId] || "notStarted";
     const unlocked = isSectionUnlocked(section, state);
     const locked = !unlocked && status !== "completed";
-    // Completed cards stay disabled to prevent re-entry; locked ones because their
-    // prerequisites are not met yet.
-    const disabled = status === "completed" || !unlocked;
-
     const words = cardWords(section);
+    // A completed scenario the test lets the learner run again (tech debt №7).
+    const rerun = state.rerunScenarios === true && words.isScenario && status === "completed";
+    // Completed cards stay disabled to prevent re-entry — except a scenario that may be run again;
+    // locked ones because their prerequisites are not met yet.
+    const disabled = (status === "completed" && !rerun) || !unlocked;
+
     const meta: string[] = [];
     // «Сценарий в ИС»: у пункта-сценария вместо числа вопросов — метка вида; задание одно.
     if (words.isScenario) meta.push("Сценарий");
@@ -242,8 +250,9 @@ export function buildRouterHubHtml(
     const imgHtml = imgUrl
       ? '<span class="router-topic-card__img"><img src="' + escHtml(imgUrl) + '" alt=""></span>'
       : "";
-    const goHtml =
-      unlocked && status !== "completed" ? '<span class="router-topic-card__go">начать</span>' : "";
+    const goHtml = rerun
+      ? '<span class="router-topic-card__go">пройти заново</span>'
+      : unlocked && status !== "completed" ? '<span class="router-topic-card__go">начать</span>' : "";
 
     cards +=
       '<button type="button" role="listitem"' +

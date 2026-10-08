@@ -43,6 +43,8 @@ var TBSimRun = (function () {
   var fullRuns = {};
   /** Открытое окно правил. */
   var rulesHost = null;
+  /** Пункты роутера, которым разрешён один повторный прогон (техдолг №7). */
+  var rerunItems = {};
 
   /** Попросить у браузера полный экран — ТОЛЬКО из обработчика щелчка, иначе откажет. */
   function requestFullscreen() {
@@ -127,6 +129,9 @@ var TBSimRun = (function () {
    */
   function record(fq, result, inSection) {
     var q = fq.question;
+    // Техдолг №7: досрочный выход из повторного прогона не затирает завершённый — ни в попытке,
+    // ни в телеметрии (вторая строка того же вопроса была бы лишним наблюдением).
+    if (!TBTemplate.simRunReplaces(state.answers[q.id], result)) return;
     var answer = compact(result);
     // Протокол для отчёта LMS (`sim_<id>_<n>`, `resultsPage.js`) — только в памяти: кодек
     // `suspend_data` его не пишет. Поэтому ответ лучшей попытки, восстановленный из
@@ -199,7 +204,8 @@ var TBSimRun = (function () {
   function render(fq) {
     claimed = true;
     var q = fq.question;
-    if (state.questionStatuses[q.id] === 'answered') {
+    var rerun = !!rerunItems[fq.topicId];
+    if (state.questionStatuses[q.id] === 'answered' && !rerun) {
       unmount();
       continueAfter();
       return;
@@ -209,6 +215,8 @@ var TBSimRun = (function () {
 
     var app = document.getElementById('app');
     if (app) app.innerHTML = '';
+    // Разрешение на повтор расходуется на этот прогон.
+    delete rerunItems[fq.topicId];
     mountRun(fq, false);
   }
 
@@ -271,6 +279,7 @@ var TBSimRun = (function () {
     requestFullscreen: requestFullscreen,
     compact: compact,
     isFullScreenItem: isFullScreenItem,
+    allowRerun: function (itemKey) { rerunItems[itemKey] = true; },
     keep: keep,
     openRules: openRules,
     fullResultFor: function (questionId) { return fullRuns[questionId] || null; },

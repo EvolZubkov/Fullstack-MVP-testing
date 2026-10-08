@@ -85,6 +85,8 @@
       unlockRules: (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {},
       completionPolicy:
         (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) || null,
+      // Техдолг №7: «менять ответ» разрешает пройти завершённый пункт-сценарий заново.
+      rerunScenarios: !!TEST_DATA.allowAnswerChange,
     };
   }
 
@@ -228,7 +230,14 @@
    */
   function selectRouterTopic(topicId) {
     if (!isRouterMode()) return;
-    if (state.routerTopicStates[topicId] === "completed") return;
+    if (state.routerTopicStates[topicId] === "completed") {
+      // Техдолг №7: завершённый пункт-сценарий проходится заново, если тест разрешает менять
+      // ответ; плеер получает разрешение на ОДИН повторный прогон этого пункта.
+      var rerun = topicId.indexOf("scenario:") === 0 && !!TEST_DATA.allowAnswerChange
+        && typeof TBSimRun !== "undefined";
+      if (!rerun) return;
+      TBSimRun.allowRerun(topicId);
+    }
     // Record the router hub on the nav route BEFORE mutating state, so the
     // topic's «Назад» (section-intro / first page) returns to the hub instead of
     // dead-ending at the rebuilt chunk's index 0. Captures the clean hub state
