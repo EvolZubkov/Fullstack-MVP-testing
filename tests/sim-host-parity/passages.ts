@@ -251,6 +251,25 @@ export function passages(): Passage[] {
         { do: "finish" },
       ],
     },
+    {
+      // Г5: the item has its own limit (2 min) under the test's 5-minute scenario limit. The run is
+      // bounded by the item's section clock (user-journey.md 5.9 «Лимит времени теста и раздела»).
+      name: "9. у пункта-сценария свой лимит времени: плеер ограничен остатком раздела",
+      options: { scenarioTimeLimitMinutes: 2 },
+      steps: [
+        { do: "start" },
+        ...topic("A", true),
+        { do: "pick", item: "SC1" },
+        {
+          do: "check",
+          what: "плеер ограничен остатком лимита пункта (2 мин), а не лимитом сценария (5 мин)",
+          test: (p) => p.screen === "scenario" && p.mount !== null && p.mount.limitSeconds !== null && p.mount.limitSeconds <= 120 && p.mount.limitSeconds > 100,
+        },
+        { do: "sim", run: "success" },
+        ...topic("B", true),
+        { do: "finish" },
+      ],
+    },
   ];
 }
 

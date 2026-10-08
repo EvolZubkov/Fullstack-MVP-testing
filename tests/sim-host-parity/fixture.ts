@@ -57,6 +57,8 @@ export interface FixtureOptions {
    * and «the last section» rules (`isLastSectionWeb`) never come into play: they concern a topic.
    */
   topicLast?: boolean;
+  /** Own time limit of scenario item 1, minutes; its section clock then bounds the run. */
+  scenarioTimeLimitMinutes?: number;
 }
 
 /** Single-choice question; the correct option is always the first one. */
@@ -160,6 +162,7 @@ export async function createRouterTest(h: Harness, options: FixtureOptions = {},
         questionId: SIM_Q1,
         title: "Сценарий один",
         required: true,
+        timeLimitMinutes: options.scenarioTimeLimitMinutes ?? null,
         passRuleJson: { source: "custom", type: "percent", value: 80 },
       },
       { id: sc2, topicId: BANK_2, questionId: SIM_Q2, title: "Сценарий два", required: false },

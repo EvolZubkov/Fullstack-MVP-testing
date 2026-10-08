@@ -20,7 +20,7 @@
  */
 import type { PackageHost } from "./package-host";
 import type { WebHost } from "./web-host";
-import type { PlayerDouble } from "./player-double";
+import type { PlayerDouble, PlayerMount } from "./player-double";
 
 export type ScreenKind = "start" | "hub" | "content" | "question" | "section-results" | "review" | "scenario" | "results" | "other";
 
@@ -35,6 +35,8 @@ export interface StepSnapshot {
   footer: { finishLabel: string | null; finishEnabled: boolean; back: boolean } | null;
   /** L4 */
   sectionResult: unknown;
+  /** The open player's mount (L5 is compared per mount elsewhere; anchors read it here). */
+  mount: PlayerMount | null;
 }
 
 /**
@@ -89,6 +91,7 @@ export function packageStep(host: PackageHost, player: PlayerDouble): StepSnapsh
     hub: screen === "hub" ? normalizeHtml(hubEl!.innerHTML) : null,
     footer,
     sectionResult: screen === "section-results" ? (lastSection?.sectionResult ?? null) : null,
+    mount: player.active ? (player.mounts[player.mounts.length - 1] ?? null) : null,
   };
 }
 
@@ -115,6 +118,7 @@ export function webStep(web: WebHost, player: PlayerDouble): StepSnapshot {
           }
         : null,
     sectionResult: screen === "section-results" ? (s!.props.context?.sectionResult ?? null) : null,
+    mount: player.active ? (player.mounts[player.mounts.length - 1] ?? null) : null,
   };
 }
 

@@ -20,7 +20,7 @@ import { createHarness } from "../it/db-harness";
 import { seedBank, createRouterTest, LEARNER_ID, SIM_Q1 } from "./fixture";
 import { WebHost, makeServer } from "./web-host";
 import { buildPackage, PackageHost, sharedRuntimeBundle } from "./package-host";
-import { PlayerDouble } from "./player-double";
+import { PlayerDouble, type PlayerMount } from "./player-double";
 import { playRun } from "../helpers/sim-runs";
 import {
   packageStep, webStep, packageDelivery, webDelivery, compactRun, packageFinal, webFinal, hubCards,
@@ -232,8 +232,12 @@ async function play(p: Passage, index: number): Promise<{ diffs: string[]; ancho
         if (wd !== pd) note(`L0 выдача: веб ${wd}, пакет ${pd}`);
       }
       if (step.do === "pick" && (step.item === "SC1" || step.item === "SC2")) {
-        const wm = JSON.stringify(webPlayer.mounts.slice(mountsBefore[1]));
-        const pm = JSON.stringify(pkgPlayer.mounts.slice(mountsBefore[0]));
+        // A limit taken from a running clock (the item's section timer) is read by each host at its
+        // own instant of the same step: a second or two apart is the same limit, a minute is not.
+        const coarse = (ms: PlayerMount[]) =>
+          JSON.stringify(ms.map((m) => ({ ...m, limitSeconds: m.limitSeconds === null ? null : Math.round(m.limitSeconds / 5) * 5 })));
+        const wm = coarse(webPlayer.mounts.slice(mountsBefore[1]));
+        const pm = coarse(pkgPlayer.mounts.slice(mountsBefore[0]));
         if (wm !== pm) note(`L5 запуск плеера: веб ${wm}, пакет ${pm}`);
       }
       if (step.do === "sim" && prevActive[0] !== prevActive[1]) {
